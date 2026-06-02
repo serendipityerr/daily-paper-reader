@@ -1,0 +1,1938 @@
+Title: Learning Energy-Based Models from Stochastic Interpolants using Spatiotemporal Differences
+
+URL Source: https://arxiv.org/pdf/2605.26850v1
+
+Published Time: Wed, 27 May 2026 01:29:23 GMT
+
+Number of Pages: 43
+
+Markdown Content:
+# Learning Energy-Based Models from Stochastic Interpolants using Spatiotemporal Differences 
+
+Hanlin Yu 1, RuiKang OuYang 2, Partha Kaushik 3,
+
+Arto Klami 1, Michael U. Gutmann 4, Omar Chehab 31University of Helsinki, 2University of Cambridge 
+
+> 3
+
+Carnegie Mellon University, 4University of Edinburgh 
+
+Abstract 
+
+Learning an energy-based model from data samples is a central problem in machine learning. Many recent and popular methods, such as denoising score matching for training energy-based diffusion models, use stochastic interpolants to corrupt data samples at different noise levels indexed by a time variable. This defines a joint density over both the data space and time, and most methods learn its energy through either spatial or temporal differences. We identify distinct failure modes for both of these approaches. To solve them, we propose Spatiotemporal Noise-Contrastive Estimation (stNCE), a framework for learning the energy through joint spatiotemporal differences. stNCE unifies many existing methods and leads to new training objectives. Experiments on images and molecules demonstrate performance competitive with state-of-the-art density estimation methods. 
+
+# 1 Introduction 
+
+A central problem in machine learning is to learn the underlying probability density of a data dis-tribution from finite samples. Accurate density models are useful in a wide range of applications. In computational chemistry, for example, they can be used to correct samples from a proposal distribution to the equilibrium distribution [57]. They also enable sampling from compositions of densities (e.g., products or tempered variants) which is used to combine generative models in a modular way [23; 62]. Moreover, they formalize the alignment of an AI system with human preferences in terms of sampling from a tilted data density, obtained by reweighting the data distribution with a reward function that scores human preferences [71; 34]. To support these applications efficiently, recent work has focused on learning likelihoods that can be evaluated in one shot , i.e., with a single neural network evaluation [1; 31; 2]. A natural approach is to parameterize the likelihood as an Energy-based Model (EBM), where a neural network defines an unnormalized density. Over the past two decades, a wide range of methods has been proposed for training energy-based models [33; 12; 36; 40; 61; 19; 25]. Despite their apparent diversity, we show that they can be organized into a simple taxonomy based on whether they estimate temporal or spatial variations of the density. Most approaches proceed in two steps. First, they define corrupted versions of the data by interpo-lating between data samples and samples from a reference distribution (e.g., a Gaussian) [61; 3]. This introduces a time variable t indexing corruption levels and defines a joint density p(x, t ) over the data space and time. Second, the model is trained by estimating how this density varies, either across time or across space. This viewpoint yields our taxonomy. Temporal methods estimate variations across corrup-tion levels. For instance, Noise-Contrastive Estimation (NCE) learns large temporal differences between data and reference distributions [33], while subsequent work improves performance by focusing on smaller temporal differences, as in telescoping density ratio estimation and time score matching [61; 19; 78; 16]. Spatial methods, in turn, estimate variations across data points. For instance, Conditional NCE [12] learns spatial difference between nearby data points. When these points are infinitesimally close, this becomes score matching [40] that is used widely used to train diffusion-based EBMs [23; 71]. While both approaches for learning energy-based models have been widely applied [40; 65; 74; 61; 19; 78; 16], they are known to suffer from catastrophic failure modes that remain poorly understood. For example, spatial methods such as score matching [40] can incur large estimation errors in multi-modal 1
+
+> arXiv:2605.26850v1 [cs.LG] 26 May 2026
+
+Figure 1: Left: interpolant density pd(x, t ). We learn it via spatial differences in x, temporal differences 
+
+t, or spatiotemporal differences in both x and t. Right: empirical error of different learning methods .Temporal methods incur high estimation error when the data distribution has high density in areas of low density for the noise distribution (abusively, “support mismatch”). Spatial methods incur high estimation error when the data distribution is multi-modal. Our spatiotemporal method achieves here virtually zero error in both setups. settings [75; 45]. Conversely, temporal methods based on large differences, such as Noise-Contrastive Estimation, can fail when the high-density regions of the data distribution (its “support”) do not overlap with those of the reference distribution. However, these failure modes are rarely stated explicitly or analyzed in a unified manner in the literature. Often the analysis is limited to behavior of a specific method, instead of the broader approach. A widely held view is that these challenges can be alleviated by learning across multiple corruption levels (or times). The intuition is that some levels are inherently easier than others, and that amortization ,through parameter sharing across levels, allows harder tasks to benefit from the easier ones. Empirically, this strategy has led to improvements in both temporal and spatial methods. On the temporal side, multi-level NCE [61] has been shown to improve sample efficiency, with some theoretical support [61; 13]. On the spatial side, multi-level denoising score matching for energy-based diffusion models [71] enjoys emerging theoretical justification [60; 18]. Yet, this perspective is not fully satisfactory. Recent work indicates that such approaches do not fundamentally resolve the underlying issues: Srivastava et al. [69] show that multi-level NCE does not eliminate support mismatch, while Yu et al. [77] provides empirical evidence that multi-level score matching continues to struggle in very simple multimodal settings. Overall, our understanding of the failure modes of existing methods remains limited. Progress in the field has largely emphasized the development of new techniques, rather than a principled analysis of the limitations they aim to address. As a result, although recent approaches report strong empirical gains [34; 31; 59; 1; 58], we still lack a clear understanding of when and why they outperform prior methods. New perspectives are needed, and we provide one by focusing specificaly on the key characteristics of the spatial and temporal differences. 
+
+Contributions We revisit the problem of learning EBMs through the lens of spatial and temporal variations. We first introduce a unifying taxonomy that organizes existing methods along these two axes. We then explicitly identify their limitations when used in isolation: temporal methods struggle under support mismatch, while spatial methods fail in multi-modal settings, even when learning across different times (corruption levels), contrary to popular belief. Motivated by these observations, we propose to jointly learn spatial and temporal variations. We formalize this task Spatiotemporal Noise-Contrastive Estimation (stNCE), a general framework that uni-fies existing approaches and solves the previous limitations. While some very recent works empirically combine spatial and temporal variations, they lack a clear conceptual justification and a unified frame-work [34; 31; 59; 1; 58]. Our framework unifies known methods and shows, perhaps remarkably, that they are all instances of a single binary classification task. Our framework leads also to new training objectives that are competitive with the state-of-the-art across synthetic, image, and molecular benchmarks, while providing a clearer understanding of when and why they succeed. 22 Background 
+
+Stochastic Interpolants Stochastic interpolants [61; 3] can be used to sample from a joint density 
+
+pd(x, t ) over data points x and their corruption levels t (0 is fully corrupted, 1 is clean). To do so, we can interpolate between clean data samples x1 ∼ p1 and samples x0 ∼ p0 from a reference distribution 
+
+p0, which is often a standard Gaussian. A simple interpolation is [50] 
+
+xt = (1 − t)x0 + tx 1, (1) but other choices are possible too [61]. The joint density can be modelled as pθ (x, t ) = p(t)pθ (x|t), where 
+
+p(t) is a distribution over corruption levels chosen by the user, for example uniform between 0 (fully corrupt data) and 1 (clean data). The time-dependent density pθ (x|t) is an energy-based model 
+
+pθ (x, t ) = p(t) exp( −Eθ (x, t ) − log Zt), (2) where Eθ (x, t ) is typically a neural network and Zt = R exp( −Eθ (x, t )) dx is the normalizing constant, which is generally intractable. The goal is to learn a parameter θ such that the model of the clean data density pθ (x, 1) is accurate. A popular way to estimate θ without having to compute the intractable Z
+
+is to model variations of the joint density. 
+
+Binary classification for learning variations A seminal approach for learning the difference between two log densities log pA(x) and log pB (x) is to solve a binary classification task. This is core to many algorithms [33; 12; 28], including the ones in this paper. Consider data from two classes pA(x) and pB (x)and a binary classification task minimizing the logistic loss 
+
+Llogistic (F ) = −Ex∼pA [log sigmoid( F (x))] − Ex∼pB [log(1 − sigmoid( F (x)))] . (3) The optimal classifier is the difference between log densities F (x) = log pA(x) − log pB (x) [70]. 
+
+Learning the energy by temporal differences. One class of methods learns the energy by estimating 
+
+temporal differences E(x, t ′) − E(x, t ) + log Z(t′) − log Z(t). A canonical approach is Noise-Contrastive Estimation (NCE) [33], using a binary classification task as above. First, generate data x from two classes 
+
+A and B with equal probability, 
+
+pA(x) = pd(x|t), pB (x) = pd(x|t′). (4) For example, generating data from class A is done by corrupting a clean data sample x1 with level t
+
+following Eq. 1. Then, minimizing the logistic loss yields the optimal classifier 
+
+F (x, t, t ′) = E(x, t ) − E(x, t ′) + log Z(t) − log Z(t′), (5) that equals the temporal energy difference. In practice, we jointly parameterize Eθ (·, ·) and log Z(·)using a single neural network and learn them. In the limit where t and t′ are infinitesimally close, that energy difference approaches the time score ∂t log pt(x) [19; 78]. Rhodes et al. [61] observed that the performances become stronger when t and t′ are sampled between 0 and 1 and close to each other; this was later generalized to continuous time [1; 58], where one define a specific p(t) and sample t′ ∼ p(t′|t), where p(t′|t) can be e.g. close to N (t′; t, σ 2) for some small σ. We provide further details on p(t) and 
+
+p(t′|t) in Appendix C.1. We refer to this as temporal NCE (tNCE). 
+
+Learning the energy by spatial differences. Another class of methods learns the energy by esti-mating spatial differences E(x′, t ) − E(x, t ) + log Z(t) − log Z(t). A fundamental example is Conditional Noise-Contrastive Estimation (CNCE) [12], which also solves a binary classification task. First, generate data ( x, x ′) from two classes A and B 
+
+pA(x, x ′) = pd(x|t)pn(x′ | x), pB (x, x ′) = pd(x′|t)pn(x′ | x) (6) To generate data from class A, first generate a data point x with corruption level t following Eq. 1, and then perturb it into x′, using a perturbation kernel pn chosen by the user. Switching the positions of x
+
+and x′ yields data from class B. Then, minimizing the logistic loss yields the optimal classifier 
+
+F (x, x ′, t ) = −E(x′, t ) + E(x, t ) + log pn(x′ | x) − log pn(x | x′). (7) 3Figure 2: Ability to compute log-likelihood differences between two data points using learned spatial (orange), temporal (green), or spatiotemporal (red) differences. Methods based purely on spatial or temporal differences fail when traversing low-density regions (white), where these differences are poorly estimated. In contrast, spatiotemporal methods remain within high-density regions (blue), enabling accurate estimation. It equals the spatial energy difference up to the known transition densities. In practice, we parameterize 
+
+E(·, ·) using a neural network and learn it. In the limit where x and x′ are infinitesimally close, that energy difference approaches the space score ∇x log pt(x) [40; 12]. A natural continuous time extension of CNCE is to sample t between 0 and 1 and form the loss as an expectation over p(t); we refer to this algorithm as temporal CNCE (tCNCE). 
+
+# 3 Limitations of current methods 
+
+Despite their widespread success, current methods can suffer from failure modes. It is well known that methods based on both spatial differences [11; 74] and temporal differences [33] can fail even in simple settings. A common belief is that these issues can be mitigated by learning across multiple corruption levels , whether through temporal schemes [61; 19; 78; 16] or spatial ones [23; 71; 67]. In this section, we argue—and empirically demonstrate—that this is not the case: such approaches still fail in the same simple regimes. 
+
+A unifying heuristic. To analyze these failures, we study the ability of a model to relate the log-density of two points. For any two points, ( x, t ) and ( x′, t ′), we decompose the difference into spatial and/or temporal differences that need to be learnt by the model. This viewpoint captures both local properties (e.g., mode geometry for nearby points) and global properties (e.g., relative mode weights for distant points). Crucially, we will show that purely spatial or temporal decompositions inevitably require evaluating p(x, t ) in low-density regions, where samples are scarce and estimation is therefore worse. Figure 1 empirically validates these claims to hold even for a bivariate density. 
+
+Spatial differences struggle with multimodality. Spatial methods learn pθ (x, t ) via differences in 
+
+x. Using our heuristic, we decompose the log-density difference between x and y as log p(x, 1) − log p(y, 1) = 
+
+> K−1
+
+X
+
+> i=0
+
+log p(xi+1 , 1) − log p(xi, 1) . (8) When p1 is multimodal (Figure 2, two right panels), these spatial differences in orange necessarily traverse low-density regions (white). Since such regions are poorly sampled, the corresponding spatial differences are poorly estimated. As a result, spatial methods—including energy-based diffusion models—struggle to capture global structure such as mode weights [77]. 
+
+Temporal differences suffer from support mismatch. Temporal methods learn pθ (x, t ) via dif-ferences in t. A simple algorithm, which we term tNCE, works by sampling t and t′, and constructing binary classification problems; this was explored in [1; 58]. Again, using our heuristic, we decompose the log-density difference between x and y as log p(x, 1) − log p(y, 1) = log p(x, 0) − log p(y, 0) + ∆ , (9) 4where p(·, 0) is a known reference distribution, and ∆ = 
+
+> K−1
+
+X
+
+> i=0
+
+ log p(x, t i+1 ) − log p(x, t i) −
+
+> K−1
+
+X
+
+> i=0
+
+ log p(y, t i+1 ) − log p(y, t i). (10) When the supports of p0 and p1 differ (Figure 2, second and fourth panels), these temporal differences in green traverse low-density regions in white. As before, this degrades estimation. 
+
+Spatiotemporal differences avoid both issues. We now consider a joint discretization in space and time. Let {(xi, y i, t i)}Ki=0 with xi, y i ∼ pti . Then log p(x, 1) − log p(y, 1) = log p(x0, 0) − log p(y0, 0) + ∆ , (11) where ∆ = PK−1
+
+> i=0
+
+ log p(xi+1 , t i+1 ) − log p(xi, t i) − PK−1
+
+> i=0
+
+ log p(yi+1 , t i+1 ) − log p(yi, t i).
+
+As illustrated in Figure 2, these spatiotemporal differences in red can be chosen to remain within high-density regions in blue. Since such regions are well sampled, the corresponding spatiotemporal differences are accurately estimated. This observation may explain the success of recent spatiotemporal methods [31; 34; 1; 58; 59], as they simultaneously address multimodality and support mismatch. We empirically validate this conjecture in Figure 1. This motivates the following unifying framework for spatiotemporal methods. 
+
+# 4 Learning the energy by spatiotemporal differences 
+
+In this section, we introduce a framework for estimating the parameters of an energy-based model by learning its variation jointly in data space and time. Our approach reduces to a single binary classification problem that unifies many popular methods [40; 74; 33; 12; 61; 19; 78; 16; 31; 1; 58]; see Table 7. 
+
+Spatiotemporal Noise-Contrastive Estimation (stNCE) We propose to learn the energy by es-timating its spatiotemporal differences, E(x′, t ′) − E(x, t ), by solving a binary classification task. We call this approach Spatiotemporal Noise-Contrastive Estimation (stNCE). First, generate data ( x, t, x ′, t ′)from two classes A and BpA(x, t, x ′, t ′) = pd(x, t )pn(x′, t ′|x, t ), pB (x, t, x ′, t ′) = pd(x′, t ′)pn(x′, t ′|x, t ). (12) To generate data from class A, first sample a data point and its corruption level ( x, t ) following Eq. 1, and then perturb them into ( x′, t ′) using a perturbation kernel pn that is chosen by the user. Switching the positions of ( x, t ) and ( x′, t ′) in the tuple yields data from class B. Efficient strategies for sampling (x, t, x ′, t ′) are discussed in Appendix C.1. Then, minimizing the logistic loss yields the optimal classifier 
+
+F (x, t, x ′, t ′) = E(x′, t ′)−E(x, t ) +log Z(t′)−log Z(t) +log pn(x′, t ′ | x, t )−log pn(x, t | x′, t ′), (13) which equals the spatiotemporal energy difference up to known terms. In practice, we parameterize 
+
+E(x, t ) and log Z(t) using neural networks and learn them jointly. Note that this can be viewed as the CNCE from Section 2 but on the augmented space ( x, t ), which we use to establish Theorem 2. 
+
+Statistical guarantees. We next present statistical guarantees on the stNCE estimator: it is consistent and we can quantify its sample-efficiency. 
+
+Theorem 1 (Non-parametric consistency) Let pθ (x, t ) = exp( −Eθ (x, t )) /Z θ (t) be a parametric model, and suppose the data is generated with parameter θ∗. Then the stNCE estimator ˆθ, obtained by minimizing the empirical logistic loss with N samples, leads to a pointwise consistent estimator: 
+
+pˆθ → pθ∗ as N → ∞ . (14) We prove this in Appendix A.2, and next characterize the estimator’s asymptotic sample efficiency. 
+
+Theorem 2 (Sample efficiency) (Based on Yu et al. [77]) Let 
+
+Fθ (x, t, x ′, t ′) = log pθ (x, t ) − log pθ (x′, t ′) + log pn(x′, t ′ | x, t ) − log pn(x, t | x′, t ′). (15) 5Then the estimator satisfies 
+
+∥ˆθ − θ∗∥2 = 1
+
+Nd
+
+Tr  C−11 C2C−11
+
+ + o
+
+Å 1
+
+Nd
+
+ã
+
+, (16) 
+
+with the following, where expectations are taken under pd(x, t )pn(x′, t ′ | x, t ):
+
+C1 = E∇θ Fθ ∇θ F ⊤ 
+
+> θ
+
+σ(−Fθ∗ ) σ(Fθ∗ ) , C2 = E∇θ Fθ ∇θ F ⊤ 
+
+> θ
+
+σ(−Fθ∗ )2 .
+
+Design choices. The main design choice is the perturbation kernel pn. While our stNCE estimator is consistent for any choice of pn, its sample efficiency depends critically on this choice. As shown in Table 7, specific choices recover many existing methods based on temporal differences [33; 61; 19; 78], spatial differences [12; 40; 65], and spatiotemporal differences [31; 1; 34; 58]. In principle, one could optimize the asymptotic variance expression with respect to pn. As is often the case, this is analytically difficult. Instead, we adopt an empirical approach and propose choices of pn
+
+that are heuristically well suited to the problem. 
+
+# 5 Choices of perturbation kernels 
+
+In this section, we propose three choices for the perturbation kernels, called mixture , white , and forward-reverse . We argue that the first two are sample-efficient when the perturbation is “small enough”, while the last is sample-efficient when a certain quantity called the “space score” is well-approximated. In both cases, the guiding principle is that the pairs ( x, t ) and ( x′, t ′) used to estimate energy difference should remain in the manifold of the target distribution pd(x, t ) that we wish to estimate; because one of them is sampled from pd(x, t ) and is therefore likely to be on the data manifold, the perturbation kernel pn
+
+used to obtain the second should avoid mapping samples outside of the data manifold, see Figure 3. We explain that certain recent methods in the literature [31; 34] can be viewed as special cases or variants on these perturbation kernels. 
+
+Figure 3: Choice of kernels. Left: departs from the data manifold (blue). Right: remains on the data manifold (blue). 
+
+Mixture kernel. This kernel perturbs either x or t:
+
+pn(x′, t ′ | x, t ) = 12 pn(t′ | t) δx(x′) + 12 pn(x′ | x) δt(t′).
+
+(17) We refer to this variant as stNCE-m. It recovers a mix-ture of tNCE and tCNCE objectives, as we show in Appendix B. 
+
+White noise kernel. This kernel perturbs both x
+
+and t, with the perturbation in terms of x being isotropic Gaussian noise: 
+
+pn(x′, t ′ | x, t ) = N (x′ | x, σ 2I) p(t′|t). (18) We refer to the resulting algorithm as stNCE-w. The intuition is that sufficiently small perturbations keep ( x′, t ′) in the data manifold of pd. In the limit σ → 0, this recovers Dual Score Matching [31], as we prove in Appendix A.4. The two previous methods suffer from the same pathology: under the scenario where the perturbation is non-vanishing, ( x′, t ′) could naturally be generated off the high density region induced by pd(x, t ). The manifold hypothesis states that real world data often lies on a low dimensional Riemannian manifold, such that adding isotropic Gaussian noises often results in off-manifold samples. Furthermore, counter-intuitively, samples from Gaussian distribution concentrate near a sphere in high dimensions, resulting in non-smooth landscape even for noise-perturbed data. The same issues will affect tCNCE when used with a white noise kernel. In contrast to the kernels above, the following kernel aims to stay within the manifold of pd(x, t ). 
+
+Forward-reverse kernel. We propose perturbing ( x, t ) along trajectories consistent with pd(x, t ): 
+
+pn(x′, t ′ | x, t ) = pn(x′ | x, t, t ′) pn(t′|x). (19) We first perturb t to t′, then apply a kernel on x: a noising step if t′ < t , and a denoising step if t′ > t .These kernels are Bayes inverses, as in diffusion-based methods [26; 21; 34]. 6An explicit construction based on the stochastic interpolant Eq. 1 is: 
+
+pn(x′ | x, t, t ′) = 
+
+
+
+N  x′ x/t, 1 − (1 − t)2/t 2 , t′ < t, 
+
+N Äx′ (t′/t )x + 2(1 −t)( t′−t) 
+
+> t
+
+∇x log pt(x), (t′−t)( t+t′−2tt ′) 
+
+> t2
+
+Iä , t′ > t. (20) The noising kernel (top) is tractable, while the denoising kernel, obtained using the exponential integrator formula [27], depends on the space score ∇x log pt(x), which is typically unknown and is the key quantity that diffusion models approximate [67]. We approximate it using either: (i) oracle scores (when available), denoted as stNCE-o, or (ii) self scores, obtained from the current model, denoted as stNCE-s. The latter is reminiscent of consistency models and flow maps [68; 9].We further note that the recent RNE regularization [34] proposed to regularize energy-based diffusion models is related too, with the following differences: it uses a squared loss instead of the logistic loss, and sampling is performed directly using the forward process without relying on the scores. However, unlike stNCE, which remains consistent for arbitrary kernels, e.g. the ones induced by imperfect scores, and can be optimized independently, RNE depends heavily on the quality of the current score estimates: RNE loss based on inaccurate scores fail to remain consistent. Consequently, RNE mandates joint training with denoising score matching loss or an oracle access to the ground truth socre, whereas stNCE could function as a standalone training objective. 
+
+Infinitesimal limit. We now characterize the behavior of stNCE for certain infinitesimal perturbation kernels. Specifically, we study perturbation kernels that are transition probabilities along a trajectory of a Stochastic Differential Equation (SDE) as in Eq. 20 or of a Ordinary Differential Equation (ODE), assuming oracle access to the ground truth scores. We prove the following results in Appendix A.3. 
+
+Proposition 3 (Transition probability of an SDE) Consider a stochastic interpolant as in Eq. 1 whose marginal laws pt are simulated by the time-reversal of an SDE, dXt = b(Xt, t )d t + g(t)d Wt. Define the perturbation kernel to be the transition probability of that SDE. In the limit ∆t → 0, stNCE recovers the space score matching loss with maximum-likelihood weighting [66]: 
+
+LstNCE (θ) = 2 log 2 + ∆t
+
+4 Ept
+
+g(t)2∥∇ x log pt(x) − ∇ x log pθt (x)∥2 + o(∆ t). (21) 
+
+Proposition 4 (Transition probability of an ODE) Consider a stochastic interpolant as in Eq. 1 whose marginal laws pt are simulated by an ODE, dXt = v(Xt)d t. Define the perturbation kernel to be the transition probability of that ODE. Under this scenario, the transition kernels are Dirac deltas subject to Jacobian scalings. In the limit ∆t → 0, stNCE recovers a loss for matching the trajectory-wise rate of change of the true and model log densities: 
+
+LstNCE (θ) = 2 log 2 + ∆t2
+
+4 Ept
+
+∥dt log pt(x) − dt log pθt (x)∥2 + o(∆ t2). (22) 
+
+where dt log pt(x) := ∂t log pt(x) + ∇x log pt(x) · vt(x).
+
+# 6 Experiments 
+
+We empirically evaluate our framework for learning densities of synthetic data, images and molecules. In particular, we report results of the different variants of our Spatiotemporal Noise-Contrastive Esti-mation (stNCE-m, stNCE-w, stNCE-s, stNCE-o) that are detailed in Section 5. We also use another variant stNCE-s+DSM which combines stNCE-s with a space score matching loss: the former estimates spatiotemporal differences while the latter estimates infinitesimal spatial differences. See Appendix C.4 for further details. Across datasets, our stNCE-s and variants are most promising: they are competitive with the state of the art. 
+
+## 6.1 Failure modes 
+
+Many methods for learning energy-based models, including denoising score matching used in diffusion models [71; 22], are typically evaluated on complex datasets. Yet, Figure 1 shows that they can already fail in a simple one-dimensional setting. This experiment highlights two key properties of the data distribution that drive these failures. First, multimodality increases the error of methods based on learning spatial 7differences. Second, a mismatch between the high-density regions (“supports”) of the data and reference distributions increases the error of methods based on learning temporal differences. Methods based on learning spatiotemporal difference are robust to both sources of error. Details on the simulations are provided in Appendix D.1. 
+
+## 6.2 Gaussian mixtures 
+
+Setup and dataset Image data are high-dimensional and sparse. To emulate these properties, we build a Gaussian mixture from the MNIST dataset [47] by sampling 100 images (10 per digit class) and using them as centroids with diagonal covariance 0 .01 I. This synthetic yet realistic distribution exhibits the two pathologies identified in Section 3: strong multimodality and minimal overlap with a standard Gaussian reference distribution due to its thin support. We therefore expect purely spatial and purely temporal methods to struggle, while spatio-temporal methods with density-aware kernels should perform well, which is confirmed in Table 1. 
+
+Evaluation We use the following metrics to evaluate if model and ground-truth density agree. They are computed as averages over data samples and to the model density and also the data density (which is usually unavailable, but we know it for toy experiments). When we have access to both the ground truth data density and the sampling mechanism that generates samples from it, we can estimate the log constant of the model density at the time corresponding to clean data using importance sampling, denoted as ÷log Z1, and evaluate the model density normalized using ÷log Z1.MSE := Ex∼pd(·| 1) 
+
+î log pd(x | 1) − log pθ (x | 1) 2ó , (23) Ratio := Ex,x ′∼pd(·| 1) ⊗2
+
+ï
+
+log pd(x | 1) − log pd(x′ | 1) − log pθ (x | 1) + log pθ (x′ | 1) 
+
+2ò
+
+, (24) NormMSE := Ex∼pd(·| 1) 
+
+î log pd(x | 1) − log pθ (x | 1) + ÷log Z1
+
+2ó , (25) NormNLL := Ex∼pd(·| 1) 
+
+î− log pθ (x | 1) + ÷log Z1
+
+ó . (26) The first is the squared error between the data and model log densities. The second is the squared error between spatial differences of the data and model log densities — this metric is well-suited for evaluating unnormalized densities given that it does not depend on normalizing constants. The third and the fourth evaluate how good the model is as an unnormalized EBM, though naturally depends on the accuracy of the estimated ÷log Z1.
+
+Results Among spatiotemporal methods, we study two perturbation kernels: white noise and the for-ward–reverse kernel from Section 5. Results with white noise match the intuition of Figure 3: finite Gaussian perturbations (stNCE-w) perform poorly because they push samples off the data manifold, whereas infinitesimal perturbations (Dual SM [31]) preserve proximity to the manifold and yield accu-rate estimates, albeit at higher computational cost due to double differentiation through the network. Results for the forward–reverse kernel further support this interpretation. Even with finite corruption, stNCE-s remains competitive because it stays close to the data manifold. By contrast, as discussed in Section 3, RNE [34] is consistent only when given access to the true scores ∇xt log pt(xt) (RNE-o), which are unavailable in practice; using estimated scores (RNE-s) can lead to substantial degradation. Our implementation of stNCE-m naively adds up tNCE loss and tCNCE loss, leading to slower running time, as indicated using ∗; this also applies to later experiments. Overall, stNCE-s provides a favorable trade-off between accuracy and speed, and is the only NCE-based method that successfully learns this challenging Gaussian mixture. 
+
+## 6.3 Images 
+
+In this section, we follow previous related works [31; 78] in reporting the Negative Log-Likelihood (NLL) in bits per dimension, for image datasets NLL bpd := −Ex∼pd(·| 1) [log pθ (x | 1)] 
+
+D log 2 , (27) where D is the data dimension (e.g. the number of pixels times channels for images). Note that we do 
+
+not use the NormNLL for two reasons. First, related works [31] do not use it and we wish to replicate 8Table 1: Results on MNIST mixture (784 dim). Time means average time per step in seconds. For methods not in Oracle category best results are in bold , second ones are underlined. Under oracle category best results are in bold .                                                                                                                                                            
+
+> Category Method MSE ↓Ratio ↓NormMSE ↓NormNLL ↓Time ↓
+> Temporal tNCE 2×10 5±4×10 3958.11 ±131.63 7×10 3±1×10 3-606.76 ±7.83 0.39 CTSM 3×10 5±1×10 51×10 3±608 .53 8×10 3±2×10 3-602.92 ±9.59 0.68 Spatial tCNCE 2×10 5±5×10 43×10 3±584 .77 9×10 3±2×10 3-598.73 ±7.82 0.4 DSM 1×10 7±9×10 51×10 4±4×10 33×10 4±1×10 4-535.54 ±28.81 0.7 Spatio-temporal stNCE-m 3×10 4±4×10 3600.77 ±276.83 2×10 3±846 .83 -644.8 ±8.51 0.45 ∗
+> stNCE-w 2×10 4±1×10 3412.73 ±148.16 2×10 3±458 .16 -652.43 ±5.22 0.4 stNCE-s 121.6 ±11.77 28.31 ±1.93 65.02 ±7.67 -680.99 ±0.53 0.36
+> RNE-s 3×10 6±1×10 63×10 3±945 .15 2×10 4±702 .98 -570.51 ±1.09 0.44 Dual SM 42.16 ±7.11 17.82 ±1.02 26.04 ±2.82 -683.96 ±0.33 0.7 Oracle stNCE-o 148.61 ±17.09 40.25 ±2.35 141.75 ±3.61 -677.07 ±0.12 0.32
+> RNE-o 18.57 ±1.46 7.88 ±0.19 9.41 ±0.61 -685.75 ±0.09 0.4
+
+a fair comparison. Second, the idea behind NormNLL is to correct the approximate normalization of the model using a sepearate estimate of the normalizing constant. In Section 6.2, we could obtain a precise estimate because we knew the ground-truth distribution of the dataset. Here, we do not know the ground-truth distribution and the standard way of estimate the normalizing constant is using AIS which in our preliminary experiments and in related literature [78] was very high-variance on image datasets. 
+
+MNIST We next train the different algorithms to learn the data density of images from the MNIST dataset of handwritten digits [47]. Results are shown in Table 2: our stNCE-s is still the best variant among NCE algorithms and reaches state-of-the-art performance while being fast to train. Here our algorithms were trained for 100 , 000 steps; we verify in Table 3 that stNCE-s continues to improve when optimized longer. Alternatively, on can use our stNCE-s+DSM which reaches state-of-the-art results, by jointly estimate the spatial scores of the density. Samples drawn from our model in Figure 4 look realistic. Table 2: Negative log likelihood (in bits/dimension) on MNIST test set. Result for Glow is taken from M´ at´ e et al. [54]. Results for FFJORD, i-ResNet, and MintNet are taken from from Song et al. [64]. TSM result is taken from Yu et al. [78]. Reported times are average times per step in seconds.                                                           
+
+> Method Type Single NFE Time ↓NLL ↓
+> tNCE Estimate ✓0.127 7.01 FP-Diffusion [46] Normalized ✗-2.98 TSM [19] Estimate ✗-1.3 TRE [61] Estimate ✗-1.09 i-ResNet [7] Normalized ✗-1.06 Glow [44] Normalized ✓-1.05 CTSM-v [78] Estimate ✗-1.03 FFJORD [29] Normalized ✗-0.99 MintNet [64] Normalized ✓-0.98 Ours (stNCE-m) Estimate ✓0.17 ∗4.92 Ours (stNCE-w) Estimate ✓0.13 4.56 Ours (stNCE-s) Estimate ✓0.13 1.61 Ours (stNCE-s+DSM) Estimate ✓0.27 1.00
+
+Figure 4: Samples drawn us-ing stNCE-s+DSM. Table 3: Test BPD of the last and from the step with the best val BPD up to the cor-responding step.             
+
+> Step Last Best
+> 100k 1.62 1.61 200k 1.49 1.48 300k 1.42 1.41 400k 1.37 1.36 500k 1.34 1.33
+
+ImageNet As a comparison against the state-of-the-art in larger scale, we repeat the experiment on ImageNet64 [20]. In Table 4, we can see that our stNCE-s+DSM is competitive with Flow Matching [50] and outperforms approaches such Dual Score-Matching [31], which similarly models the data density as an energy-based model. We verify in Figure 5 that our learnt model assigns high probability to sharper images and lower probability to blurrier images. 9Table 4: Negative log likelihood (in bits/dimension) on ImageNet64 test set as in Guth et al. [31].                                                              
+
+> Method Anti-aliasing Augmentation Discreteness Type Single NFE NLL
+> Glow [44] ✗None Continuous Normalized ✓3.81 PixelCNN [73] ✗None Discrete Normalized ✗3.57 I-DDPM [56] ✗None Continuous Upper bound ✗3.54 VDM [42] ✗None Discrete Upper bound ✗3.40 FM [50] ✓None Uniform* Normalized ✗3.31 NFDM [5] ✗Horizontal flips Uniform* Normalized ✗3.20 TarFlow [79] ✗Horizontal flips Uniform Normalized ✓2.99 Dual SM [31] ✓Horizontal flips Continuous Estimate ✓3.36 Ours (stNCE-s+DSM) ✓Horizontal flips Continuous Estimate ✓2.94
+
+Figure 5: ImageNet test set images with the highest densities (left) and the lowest densities (right) as identified using our model. Higher likelihood images appear to have higher frequencies manifested by sharper contours and shapes, while lower likelihood images appear to have lower frequencies in the form of regular geometric patterns. This is consistent with the literature [31]. 
+
+## 6.4 Molecules 
+
+Setup and datasets We wish to model a target distribution ( a.k.a. equilibrium distribution) over con-figurations of a molecule. Concretely, each data point in that space is the collection of three-dimensional positions of the atoms, or rather groups of atoms called chains, that make up the molecule. In our experiments, we consider two “coarse-grained” molecular systems: Alanine dipeptide (ALDP) and Chig-nolin. Specifically, the ALDP is represented by 5 chains and Chignolin by 10 chains; because each chain has three-dimensional spatial coordinates, this leads to 15-dimensional and 30-dimensional data, respec-tively. Data points in “high probability” regions correspond to likely spatial configurations of the atoms. In practice, we have access energy and score function ( a.k.a. force field) of the target distribution via physics, but they are expensive to evaluate as they require solving a PDE. To avoid evaluating them for every new data point, there are two prevailing approaches in the literature. The first approach is Machine Learning Force Fields (MLFFs), which regress a neural network against the energy and score functions on some finite grid of data points [38; 6]. The second approach which we follow here is Energy-Based Models (EBMs) that learn a neural network that matches the energy of the target distribution. Such models are trained on a dataset of samples that approximately follow the target distribution. To form such a dataset, a sampling process such as Langevin Dynamics ( a.k.a. Molecular Dynamics), which requires evaluating the target energy and score functions, is run long enough so that the final samples are approximately i.i.d. samples from the target distribution. In practice, we use the datasets provided Plainer et al. [59] and Lindorff-Larsen et al. [49], following the same architecture and parameterization as Plainer et al. [59]. 
+
+Methods We compare stNCE to another spatiotemporal method from Plainer et al. [59] based on the Fokker-Planck Equation (FPE). That method consists in learning spatial differences of the energy using a loss we detail in Appendix B.11, and temporal differences of the energy by minimizing a PINN loss that effectively forces the energy to follow a certain Partial Differential Equation. Although technically sound, FPE is computationally expensive because it requires optimizing through the second-order derivative of the energy network. Even with the estimator proposed by Plainer et al. [59] to bypass explicit second-order derivatives, the FPE approach remains costly due to the multiple additional network evaluations required per loss calculation. In contrast, stNCE is fundamentally more efficient to optimize. 
+
+Evaluation To evaluate the quality of the estimated model of the data pθ (x|1), we use the following metrics from Plainer et al. [59]. The Potential Mean Field (PMF) is just the mean-squared error between 10 Table 5: Alanine dipeptide results.                                                                     
+
+> Method IID JS ↓Langevin JS ↓IID PMF ↓Langevin PMF ↓
+> tNCE 0.0093 ±0.0001 0.0111 ±0.0003 0.095 ±0.001 0.119 ±0.003 tNCE+DSM 0.0063 ±0.0000 0.0065 ±0.0001 0.063 ±0.002 0.066 ±0.003 stNCE-s 0.0098 ±0.0002 0.0111 ±0.0001 0.106 ±0.004 0.139 ±0.001 stNCE-s+DSM 0.0072 ±0.0000 0.0082 ±0.0002 0.076 ±0.002 0.088 ±0.005 FPE [59] 0.0082 ±0.0002 0.0090 ±0.0006 0.098 ±0.003 0.104 ±0.004
+
+Table 6: Chignolin results.                                                                     
+
+> Method IID JS ↓Langevin JS ↓IID PMF ↓Langevin PMF ↓
+> tNCE 0.0593 ±0.0001 0.2420 ±0.0020 0.654 ±0.001 3.143 ±0.031 tNCE+DSM 0.0073 ±0.0019 0.0181 ±0.0055 0.060 ±0.015 0.162 ±0.053 stNCE-s 0.0097 ±0.0000 0.0199 ±0.0015 0.083 ±0.000 0.170 ±0.014 stNCE-s+DSM 0.0074 ±0.0001 0.0082 ±0.0006 0.059 ±0.001 0.065 ±0.005 FPE [59] 0.0048 ±0.0001 0.0050 ±0.0001 0.037 ±0.000 0.039 ±0.001
+
+the model energy and true energy, comptued over data samples. The Jensen-Shannon Divergence (JSD) is a statistical divergence between the ground truth and model densities. PMF( θ) = Ex∼pd(·| 1) 
+
+  E(x, 1) − Eθ (x, 1) 2 (28) JSD( θ) = log 2 + 12 Ex∼pd(·| 1) 
+
+ï
+
+log pd(x | 1) 
+
+pd(x | 1) + pθ (x | 1) 
+
+ò
+
++ 12 Ex∼pθ (·| 1) 
+
+ï
+
+log pθ (x | 1) 
+
+pd(x | 1) + pθ (x | 1) 
+
+ò
+
+. (29) In practice, these metrics are not computed over the full data space but on a physically meaningful 2-dimensional subspace: the torsional angles for ALDP, and the principle directions of multi-modality obtained by Time-lagged Independent Component Analysis (TICA) [55; 39] for Chignolin. To compute these metrics, we proceed as follows. First, we start with samples on the full data samples: ground-truth samples x ∼ pd(x|1) are from the the dataset and the samples from our model 
+
+x ∼ pθ (x|1) are obtained by running two score-based samplers, the Langevin sampler which uses the final score ∇ log pθ (x|1) [24] and the diffusion sampler which uses the intermediate scores ∇ log pθ (x|t) [67]. Second, we project the ground-truth and model samples onto the 2-dimensional subspace. Third, we compute histogram-based density estimates of the corresponding 2-dimensional ground-truth and model distributions. Finally, we compute an empirical version of the above metrics, where the expectations are replaced by a finite-sample average. 
+
+Results Tables 5 and 6 report the Jensen-Shannon (JS) divergence and Potential of Mean Force (PMF) metrics (lower is better). They show that stNCE effectively generates these consistent samples and achieves performance comparable to FPE. On the other hand, training jointly with DSM consistently improves performance while introducing only marginal computational overhead. In fact, the estimated training time (in GPU hours of a single NVDIA A100 ) of different methods is as follows: DSM is the fastest method (8.71) but achieves lower performance. stNCE-s (16.87) is the next fastest and adding DSM slightly increases its runtime (18.85) while still being 2 .5-fold faster than FPE (49.57). 
+
+# 7 Discussion 
+
+Compute burden of the likelihood: training-time versus inference-time This work highlights how the literature of learning energy-based models falls within three families of learning objectives: temporal, spatial, and spatiotemporal. Another axis for organizing the literature is two parameterizations of the energy-based model differences, both enabling likelihood estimation but differing primarily in when the computational burden is incurred. A first class defers this cost to inference time by integrating learned quantities, including temporal methods based on ∂t log pt(x) [19; 78; 17], spatial methods based on ∇ log pt(x), and spatio-temporal approaches integrating ddt log pt(xt), such as continuous normalizing flows [14] and path-wise formula-tions [19]. These methods are relatively easy to train, as they avoid higher-order differentiation, but 11 incur significant inference-time cost due to numerical integration, although recent works look into learn 
+
+to integrate in few steps [9; 2; 15]. A second class instead parameterizes these differences directly with an energy-based model, enabling one-step likelihood evaluation. This includes temporal methods such as NCE [33], spatial methods such as (denoising) score matching [40; 74], and recent spatio-temporal approaches, including ours [34; 31; 59; 1; 58]. These methods yield cheap inference—often a single network evaluation—but are harder to train, e.g., due to higher-order autodiff. Overall, these approaches trade training-time for inference-time compute. We focus on the latter regime, favoring expensive training for efficient inference. A systematic study of this trade-off is left for future work. 
+
+Limitations and future directions While models trained using NCE loss functions can recover the ground truth energies accurately, the scores may not be learned well when comparing to the score matching variants. Future work could explore better samplers for models trained with NCE losses that either do not rely on gradient information or could better handle noisy gradients. In conclusion, we show that despite their diversity, most energy-based model estimation methods fall into three categories: spatial, temporal, and spatiotemporal. We identify fundamental failure modes of purely spatial and temporal approaches, and show how spatiotemporal methods overcome them. Our unified binary classification framework recovers many existing methods and yields new objectives with near state-of-the-art performance across synthetic, image, and molecular data. 
+
+Acknowledgements and Disclosure of Funding 
+
+The authors wish to acknowledge Florentin Guth for interesting discussions on Dual Score Matching [31]. Hanlin Yu and Arto Klami acknowledge the research environment provided by ELLIS Institute Fin-land, and were supported by the Research Council of Finland Flagship programme: Finnish Center for Artificial Intelligence FCAI. RuiKang OuYang acknowledges the UK Engineering and Physical Sciences Research Council (EPSRC) grant EP/L016516/1 for the University of Cambridge Centre for Doctoral Training, the Cambridge Centre for Analysis. Michael U. Gutmann was supported in part by Gen AI -the AI Hub for Generative Models, funded by EPSRC (EP/Y028805/1). The authors wish to acknowledge CSC - IT Center for Science, Finland, for computational resources, and acknowledge CSC - IT Center for Science, Finland for awarding this project access to the LUMI supercomputer, owned by the EuroHPC Joint Undertaking, hosted by CSC(Finland) and the LUMI consortium through CSC - IT Center for Science, Finland. 12 References 
+
+[1] R. Aggarwal, J. Chen, N. M. Boffi, and D. Koes. BoltzNCE: Learning likelihoods for boltzmann generation with stochastic interpolants and noise contrastive estimation. In Conference on neural information processing systems , 2025. [2] X. Ai, Y. He, A. Gu, R. Salakhutdinov, J. Kolter, N. Boffi, and M. Simchowitz. Joint distillation for fast likelihood evaluation and sampling in flow-based models. In International Conference on Learning Representations , 2026. [3] M. Albergo, N. M. Boffi, and E. Vanden-Eijnden. Stochastic interpolants: A unifying framework for flows and diffusions. Journal of Machine Learning Research , 26(209):1–80, 2025. [4] J. Ansel, E. Yang, H. He, N. Gimelshein, A. Jain, M. Voznesensky, B. Bao, P. Bell, D. Berard, E. Burovski, G. Chauhan, A. Chourdia, W. Constable, A. Desmaison, Z. DeVito, E. Ellison, W. Feng, J. Gong, M. Gschwind, B. Hirsh, S. Huang, K. Kalambarkar, L. Kirsch, M. Lazos, M. Lezcano, Y. Liang, J. Liang, Y. Lu, C. Luk, B. Maher, Y. Pan, C. Puhrsch, M. Reso, M. Saroufim, M. Y. Siraichi, H. Suk, M. Suo, P. Tillet, E. Wang, X. Wang, W. Wen, S. Zhang, X. Zhao, K. Zhou, R. Zou, A. Mathews, G. Chanan, P. Wu, and S. Chintala. PyTorch 2: Faster machine learning through dynamic python bytecode transformation and graph compilation. In ACM international conference on architectural support for programming languages and operating systems, volume 2 (ASPLOS ’24) . ACM, Apr. 2024. [5] G. Bartosh, D. Vetrov, and C. A. Naesseth. Neural flow diffusion models: Learnable forward process for improved diffusion modelling. In Annual Conference on Neural Information Processing Systems ,2024. [6] I. Batatia, D. P. Kov´ acs, G. N. C. Simm, C. Ortner, and G. Cs´ anyi. Mace: Higher order equivariant message passing neural networks for fast and accurate force fields, 2023. [7] J. Behrmann, W. Grathwohl, R. T. Q. Chen, D. Duvenaud, and J.-H. Jacobsen. Invertible residual networks. In International Conference on Machine Learning , volume 97, pages 573–582. PMLR, 09–15 Jun 2019. [8] L. Biewald. Experiment tracking with weights and biases, 2020. URL https://www.wandb.com/ .[9] N. M. Boffi, M. S. Albergo, and E. Vanden-Eijnden. How to build a consistency model: Learning flow maps via self-distillation. In The thirty-ninth annual conference on neural information processing systems , 2026. [10] J. Bradbury, R. Frostig, P. Hawkins, M. J. Johnson, Y. Katariya, C. Leary, D. Maclaurin, G. Necula, A. Paszke, J. VanderPlas, S. Wanderman-Milne, and Q. Zhang. JAX: composable transformations of Python+NumPy programs, 2018. URL http://github.com/jax-ml/jax .[11] C. Ceylan. Conditional noise-contrastive estimation: With application to natural image statistics. Master’s thesis, KTH, School of Computer Science and Communication (CSC), Stockholm, Sweden, 2017. Independent thesis, advanced level (20 credits / 30 HE credits). [12] C. Ceylan and M. U. Gutmann. Conditional Noise-Contrastive Estimation of Unnormalised Models. In International Conference on Machine Learning , volume 80, pages 726–734. PMLR, July 2018. [13] O. Chehab, A. Hyvarinen, and A. Risteski. Provable benefits of annealing for estimating normalizing constants: Importance sampling, noise-contrastive estimation, and beyond. In Conference on Neural Information Processing Systems , 2023. [14] R. T. Q. Chen, Y. Rubanova, J. Bettencourt, and D. Duvenaud. Neural ordinary differential equa-tions, 2019. [15] W. Chen, S. Li, J. Li, J. Xu, Z. Lin, J. Yang, D. Zeng, J. Paisley, and Q. Zhao. Diffusion secant alignment for score-based density ratio estimation, 2025. [16] W. Chen, S. Li, J. Li, J. Yang, J. Paisley, and D. Zeng. Dequantified diffusion-schr¨ odinger bridge for density ratio estimation. In International Conference on Machine Learning , volume 267, pages 8427–8452. PMLR, 13–19 Jul 2025. 13 [17] W. Chen, J. Li, S. Li, Z. Lin, J. Yang, J. Paisley, and D. Zeng. A minimum variance path principle for accurate and stable score-based density ratio estimation. In International Conference on Learning Representations , 2026. [18] S. Chewi, A. Kalavasis, A. Mehrotra, and O. Montasser. DDPM score matching is asymptotically efficient. In ICLR 2025 Workshop on Deep Generative Model in Machine Learning: Theory, Principle and Efficacy , 2025. [19] K. Choi, C. Meng, Y. Song, and S. Ermon. Density ratio estimation via infinitesimal classification. In International Conference on Artificial Intelligence and Statistics , volume 151, pages 2552–2573. PMLR, 28–30 Mar 2022. [20] P. Chrabaszcz, I. Loshchilov, and F. Hutter. A downsampled variant of imagenet as an alternative to the cifar datasets, 2017. [21] A. Doucet, W. Grathwohl, A. G. Matthews, and H. Strathmann. Score-based diffusion meets an-nealed importance sampling. In Advances in Neural Information Processing Systems , volume 35, pages 21482–21494. Curran Associates, Inc., 2022. [22] Y. Du and I. Mordatch. Implicit generation and modeling with energy-based models. In international conference on neural information processing systems . Curran Associates Inc., Red Hook, NY, USA, 2019. [23] Y. Du, C. Durkan, R. Strudel, J. B. Tenenbaum, S. Dieleman, R. Fergus, J. Sohl-Dickstein, A. Doucet, and W. S. Grathwohl. Reduce, Reuse, Recycle: Compositional Generation with Energy-Based Diffusion Models and MCMC. In International Conference on Machine Learning , volume 202, pages 8489–8510. PMLR, July 2023. [24] P. Eastman, R. Galvelis, R. P. Pel´ aez, C. R. A. Abreu, S. E. Farr, E. Gallicchio, A. Gorenko, M. M. Henry, F. Hu, J. Huang, A. Kr¨ amer, J. Michel, J. A. Mitchell, V. S. Pande, J. P. Rodrigues, J. Rodriguez-Guerra, A. C. Simmonett, S. Singh, J. Swails, P. Turner, Y. Wang, I. Zhang, J. D. Chodera, G. De Fabritiis, and T. E. Markland. OpenMM 8: Molecular Dynamics Simulation with Machine Learning Potentials. The Journal of Physical Chemistry B , 128(1):109–116, Jan. 2024. ISSN 1520-6106. doi: 10.1021/acs.jpcb.3c06662. [25] R. Gao, E. Nijkamp, D. P. Kingma, Z. Xu, A. M. Dai, and Y. N. Wu. Flow contrastive estimation of energy-based models. In 2020 IEEE/CVF conference on computer vision and pattern recognition (CVPR) , pages 7515–7525, 2020. [26] R. Gao, Y. Song, B. Poole, Y. N. Wu, and D. P. Kingma. Learning energy-based models by diffusion recovery likelihood. In International conference on learning representations , 2021. [27] M. Gonzalez, N. Fernandez Pinto, T. Tran, e. Gherbi, H. Hajri, and N. Masmoudi. SEEDS: Ex-ponential SDE solvers for fast high-quality sampling from diffusion models. In Advances in neural information processing systems , volume 36, pages 68061–68120. Curran Associates, Inc., 2023. [28] I. Goodfellow, J. Pouget-Abadie, M. Mirza, B. Xu, D. Warde-Farley, S. Ozair, A. Courville, and Y. Bengio. Generative Adversarial Networks. Commun. ACM , 63(11):139–144, Oct. 2020. ISSN 0001-0782. Place: New York, NY, USA. [29] W. Grathwohl, R. T. Q. Chen, J. Bettencourt, and D. Duvenaud. Scalable reversible generative mod-els with free-form continuous dynamics. In International Conference on Learning Representations ,2019. [30] S. Gugger, L. Debut, T. Wolf, P. Schmid, Z. Mueller, S. Mangrulkar, M. Sun, and B. Bossan. Accelerate: Training and inference at scale made simple, efficient and adaptable., 2022. URL https: //github.com/huggingface/accelerate .[31] F. Guth, Z. Kadkhodaie, and E. P. Simoncelli. Learning normalized image densities via dual score matching, 2025. eprint: 2506.05310. [32] M. U. Gutmann and J.-i. Hirayama. Bregman divergence as general framework to estimate un-normalized statistical models. In conference on uncertainty in artificial intelligence , UAI’11, pages 283–290, Barcelona, Spain, 2011. AUAI Press. ISBN 978-0-9749039-7-2. 14 [33] M. U. Gutmann and A. Hyv¨ arinen. Noise-Contrastive Estimation of Unnormalized Statistical Mod-els, with Applications to Natural Image Statistics. Journal of Machine Learning Research , 13(11): 307–361, 2012. [34] J. He, J. M. Hern´ andez-Lobato, Y. Du, and F. Vargas. RNE: plug-and-play diffusion inference-time control and energy-based training. In International Conference on Learning Representations , 2026. [35] G. E. Hinton. Training products of experts by minimizing contrastive divergence. Neural Computa-tion , 14(8):1771–1800, 2002. doi: 10.1162/089976602760128018. [36] G. E. Hinton. Training products of experts by minimizing contrastive divergence. Neural Comput. ,14(8):1771–1800, Aug. 2002. ISSN 0899-7667. [37] P. Holderrieth, U. Singer, T. Jaakkola, R. T. Q. Chen, Y. Lipman, and B. Karrer. GLASS flows: Efficient inference for reward alignment of flow and diffusion models. In International conference on learning representations , 2026. [38] B. E. Husic, N. E. Charron, D. Lemm, J. Wang, A. P´ erez, M. Majewski, A. Kr¨ amer, Y. Chen, S. Olsson, G. de Fabritiis, F. No´ e, and C. Clementi. Coarse graining molecular dynamics with graph neural networks. The Journal of Chemical Physics , 153(19), Nov. 2020. ISSN 1089-7690. doi: 10.1063/5.0026133. URL http://dx.doi.org/10.1063/5.0026133 .[39] A. Hyv¨ arinen, J. Karhunen, and E. Oja. Independent Component Analysis . Adaptive and Cognitive Dynamic Systems: Signal Processing, Learning, Communications and Control. Wiley, 2004. ISBN 9780471464198. [40] A. Hyv¨ arinen. Estimation of Non-Normalized Statistical Models by Score Matching. Journal of Machine Learning Research , 6(24):695–709, 2005. [41] T. Karras, M. Aittala, T. Aila, and S. Laine. Elucidating the Design Space of Diffusion-Based Generative Models. In Advances in Neural Information Processing Systems , volume 35, pages 26565– 26577. Curran Associates, Inc., 2022. [42] D. Kingma, T. Salimans, B. Poole, and J. Ho. Variational diffusion models. In Advances in Neural Information Processing Systems , volume 34, pages 21696–21707. Curran Associates, Inc., 2021. [43] D. P. Kingma and J. Ba. Adam: A Method for Stochastic Optimization. In International Conference on Learning Representations , 2015. [44] D. P. Kingma and P. Dhariwal. Glow: Generative flow with invertible 1x1 convolutions. In Advances in Neural Information Processing Systems , volume 31. Curran Associates, Inc., 2018. [45] F. Koehler, A. Heckett, and A. Risteski. Statistical efficiency of score matching: The view from isoperimetry. In The Eleventh International Conference on Learning Representations , 2023. [46] C.-H. Lai, Y. Takida, N. Murata, T. Uesaka, Y. Mitsufuji, and S. Ermon. FP-diffusion: Improving score-based diffusion models by enforcing the underlying score fokker-planck equation. In Interna-tional Conference on Machine Learning , volume 202, pages 18365–18398. PMLR, 23–29 Jul 2023. [47] Y. LeCun, C. Cortes, and C. Burges. MNIST handwritten digit database. ATT Labs [Online]. Available: http://yann.lecun.com/exdb/mnist , 2, 2010. [48] T. Li and K. He. Back to basics: Let denoising generative models denoise, 2026. arXiv: 2511.13720 [cs.CV]. [49] K. Lindorff-Larsen, S. Piana, R. O. Dror, and D. E. Shaw. How fast-folding proteins fold. Science ,334(6055):517–520, 2011. doi: 10.1126/science.1208351. [50] Y. Lipman, R. T. Q. Chen, H. Ben-Hamu, M. Nickel, and M. Le. Flow Matching for Generative Modeling. In The Eleventh International Conference on Learning Representations , 2023. [51] Y. Lipman, M. Havasi, P. Holderrieth, N. Shaul, M. Le, B. Karrer, R. T. Q. Chen, D. Lopez-Paz, H. Ben-Hamu, and I. Gat. Flow matching guide and code, 2024. arXiv: 2412.06264 [cs.LG]. 15 [52] I. Loshchilov and F. Hutter. Decoupled weight decay regularization. In International conference on learning representations , 2019. [53] C. Lu, Y. Zhou, F. Bao, J. Chen, C. LI, and J. Zhu. DPM-solver: a fast ODE solver for diffusion probabilistic model sampling in around 10 steps. In Advances in neural information processing systems , volume 35, pages 5775–5787. Curran Associates, Inc., 2022. [54] B. M´ at´ e, S. Klein, T. Golling, and F. Fleuret. Flowification: Everything is a normalizing flow. In 
+
+Advances in Neural Information Processing Systems , 2022. [55] L. Molgedey and H. G. Schuster. Separation of a mixture of independent signals using time delayed correlations. Phys. Rev. Lett. , 72:3634–3637, Jun 1994. [56] A. Q. Nichol and P. Dhariwal. Improved denoising diffusion probabilistic models. In International Conference on Machine Learning , volume 139, pages 8162–8171. PMLR, 18–24 Jul 2021. [57] F. No´ e, S. Olsson, J. K¨ ohler, and H. Wu. Boltzmann generators: Sampling equilibrium states of many-body systems with deep learning. Science , 365(6457):eaaw1147, 2019. tex.eprint: https://www.science.org/doi/pdf/10.1126/science.aaw1147. [58] R. OuYang, L. Grenioux, and J. M. Hern´ andez-Lobato. A diffusive classification loss for learning energy-based generative models, 2026. arXiv: 2601.21025 [stat.ML]. [59] M. Plainer, H. Wu, L. Klein, S. G¨ unnemann, and F. Noe. Consistent sampling and simulation: Molecular dynamics with energy-based diffusion models. In The thirty-ninth annual conference on neural information processing systems , 2026. [60] Y. Qin and A. Risteski. Fit like you sample: Sample-efficient generalized score matching from fast mixing diffusions. In Conference on Learning Theory , volume 247, pages 4413–4457. PMLR, 30 Jun–03 Jul 2024. [61] B. Rhodes, K. Xu, and M. U. Gutmann. Telescoping density-ratio estimation. In Advances in Neural Information Processing Systems , volume 33, pages 4905–4916. Curran Associates, Inc., 2020. [62] M. Skreta, T. Akhound-Sadegh, V. Ohanesian, R. Bondesan, A. Aspuru-Guzik, A. Doucet, R. Brekel-mans, A. Tong, and K. Neklyudov. Feynman-kac correctors in diffusion: Annealing, guidance, and product of experts. In International Conference on Machine Learning , 2025. [63] Y. Song and S. Ermon. Generative Modeling by Estimating Gradients of the Data Distribution. In 
+
+Advances in Neural Information Processing Systems , volume 32. Curran Associates, Inc., 2019. [64] Y. Song, C. Meng, and S. Ermon. Mintnet: Building invertible neural networks with masked convo-lutions. In Neural Information Processing Systems , volume 32. Curran Associates, Inc., 2019. [65] Y. Song, S. Garg, J. Shi, and S. Ermon. Sliced Score Matching: A Scalable Approach to Density and Score Estimation. In Uncertainty in Artificial Intelligence Conference , volume 115, pages 574–584. PMLR, July 2020. [66] Y. Song, C. Durkan, I. Murray, and S. Ermon. Maximum Likelihood Training of Score-Based Diffusion Models. In Advances in Neural Information Processing Systems , volume 34, pages 1415– 1428. Curran Associates, Inc., 2021. [67] Y. Song, J. Sohl-Dickstein, D. P. Kingma, A. Kumar, S. Ermon, and B. Poole. Score-Based Gener-ative Modeling through Stochastic Differential Equations. In International Conference on Learning Representations , 2021. [68] Y. Song, P. Dhariwal, M. Chen, and I. Sutskever. Consistency Models. In International Conference on Machine Learning , ICML’23. JMLR.org, 2023. Place: Honolulu, Hawaii, USA. [69] A. Srivastava, S. Han, K. Xu, B. Rhodes, and M. U. Gutmann. Estimating the Density Ratio between Distributions with High Discrepancy using Multinomial Logistic Regression. Transactions on Machine Learning Research , 2023. ISSN 2835-8856. [70] M. Sugiyama, T. Suzuki, and T. Kanamori. Density ratio estimation in machine learning . Cambridge University Press, 2012. 16 [71] J. Thornton, L. Bethune, R. Zhang, A. Bradley, P. Nakkiran, and S. Zhai. Composition and control with distilled energy diffusion models and sequential monte carlo. In AISTATS 2025 , 2025. [72] M. Uehara, T. Matsuda, and F. Komaki. Analysis of noise contrastive estimation from the perspective of asymptotic variance, 2018. [73] A. van den Oord, N. Kalchbrenner, L. Espeholt, k. kavukcuoglu, O. Vinyals, and A. Graves. Con-ditional image generation with pixelcnn decoders. In Advances in Neural Information Processing Systems , volume 29. Curran Associates, Inc., 2016. [74] P. Vincent. A Connection Between Score Matching and Denoising Autoencoders. Neural Computa-tion , 23(7):1661–1674, 2011. [75] L. K. Wenliang and H. Kanagawa. Blindness of score-based methods to isolated components and mixing proportions, 2021. eprint: 2008.10087. [76] O. Yair and T. Michaeli. Contrastive Divergence Learning is a Time Reversal Adversarial Game. In 
+
+International Conference on Learning Representations , 2021. [77] H. Yu, M. U. Gutmann, A. Klami, and O. Chehab. Conditional noise-contrastive estimation of energy-based models by jumping between modes. In EurIPS 2025 workshop on principles of gener-ative modeling (PriGM) , 2025. [78] H. Yu, A. Klami, A. Hyvarinen, A. Korba, and O. Chehab. Density Ratio Estimation with Condi-tional Probability Paths. In Forty-second International Conference on Machine Learning , 2025. [79] S. Zhai, R. Zhang, P. Nakkiran, D. Berthelot, J. Gu, H. Zheng, T. Chen, M. ´A. Bautista, N. Jaitly, and J. M. Susskind. Normalizing flows are capable generative models. In International Conference on Machine Learning , 2025. 17 Appendix 
+
+The appendix is organized as follows. 
+
+A Theoretical results 19 
+
+A.1 Useful lemma on the logistic loss . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 A.2 Non-parametric consistency (Theorem 1) . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 A.3 Forward-reverse kernel: Infinitesimal Limit (Propositions 3 and Proposition 4) . . . . . . 20 A.4 White noise kernel: infinitesimal limit . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22 
+
+B Special cases of our method 25 
+
+B.1 Summary . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 B.2 Noise-Contrastive Estimation (NCE) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26 B.3 Flow-Contrastive Estimation (FCE) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26 B.4 Temporal Noise-Contrastive Estimation (tNCE) . . . . . . . . . . . . . . . . . . . . . . . . 26 B.5 Conditional Noise-Contrastive Estimation (CNCE) . . . . . . . . . . . . . . . . . . . . . . 27 B.6 Contrastive Divergence (CD) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28 B.7 Temporal Conditional Noise-Contrastive Estimation (tCNCE) . . . . . . . . . . . . . . . . 28 B.8 Sum of tNCE and tCNCE . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28 B.9 Time Score Matching . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29 B.10 Space Score Matching . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30 B.11 Energy-Based Diffusion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30 B.12 Discussion on RNE [34] . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31 
+
+C Implementation considerations 32 
+
+C.1 Sampling mechanisms . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32 C.2 Implementing forward-reverse kernel . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33 C.3 Parameterization of energy-based diffusion models . . . . . . . . . . . . . . . . . . . . . . 35 C.4 Score and velocity . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37 
+
+D Experimental details 37 
+
+D.1 Failure modes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38 D.2 Toy mixture . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38 D.3 MNIST mixture . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38 D.4 MNIST . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39 D.5 ImageNet64 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39 D.6 Molecules . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39 D.7 Computational resources . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40 D.8 License information . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40 
+
+E Additional experimental results 40 
+
+E.1 Synthetic Gaussian mixtures . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40 E.2 MNIST mixture . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 41 E.3 Molecules . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43 
+
+F Broader impacts 43 
+
+18 A Theoretical results 
+
+In this section, we prove the consistency of the estimator obtained by minimizing the empirical stNCE loss. We also derive the simplified expressions of stNCE loss under specific perturbation kernels. 
+
+## A.1 Useful lemma on the logistic loss 
+
+The following are useful lemma on how to rewrite the logistic classification loss. 
+
+Lemma 5 (Logistic loss as a Bregman divergence) Consider the logistic loss 
+
+Llogistic (F ) = −Ex∼pA [log σ(F (x))] − Ex∼pB [log(1 − σ(F (x)))] , (30) 
+
+which is minimized by 
+
+F ∗(x) = log pA(x) − log pB (x).
+
+Then, up to an additive constant independent of F , the logistic loss can be written as a Bregman divergence between eF ∗
+
+and eF .Proof. This is inspired by Gutmann and Hirayama [32]; Uehara et al. [72]. Let Φ( u) = u log u − (1 + u) log(1 + u). Consider the pointwise Bregman divergence 
+
+DΦ
+
+ eF ∗(x), e F (x) = Φ  eF ∗(x) − Φ eF (x) − Φ′ eF (x)  eF ∗(x) − eF (x). (31) Integrating against pB (x) dx yields a divergence between functions: 
+
+DΦ
+
+ eF ∗
+
+, e F  =
+
+Z
+
+DΦ
+
+ eF ∗(x), e F (x) pB (x) dx. (32) Substituting F ∗(x) = log pA(x) − log pB (x), a straightforward calculation shows 
+
+DΦ
+
+ eF ∗
+
+, e F  = Llogistic (F ) − L logistic (F ∗), (33) which proves the claim. 
+
+Lemma 6 (Logistic loss simplified when the model is near zero) Consider the logistic loss 
+
+L(Fθ ) := −Ep+(x)
+
+log σ(Fθ (x))  − Ep−(x)
+
+log  1 − σ(Fθ (x))  . (34) 
+
+If Fθ (x) is close to zero, then 
+
+L(Fθ ) = L(0) − 12 Ep+(x)−p−(x) [Fθ (x)] + 18 Ep+(x)+ p−(x)
+
+Fθ (x)2 + Ep+(x)+ p−(x)
+
+o(Fθ (x)2) . (35) 
+
+Proof. For fixed x, define the pointwise loss 
+
+ℓ(Fθ ) := −p+ log σ(Fθ ) − p− log  1 − σ(Fθ ). (36) A second-order Taylor expansion around Fθ = 0 gives 
+
+ℓ(Fθ ) = ℓ(0) − 12
+
+ p+ − p−Fθ + 18
+
+ p+ + p−F 2 
+
+> θ
+
++  p+ + p−o(F 2 
+
+> θ
+
+). (37) Integrating over x yields the result. 
+
+## A.2 Non-parametric consistency (Theorem 1) 
+
+Recall that the stNCE population loss is the logistic classification objective 
+
+LstNCE (F ) = −Ex∼pA
+
+ log σ(F (x))  − Ex∼pB
+
+ log(1 − σ(F (x))) . (38) By Lemma 5, this can be written (up to an additive constant) as 
+
+LstNCE (F ) = DΦ
+
+ eF ∗
+
+, e F  + const . (39) 19 Hence any minimizer F θmin satisfies 
+
+F θmin = F ∗.
+
+Using the definition of the stNCE classifier Eq. 13, this yields, for all ( x, t ) and ( x′, t ′) in the support, log pθmin (x | t) − log pθmin (x′ | t′) = log pd(x | t) − log pd(x′ | t′). (40) Therefore, log pθmin (x | t) = log pd(x | t) + C, (41) where C does not depend on ( x, t ). Enforcing the constraint pθ (x | t = 0) = p0(x) fixes C, yielding 
+
+pθmin (x | t) = pd(x | t). (42) This establishes non-parametric consistency. If the model is identifiable, we further obtain parametric Fisher consistency, i.e., 
+
+θmin = θ∗.
+
+## A.3 Forward-reverse kernel: Infinitesimal Limit (Propositions 3 and Propo-sition 4) 
+
+Simplifying the loss around zero Let 
+
+p+(x, t, x ′, t ′) := pd(x, t )pn(x′, t ′ | x, t ), (43) 
+
+p−(x, t, x ′, t ′) := pd(x′, t ′)pn(x, t | x′, t ′). (44) The logistic loss used in stNCE is 
+
+L(Fθ ) = −Ep+(x,t,x ′,t ′)[log σ(Fθ (x, t, x ′, t ′))] − Ep−(x,t,x ′,t ′)[log(1 − σ(Fθ (x, t, x ′, t ′)))] . (45) Using Lemma 6, we have, whenever Fθ is close to zero, 
+
+L(Fθ ) = L(0) − 12 Ep+−p− [Fθ ] + 18 Ep++p−
+
+F 2
+
+> θ
+
+ + Ep++p−
+
+o(F 2 
+
+> θ
+
+) . (46) In contrast with the expansion around the optimum, this expansion generally contains a linear term. However, this term vanishes in the forward-reverse case considered below. 
+
+Plugging in the forward-reverse kernel Recall that the forward-reverse kernel satisfies 
+
+pd(x, t )pn(x′, t ′ | x, t ) = pd(x′, t ′)pn(x, t | x′, t ′), (47) due to the Bayes rule. Equivalently, 
+
+p+(x, t, x ′, t ′) = p−(x, t, x ′, t ′). (48) Therefore, the linear term vanishes: 
+
+Ep+−p− [Fθ ] = 0 . (49) Moreover, by taking logs in the forward-reverse identity, log pn(x′, t ′ | x, t ) − log pn(x, t | x′, t ′) = log pd(x′, t ′) − log pd(x, t ). (50) Hence 
+
+Fθ (x, t, x ′, t ′) = log pθ (x, t ) − log pθ (x′, t ′) (51) + log pn(x′, t ′ | x, t ) − log pn(x, t | x′, t ′) (52) = log pθ (x, t ) − log pθ (x′, t ′) + log pd(x′, t ′) − log pd(x, t ) (53) =  log pd(x′, t ′) − log pθ (x′, t ′) −  log pd(x, t ) − log pθ (x, t ). (54) 20 Defining 
+
+eθ (x, t ) := log pd(x, t ) − log pθ (x, t ), (55) we obtain 
+
+Fθ (x, t, x ′, t ′) = eθ (x′, t ′) − eθ (x, t ). (56) Since p+ = p− = pd(x, t )pn(x′, t ′ | x, t ), the expansion becomes 
+
+L(Fθ ) = L(0) + 14 Epd(x,t )pn(x′,t ′|x,t )
+
+î eθ (x′, t ′) − eθ (x, t )2ó (57) + Epd(x,t )pn(x′,t ′|x,t )
+
+îoÄ eθ (x′, t ′) − eθ (x, t )2äó . (58) This expansion is valid when Fθ is close to zero. In the infinitesimal-time regime, this follows from the fact that ( x′, t ′) is close to ( x, t ). 
+
+Case of the SDE Assume that xt follows the SDE dxt = b(xt, t )d t + g(t)d Wt. (59) Let t′ = t + ∆ t. Conditional on ( xt, t ) = ( x, t ), the next point satisfies 
+
+x′ = x + b(x, t )∆ t + g(t)∆ W + Rt, ∆W ∼ N (0 , ∆t I ), (60) where 
+
+Rt =
+
+Z t+∆ tt
+
+ b(xs, s ) − b(x, t ) ds +
+
+Z t+∆ tt
+
+ g(s) − g(t) dW s. (61) Therefore, the expectation with respect to the transition kernel pn(x′, t ′ | x, t ) may be written as an expectation with respect to the Brownian increment ∆ W .By Itˆ o’s lemma, 
+
+eθ (x′, t ′) − eθ (x, t ) = ∂teθ (x, t )∆ t + ∇xeθ (x, t )⊤b(x, t )∆ t (62) + g(t)∇xeθ (x, t )⊤∆W + 12 g(t)2 Tr  ∇2
+
+> x
+
+eθ (x, t ) ∆t + o(∆ t). (63) Since ∆ W = O(√∆t), the leading term is 
+
+eθ (x′, t ′) − eθ (x, t ) = g(t)∇xeθ (x, t )⊤∆W + O(∆ t). (64) Thus, conditionally on ( x, t ), 
+
+E∆W
+
+î eθ (x′, t ′) − eθ (x, t )2 | x, t ó = g(t)2E∆W
+
+î ∇xeθ (x, t )⊤∆W 2ó + o(∆ t) (65) = g(t)2 ∥∇ xeθ (x, t )∥2 ∆t + o(∆ t). (66) Substituting into the loss expansion gives 
+
+L(Fθ ) − L (0) = 14 Epd(x,t )E∆W
+
+î eθ (x′, t ′) − eθ (x, t )2 | x, t ó + o(∆ t) (67) = ∆t
+
+4 Epd(x,t )
+
+îg(t)2 ∥∇ xeθ (x, t )∥2ó + o(∆ t). (68) Finally, since 
+
+∇xeθ (x, t ) = ∇x log pd(x, t ) − ∇ x log pθ (x, t ), (69) we obtain 
+
+L(Fθ ) − L (0) = ∆t
+
+4 Epd(x,t )
+
+îg(t)2 ∥∇ x log pd(x, t ) − ∇ x log pθ (x, t )∥2ó + o(∆ t). (70) 21 Case of the ODE Assume now that xt follows the ODE dxt = b(xt, t )d t. (71) Let t′ = t + ∆ t. Then, conditional on ( xt, t ) = ( x, t ), 
+
+x′ = x + b(x, t )∆ t + o(∆ t). (72) Therefore, 
+
+eθ (x′, t ′) − eθ (x, t ) =  ∂teθ (x, t ) + b(x, t )⊤∇xeθ (x, t ) ∆t + o(∆ t). (73) Defining the total derivative dteθ (x, t ) := ∂teθ (x, t ) + b(x, t )⊤∇xeθ (x, t ), (74) we get 
+
+eθ (x′, t ′) − eθ (x, t ) = d teθ (x, t )∆ t + o(∆ t). (75) Using the Taylor expansion of the logistic loss around zero, and using the forward-reverse identity p+ =
+
+p−, the linear term vanishes and 
+
+LstN CE (Fθ ) − L stN CE (0) = 14 Epd(x,t )
+
+î eθ (x′, t ′) − eθ (x, t )2ó + Epd(x,t )
+
+îoÄ eθ (x′, t ′) − eθ (x, t )2äó .
+
+(76) Substituting the ODE expansion gives 
+
+LstN CE (Fθ ) − L stN CE (0) = ∆t2
+
+4 Epd(x,t )
+
+î dteθ (x, t )2ó + o(∆ t2). (77) Finally, since 
+
+eθ (x, t ) = log pd(x, t ) − log pθ (x, t ), (78) we have dteθ (x, t ) = d t log pd(x, t ) − dt log pθ (x, t ). (79) Therefore, 
+
+LstN CE (Fθ ) − L stN CE (0) = ∆t2
+
+4 Epd(x,t )
+
+î(d t log pd(x, t ) − dt log pθ (x, t )) 2ó + o(∆ t2). (80) We remark that the SDE interpretation is closer to the practical implementation of stNCE with forward-reverse kernel. With the ODE interpretation, one would need to know the velocity field b(x, t )in advance, and need to keep track of the ground truth d t log pt(x). 
+
+## A.4 White noise kernel: infinitesimal limit 
+
+Simplifying the loss around zero Let 
+
+p+(x, t, x ′, t ′) := pd(x, t )pn(x′, t ′ | x, t ), (81) 
+
+p−(x, t, x ′, t ′) := pd(x′, t ′)pn(x, t | x′, t ′). (82) The logistic loss used in stNCE is 
+
+L(Fθ ) = −Ep+ [log σ(Fθ (x, t, x ′, t ′))] − Ep−
+
+log  1 − σ(Fθ (x, t, x ′, t ′))  . (83) Using Lemma 6, whenever Fθ is close to zero, 
+
+L(Fθ ) = L(0) − 12 Ep+−p− [Fθ ] + 18 Ep++p−
+
+F 2
+
+> θ
+
+ + Ep++p−
+
+o(F 2 
+
+> θ
+
+) . (84) 22 Plugging in the white noise kernel Assume that the perturbation kernel is an infinitesimal Gaussian kernel in both space and time: 
+
+x′ = x + √εx ξ, ξ ∼ N (0 , I ), (85) 
+
+t′ = t + √εt τ, τ ∼ N (0 , 1) , (86) where ξ and τ are independent. Since the Gaussian kernel is symmetric, 
+
+pn(x′, t ′ | x, t ) = pn(x, t | x′, t ′). (87) Thus 
+
+Fθ (x, t, x ′, t ′) = log pθ (x, t ) − log pθ (x′, t ′). (88) A first-order Taylor expansion gives 
+
+Fθ (x, t, x ′, t ′) = −√εx∇x log pθ (x, t )⊤ξ − √εt∂t log pθ (x, t )τ (89) + o(√εx + √εt). (90) Therefore Fθ is close to zero in the infinitesimal perturbation limit, justifying the Taylor expansion around zero. 
+
+The linear term Using symmetry of pc, we have 
+
+p+(x, t, x ′, t ′) − p−(x, t, x ′, t ′) =  pd(x, t ) − pd(x′, t ′)pn(x′, t ′ | x, t ). (91) Moreover, 
+
+pd(x′, t ′) = pd(x, t ) + √εx∇xpd(x, t )⊤ξ + √εt∂tpd(x, t )τ (92) + o(√εx + √εt). (93) Hence 
+
+pd(x, t ) − pd(x′, t ′) = −pd(x, t ) √εx∇x log pd(x, t )⊤ξ + √εt∂t log pd(x, t )τ  (94) + o(√εx + √εt). (95) Combining this with the expansion of Fθ , and averaging over ξ, τ , gives 
+
+Ep+−p− [Fθ ] = Epd(x,t )
+
+h
+
+εx∇x log pd(x, t )⊤∇x log pθ (x, t ) (96) + εt∂t log pd(x, t )∂t log pθ (x, t )
+
+i
+
+(97) + o(εx + εt), (98) where the mixed term vanishes because ξ and τ are independent and centered. 
+
+The quadratic term Similarly, 
+
+F 2 
+
+> θ
+
+= εx
+
+ ∇x log pθ (x, t )⊤ξ2 + εt (∂t log pθ (x, t )τ )2 (99) + 2 √εxεt
+
+ ∇x log pθ (x, t )⊤ξ (∂t log pθ (x, t )τ ) (100) + o(εx + εt). (101) Averaging over ξ, τ yields 
+
+Eξ,τ 
+
+F 2
+
+> θ
+
+ = εx ∥∇ x log pθ (x, t )∥2 + εt (∂t log pθ (x, t )) 2 (102) + o(εx + εt). (103) Since 
+
+p+(x, t, x ′, t ′) + p−(x, t, x ′, t ′) = 2 pd(x, t )pn(x′, t ′ | x, t ) + o(1) , (104) we get 18 Ep++p−
+
+F 2
+
+> θ
+
+ = 14 Epd(x,t )
+
+"
+
+εx ∥∇ x log pθ (x, t )∥2 (105) + εt (∂t log pθ (x, t )) 2
+
+#
+
+(106) + o(εx + εt). (107) 23 Combining the terms Substituting the linear and quadratic terms into the expansion gives 
+
+LstN CE (Fθ ) − L stN CE (0) = 14 Epd(x,t )
+
+"
+
+εx ∥∇ x log pθ (x, t )∥2 + εt (∂t log pθ (x, t )) 2
+
+#
+
+(108) 
+
+− 12 Epd(x,t )
+
+"
+
+εx∇x log pd(x, t )⊤∇x log pθ (x, t ) (109) + εt∂t log pd(x, t )∂t log pθ (x, t )
+
+#
+
+(110) + o(εx + εt). (111) Completing the square, we obtain 
+
+LstN CE (Fθ ) − L stN CE (0) = 14 Epd(x,t )
+
+"
+
+εx ∥∇ x log pθ (x, t ) − ∇ x log pd(x, t )∥2 (112) + εt (∂t log pθ (x, t ) − ∂t log pd(x, t )) 2
+
+#
+
+(113) 
+
+− 14 Epd(x,t )
+
+"
+
+εx ∥∇ x log pd(x, t )∥2 + εt (∂t log pd(x, t )) 2
+
+#
+
+(114) + o(εx + εt). (115) Therefore, up to additive terms independent of θ,
+
+LstN CE (Fθ ) ≡ 14 Epd(x,t )
+
+"
+
+εx ∥∇ x log pθ (x, t ) − ∇ x log pd(x, t )∥2 (116) + εt (∂t log pθ (x, t ) − ∂t log pd(x, t )) 2
+
+#
+
++ o(εx + εt). (117) Thus, infinitesimal Gaussian perturbations recover the dual score matching objective [31]: one term matches the spatial score ∇x log pd(x, t ), while the other matches the temporal score ∂t log pd(x, t ). 24 B Special cases of our method 
+
+In this section, we detail how many popular losses for learning energy-based models are in fact special cases of our loss. First, we express the stNCE loss function in a similar form as Ceylan and Gutmann [12]. Recall the stNCE loss function: 
+
+LstN CE (Fθ ) = −Ep+ [log σ(Fθ (x, t, x ′, t ′))] − Ep−
+
+log  1 − σ(Fθ (x, t, x ′, t ′))  . (118) Since p+(x, t, x ′, t ′) = pd(x, t )pn(x′, t ′|x, t ) and p−(x, t, x ′, t ′) = pd(x′, t ′)pn(x, t |x′, t ′), due to symmetry one can switch x, t and x′, t ′ without affecting the correctness. As such, we can simply reuse x, t, x ′, t ′ as 
+
+x′, t ′, x, t and write it using a single term, given by 
+
+LstN CE (Fθ ) = −2Epd(x,t )pn(x′,t ′|x,t ) [log σ(Fθ (x, t, x ′, t ′))] (119) = −2Epd(x|t)p(t)pn(x′,t ′|x,t ) [log σ(Fθ (x, t, x ′, t ′))] , (120) 
+
+Fθ (x, t, x ′, t ′) = log pθ (x|t) + log p(t) + log pn(x′, t ′|x, t ) (121) 
+
+− log pθ (x′|t′) − log p(t′) − log pn(x, t |x′, t ′). (122) Observe that it concerns two choices: the time prior p(t) and the perturbation kernel pn(x′, t ′|x, t ). We next show how to recover exisiting methods using the above formulation. 
+
+## B.1 Summary 
+
+We summarize in Table 7 how many methods in the literature can be viewed as special cases under our stNCE framework. In particular, the proof for Trajectory Score Matching can be found in Section A.3, and the proof for Dual Score Matching can be found in Section A.4. In the following we show how the previous methods fall under our stNCE framework. 
+
+Method Time prior Perturbation kernel x′, t ′|x, t 
+
+Temporal variation 
+
+Noise-Contrastive Estimation (NCE) [33] 12 δ0(t) + 12 δ1(t) δx(x′) δ1−t(t′)Flow-Contrastive Estimation (FCE) [25] 12 δ0(t) + 12 δ1(t) δx(x′) δ1−t(t′)Temporal NCE (tNCE)[61; 58; 1] pt(t) δx(x′) pn(t′ | t)Time Score Matching [19] pt(t) δx(x′) δt+ϵt (t′), ϵ → 0
+
+Spatial variation 
+
+Conditional NCE (CNCE) [12] δ1(t) pn(x′ | x) δt(t′)Contrastive Divergence (CD) [35] δ1(t) pMCMC (x′ | x) δt(t′)Temporal CNCE (tCNCE) pt(t) pn(x′ | x) δt(t′)Space Score Matching [40; 74] δ1(t) N (x′; x, ϵI ) δt(t′), ϵ → 0Energy-Based Diffusion [67; 71] pt(t) N (x′; x, ϵI ) δt(t′), ϵ → 0
+
+Spatiotemporal variation 
+
+Spatiotemporal NCE (stNCE) pt(t) pn(x′ | x, t, t ′) pn(t′ | t)tNCE + tCNCE pt(t) 12 δt(t′)pn(x′|x) + 12 δx(x′)pn(t′|t)stNCE-o (forward-reverse, infinitesimal, SDE) 
+
+pt(t) see Theorem 3 stNCE-o (forward-reverse, infinitesimal, ODE) 
+
+pt(t) see Theorem 4 Dual Score Matching [31] pt(t) N (x′, t ′; x, t, ϵI ) ϵ → 0
+
+Table 7: stNCE recovers known methods, obtained by specific choices of the time prior and perturbation kernel. We next write some additional precisions for the above table. The FCE parameterizes the the reference distribution as a flow-based model pd(x|0) = pβ (x) that is updated during training. Similarly, the CD 25 updates the perturbation kernel during training as pMCMC (x′|x), that is a MCMC kernel with stationary distribution stopgrad( pθ ). 
+
+## B.2 Noise-Contrastive Estimation (NCE) 
+
+Original loss The standard Noise-Contrastive Estimation (NCE) objective [33] is given by 
+
+LNCE (θ) = −Epd(x|1) [log σ(log pθ (x) − log pd(x|0))] − Epd(x|0) [log (1 − σ(log pθ (x) − log pd(x|0)))] .
+
+where σ is the sigmoid function. 
+
+Our loss Recall that the generic stNCE loss is 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(x′,t ′|x,t ) [log σ(Fθ (x, t, x ′, t ′))] − Epd(x′,t ′)pn(x,t |x′,t ′) [log (1 − σ(Fθ (x, t, x ′, t ′)))] ,
+
+where the logit is 
+
+Fθ (x, t, x ′, t ′) = log pθ (x|t) + log p(t) + log pn(x′, t ′|x, t ) − log pθ (x′|t′) − log p(t′) − log pn(x, t |x′, t ′).
+
+and the model distribution at time zero is known, pθ (x, 0) := p0(x). Recall that pd(x, t ) = p(t)pd(x|t). Choosing the prior on time as p(t) = 12 δ1(t) + 12 δ0(t), and the perturbation kernel as pn(x′, t ′|x, t ) = 
+
+δx(x′)δ1−t(t′) simplifies the loss. In particular, the perturbation leaves the spatial variable unchanged and swaps the temporal index. We now obtain 
+
+LstNCE (Fθ ) = −Ep1(x) [log σ(Fθ (x, 1, x, 0))] − Ep0(x) [log (1 − σ(Fθ (x, 0, x, 1)))] .
+
+where 
+
+Fθ (x, 1, x, 0) = log pθ (x|1) + log p(1) + log δx(x) + log δ0(0) − log pθ (x|0) − log p(0) − log δx(x) − log δ1(1) = log pθ (x|1) − log p0(x)
+
+Fθ (x, 0, x, 1) = log p0(x) − log pθ (x|1) Substituting these expressions back into the stNCE loss yields 
+
+LstNCE = −Epd(x|1) [log σ(log pθ (x) − log p0(x))] − Epd(x|0) [log (1 − σ(log pθ (x) − log p0(x)))] , (123) which exactly recovers the standard NCE objective. 
+
+## B.3 Flow-Contrastive Estimation (FCE) 
+
+This is a special case of NCE where the reference distribution pd(x|0) is not fixed beforehand but is instead updated adaptively during training. In particular, FCE parameterizes the reference distribution as a flow-based model pd(x|0) = pβ (x) that is updated during the optimization. 
+
+## B.4 Temporal Noise-Contrastive Estimation (tNCE) 
+
+Original loss The temporal Noise-Contrastive Estimation (tNCE) objective which is heavily inspired by Rhodes et al. [61] is given by 
+
+LtNCE (θ) = −Epd(x,t )pn(t′|t) [log σ(log pθ (x|t) − log pθ (x|t′) + ∆( t, t ′))] (124) 
+
+− Epd(x,t ′)pn(t|t′) [log (1 − σ(log pθ (x|t) − log pθ (x|t′) + ∆( t, t ′)))] , (125) where ∆( t, t ′) = log p(t) + log pn(t′|t) − log p(t′) − log pn(t|t′)is known to the user. For example, the user can choose p(t) to be uniform over the interval [0 , 1], and 
+
+pn(t′|t) to be a Gaussian perturbation. In that case, ∆( t, t ′) = 0. 26 Our loss Recall that the generic stNCE loss is 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(x′,t ′|x,t ) [log σ(Fθ (x, t, x ′, t ′))] − Epd(x′,t ′)pn(x,t |x′,t ′) [log (1 − σ(Fθ (x, t, x ′, t ′)))] ,
+
+where the logit is 
+
+Fθ (x, t, x ′, t ′) = log pθ (x|t) + log p(t) + log pn(x′, t ′|x, t ) − log pθ (x′|t′) − log p(t′) − log pn(x, t |x′, t ′).
+
+Choosing the perturbation kernel as pn(x′, t ′|x, t ) = δx(x′)pn(t′|t) removes all spatial perturbations. In particular, the perturbation leaves the spatial variable unchanged while perturbing only the temporal index. We now obtain 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(t′|t) [log σ(Fθ (x, t, x, t ′))] − Epd(x,t ′)pn(t|t′) [log (1 − σ(Fθ (x, t, x, t ′)))] .
+
+Moreover, 
+
+Fθ (x, t, x, t ′) = log pθ (x|t) + log p(t) + log pn(t′|t) − log pθ (x|t′) − log p(t′) − log pn(t|t′)= log pθ (x|t) − log pθ (x|t′) + ∆( t, t ′).
+
+Substituting these expressions back into the stNCE loss yields 
+
+LstNCE = −Epd(x,t )pn(t′|t) [log σ(log pθ (x|t) − log pθ (x|t′) + ∆( t, t ′))] (126) 
+
+− Epd(x,t ′)pn(t|t′) [log (1 − σ(log pθ (x|t) − log pθ (x|t′) + ∆( t, t ′)))] , (127) which exactly recovers the tNCE objective. 
+
+## B.5 Conditional Noise-Contrastive Estimation (CNCE) 
+
+Original loss The Conditional Noise-Contrastive Estimation (CNCE) objective [12] is given by 
+
+LCNCE (θ) = −Epd(x|1) pn(x′|x) [log σ(log pθ (x) + log pn(x′|x) − log pθ (x′) − log pn(x|x′))] (128) 
+
+− Epd(x′|1) pn(x|x′) [log (1 − σ(log pθ (x) + log pn(x′|x) − log pθ (x′) − log pn(x|x′)))] . (129) where σ is the sigmoid function. 
+
+Our loss Recall that the generic stNCE loss is 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(x′,t ′|x,t ) [log σ(Fθ (x, t, x ′, t ′))] − Epd(x′,t ′)pn(x,t |x′,t ′) [log (1 − σ(Fθ (x, t, x ′, t ′)))] ,
+
+where the logit is 
+
+Fθ (x, t, x ′, t ′) = log pθ (x|t) + log p(t) + log pn(x′, t ′|x, t ) − log pθ (x′|t′) − log p(t′) − log pn(x, t |x′, t ′).
+
+Choosing the prior on time as p(t) = δ1(t) and the perturbation kernel as pn(x′, t ′|x, t ) = pn(x′|x)δt(t′) re-moves all temporal perturbations. In particular, the temporal index remains fixed while the perturbation acts only on the spatial variable. We now obtain 
+
+LstNCE (Fθ ) = −Epd(x)pn(x′|x) [log σ(Fθ (x, 1, x ′, 1))] − Epd(x′)pn(x|x′) [log (1 − σ(Fθ (x, 1, x ′, 1)))] .
+
+Moreover, 
+
+Fθ (x, 1, x ′, 1) = log pθ (x|1) + log p(1) + log pn(x′|x) − log pθ (x′|1) − log p(1) − log pn(x|x′)= log pθ (x|1) + log pn(x′|x) − log pθ (x′|1) − log pn(x|x′).
+
+Identifying pθ (x|1) with pθ (x), we obtain 
+
+Fθ (x, 1, x ′, 1) = log pθ (x) + log pn(x′|x) − log pθ (x′) − log pn(x|x′).
+
+Substituting these expressions back into the stNCE loss yields 
+
+LstNCE = −Epd(x|1) pn(x′|x) [log σ(log pθ (x) + log pn(x′|x) − log pθ (x′) − log pn(x|x′))] (130) 
+
+− Epd(x′|1) pn(x|x′) [log (1 − σ(log pθ (x) + log pn(x′|x) − log pθ (x′) − log pn(x|x′)))] , (131) which exactly recovers the CNCE objective. 27 B.6 Contrastive Divergence (CD) 
+
+Yair and Michaeli [76] observed that this is a special case of CNCE where the perturbation kernel pn(x′|x)is an MCMC kernel with stationary distribution stopgrad( pθ ) constantly updated during training. 
+
+## B.7 Temporal Conditional Noise-Contrastive Estimation (tCNCE) 
+
+Original loss The temporal Conditional Noise-Contrastive Estimation (tCNCE) objective, which is a natural extension of the CNCE objective, is given by 
+
+LtCNCE (θ) = −Epd(x,t )pn(x′|x) [log σ(log pθ (x|t) + log pn(x′|x) − log pθ (x′|t) − log pn(x|x′))] (132) 
+
+− Epd(x′,t )pn(x|x′) [log (1 − σ(log pθ (x|t) + log pn(x′|x) − log pθ (x′|t) − log pn(x|x′)))] .
+
+(133) where σ is the sigmoid function. 
+
+Our loss Recall that the generic stNCE loss is 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(x′,t ′|x,t ) [log σ(Fθ (x, t, x ′, t ′))] − Epd(x′,t ′)pn(x,t |x′,t ′) [log (1 − σ(Fθ (x, t, x ′, t ′)))] ,
+
+where the logit is 
+
+Fθ (x, t, x ′, t ′) = log pθ (x|t) + log p(t) + log pn(x′, t ′|x, t ) − log pθ (x′|t′) − log p(t′) − log pn(x, t |x′, t ′).
+
+Choosing the perturbation kernel as pn(x′, t ′|x, t ) = pn(x′|x)δt(t′) leaves the temporal index unchanged while perturbing only the spatial variable. We now obtain 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(x′|x) [log σ(Fθ (x, t, x ′, t ))] − Epd(x′,t )pn(x|x′) [log (1 − σ(Fθ (x, t, x ′, t )))] .
+
+Moreover, 
+
+Fθ (x, t, x ′, t ) = log pθ (x|t) + log p(t) + log pn(x′|x) − log pθ (x′|t) − log p(t) − log pn(x|x′)= log pθ (x|t) + log pn(x′|x) − log pθ (x′|t) − log pn(x|x′).
+
+Substituting these expressions back into the stNCE loss yields 
+
+LstNCE = −Epd(x,t )pn(x′|x) [log σ(log pθ (x|t) + log pn(x′|x) − log pθ (x′|t) − log pn(x|x′))] (134) 
+
+− Epd(x′,t )pn(x|x′) [log (1 − σ(log pθ (x|t) + log pn(x′|x) − log pθ (x′|t) − log pn(x|x′)))] , (135) which exactly recovers the tCNCE objective. 
+
+## B.8 Sum of tNCE and tCNCE 
+
+Original loss Consider the sum of the tNCE and tCNCE objectives: 
+
+L = LtNCE + LtCNCE . (136) 
+
+Our loss Recall that the generic stNCE loss is 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(x′,t ′|x,t ) [log σ(Fθ (x, t, x ′, t ′))] − Epd(x′,t ′)pn(x,t |x′,t ′) [log (1 − σ(Fθ (x, t, x ′, t ′)))] ,
+
+where the logit is 
+
+Fθ (x, t, x ′, t ′) = log pθ (x|t) + log p(t) + log pn(x′, t ′|x, t ) − log pθ (x′|t′) − log p(t′) − log pn(x, t |x′, t ′).
+
+Choosing the perturbation kernel as 
+
+pn(x′, t ′|x, t ) = 12 δt(t′)pn(x′|x) + 12 δx(x′)pn(t′|t)28 creates two perturbation branches. The first branch leaves the temporal index unchanged while perturbing the spatial variable, whereas the second branch leaves the spatial variable unchanged while perturbing the temporal index. We now split the stNCE loss according to these two branches: 
+
+LstNCE (Fθ ) = − 12 Epd(x,t )pn(x′|x) [log σ(Fθ (x, t, x ′, t ))] 
+
+− 12 Epd(x′,t )pn(x|x′) [log (1 − σ(Fθ (x, t, x ′, t )))] 
+
+− 12 Epd(x,t )pn(t′|t) [log σ(Fθ (x, t, x, t ′))] 
+
+− 12 Epd(x,t ′)pn(t|t′) [log (1 − σ(Fθ (x, t, x, t ′)))] .
+
+For the spatial perturbation branch, we obtain 
+
+Fθ (x, t, x ′, t ) = log pθ (x|t) + log p(t) + log pn(x′|x)
+
+− log pθ (x′|t) − log p(t) − log pn(x|x′)= log pθ (x|t) + log pn(x′|x) − log pθ (x′|t) − log pn(x|x′),
+
+which is exactly the tCNCE logit. Similarly, for the temporal perturbation branch, 
+
+Fθ (x, t, x, t ′) = log pθ (x|t) + log p(t) + log pn(t′|t)
+
+− log pθ (x|t′) − log p(t′) − log pn(t|t′)= log pθ (x|t) − log pθ (x|t′) + ∆( t, t ′),
+
+where ∆( t, t ′) = log p(t) + log pn(t′|t) − log p(t′) − log pn(t|t′).
+
+This is exactly the tNCE logit. Substituting these expressions back into the stNCE loss yields 
+
+LstNCE = 12 LtCNCE + 12 LtNCE , (137) which recovers the sum of the tNCE and tCNCE objectives up to a constant rescaling factor independent of θ.
+
+## B.9 Time Score Matching 
+
+Original loss The Time Score Matching objective is given by 
+
+LTSM (θ) = Epd(x,t )
+
+î(∂t log pθ (x|t) − ∂t log pd(x|t)) 2ó . (138) where ∂t log pd(x|t) denotes the ground-truth temporal score. In practice, the ground-truth temporal score is not available in closed-form so many have proposed tractable ways to rewrite the objective, using integration by parts [19] or by introducing a conditioning variable [78]. 
+
+Our loss Recall that the generic stNCE loss is 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(x′,t ′|x,t ) [log σ(Fθ (x, t, x ′, t ′))] − Epd(x′,t ′)pn(x,t |x′,t ′) [log (1 − σ(Fθ (x, t, x ′, t ′)))] ,
+
+where the logit is 
+
+Fθ (x, t, x ′, t ′) = log pθ (x|t) + log p(t) + log pn(x′, t ′|x, t ) − log pθ (x′|t′) − log p(t′) − log pn(x, t |x′, t ′).
+
+To recover Time Score Matching, we choose a purely temporal infinitesimal perturbation. That is, the perturbation kernel leaves the spatial variable unchanged and perturbs time according to pn(x′, t ′|x, t ) = 
+
+δx(x′)N (t′; t, ε ), with ε → 0. We also assume that the temporal perturbation is symmetric, so pn(t′|t) = 
+
+pn(t|t′) up to boundary effects. We now obtain 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(t′|t) [log σ(Fθ (x, t, x, t ′))] − Epd(x,t ′)pn(t|t′) [log (1 − σ(Fθ (x, t, x, t ′)))] .
+
+29 Moreover, 
+
+Fθ (x, t, x, t ′) = log pθ (x|t) + log p(t) + log pn(t′|t) − log pθ (x|t′) − log p(t′) − log pn(t|t′)= log pθ (x|t) − log pθ (x|t′) + log p(t) − log p(t′),
+
+where the perturbation-kernel terms cancel by symmetry. If the time prior is locally uniform, or if it is absorbed into the time-dependent density, this reduces to 
+
+Fθ (x, t, x, t ′) = log pθ (x|t) − log pθ (x|t′).
+
+Writing t′ = t + √εξ with ξ ∼ N (0 , 1), a first-order Taylor expansion gives 
+
+Fθ (x, t, x, t ′) = −√ε ∂ t log pθ (x|t)ξ + o(√ε).
+
+Using the second-order expansion of the logistic loss around Fθ = 0, the infinitesimal temporal pertur-bation limit gives 
+
+LstNCE = ε
+
+4 Epd(x,t )
+
+î(∂t log pθ (x|t) − ∂t log pd(x|t)) 2ó + C + o(ε), (139) where C is independent of θ. Therefore, up to the constant factor ε/ 4 and additive terms independent of θ, the infinitesimal temporal-only limit of stNCE recovers the Time Score Matching objective. 
+
+## B.10 Space Score Matching 
+
+Original loss The Space Score Matching objective is given by 
+
+LSSM (θ) = Epd(x|1) 
+
+î∥∇ x log pθ (x|1) − ∇ x log pd(x|1) ∥2ó . (140) where ∇x log pd(x|1) denotes the ground-truth spatial score. This quantity is unknown in closed-form so many have rewritten the objective in a tractable way using integration by parts [40] or by introducing a conditioning variable [74]. 
+
+Our loss Recall that the Energy-Based Diffusion loss derived above is obtained from the infinitesimal spatial-only limit of stNCE: 
+
+LstNCE = ε
+
+4 Epd(x,t )
+
+î∥∇ x log pθ (x|t) − ∇ x log pd(x|t)∥2ó + C + o(ε). (141) Restricting the time distribution to the single time point t = 1, that is, choosing p(t) = δ1(t), yields 
+
+LstNCE = ε
+
+4 Epd(x|1) 
+
+î∥∇ x log pθ (x|1) − ∇ x log pd(x|1) ∥2ó + C + o(ε), (142) which exactly recovers the standard Space Score Matching objective up to a constant rescaling factor and additive terms independent of θ.
+
+## B.11 Energy-Based Diffusion 
+
+Original loss The Energy-Based Diffusion (EBD) loss [67; 71] is given by 
+
+LEBD (θ) = Epd(x,t )
+
+î∥∇ x log pθ (x|t) − ∇ x log pd(x|t)∥2ó . (143) where ∇x log pd(x|t) denotes the ground-truth spatial score. 
+
+Our loss Recall that the generic stNCE loss is 
+
+LstNCE (Fθ ) = −Epd(x,t )pn(x′,t ′|x,t ) [log σ(Fθ (x, t, x ′, t ′))] − Epd(x′,t ′)pn(x,t |x′,t ′) [log (1 − σ(Fθ (x, t, x ′, t ′)))] ,
+
+where the logit is 
+
+Fθ (x, t, x ′, t ′) = log pθ (x|t) + log p(t) + log pn(x′, t ′|x, t ) − log pθ (x′|t′) − log p(t′) − log pn(x, t |x′, t ′).
+
+30 To recover the Energy-Based Diffusion loss, we choose a purely spatial infinitesimal perturbation. That is, the perturbation kernel leaves the temporal index unchanged and perturbs the spatial variable ac-cording to pn(x′, t ′|x, t ) = N (x′; x, εI )δt(t′), with ε → 0. Since the Gaussian perturbation is symmetric, 
+
+pn(x′|x) = pn(x|x′). We now obtain 
+
+LstNCE = −Epd(x,t )pn(x′|x) [log σ(Fθ (x, t, x ′, t ))] − Epd(x′,t )pn(x|x′) [log (1 − σ(Fθ (x, t, x ′, t )))] .
+
+Moreover, 
+
+Fθ (x, t, x ′, t ) = log pθ (x|t) + log p(t) + log pn(x′|x) − log pθ (x′|t) − log p(t) − log pn(x|x′)= log pθ (x|t) − log pθ (x′|t),
+
+where the time-prior terms cancel because t′ = t, and the perturbation kernel terms cancel by symmetry. Writing x′ = x + √εξ with ξ ∼ N (0 , I ), a first-order Taylor expansion gives 
+
+Fθ (x, t, x ′, t ) = −√ε ∇x log pθ (x|t)⊤ξ + o(√ε).
+
+Using the second-order expansion of the logistic loss around Fθ = 0, the infinitesimal spatial perturbation limit gives 
+
+LstNCE = ε
+
+4 Epd(x,t )
+
+î∥∇ x log pθ (x|t) − ∇ x log pd(x|t)∥2ó + C + o(ε), (144) where C is independent of θ. Therefore, up to the constant factor ε/ 4 and additive terms independent of θ, the infinitesimal spatial-only limit of stNCE recovers the Energy-Based Diffusion loss. 
+
+## B.12 Discussion on RNE [34] 
+
+Next we consider RNE as proposed in He et al. [34], which was shown to be capable of regularizing energy-based diffusion models. The RNE loss is roughly given by 
+
+L = Ext,t,x t+∆ t,t +∆ t∥sg (log p(xt|xt+∆ t) − log p(xt+∆ t|xt)) + log pt+∆ t(xt+∆ t) − log pt(xt)∥2, (145) where the diffusion convention of time is used, and sg denotes stop gradient. He et al. [34] showed that the regularizer, when combined with denoising score matching loss, allows training normalized energy-based models. However, when used on its own and using the score estimates as given by the model itself, the RNE loss suffers from a notable pathology. Specifically, the optimum satisfying the Bayes rule constraint induced by RNE is not unique, in contrast to stNCE-s: while the ground-truth time-varying density 
+
+pt is one optimum, there exist infinitely many other optimums that may differ arbitrarily from the data distribution. For example, the degenerate solution where pt ≡ c for some constant c is an optimum under the Variance-Exploding noising process with Euler-Maruyama discretization, and any time-varying probability density induced by a clean data distribution that differ from the empirical distribution is also a optimum. 31 C Implementation considerations 
+
+## C.1 Sampling mechanisms 
+
+stNCE logits are determined by log p(x, t ) + log pn(x′, t ′|x, t ) = log p(t) + log p(x|t) + log pn(x′|x, t |t′) + log pn(t′|t). As such, one would need to take into account log p(t) + log pn(t′|t) = log pn(t, t ′) when forming the logit, unless log pn(t, t ′) = log pn(t′, t ), in which case they cancel out with each other. We next introduce the folding mechanism, which will be beneficial afterwards. 
+
+C.1.1 Useful identity: folding mechanism 
+
+We would like to sample t′ given t, such that when t is uniformly distributed between [0 , 1], t′ follows the same distribution while remaining reasonably close to t. The following mechanism achieves it: one samples ˜ t by adding Gaussian noise with zero mean and some standard deviation σ, and folds ˜ t back to lie between [0 , 1] and obtain t′ using t′ = 1 − | (˜ t mod 2) − 1|.
+
+Proof. Denote ϵ to be the Gaussian noise with standard deviation σ. Observe that a given value of t′ can be obtained from different ˜ t. Specifically, they could be ˜ t = 2 k + t′ or ˜ t = 2 k − t′, where k ∈ Z. We thus have 
+
+pt′ (t′) = 
+
+> ∞
+
+X
+
+> k=−∞
+
+[p˜t(2 k + t′) + p˜t(2 k − t′)] , (146) i.e. the sum of two terms. Note that 
+
+p˜t(˜ t) = 
+
+Z 10
+
+pϵ(x − t)d t, (147) and 
+
+pt′ (t′) = 
+
+> ∞
+
+X
+
+> k=−∞
+
+ñZ 10
+
+pϵ(2 k + t′ − t)d t +
+
+Z 10
+
+pϵ(2 k − t′ − t)d t
+
+ô
+
+. (148) For the first term, using a change of variable u = t − 2k, we have 
+
+> ∞
+
+X
+
+> k=−∞
+
+p˜t(2 k + t′) = 
+
+> ∞
+
+X
+
+> k=−∞
+
+Z −2k+1 
+
+> −2k
+
+pϵ(t′ − u)d u, (149) i.e. it is the sum over all intervals of the form [2 k, 2k + 1]. For the seocnd term, using a change of variable 
+
+u = 2 k − t, we have ∞X
+
+> k=−∞
+
+p˜t(2 k − t′) = 
+
+> ∞
+
+X
+
+> k=−∞
+
+Z 2k
+
+> 2k−1
+
+pϵ(t′ − u)d u, (150) i.e. it is the sum over all intervals of the form [2 k − 1, 2k]. Summarizing, these intervals cover the entire real line. As such, 
+
+pt′ (t′) = 
+
+Z ∞−∞ 
+
+pϵ(t′ − u)d u = 1 , (151) i.e. t′ follows uniform distribution. Furthermore, given two values t and t′, pn(t′|t) = pn(t|t′), as these probabilities only depend on the distances of the path between t and t′, while a Gaussian is symmetric around its mean. Note that there are different approaches to sample t, t′, x and x′. In the following we describe two main sampling schemes, which we term default and reuse . We use z to denote the clean data, and consider as perturbation kernel pn(x′, t ′|x, t ) = pn(t′|t)pn(x′|x, t, t ′). 
+
+C.1.2 default 
+
+Perhaps the most natural implementation is to follow the data generation process of stNCE; we note that this is also the sampling mechanism as employed by Aggarwal et al. [1]. Given one z, one ( x, t, x ′, t ′) is constructed. It can be summarized as follows: 
+
+t ∼ p(t), x ∼ p(x|z, t ), (152) 
+
+t′ ∼ pn(t′|t), x′ ∼ pn(x′|x, t, t ′). (153) 32 However, special care is needed on the logits involving t and t′. Perhaps the simplest case is p(t) is uniform and pn(t′|t) = pn(t|t′), as all logits naturally cancel out. Interestingly, when p(t) is uniform, the folding mechanism from Section C.1.1 guarantees that pn(t′|t) = pn(t|t′), while ensuring that the marginal distribution p(t′) = R pn(t′|t)p(t)d t remains uniform. 
+
+C.1.3 reuse 
+
+Alternatively, one can consider the following mechanism: 
+
+t0 ∼ p(t0), t1 ∼ pn(t1|t0), (154) 
+
+t = [ t0, t 1], t′ = [ t1, t 0], (155) 
+
+x0 ∼ p(x0|z, t 0), x1 ∼ p(x1|z, t 1), (156) 
+
+x′ 
+
+> 0
+
+∼ pn(x′
+
+> 0
+
+|x0, t 0, t 1), x′ 
+
+> 1
+
+∼ pn(x′
+
+> 1
+
+|x1, t 1, t 0), (157) 
+
+x = [ x0, x 1], x′ = [ x′
+
+> 0
+
+, x ′
+
+> 1
+
+]. (158) Given one z, two ( x, t, x ′, t ′) instances are constructed, using ( t, t ′) and ( t′, t ), respectively. In this case, regardless of the choice of p(t0) and pn(t1, t 0), the sampling mechanism ensures that pn(t, t ′) = pn(t′, t ). Nevertheless, one may still prefer to employ the folding mechanism from Section C.1.1 so as to make t and 
+
+t′ remain uniform. Furthermore, this enables mechanisms to reduce variances and even save computations, as detailed below. 
+
+General case Rhodes et al. [61] noted that reusing the same noise can reduce variance. As such, we could use the same noise when simulating p(x|z, t ) or pn(x′|x, t, t ′). Given one z, we would like to obtain samples from t0 and t1, and we can achieve this by interpolating between z and the same noise using t0
+
+and 1. Certain pn(x′|x, t, t ′) adds Gaussian noise of some standard deviations, and we can add the same Gaussian noise to x0 and x1 when simulating x′ 
+
+> 0
+
+and x′
+
+> 1
+
+.
+
+stNCE with forward-reverse In the case of stNCE with forward-reverse kernel, pn could naturally correspond to diffusion forward process. As such, we could exploit this identity to reduce computations. Specifically, without generality, one can design it so, such that t0 is always smaller than t1. For numerical stability, one additionally ensure that the difference between them is not too small. Observe that one could reuse x0 for x′
+
+> 1
+
+, suppose one simulate x1 by following the diffusion forward process for time t1 − t0.Furthermore, stNCE with forward-reverse kernel requires the scores always for the smaller t, and we only need the scores for t0. When we combine stNCE loss with DSM loss, these scores are naturally needed for DSM, as x0 are indeed samples from the corresponding distributions. In order for the forward kernel to perfectly coincide with the forward process while avoiding numerical issues, we additionally employ a mechanism to guarantee that t1 and t0 are apart by at least ϵ. We follow the convention that this mechanism is employed when we use the reuse scheme, even for algorithms apart from stNCE with forward-reverse. 
+
+## C.2 Implementing forward-reverse kernel 
+
+Denote the forward denoising process as xt = αtz +βtn, where z are data samples and n are noise samples from standard normal distribution. From the perspective of diffusion and flows, the choice of the kernel in the case where t′ < t is obvious (note that we use the flow matching convention of time), as it can be given by the forward process of diffusion models. In this case, we can choose 
+
+p(x′|x, t ′, t ) = N
+
+Å
+
+x′ αt′
+
+αt
+
+x, β 2 
+
+> t′
+
+− α2 
+
+> t′
+
+β2
+
+> t
+
+α2
+
+> t
+
+ã
+
+, (159) which essentially generates samples from p(x′|t′) given samples from p(x|t). Under the scenario that t′ > t , with the above forward process one might be tempted to use as transition kernel the one that leads to the reverse kernel of diffusions, in which case we would sample from the posterior distribution. However, this posterior is highly non-trivial and is available only under specific data distributions. 33 C.2.1 Recovery likelihood 
+
+Inspired by diffusion recovery likelihood [26], we can construct approximations to the reverse kernel. In the following, to simplify notations, we denote p(x′|x, t ′, t ) as p(xτ |xt), where xt = αx τ +βn , with α = αt
+
+> ατ
+
+and β =
+
+…
+
+β2 
+
+> t
+
+− α2 
+
+> tβ2
+> t′
+> α2
+> t′
+
+. We have log p(xτ |xt) = log p(xτ ) + log p(xt|xτ ) + c (160) 
+
+≈ log p(xt) + ⟨∇ x log p(xt), x τ − xt⟩ − 12β2 ∥xt − αx τ ∥2 + c (161) = ⟨∇ x log p(xt), x τ ⟩ − α2
+
+2β2
+
+xt
+
+α − xτ
+
+> 2
+
++ c (162) = ⟨∇ x log p(xt), x τ ⟩ − α2
+
+2β2 ∥xτ ∥2 + α2
+
+2β2 2
+
+D
+
+xτ , xt
+
+α
+
+E
+
++ c (163) = − α2
+
+2β2
+
+Å
+
+⟨xτ , x τ ⟩ − 2
+
+D
+
+xτ , xt
+
+α
+
+E
+
+− 2β2
+
+α2 ⟨xτ , ∇x log p(xt)⟩
+
+ã
+
++ c (164) = − α2
+
+2β2 xτ −
+
+Å xt
+
+α + β2
+
+α2 ∇x log p(xt)
+
+ã 2
+
++ c, (165) which motivates using the following Gaussian approximation: 
+
+p(xτ |xt) = N
+
+Å
+
+xτ
+
+xt
+
+α + β2
+
+α2 ∇x log p(xt), β2
+
+α2 I
+
+ã
+
+. (166) 
+
+C.2.2 Exponential integrator 
+
+The sampling scheme based on diffusion recovery likelihood builds on the assumption that the score is locally constant across x. However, this assumption may not be ideal. Indeed, works on accelerated diffusion samplers [53; 27] typically assume that the score is locally constant across t.Here we focus on the exponential integrator for the reverse SDE as presented in Gonzalez et al. [27], specifically the SEEDS-1 variant, which is a first order SDE solver. The update rule is given by 
+
+xτ = ατ
+
+αt
+
+xt − 2βτ (exp( h) − 1) F (xt, t ) − βτ
+
+»
+
+exp(2 h) − 1ϵ, (167) where F is the output of noise prediction model, and h = λτ − λt = log Ä ατ
+
+> βτ
+
+ä − log Ä αt
+
+> βt
+
+ä. As such, exp( h) = ατ βt  
+
+> βταt
+
+and exp(2 h) = Ä ατ βt 
+
+> βταt
+
+ä2
+
+.Observe that the update rule of SEEDS-1 naturally induces a Gaussian distribution. The mean is given by 
+
+ατ
+
+αt
+
+xt + 2 βτ
+
+Å ατ βt
+
+βτ αt
+
+− 1
+
+ã
+
+βt∇x log pt(x) (168) = ατ
+
+αt
+
+xt + 2 
+
+Å ατ β2
+
+> t
+
+αt
+
+− βτ βt
+
+ã
+
+∇x log pt(x) (169) = ατ
+
+αt
+
+xt + 2 βt
+
+Å ατ
+
+αt
+
+βt − βτ
+
+ã
+
+∇x log pt(x), (170) and the covariance is given by 
+
+β2
+
+> τ
+
+ÇÅ ατ βt
+
+βτ αt
+
+ã2
+
+− 1
+
+å
+
+I =
+
+Å α2 
+
+> τ
+
+β2
+
+> t
+
+α2
+
+> t
+
+− β2
+
+> τ
+
+ã
+
+I. (171) Compared with the one obtained through recovery likelihood, the only difference is the scaling term in front of the score. Consider the scenario where αt = t and βt = 1 − t. The above expression simplifies, resulting in a Gaussian distribution with mean given by 
+
+τt xt + 2(1 − t)( τ − t)
+
+t ∇x log pt(xt), (172) and covariance given by (τ − t)( t + τ − 2tτ )
+
+t2 I. (173) 34 C.3 Parameterization of energy-based diffusion models 
+
+A proper parameterization of energy-based diffusion models, Eθ (x, t ), could be crucial in practice, where the training stability of the high variance of the Denoising Score Matching objective at low noise levels required to be cured [63]. Let xt = αtx1 + σtz. In standard Diffusion models, Karras et al. [41] proposes to parameterize a denoiser with skip connection: 
+
+Dθ (xt, t ) = cskip (t)xt + cout (t)fθ (cin (t)xt, c t(t)) , (174) where cskip (t), c out (t), c in (t) are predefined parameters that depend on the variance of target data and noise schedules. Assumed an optimal denoiser, the denoising score, ∇ log pt, is then recovered through Tweedie’s formula: 
+
+cskip (t)xt + cout (t)fθ (cin (t)xt, c t(t)) = α−1
+
+> t
+
+ xt + σ2 
+
+> t
+
+∇ log pt(xt). (175) Therefore, one could parameterize an energy network as [71]: 
+
+Uθ (xt, t ) = 1 − αtcskip (t)2σ2
+
+> t
+
+∥xt∥2 − αtcout (t)
+
+cin (t)σ2
+
+> t
+
+Fθ (cin (t)xt, c t(t)) , (176) where Fθ is an arbitrary scalar network. Then applying Tweedie’s formula, it recovers the EDM precon-ditioning: 
+
+Dθ (xt, t ) = α−1
+
+> t
+
+ xt − σ2 
+
+> t
+
+∇Uθ (xt, t ) = cskip (t)xt + cout (t)∇cin (t)xt Fθ (cin (t)xt, c t(t)) . (177) 
+
+C.3.1 Pathology of model without preconditioning 
+
+In the following, we focus on the case of using Cond OT probability path [50]. One might be tempted to directly parameterize the EBMs using some neural architectures and obtain its gradient as the score. However, recall that the velocity can be expressed using the score as 
+
+v = xt + 1 − tt ∇ log pt(xt). (178) As such, when t is small, any small error in the estimated ∇ log pt(xt) is significantly amplified. 
+
+C.3.2 Choice of preconditioning 
+
+Next we develop our exact choice of preconditioning. In the following we use σ to denote the standard deviation of data. 
+
+cin (t) = 1
+
+pt2σ2 + (1 − t)2 , (179) 
+
+cskip (t) = tσ 2
+
+t2σ2 + (1 − t)2 , (180) 
+
+cout (t) = (1 − t)σ
+
+pt2σ2 + (1 − t)2 , (181) 
+
+ct(t) = log 
+
+Å 1 − tt
+
+ã
+
+. (182) With the above choices, the velocity can be expressed using the model as 
+
+v = cskip (t) − 11 − t x + σ∇xF (cin x, c t(t)) , (183) which avoids the singularity issue under the vanilla model. 
+
+cin (t) serves to keep the inputs to the network with unit standard deviation. We have Var( xt) = t2σ2 + (1 − t)2, (184) Std( xt) = 
+
+»
+
+t2σ2 + (1 − t)2, (185) 
+
+cin (t) = 1
+
+pt2σ2 + (1 − t)2 . (186) 35 cskip (t) serves as the optimal linear coefficient to predict x1 based on xt, and its optimal value is given by 
+
+cskip (t) = Cov( x1, x t)Var( xt) (187) = Cov( x1, tx 1 + (1 − t)x0
+
+t2σ2 + (1 − t)2 (188) = tσ 2
+
+t2σ2 + (1 − t)2 . (189) 
+
+cout (t) serves to keep the network output have variance 1, and can be derived by considering the variance of x1 − cskip (t)xt. Observe that 
+
+x1 − cskip (t)xt (190) = x1 − cskip (t)( tx 1 + (1 − t)x0) (191) = (1 − tc skip (t)) x1 − (1 − t)cskip (t)x0, (192) and Var( x1 − cskip (t)xt) = (1 − tc skip (t)) 2 σ2 + ((1 − t)cskip (t)) 2 . (193) Denote the denominator of x1 − cskip (t)xt to be D = t2σ2 + (1 − t)2, as such cskip (t) = tσ 2 
+
+> D
+
+, and 1 − tc skip (t) = 1 − t2σ2
+
+D = (1 − t)2
+
+D . (194) We have Var( x1 − cskip (t)xt) = 
+
+Å (1 − t)2
+
+D
+
+ã2
+
+σ2 +
+
+Å (1 − t)tσ 2
+
+D
+
+ã2
+
+(195) = (1 − t)4σ2 + (1 − t)2t2σ4
+
+D2 (196) = (1 − t)2σ2  (1 − t)2 + t2σ2
+
+D2 (197) = (1 − t)2σ2
+
+D . (198) As such, 
+
+cout (t) = Std( x1 − cskip (t)xt) = (1 − t)σ
+
+pt2σ2 + (1 − t)2 . (199) 
+
+cnoise (t) provides time embedding that reflects the effective noise level. With Cond OT path, the ratio of noise std to signal std is given by 1−ttσ , and we have 
+
+cnoise (t) = ln 
+
+Å 1 − ttσ 
+
+ã
+
+. (200) Flow matching model is known to work well without needing cin (t) and ct(t). As such, we can drop them from F , while keeping them elsewhere. It might be tempting to directly employ the above choices to parameterize the energy and velocity. Observe that cout (t) 
+
+> cin (t)
+
+= (1 − t)σ. We have 
+
+U (xt, t ) = 1 − tc skip (t)2(1 − t)2 ∥xt∥2 − σt 
+
+1 − t F, (201) 
+
+v = cskip (t) − 11 − t x + σ∇xF. (202) Note that cskip (1) = 1. As such, when t = 1, U (xt, t ) has a singularity. In order to resolve the singularity, we can either sample time not until 1 or replace 1 − t with 1 − at 
+
+for some a < 1. In this work, we set a = 0 .75. 36 C.4 Score and velocity 
+
+Flow Matching [50] provides an alternative viewpoint for diffusion models. When the noise distribution is Gaussian, we can convert between the score and the velocity. Similar identities have been shown in previous works, e.g. Holderrieth et al. [37]. Consider xt = αtx0 + βtn. We have 
+
+vt(x) = ˙αα xt +
+
+Å ˙αβ 2
+
+α − ˙ββ 
+
+ã
+
+∇ log pt(x), (203) 
+
+∇ log pt(x) = vt(x) − ˙αα x 
+
+> ˙αβ 2
+> α
+
+− ˙ββ . (204) 
+
+Proof. 
+
+∇ log pt(x|x1) = − 1
+
+β2 (x − αx 1) , (205) 
+
+vt(x|x1) = ˙ αx 1 + ˙β x − αx 1
+
+β = ˙ αx 1 − ˙ββ ∇ log pt(x|x1), (206) 
+
+∇ log pt(x) = E
+
+ï
+
+− x − αx 1
+
+β2
+
+ò
+
+= − x − αE [x1]
+
+β2 , (207) 
+
+E [x1] = β2∇ log pt(x) + xα , (208) 
+
+vt(x) = E î ˙αx 1 − ˙ββ ∇ log pt(x|x1)ó = ˙ αE [x1] − ˙ββ E [∇ log pt(x|x1)] (209) = ˙αα
+
+ β2∇ log pt(x) + x − ˙ββ ∇ log pt(x) = ˙αα x +
+
+Å ˙αβ 2
+
+α − ˙ββ 
+
+ã
+
+∇ log pt(x), (210) 
+
+∇ log pt(x) = vt(x) − ˙αα x 
+
+> ˙αβ 2
+> α
+
+− ˙ββ . (211) The above connection between the score and the velocity also enables one to use flow matching loss to train models under different parameterizations [48]. Therefore, while Dual SM, following Guth et al. [31], uses the original denoising score matching loss, for stNCE-s+DSM we adapt flow matching loss to train the space score. As it still trains the space score, we refer to it still as a space score matching loss. 
+
+# D Experimental details 
+
+Recall that default scheme results in one training instance for each input data, and reuse scheme results in two training instances for each input data. As such, when comparing between reuse and default, we use two times larger batch size for default. Unless otherwise stateed, we train the model for 100000 steps and perform evaluation every 2000 steps. The algorithms involve different hyperparameters. Especially, when the algorithm involves compar-isons across different times, we need to determine the sampling scheme for t′ given t. Inspired by Aggarwal et al. [1], we consider either using a local Gaussian proposal before wrapping things back to the range of t or sampling t′ uniformly at random. We denote the standard deviation of the Gaussian proposal as 
+
+σtime , and use σtime = −1.0 to denote the case where t′ is sampled uniformly at random. Some algo-rithms involve adding local Gaussian perturbations to the positions, in which case we tune the standard deviation of the perturbation σwhite between [0 .01 , 0.1, 1.0]. For tNCE, we tune σtime . For tCNCE, we tune σwhite ; under reuse scheme, as an ablation we additionally tune σtime . We tune stNCE-w in terms of both σtime and σwhite . stNCE-s and stNCE-o are tuned in terms of σtime .We generally select the best model based on val set results under a single random seed, and report test set results. For each job, we select the step that yields the best val set results and use the test set results at that step as the final metrics. Sometimes we would like to obtain uncertainty estimates, in which case we additionally train the models using the best configs with two additional random seeds. Unless otherwise stated, we use Adam optimizer [43] with no weight decay. 37 D.1 Failure modes 
+
+Experimental settings We consider a simple setup where the reference distribution is a standard Gaussian and the data distribution is a Gaussian mixture: 
+
+p0 = N (0 , 1) , p1 = 0 .5 N (μ1, 0.12) + 0 .5 N (μ2, 0.12). (212) By varying ( μ1, μ 2), we control both the multimodality of p1 and the mismatch between the high-density regions of p0 and p1, quantified in [0 , 1]. We measure the error as 1 − R2 ∈ [0 , 1]. Here, the Pearson R2
+
+measures the correlation between the ground truth and learnt energies of the data points. We evaluate three representative methods: tNCE (temporal differences), tCNCE (spatial differences), and stNCE-m (spatio-temporal). The trends in Figure 1 are robust across specific algorithms and depend primarily on the method family. 
+
+Multimodality and mismatch scores We used heuristic scores to measure two properties of the data distribution p1: its multi-modality and its mismatch with the reference distribution p0. The multimodality score is computed as score multimodality = μ2 − μ1
+
+μ2 − μ1 + 2 σ , ∈ [0 , 1] . (213) The mismatch score is computed as score mismatch = 1 − max  0, min( b, 1) − max( a, −1) 
+
+b − a , (214) where 
+
+a = min( μ1 − σ, μ 2 − σ), b = max( μ1 + σ, μ 2 + σ). (215) To vary both these scores relatively on a approximately uniform grid on [0 , 1] ×[0 , 1], we used the following parameters for the data distribution: σ = 0 .01 and                           
+
+> μ1-0.90 0.79 0.01 0.01 -0.91 -0.95 -0.97 0.80 -1.10 -1.07 1.00 -1.03 -1.10
+> μ2-0.90 0.85 0.21 0.61 0.91 -0.95 -0.90 1.00 -0.50 1.42 1.00 -0.97 -0.89
+
+and                         
+
+> μ1-1.30 -2.29 -1.05 -1.10 1.00 -1.50 -3.00 -3.00 -1.98 -1.98 -1.98 -3.00
+> μ2-0.70 1.55 -1.05 -1.03 1.20 -0.90 -0.37 -3.00 -1.92 -1.78 -1.38 -1.07
+
+Model and optimization The energy function is parameterized by a neural network that is a simple Multi-Layer Perceptron with 2 hidden layers and SiLU activations. Its weights are updated using the AdamW optimizer [52] with learning rate 1 e − 3, weight decay 1 e − 4, using a batch size of 256 over 1e4 epochs. An exponential moving average of the weights is used, with a high parameter of 0 .9999, to remove the residual variance in the loss. We empirically observed that the residual variance was high when the methods were expected to have a high estimation error, as is the case for example for tCNCE when the data distribution is multi-modal. 
+
+## D.2 Toy mixture 
+
+We use a batch size of 250 for default scheme and 125 for reuse scheme. The network structure is based on Du et al. [23] and shown in Table 8. We tune the learning rates between [1 e − 4, 3e − 4, 1e − 3], and select the best model based on NormMSE on the val set. 
+
+## D.3 MNIST mixture 
+
+We use a batch size of 512 for default scheme and 256 for reuse scheme. We show the network structure in Table 9. We fix the learning rate of all methods to 1 e − 4, and select the best config based on NormMSE. For RNE, we tune ∆ t between [1 e − 5, 1e − 4, 1e − 3], while setting λ, the weighting of the RNE regularization loss, to 1000, following He et al. [34]. 38 Stage Dimension Operation Input 10 random GMM sample xt ∈ R10 
+
+Time emb. 1 → 32 sinusoidal embedding of continuous time t
+
+Input proj. 10 → 128 Linear layer ResBlocks 128 4× repeated block: LN, SiLU, Linear 128 → 256, add time Linear 32 → 256, SiLU, Linear 256 → 256, SiLU, zero Linear 256 → 128, residual Output 128 → 1 Linear layer Energy scalar Eθ (x, t ) = fθ (x, t )
+
+Table 8: Compact structure of the small resnet used for the random-GMM run. 
+
+Stage Resolution / Channels Operation Input 28 ×28 , 1 MNIST-mixture image xt
+
+Time emb. 32 → 128 sinusoidal PE, Linear, SiLU, Linear Input proj. 28 ×28 , 1 → 32 3×3 Conv Enc. 0 28 ×28 , 32 2× ResBlock, dropout 0 Down 0 28 → 14 , 32 3×3 Conv, stride 2 Enc. 1 14 ×14 , 32 → 64 ResBlock 32 → 64, ResBlock 64 → 64 Down 1 14 → 7, 64 3×3 Conv, stride 2 Enc. 2 7×7, 64 2× ResBlock Middle 7×7, 64 ResBlock, self-attention, ResBlock Dec. 2 7×7, 64 3× ResBlock with skip concatenation Up 2 7 → 14 , 64 nearest upsample, 3 ×3 Conv Dec. 1 14 ×14 , 64 3× ResBlock with skip concatenation Up 1 14 → 28 , 64 nearest upsample, 3 ×3 Conv Dec. 0 28 ×28 , 64 → 32 3× ResBlock with skip concatenation Output 28 ×28 , 32 → 1 GroupNorm, SiLU, zero 3 ×3 Conv Energy scalar preconditioned sum-output energy 
+
+Table 9: Compact structure of the U-Net used for MNIST mixture. Base channels are 32, channel multipliers are (1 , 2, 2). 
+
+## D.4 MNIST 
+
+We always use reuse scheme, and employ a batch size of 256. The model architecture can be found in Table 10. We fix the learning rates of all methods to 1 e − 4, selecting the best configurations using bits-per-dimension on the val set. 
+
+## D.5 ImageNet64 
+
+We use 50000 samples from the original training set as the val set. Same as Guth et al. [31], we use the original val set as our test set. We use reuse scheme with batch size 256. We additionally employ mixed precision with bf16 to speed up training. We use learning rate of 2 e − 4 with σtime = 0 .01 in the first 122000 steps, while changing the learning rate to 1 e − 4 and σtime to 0 .001 afterwards. 
+
+## D.6 Molecules 
+
+Following Plainer et al. [59], we optimize the models using AdamW [52], where we directly use the models as employed by Plainer et al. [59]. Note that we do not employ the mixture version as in Plainer et al. [59]. We fix the weights of tNCE and stNCE-s loss to DSM loss as 1, and tune σtime between [ −1.0, 0.1, 0.01]; in some cases we experimented with the weights of NCE losses and σtime = 0 .001, but did not observe notable differences. 39 Stage Resolution / Channels Operation Input 28 ×28 , 1 MNIST image xt                                                                         
+
+> Time emb. 64 →256 sinusoidal PE, Linear, SiLU, Linear Input proj. 28 ×28 ,1→64 3×3 Conv Enc. 0 28 ×28 ,64 2×ResBlock, dropout 0 .1Down 0 28 →14 ,64 3×3 Conv, stride 2 Enc. 1 14 ×14 ,64 →128 ResBlock 64 →128, ResBlock 128 →128 Down 1 14 →7,128 3×3 Conv, stride 2 Enc. 2 7×7,128 2×ResBlock Middle 7×7,128 ResBlock, self-attention, ResBlock Dec. 2 7×7,128 3×ResBlock with skip concatenation Up 2 7→14 ,128 nearest upsample, 3 ×3 Conv Dec. 1 14 ×14 ,128 3×ResBlock with skip concatenation Up 1 14 →28 ,128 nearest upsample, 3 ×3 Conv Dec. 0 28 ×28 ,128 →64 3×ResBlock with skip concatenation Output 28 ×28 ,64 →1GroupNorm, SiLU, zero 3 ×3 Conv Energy scalar preconditioned inner-product energy Log norm. scalar learned time-only MLP zϕ(t), subtracted from energy
+
+Table 10: Compact structure of the U-Net used for MNIST. Base channels are 64, channel multipliers are (1 , 2, 2). 
+
+## D.7 Computational resources 
+
+For Failure modes experiments in Section 6.1, we run the experiments for roughly 2 days and a half using 6 CPU cores of an Apple M4 CPU. For synthetic Gaussian mixture experiments in Section E.1, we run the experiments using Intel Xeon Gold 6230. Apart from the jobs to generate the datasets which are generally fast, each job generally uses 4 CPU cores and takes roughly 1 − 2 hours. MNIST Gaussian mixture experiments in Section 6.2 and MNIST experiments in Section 6.3 are run using AMD MI250x GPU and AMD EPYC 7A53 CPU. For MNIST Gaussian mixture experiments, apart from some lightweight preprocessing jobs run using CPUs, each model is trained using 1 GPUs, which is composed of 2 GCDs. Depending on the method, running times vary between 9 hours and 20 hours. For MNIST experiments, each model is trained using 2 GPUs, containing 4 GCDs. Across different methods, the running times vary between around 3 hours and round 8 hours. The long run for stNCE-s took around 19 hours. ImageNet64 experiments are run using a single NVIDIA H200 GPU for 200000 steps, which takes roughly 5 days. For molecule experiments on Chignolin dataset, the models are trained using a single NVIDIA A100 GPU. Each job takes around 17 − 21 hours. 
+
+## D.8 License information 
+
+For experiments apart from Failure modes and molecules, our code is inspired by Song et al. [67] (Apache-2.0 license), and, notably, some parts are based on Lipman et al. [51] (CC BY-NC license) and Guth et al. [31] (BSD-3-Clause license). Our code for molecule experiment is based on Plainer et al. [59] (MIT license), which uses OpenMM [24] (MIT license and LGPL license). MNIST dataset (MIT) license, ImageNet64 dataset (non-commercial research and education) and Chignolin dataset (D.E. Shaw Research Trajectory Data License Agreement) are also employed. Our code is based on PyTorch [4] (custom license) or JAX [10] (Apache-2.0 license). Huggingface accelerate [30] (Apache-2.0 license) is used to perform multi-GPU training, and Weights & Biases [8] (MIT license) is used to monitor trainings. 
+
+# E Additional experimental results 
+
+## E.1 Synthetic Gaussian mixtures 
+
+We consider the problem of modeling a 20 mode Gaussian mixture in 10 dimensions, where the means of the Gaussian mixture are sampled from a standard normal distribution, and the covariances of the 40 Stage Resolution / Channels Operation Input 64 ×64 , 3 ImageNet64 image xt
+
+Time emb. 64 → 256 sinusoidal PE, Linear, SiLU, Linear Input proj. 64 ×64 , 3 → 64 3×3 Conv Enc. 0 64 ×64 , 64 3× ResBlock, dropout 0 Down 0 64 → 32 , 64 3×3 Conv, stride 2 Enc. 1 32 ×32 , 64 → 128 ResBlock 64 → 128, 2 × ResBlock 128 → 128 Down 1 32 → 16 , 128 3×3 Conv, stride 2 Enc. 2 16 ×16 , 128 3× ResBlock Middle 16 ×16 , 128 ResBlock, self-attention, ResBlock Dec. 2 16 ×16 , 128 4× ResBlock with skip concatenation Up 2 16 → 32 , 128 nearest upsample, 3 ×3 Conv Dec. 1 32 ×32 , 128 4× ResBlock with skip concatenation Up 1 32 → 64 , 128 nearest upsample, 3 ×3 Conv Dec. 0 64 ×64 , 128 → 64 4× ResBlock with skip concatenation Output 64 ×64 , 64 → 3 GroupNorm, SiLU, zero 3 ×3 Conv Energy scalar preconditioned inner-product energy Log norm. scalar learned time-only MLP zϕ(t), subtracted from energy 
+
+Table 11: Compact structure of the U-Net used for ImageNet64. Base channels are 64, channel multipliers are (1 , 2, 2), and the middle attention block has 128 channels with 2 heads. individual mixture components are given by 0 .12I. The models are evaluated using the same evaluation metrics as discussed in Section D.3. The experimental results using the reuse scheme are shown in Table 12. Table 12: Results on random gmm 20 0.1 1.0 with dim 10                                                                                             
+
+> Category Method MSE ↓Ratio ↓NormMSE ↓NormNLL ↓Time ↓
+> Temporal tNCE 72.1 ±48.78 28.67 ±25.24 62.16 ±70.56 -0.29 ±4.15 1.78 Spatial tCNCE 34.46 ±18.92 10.7 ±0.96 33.89 ±3.16 -0.5 ±0.27 1.45
+> Spatial-temporal stNCE-m 8.83 ±2.4 5.74 ±0.79 5.69 ±1.08 -4.16 ±0.23 2.08 ∗
+> stNCE-w 27.72 ±17.25 5.47 ±0.98 4.79 ±0.92 -4.4 ±0.16 1.62 stNCE-s 4.29 ±2.2 3.82 ±0.45 3.16 ±0.51 -4.73 ±0.15 1.87 Oracle stNCE-o 2.02 ±0.34 3.51 ±0.42 2.82 ±0.36 -4.8 ±0.1 1.47
+
+In Table 13 we additionally present results using the default scheme as a verification that the results are consistent across different sampling schemes. Table 13: Results on random gmm 20 0.1 1.0 with dim 10                                                                                             
+
+> Category Method MSE ↓Ratio ↓NormMSE ↓NormNLL ↓Time ↓
+> Temporal tNCE 51.11 ±21.93 18.33 ±1.9 32.74 ±6.27 -1.03 ±0.62 1.72 Spatial tCNCE 35.24 ±2.26 10.63 ±0.84 34.55 ±3.17 -0.44 ±0.28 1.42
+> Spatial-temporal stNCE-m 4.2 ±0.33 7.29 ±0.78 6.79 ±0.84 -4.06 ±0.16 1.95 ∗
+> stNCE-w 4.32 ±1.29 5.67 ±0.61 4.89 ±0.38 -4.4 ±0.13 1.86 stNCE-s 2.15 ±0.38 3.63 ±0.37 2.78 ±0.45 -4.86 ±0.12 2.52 Oracle stNCE-o 2.05 ±0.31 3.68 ±0.74 2.85 ±0.59 -4.84 ±0.13 1.82
+
+We additionally verified that the results are highly consistent across different configurations of the Gaussian mixture, e.g. when the means and / or the covariances are scaled. 
+
+## E.2 MNIST mixture 
+
+We report samples drawn using the model trained using stNCE-s and DSM in Figure 6. While DSM results in better samples, as shown in Table 1 of main paper and further verified in Figure 7, DSM does 41 Figure 6: Left: samples drawn using model trained using stNCE-s; right: samples drawn using model trained using DSM. 600 550 500                              
+
+> Ground truth log density
+> 640
+> 620
+> 600
+> 580
+> 560
+> 540
+> 520
+> 500
+> Estimated log density
+> t=0.00, corr=1.0000
+> 425 400 375 350 325 300
+> Ground truth log density
+> 420
+> 400
+> 380
+> 360
+> 340
+> 320
+> 300
+> Estimated log density
+> t=0.25, corr=0.9952
+> 100 50 0
+> Ground truth log density
+> 140
+> 120
+> 100
+> 80
+> 60
+> 40
+> 20
+> 0
+> Estimated log density
+> t=0.50, corr=0.9923
+> 350 400 450
+> Ground truth log density
+> 320
+> 340
+> 360
+> 380
+> 400
+> 420
+> 440
+> 460
+> Estimated log density
+> t=0.75, corr=0.9893
+> 650 700 750
+> Ground truth log density
+> 620
+> 640
+> 660
+> 680
+> 700
+> 720
+> 740
+> 760
+> Estimated log density
+> t=1.00, corr=0.9810 01000 2000 3000
+> Ground truth log density
+> 500
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> 3000
+> 3500
+> Estimated log density
+> t=0.00, corr=1.0000
+> 01000 2000 3000
+> Ground truth log density
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> 3000
+> Estimated log density
+> t=0.25, corr=0.9995
+> 01000 2000 3000
+> Ground truth log density
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> 3000
+> Estimated log density
+> t=0.50, corr=0.9856
+> 500 1000 1500 2000 2500 3000
+> Ground truth log density
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> 3000
+> Estimated log density
+> t=0.75, corr=0.7173
+> 300 400 500 600 700
+> Ground truth log density
+> 300
+> 400
+> 500
+> 600
+> 700
+> Estimated log density
+> t=1.00, corr=0.2341
+
+Figure 7: We generate density-density plots, where the model’s learned energies are normalized using log constant estimated at time corresponding to data. t = 0 and t = 1 are approximated using the closest possible t that the models were trained on. Top: Density-density plots of model trained using stNCE-s across times. The learned densities are highly accurate. Bottom: Density-density plots of model trained using DSM across times. The trained model has time-varying log-constant, and the learned energies become highly inaccurate as t approaches 1, in which case the multimodality of the data distribution increases. not learn the correct energies. In the main paper, we reported results where the NCE algorithms use the reuse scheme. We also report the results where the NCE algorithms use the default scheme in Table 14. The results are largely consistent regardless of the sampling scheme. Table 14: Results on mnist mixture with dim 784 using default scheme. Reported times are average times per step in seconds. Results are largely consistent with reuse scheme. 
+
+Category Method MSE ↓ Ratio ↓ NormMSE ↓ NormNLL ↓ Time ↓
+
+Temporal tNCE 6×10 5 ± 2×10 4 837.42 ± 86.74 8×10 3 ± 2×10 3 -604.45 ± 13.76 0.4 
+
+CTSM 3×10 5 ± 1×10 5 1×10 3 ± 608 .53 8×10 3 ± 2×10 3 -602.92 ± 9.59 0.68 Spatial tCNCE 1×10 5 ± 7×10 4 2×10 3 ± 346 .59 7×10 3 ± 568 .52 -608.12 ± 2.46 0.4 
+
+DSM 1×10 7 ± 9×10 5 1×10 4 ± 4×10 3 3×10 4 ± 1×10 4 -535.54 ± 28.81 0.7 Spatial-temporal stNCE-m 4×10 4 ± 7×10 3 658.96 ± 255.93 2×10 3 ± 215 .46 -644.25 ± 1.36 0.44 ∗
+
+stNCE-w 2×10 4 ± 3×10 3 599.05 ± 250.02 2×10 3 ± 773 .45 -646.07 ± 8.23 0.4 
+
+stNCE-s 179.86 ± 21.21 38.23 ± 1.11 91.29 ± 9.14 -679.61 ± 0.47 0.47 RNE-s 3×10 6 ± 1×10 6 3×10 3 ± 945 .15 2×10 4 ± 702 .98 -570.51 ± 1.09 0.44 Dual SM 42.16 ± 7.11 17.82 ± 1.02 26.04 ± 2.82 -683.96 ± 0.33 0.7 Oracle stNCE-o 148.61 ± 17.09 40.25 ± 2.35 141.75 ± 3.61 -677.07 ± 0.12 0.32 
+
+RNE-o 18.57 ± 1.46 7.88 ± 0.19 9.41 ± 0.61 -685.75 ± 0.09 0.4 
+
+42 TIC 0 
+
+> TIC 1
+
+STNCE 0.01 with DSM (iid) TIC 0 
+
+> TIC 1
+
+STNCE 0.01 with DSM (sim) Figure 8: Samples drawn using diffusion sampler (left) and molecular dynamic simulations (right) with the model trained using stNCE-s+DSM. The samples are highly consistent, verifying the correctness of the learned energy-based diffusion model. 
+
+## E.3 Molecules 
+
+We report the samples drawn using diffusion sampler and molecular dynamic simulations based on model trained using stNCE-s+DSM on Chignolin in Figure 8. The samples agree well with each other, high-lighting the quality of the learned energies. 
+
+# F Broader impacts 
+
+Our work is relatively theoretical and studies how to train EBMs. Nevertheless, due to the widespread usage of EBMs, it could be used by practioners in malicious manners. We attempt to mitigate such negative impacts by advocating for responsible usage of such trained models. 43
