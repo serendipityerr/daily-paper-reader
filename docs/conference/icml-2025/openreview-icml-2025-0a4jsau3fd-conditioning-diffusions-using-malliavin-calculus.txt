@@ -1,0 +1,2485 @@
+Title: Conditioning Diffusions Using Malliavin Calculus
+
+URL Source: https://openreview.net/pdf?id=0A4JSAU3FD
+
+Number of Pages: 24
+
+Markdown Content:
+# Conditioning Diffusions Using Malliavin Calculus 
+
+Jakiw Pidstrigach * 1 Elizabeth L. Baker * 2 Carles Domingo-Enrich 3 George Deligiannidis 1 Nikolas N ¨ usken * 4 
+
+# Abstract 
+
+In generative modelling and stochastic optimal control, a central computational task is to modify a reference diffusion process to maximise a given terminal-time reward. Most existing methods re-quire this reward to be differentiable, using gradi-ents to steer the diffusion towards favourable out-comes. However, in many practical settings, like diffusion bridges, the reward is singular, taking an infinite value if the target is hit and zero other-wise. We introduce a novel framework, based on Malliavin calculus and centred around a generali-sation of the Tweedie score formula to nonlinear stochastic differential equations, that enables the development of methods robust to such singulari-ties. This allows our approach to handle a broad range of applications, like diffusion bridges, or adding conditional controls to an already trained diffusion model. We demonstrate that our ap-proach offers stable and reliable training, outper-forming existing techniques. As a byproduct, we also introduce a novel score matching objective. Our loss functions are formulated such that they could readily be extended to manifold-valued and infinite dimensional diffusions. 
+
+# 1. Introduction 
+
+Simulating conditioned diffusions is a central computational task in many applications, ranging from molecular dynamics and physical chemistry (Dellago et al., 2002; Bolhuis et al., 2002; Vanden-Eijnden et al., 2010) and genetics (Wang et al., 2011) to finance, econometrics (Bladt & Sørensen, 2014; Elerian et al., 2001; Durham & Gallant, 2002), evolutionary biology (Arnaudon et al., 2023; 2017; Baker et al., 2024),           
+
+> *Equal contribution 1Department of Statistics, University of Ox-ford, UK 2Department of Computer Science, University of Copen-hagen, Denmark 3Microsoft Research New England, Cambridge, USA 4Department of Mathematics, King’s College, London, UK. Correspondence to: Jakiw Pidstrigach <mail@jakiw.com >, Eliza-beth L. Baker <eloba@dtu.dk >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+> (a) (b)
+
+Figure 1: The figure depicts particle trajectories in a dou-ble well potential, with the background color indicating potential intensity. The potential has two metastable states at x = 1 and x = −1. In (a) we observe that under the diffusion dynamics, particles initialised at x = 1 typically remain confined to their well, rarely crossing the barrier to 
+
+x = −1. On the right, in (b), the diffusion is conditioned on the rare event of transitioning between the two metastable states. and generative modelling (Dhariwal & Nichol, 2021; Ho & Salimans, 2021), including guidance for generative models (Zhang et al., 2023; Denker et al., 2024). 
+
+Reference System. To demonstrate some of the core ideas, let us consider a diffusion process of the form 
+
+dXt = b(Xt) d t + d Bt, (1) where the drift vector field b is given–either from a learned generative model or from physically or financially moti-vated considerations. Samples from (1) can be obtained by straightforward numerical simulation. 
+
+Guidance and Control. In many applications, it is desir-able to condition the reference process (1) . For instance, in generative modeling, a large pretrained model may not offer the necessary task-specific controls. One may then seek to impose such controls post hoc—for example, to generate images matching a desired edge map or human pose, or to sample proteins with properties tailored to a particular application. Similarly, when the reference process mod-els weather dynamics, interest may lie in rare or extreme 1Conditioning Diffusions Using Malliavin Calculus 
+
+scenarios rather than typical ones. 
+
+Bayesian Inverse Problems. These objectives can be for-malised within the framework of Bayesian inverse problems (Stuart, 2010). To this end, let G be an observation operator and Y the corresponding observation at terminal time: 
+
+Y = G(XT ). (2) The goal is to sample (Xt)0≤t≤T given Y = y. This setting encompasses all previous examples; for instance, G may extract edge or pose information from an image. Our for-mulation allows G to be a full or partial (potentially noisy) observation of XT . Note that G may be stochastic; for example, G(XT ) = XT + ξ, where ξ is a random variable. 
+
+Stochastic Optimal Control and Conditioning Diffusions. 
+
+In order to condition on Y , we add a control term ut to the reference process (1): 
+
+dXt = b(Xt) d t + ut(Xt) d t + d Bt. (3) The optimal control will have the property that each sample 
+
+(Xt)0≤t≤T from (3) is a sample from the distribution of (1) ,conditioned on Y = y.
+
+Likelihoods and Rewards with Gradients. The function 
+
+G induces a likelihood or reward 
+
+g(x; y) := p(Y = y | XT = x). (4) Current methods, framed in terms of stochastic optimal con-trol (Domingo-Enrich, 2024; Zhang & Chen, 2022; Berner et al., 2024), critically rely on gradient information ∇g or 
+
+∇ log g to guide the process and learn ut.
+
+Singular Rewards. In many settings there is no gradient information available for g. One case where this happens is if G is an indicator function or discontinuous, as would be the case for classification. But even if G is smooth but deterministic, the induced likelihood g is often singular if one does not add artificial noise to the observations. Even in the seemingly straightforward case of G = Id , the reward would be given by a Dirac delta distribution g(xT ; y) = 
+
+δy (xT ), which is not even continuous. The case of G = Id conditions diffusions to end at a specific state and is known under the term diffusion bridges (see Figure 1(a)). Due to g
+
+being a Dirac it is in some sense the most challenging setting and will be a guiding problem for us in the development of the methodology. 
+
+Integration by Parts on Path Space. In this paper, we circumvent these issues altogether by constructing numeri-cal methods that remain unaffected by singularities in the likelihood g. The key idea is best introduced via an analogy: replace, for the moment, the trajectory space associated with (1) by the real line. The classical integration-by-parts 
+
+identity 
+
+Z ∞−∞ 
+
+∂xg(x)f (x) d x = −
+
+Z ∞−∞ 
+
+g(x)∂xf (x) d x, (5) valid provided f and g vanish sufficiently fast at infinity, of-fers a blueprint for handling singularities: the left-hand side can be given a rigorous meaning even if g lacks differentia-bility, as long as f is smooth. Numerically, large (exploding) gradients can be avoided by shifting differentiation onto the factor with better properties. 
+
+Outline and Contributions. Guided by (5), we develop loss functions L(u) whose unique minimisers ut(x; y) im-plement the conditioning of (1) via the controlled diffusion in (3), for any condition Y = y at once. Towards this goal, • we recall the well-known (Eberle, 2015; Denker et al., 2024; Shi et al., 2024; Du et al., 2024) connection of diffusion bridges to Doob’s h-transform in Section 2.1, in particular the relevance of conditional score functions, • lift (5) to integration by parts on the space of trajecto-ries; the role of the Lebesgue measure dx is replaced by the law of (Xt)0≤t≤T , and the ordinary derivative 
+
+∂x is replaced by the Malliavin derivative (Nualart, 2006). Based on this, we derive a novel formula for conditional scores that generalises Tweedie’s formula (Efron, 2011) for denoising score matching (Vincent, 2011), • discuss implementation details and showcase numeri-cal performance in Section 4. Furthermore, we recover existing methods for stochastic optimal control from our framework, see Section 3.2. 
+
+# 2. Theoretical Background and Main Result 
+
+Theorem 2.1 below serves as the mathematical foundation of our methodology. Before presenting it, we introduce the necessary notation and assumptions. Throughout, we consider diffusion processes of the form 
+
+dXt = bt(Xt) d t + σt(Xt) d Bt, X0 = x0, (6) where b : [0 , T ] × Rn → Rn is a smooth drift of at most linear growth, x0 ∈ Rn is a fixed initial state, Bt is a standard Brownian motion, and σ : [0 , T ] × Rn → Rn×n
+
+specifies the volatility, assumed to be symmetric, strictly positive definite and bounded, with bounded inverse. A key component is the Jacobian Jt|s associated to (6), which is a matrix-valued stochastic process satisfying 
+
+dJt|s = ∇bt(Xt)Jt|s dt + ∇σt(Xt)Jt|s dBt, (7) with initial condition Js|s = Id , for fixed s ∈ [0 , T ]. In-tuitively, Jt|s measures the sensitivity of (6) at time t with respect to a small perturbation at an earlier time s < t .More precisely, it represents the derivative process, i.e. 2Conditioning Diffusions Using Malliavin Calculus 
+
+Jt|s = ∇Xs Xt (Williams & Rogers, 1979, Chapter V.13). The process Jt|s plays a central role in adjoint methods for gradient computation (Li et al., 2020) and stochastic optimal control (Domingo-Enrich et al., 2024b), and we highlight the fact that simulating the full matrix-valued evolution is typically unnecessary as only matrix-vector products are re-quired (see Appendix A). Our main theoretical contribution can now be stated as follows. 
+
+Theorem 2.1. Let α : [0 , T ] → Rn×n be a matrix-valued differentiable function such that AT |s := αT − αs is invert-ible for all s ∈ [0 , T ). Define the score process 
+
+Ss := A−1 
+
+> T|s
+
+Z Ts
+
+α′
+
+> t
+
+J⊤
+
+> t|s
+
+(σt(Xt)⊤)−1 dBt, (8) 
+
+as well as the loss functional 
+
+L(u) = E
+
+"Z T
+
+> 0
+
+∥us(Xs; Y ) − S s∥2 ds
+
+#
+
+, (9) 
+
+where the expectation is taken with respect to the injected noise (Bt)0≤t≤T driving (6) , (7) and (8) , as well as poten-tial noise in G in (2) . Then L admits a unique minimiser u∗,and for any y ∈ Rd, the law of 
+
+dXt = bt(Xt) d t + σt(Xt)σt(Xt)⊤ u∗ 
+
+> t
+
+(Xt; y) d t
+
++ σt(Xt) d Bt
+
+(10) 
+
+coincides with the conditional law of (6) , given Y = y.
+
+Based on Theorem 2.1, we propose to (i) estimate the ex-pectation in (9) using Monte Carlo, (ii) parameterise the drift ut (including the conditioning) by a neural network, and (iii) learn the parameters of ut through gradient-descent type updates. We have formalised the resulting training procedure in Algorithm 1, and, given the close relationship between Theorem 2.1 and the Bismuth-Elworthy-Li (BEL) formula from Malliavin calculus (see Section 2.2), we refer to these methods as BEL-algorithms . Importantly, the score process (8) can be simulated efficiently by directly updating 
+
+J⊤
+
+> t|s
+
+(σt(Xt)⊤)−1 dBt along (7), without simulating the full dynamics of Jt|s (see Appendix A for details). The main hyperparameter in Algorithm 1 is the matrix-valued func-tion α : [0 , T ] → Rn×n; based on variance and stability considerations we give guidance on its choice in Section 3. Furthermore, specific choices of α allow us to connect existing methods to the framework of Theorem 2.1; those are explained in Sections 3.2.1 and 3.2.2. 
+
+Remark 2.2 (Amortisation) . After training according to Algorithm 1, the learned control ut(x; y) performs condi-tioning of (1) for arbitrary y, without the need for retraining. On a related note, the constructions in (8) and (9) as well as in Algorithm 1 depend on the observation operator G only implicitly through the samples Y = G(XT ) and do not access or require any particular structure; in particular, they are gradient free. On the technical technical level this corre-sponds to the conditional expectation being the minimiser of the L2 loss, see (17). In the remainder of this section we prove Theorem 2.1 and illustrate its connection to integration by parts, as hinted at in (5). Implementation details are deferred to Section 4. 
+
+Algorithm 1 BEL - Training Step 
+
+Require: α : [0 , 1] → Rn×n, initial condition x0, batch size N , current drift approximation uθ , time grid 
+
+{t0, t 1, . . . t M }. 
+
+> 1:
+
+for i = 1 to N do  
+
+> 2:
+
+Sample a sample path X with corresponding Brown-ian motion path B from the SDE (6).  
+
+> 3:
+
+Sample an observation Y = G(XT ) from (2).  
+
+> 4:
+
+Compute the Monte Carlo estimator for Ss using (8) (for details see Algorithm 2) along the path (X, B ). 
+
+> 5:
+
+Calculate the single-path loss 
+
+li(θ) =  
+
+> M−1
+
+X
+
+> j=1
+
+∥uθtj (Xtj ; Y ) − S tj (X, B )∥2, 
+
+> 6:
+
+end for  
+
+> 7:
+
+Sum for the full-batch loss 
+
+LN (θ) = 
+
+> N
+
+X
+
+> i=1
+
+li(θ). 
+
+> 8:
+
+Take a gradient step on LN (θ) with your favourite opti-miser. 
+
+2.1. Doob’s h-transform and Conditional Scores 
+
+As a first step towards Theorem 2.1, we recall the fact that the optimal drift in (10) can be expressed in terms of condi-tional scores (Rogers & Williams, 2000, p. 83): 
+
+Proposition 2.3 (Doob’s h-transform) . For y ∈ Rd, let 
+
+u∗ 
+
+> t
+
+(x; y) := σt(x)σt(x)⊤∇x log p(Y = y | Xt = x),
+
+(11) 
+
+where p(Y = y | Xt = x) is the probability of Y = y given 
+
+Xt = x. Then the corresponding controlled diffusion (10) 
+
+reproduces the conditional law of (6) , given Y = y.
+
+Similar closed-form formulations are available in the context of optimal control (N ¨usken & Richter, 2021, Section 2.2) and time reversals (Boffi & Vanden-Eijnden, 2024; Song et al., 2021b; Ho et al., 2020). Note that for t = T , the conditional score coincides with the gradient of the log-reward, ∇x log p(Y = y | XT = x) = ∇x log g(x; y). As a consequence, if g is singular, (11) becomes singular (and possibly numerically unstable) as t → T . We deal with this issue in the next subsection. 3Conditioning Diffusions Using Malliavin Calculus 
+
+2.2. Malliavin Calculus and Integration by Parts 
+
+While Proposition 2.3 in principle identifies the desired control vector field, the right-hand side of (11) will be un-available in all but simple toy examples. The following result provides a formula that is amenable to Monte Carlo simulation: 
+
+Proposition 2.4 (Generalised Tweedie formula) . The con-ditional score is given by the conditional expectation of the score process, 
+
+∇x log p(Y = y | Xt = x)= E [St | Xt = x, Y = y] , (12) 
+
+for all t ∈ [0 , T ) and x ∈ Rn, y ∈ Rd.
+
+Remark 2.5 . In the case when (6) is linear, Proposition 2.4 simplifies to the celebrated Tweedie formula (Efron, 2011), given, e.g., by 
+
+∇xT log pT (XT = xT ) = 1 
+
+> T
+
+(E[Xt | XT = xT ] − xT ).
+
+Similarly, the denoising score matching objective for dif-fusion models (Song et al., 2021a) can be seen as an in-stance of (9) for a specific choice of α. Consequently, (12) is a generalisation to nonlinear SDEs, also allowing us to derive novel regression targets for diffusion models; see Appendix B. 
+
+Proof sketch (Proposition 2.4). See Appendix D.1 for full details. Without loss of generality, we may consider the dif-fusion bridge setting (i.e., G(XT ) = XT ), see Lemma D.2. To show (12), we rely on two main ideas: Firstly, to express the transition probability in terms of an expectation, we use the fact that whenever a random vari-able X admits a smooth Lebesgue density pX , we have the representation 
+
+pX (x) = E[δx(X)] , (13) see Duistermaat et al. (2010) for a rigorous general account or Watanabe (1987, Section 2.1) for the statement in the context of Malliavin calculus. Secondly, as outlined in the introduction, we elevate the integration-by-parts formula (5) to Wiener space, i.e., to the space of sample paths of Brownian motion (Bt)0≤t≤T . To this end, we introduce the Malliavin derivative Dt, which represents differentiation with respect to the infinitesimal noise increment dBt: for a functional g that depends on the realisation of (Bt)0≤t≤T , the Malliavin derivative is given by 
+
+Dtg = ∂g ∂ dBt
+
+. (14) A rigorous treatment of (14) requires the framework of calculus on Wiener space; see Nualart (2006). With (14) in place, the analogue of (5) on Wiener space becomes 
+
+E
+
+"Z T
+
+> 0
+
+Dtg · ft dt
+
+#
+
+= E
+
+"
+
+g
+
+Z T
+
+> 0
+
+ft · dBt
+
+#
+
+, (15) for appropriate choices of g and the stochastic process ft.Using (13), we write 
+
+∇x log pT |t(XT = xT | Xt = x) = ∇xE[δxT (XT ) | Xt = x]
+
+pT |t(XT = xT | Xt = x) ,
+
+and, using the chain rule, we further obtain 
+
+∇xE[δxT (XT ) | Xt = x]= −E[∇xT δxT (XT )J⊤  
+
+> T|t
+
+| Xt = x].
+
+Here, ∇Xt XT = JT |t, as explained in Section 2, and the gradient ∇xT δxT is understood in the sense of distributions (Duistermaat et al., 2010, Chapter 4). To complete the proof, it remains to eliminate the derivative on δxT via the inte-gration by parts formula (15) —the left-hand side of (15) precisely explains the appearance of the stochastic integral in the score process (8) . For this, we need to convert the conventional gradient ∇xT into the Malliavin derivative 
+
+Dt. This is achieved using the matrix-valued function α,as detailed in Appendix D.1. In fact, there are infinitely many ways to carry out this conversion, each determined by a particular choice of α. We note that the proof strat-egy, particularly the conversion of ∇xT into Dt and the use of integration by parts, closely resembles the proof of the Bismuth-Elworthy-Li (BEL) formula from Malliavin calcu-lus (Bismut, 1984; Elworthy & Li, 1994), which inspired the name of Algorithm 1. 
+
+2.3. Amortised Bridges and Forward-KL 
+
+While Propositions 2.3 and 2.4 together provide an expres-sion for the desired control vector field u∗ 
+
+> t
+
+, the left-hand side of (12) requires access to the targeted distribution of (6) ,conditioned on Xt = x and Y = y; the construction might thus appear circular. Fortunately, taking expectations over 
+
+Xt and Y in (12) not only recovers the straightforward-to-simulate reference diffusion (6) as a mixture of its bridges, but also allows us to amortise the learning procedure, infer-ring all the bridges simultaneously. The following proof of our main result reflects this idea: 
+
+Proof of Theorem 2.1. The minimiser of the least-squares “local-in-time” loss 
+
+Lt
+
+> local
+
+(u) := E
+
+h
+
+∥ut(Xt, Y ) − S t∥2i
+
+(16) is given by the conditional expectation of St with respect to 
+
+Xt and Y , i.e. 
+
+u∗ 
+
+> t
+
+(x, y ) = E[St | Xt = x, Y = y]. (17) 4Conditioning Diffusions Using Malliavin Calculus 
+
+Combining Proposition 2.3 and Proposition 2.4, this implies that the minimiser u∗ 
+
+> t
+
+is equal to the optimal control term. By exchanging the expectation with the integral in (9), we get that ut is equal to the optimal control ∇Xt log p(Y |
+
+Xt), for each t ∈ [0 , T ].
+
+Remark 2.6 (KL interpretation) . The time-integrated lo-cal loss can be interpreted in terms of the amortized KL -divergence between measures on path space, 
+
+Z T
+
+> 0
+
+Lt
+
+> local
+
+(ut) d t = E [KL( Py | Pu)] + C (18) with a constant C > 0 that does not depend on u. Here, the expectation is taken with respect to Y and Py refers to the distribution of trajectories induced by the diffusion conditioned on Y = y. The measure Pu refers to the distri-bution associated to the current control u. The forward-KL 
+
+divergence in (18) is mode-covering (Naesseth et al., 2020), which is a desirable property for conditional generation and rare event simulation. Furthermore, the KL -representation (18) allows us to connect the BEL-framework from Algo-rithm 1 to the previous works by Heng et al. (2022) and Baker et al. (2025). However, the former requires addi-tional numerical overhead in learning backward processes, whereas the latter relies on additional simulations for a Feynman-Kac type construction. The accuracy of these approaches is evaluated experimentally in Section 4. Fi-nally, we remark that (18) distinguishes our approach from the work by Du et al. (2024), who use forward-KL , to-gether with subsequent (Gaussian) approximations. For background on the “measures on path space” perspective, see N ¨usken & Richter (2021), and for a proof of (18) see Appendix D.2. 
+
+# 3. On the Choice of α
+
+Theorem 2.1 provides a whole class of loss functions for dif-fusion bridge simulation: each choice of α yields a slightly different approach to approximating the drift in (11) , provid-ing considerable flexibility. We now exploit this flexibility for two purposes: in Section 3.1, we derive an optimal choice of α under a simplified setting, and in Section 3.2, we connect our bridge losses to existing algorithms used in stochastic optimal control and diffusion bridge simulation. 
+
+3.1. Optimal α for Reduced Variance 
+
+Each choice of α in Theorem 2.1 implies a different regres-sion target for the neural network. While all of these targets have the same mean, namely the diffusion bridge drift in (11), they differ in variance: Var (Ss) = Var A−1 
+
+> T|s
+
+Z Ts
+
+α′
+
+> t
+
+J⊤
+
+> t|s
+
+(σt(Xt)⊤)−1dBt
+
+!
+
+.
+
+Figure 2: The variance-optimal weighting α′ 
+
+> s
+
+(see Lemma 3.1) for the simplified setting in which Xt is a conditioned Brownian motion. Since the algorithm works by generating independent sam-ples from Ss and then regressing against those, a lower variance of Ss is expected to lower the variance of the gra-dients. In the following result we compute and optimise the variance in a simplified setting, providing guidance for the choice of α:
+
+Lemma 3.1. Set Y = XT , T = 1 , n = 1 , b = 0 and σ = 1 ,i.e., Xt is a one-dimensional Brownian motion conditioned on X0 = x0 and X1 = x1. Then the variance of the Monte-Carlo estimator 
+
+∇ log p1|0(B1 = x | B0 = x0) ≈
+
+Z 10
+
+α′
+
+> t
+
+J⊤
+
+> t|0
+
+(σ−1 
+
+> t
+
+)⊤dBt
+
+is given by 
+
+1
+
+α1 − α0
+
+Z 10
+
+(α′
+
+> t
+
+)2 dt +
+
+Z 10
+
+(α1 − αt)2
+
+(1 − t)2 dt + d2
+
+
+
+, (19) 
+
+assuming that α1−αs√1−s → 0 as s → 1 and letting d = x1−x0.The variance is minimised for the choice 
+
+α′ 
+
+> t
+
+= 1 − (1 − t) 12 (1+ √5). (20) The proof of Lemma 3.1 can be found in Appendix E, and Figure 2 shows the derivative α′ 
+
+> t
+
+of the optimal variance-reducing choice in (20) . Interpreted as weights in the score process (8) , we see that (20) weights the initial increments of the Brownian motion relatively highly in comparison to increments closer to the terminal time. The choice of α will further be explored in Section 4. 
+
+3.2. Connections to other Algorithms 
+
+3.2.1. R EPARAMETRISATION 
+
+Inspired by the reparametrisation trick in variational infer-ence (Kingma et al., 2019, Section 2.4), Domingo-Enrich et al. (2024b) derived a novel methodology for stochastic optimal control. A variant of it–adapted to our setting–can be recovered from Theorem 2.1 by a specific choice of α:5Conditioning Diffusions Using Malliavin Calculus 
+
+Lemma 3.2. Let M : [0 , T ] → Rn×n be a matrix-valued differentiable function such that M0 = Id and MT = 0 .Then the score process from (8) has the equivalent represen-tation 
+
+Ss =
+
+Z Ts
+
+(Mt∇b⊤ 
+
+> t
+
+(Xt) − M ′ 
+
+> t
+
+)( σt(Xt)⊤)−1 dBt. (21) 
+
+Proof. The correspondence between (8) is via the choice 
+
+αt = J−1 
+
+> t|s
+
+Mt; see Appendix D.3. The significance of Lemma 3.2 is that (i) it extends the reparameterisation trick to the singular reward setting and (ii) it gives conceptual insights into the choices of αt and 
+
+Mt in the respective methods. For further intuition into the role of Mt we refer to Domingo-Enrich et al. (2024b) and Appendix D.3. 3.2.2. G AUSSIAN APPROXIMATIONS 
+
+Another method to learn ∇ log p(Y = y | Xs = xs), identi-fied as the conditional drift in Proposition 2.4, is to approxi-mate the transition densities as Gaussian and regress against their score. We now derive methods based on a Gaussian ap-proximation and show how they can be reformulated as BEL algorithms for specific choices of α. Moreover, the BEL algorithm provides deeper insight into the approximation error introduced by the Gaussian assumption. Rather than regressing directly against the target, we first observe that one can regress against the optimal drift for a small timestep: 
+
+Lemma 3.3. For any t ≥ s,
+
+LGA (u, s, t ):= E∥us(Xs, y ) − ∇ Xs log pt|s(Xt | Xs)∥2 (22) 
+
+is minimised by the diffusion bridge term u∗ 
+
+> s
+
+(xs, y ), see 
+
+(11) .
+
+Thus, optimising LGA for each s yields the diffusion bridge drift. To achieve this, one must select a t ≥ s for each 
+
+s. After discretising the time domain into {t0, t 1 = t0 +
+
+δt, . . . , t N = t0 + N δt }, a suitable loss function is: 
+
+LGA (u) =  
+
+> N−1
+
+X
+
+> i=1
+
+LGA (u, t i, t i + δt ). (23) For small δt , the transition density can be approximated by a Gaussian, for example, via an Euler-Maruyama step: 
+
+p(Xt+δt | Xt) ≈ N (Xt + δt b t(Xt), δt a t(Xt)) , (24a) 
+
+at(Xt) = σt(Xt)σt(Xt)⊤. (24b) This provides an explicit expression for 
+
+∇Xt log pt+δt |t(Xt+δt | Xt), which can be used for regression. In Heng et al. (2022), the authors applied a similar Gaussian approximation to the time-reversal of a diffusion to learn bridges of the time-reversed process. However, this approximation is performed in the density domain pt+δt |t(Xt+δt | Xt), and its impact on the accuracy of ∇ log pt+δt |t(Xt+δt | Xt) is unclear. By the generalised Tweedie formula (see Proposition 2.4), we obtain the ex-plicit relation: 
+
+∇ log pt+δt |t(Xt+δt | Xt) = E[Ss | Xt, X t+δt ], (25) where Ss is defined in (8) with terminal time T = t + δt .The Gaussian approximation can now be directly related to a discretisation scheme for Ss in (25) . We prove this in the case of σ = 1 :
+
+Lemma 3.4. Approximating p(Xt+δt | Xt) by a Gaussian 
+
+(24a) and regressing against its score is equivalent to choos-ing α′ 
+
+> s
+
+= 1 [t,t +δt ] and approximating the stochastic integral in Ss (8) as 
+
+Z t+δt t
+
+Js|tdBs ≈ Jt+δt |t(Bt+δt − Bt), (26) 
+
+and furthermore approximating Jt+δt |t by an Euler-Maryuama step on (7) :
+
+Jt+δt |t ≈ Id + δt ∇b(t, X t). (27) The proofs for this section can be found in Appendix D.4. 
+
+3.3. Summary of Choices 
+
+Based on the above discussion we will now summarise some choices for the function αt in Theorem 2.1. Each choice leads to a different loss function, and we compare the different choices empirically in Section 4. 
+
+BEL optimal: The first choice is setting αs as in Lemma 3.1. Although this only gives optimal variance in the specific case of Brownian motion, it still may do well in other problem settings, especially those similar to Brownian motions. 
+
+BEL first: Based on Lemma 3.3 we can set αs such that 
+
+α′ 
+
+> s
+
+= 1 [s,s +∆ s]. In this case, αT −αs = ∆ s. This means we are only using local information to approximate the score. 
+
+BEL average: Another choice is setting αs = s. This leads to the traditional Bismut-Elworth-Li formula (Bismut, 1984; Elworthy & Li, 1994). 
+
+BEL last: This algorithm uses α′ 
+
+> s
+
+= 1 [T −∆t,T ]. This is similar to the stochastic optimal control setting, where the gradient of the target function is propagated back through the whole trajectory. 
+
+Reparametrisation: Corresponding to the discussion on the reparametrisation trick in Lemma 3.2, we set αs =
+
+Js|tMs, with Ms = T −sT Id .6Conditioning Diffusions Using Malliavin Calculus  
+
+> (a) (b)
+
+Figure 3: In (a), we plot the double-well potential (31) for 
+
+v = 5 . In (b), we sample 1,000 paths from the uncondi-tioned SDE (30) and observe that they remain confined to a single potential minimum, failing to transition between them. This highlights the inherent difficulty of the problem. 
+
+# 4. Experiments 
+
+In this section, we do an empirical evaluation of our meth-ods. Full experimental details are provided in Appendix C. In Section 4.1 and Section 4.2 we study the case of diffusion bridges, i.e. Y = XT , or a Dirac-delta reward function 
+
+g, since this can be seen as the most challenging setup: In Section 4.1, we conduct experiments where the true transi-tion densities are available for evaluation. In Section 4.2, we demonstrate our method on bridges of stochastic shape processes, which have applications in biology. We also com-pare to related methods (Heng et al., 2022) and (Baker et al., 2025) and show favourable results. In Section 4.3 we apply our methodology to diffusion models or equivalently, flow matching algorithms. 
+
+4.1. Controlled Environment Experiments 
+
+In this subsection, we introduce two experiments where the true diffusion bridge drift can be computed, allowing us to evaluate our methods against the ground truth. We explain the experiment setup in Appendix C.1.1. 4.1.1. M ETHODOLOGY 
+
+For the experiments in Section 4.1.2 and Section 4.1.3, we consider one-dimensional SDEs, simulated indepen-dently across all dimensions. Trajectories are conditioned to start at yinit = (1 , 1, . . . , 1) ∈ RD and end at yfinal =(−1, 1, . . . , 1) ∈ RD , modifying the first coordinate. This setup isolates the effect of the rare event from the di-mensionality of the state space. Conditioning all coordinates would cause the probability of the transition event—being the product of independent one-dimensional transition prob-abilities—to scale as pD , where p is the probability of the event in one dimension. In contrast, by constraining only   
+
+> (a) (b)
+> (c) (d)
+
+Figure 4: Panel (a) shows ground truth paths from (30), conditioned on transitioning from state 1 to state −1. Panels (b), (c) and (d) present the paths generated by the BEL-first, BEL-last and BEL-optimal respectively. the first coordinate, we maintain an approximately constant event probability whilst varying the problem dimensionality. 4.1.2. B ROWNIAN MOTION 
+
+The first experiment we consider involves conditioning a Brownian motion: 
+
+dXt = d Bt. (28) For this SDE, the diffusion bridge drift (11) has a closed-form solution given by: 
+
+∇ log p1|t(X1 = x | Xt = xt) = − xt − x
+
+1 − t . (29) This allows us to compare our methods against the true bridges. The results are presented in Table 4. We observe that the reparametrisation trick algorithm performs well for the one-dimensional Brownian motion, while the BEL average achieves the best performance in 10 dimensions. For an explanation of the metrics see Appendix C.1.2 4.1.3. D OUBLE -W ELL 
+
+In this experiment, we consider the double-well problem as described by N ¨usken & Richter (2021). This model is given 7Conditioning Diffusions Using Malliavin Calculus 
+
+by the SDE: 
+
+dXt = −∇ Uv (Xt)d t + d Bt, (30) 
+
+Uv (x) = v(x2 − 1) 2. (31) For v = 5 , we visualize the potential in Figure 3(a). The potential exhibits two minima at x = −1 and x = 1 , which correspond to metastable states. Since the drift term in (30) drives trajectories toward the minima of Uv , transitions between x = −1 and x = 1 are rare events, with their probability decreasing exponentially as the potential barrier height v increases (Kramers, 1940; Berglund, 2013). We illustrate this by plotting 1000 sample paths of the uncon-ditioned process in Figure 3(b), none of which crosses the barrier. To obtain a ground truth for this example, we numerically estimate f (x) = p1|s(X1 = −1 | Xs = x) and compute its logarithmic gradient. We then compare the paths of the process under the true drift with our estimates in Figure 4. Additionally, we extend the experiment to higher-dimensional settings as described in Section 4.1.1. The first and second marginals of a 10 dimensional process are shown in Figure 5. Finally, we quantitatively compare the performance of differ-ent algorithms in Table 7. We observe that BEL Last and the Reparameterisation Trick exhibit the lowest performance, aligning with the empirical experience of the authors. For an explanation of the metrics, see Appendix C.1.2. In Figure 7 we also provide plots for the reparametrisation trick. 
+
+4.2. Shape Processes 
+
+We demonstrate our methodology on stochastic shape pro-cesses (Arnaudon et al., 2023), which are used in computa-tional anatomy to model morphological changes in human organs due to disease (Arnaudon et al., 2017). In evolu-tionary biology, they help analyse morphometric changes in species, such as how butterfly wing shapes evolve along phylogenetic trees (Baker et al., 2024). Following the setup in (Sommer et al., 2021), we consider a shape represented by x0 ∈ R2N , where N points discretise a two-dimensional shape. Let {yj }Mj=1 ⊂ R2 be equidistant points, and {Bj }Mj=1 be independent Brownian motions in 
+
+R2. The SDE governing the shape evolution is given by 
+
+dxit =
+
+> M
+
+X
+
+> j=1
+
+k(yj , x it), dBjt , 1 ≤ i ≤ N, (32) 
+
+k(x, y ) = κ ∥x − y∥22
+
+β , (33) where k is a Gaussian kernel with parameters κ, β ∈ R. For each t, the map x0 7 → xt is a diffeomorphism, ensuring   
+
+> (a) (b)
+> (c) (d)
+
+Figure 5: The first and second coordinates of a 10-dimensional process sampled from the SDE in (30) are shown in (a). The process is conditioned on transitioning from 1 to −1 in the first coordinate while remaining at 1
+
+in all others. Panels (b), (c), and (d) depict the paths gen-erated by the BEL-first, BEL-average, and BEL-optimal algorithms, respectively. All plots inclucde underlying con-tour lines representing the level sets of the potential. that nearby points remain highly correlated. This property makes learning bridges particularly challenging. An ex-ample trajectory of the unconditioned process is shown in Appendix C.2. We apply our method, BEL average (i.e. αt = t), to learn bridges of the shape SDE, conditioning the process on a cir-cle of radius 1.5. We compare our approach to the methods of Heng et al. (2022) and Baker et al. (2025). The latter uses “adjoint” processes derived from a Feynman-Kac represen-tation for the conditional expectation in (11), while Heng et al. (2022) estimate the time-reversed bridge process by regressing against the time-reversed diffusion bridge drift for small time steps, following Lemma 3.3. However, due to the time-reversal their drift term involves the gradient 
+
+∇xt pt|s(Xt = xt | Xs = xs), where differentiation is taken with respect to the final time point rather than the initial one. Our findings are given in Table 1 and show that BEL average outperforms competing methods. We plot a trajectory from the conditioned process learned via BEL average, alongside a trajectory from the unconditioned process in Appendix C.2. The next best method is Heng et al. (2022), which can be 8Conditioning Diffusions Using Malliavin Calculus 
+
+Method Dist BEL average 0.085 
+
+Time reversal 0.090 
+
+Adjoint paths 0.498 
+
+Untrained 1.396 
+
+Table 1: A comparison between different methods for learn-ing bridges for shape processes. We see that our proposed method BEL average outperforms other existing methods. interpreted as first applying BEL to the time-reversed pro-cess, approximating the transition densities via Gaussians ((24a)), and using a fixed start point instead of amortisation. However, since their approach involves time-reversal, they do not take gradients of the drift or diffusion terms. BEL av-erage not only uses this gradient information, but non-local information about the score. 
+
+4.3. Image Experiments 
+
+We train a diffusion model using a flow matching loss with a U-Net architecture on the Fashion-MNIST dataset (Xiao et al., 2017). 
+
+Remark 4.1 . The model is trained deterministically using the flow matching loss. We then apply the memoryless schedule from Domingo-Enrich et al. (2024a) to reinterpret the trained model as an equivalent SDE (or diffusion model). Next, we condition the resulting SDE to produce images with a specified upper-left corner. Importantly, this condi-tioning does not require adding artificial noise to the obser-vation. More specifically, the law of XT is by design the data distribution. We condition on Y = G(XT ) where G selects the upper left corner of the image. Once trained we can therefore choose an arbitrary upper left corner y and sample from images matching this, using the learned addi-tional drift u(Xt, y ). Note we only need train once and then can sample using any corner. We demonstrate the result by conditioning on the upper-left corner of a jacket image in Figure 6. 
+
+Remark 4.2 . When both the forward and reverse dynamics of an SDE are known, one can construct bridges, as shown in Heng et al. (2022). Diffusion models form a special case of this setting: not only are both directions available, but the reverse dynamics are particularly easy to simulate. This property has been leveraged in Denker et al. (2024) to simplify the methodology of Heng et al. (2022). However, both approaches implicitly assume that the learned score is exact. In contrast, our method makes no such assumption. Since we do not require access to the reverse dynamics, we directly learn the correct conditioning for the learned score—even when it is inexact.  
+
+> (a) (b)
+
+Figure 6: In panel (a), the top-left image shows the ground truth used for conditioning. The remaining 15 images are samples generated by the diffusion model conditioned on the upper-left quarter of the ground truth image. Panel (b) displays only the conditioning inputs: again, the top-left image is the ground truth, while the others show the corresponding conditioned quarters used for generation. 
+
+# 5. Conclusion 
+
+In this work, we introduced a novel class of loss functions to estimate the control of a conditioned diffusion process. When applied to diffusion models, we discover novel meth-ods to add controls to an already trained diffusion model. As a byproduct, we also find novel denoising score matching objectives, which can be used for time reversal of SDEs, or to train a diffusion model. Our approach leverages Malliavin calculus and integration by parts to handle singular losses, enabling a more stable and accurate estimation. Thanks to its generality, the framework accommodates a wide range of conditioning types—continuous, discrete, noisy, or noise-less—and and could be extended to manifold-valued and infinite-dimensional settings in future works. 
+
+# Acknowledgments 
+
+EB is supported by the Novo Nordisk Foundation grant NNF18OC0052000, a research grant (VIL40582) from VIL-LUM FONDEN, and UCPH Data+ Strategy 2023 funds for interdisciplinary research. GD and JP were supported by the Engineering and Physical Sciences Research Council [grant number EP/Y018273/1]. 
+
+# Impact Statement 
+
+This work has connections to diffusion models, and could be used in that setting. As such, it shares the societal and ethical implications of generative modelling. 9Conditioning Diffusions Using Malliavin Calculus 
+
+# References 
+
+Arnaudon, A., Holm, D. D., Pai, A., and Sommer, S. A stochastic large deformation model for computational anatomy. In Information Processing in Medical Imaging: 25th International Conference, IPMI 2017, Boone, NC, USA, June 25-30, 2017, Proceedings 25 , pp. 571–582. Springer, 2017. Arnaudon, A., Holm, D., and Sommer, S. Stochastic Shape Analysis , pp. 1325–1348. Springer International Publish-ing, Cham, 2023. Baker, E. L., Yang, G., Severinsen, M., Hipsley, C., and Sommer, S. Conditioning non-linear and infinite-dimensional diffusion processes. Advances in Neural Information Processing Systems , 37:10801–10826, 2024. Baker, E. L., Schauer, M., and Sommer, S. Score matching for bridges without time-reversals. In The 28th Interna-tional Conference on Artificial Intelligence and Statistics ,2025. URL https://openreview.net/forum? id=wkLO3Q1it8 .Bayer, C. and Schoenmakers, J. Simulation of forward-reverse stochastic representation for conditional diffu-sions. The Annals of Applied Probability , 24, June 2013. doi: 10.1214/13-AAP969. Berglund, N. Kramers’ law: Validity, derivations and gener-alisations. Markov Processes And Related Fields , 19(3): 459–490, 2013. Berner, J., Richter, L., and Ullrich, K. An optimal con-trol perspective on diffusion-based generative modeling. 
+
+Transactions on Machine Learning Research , 2024. Bismut, J. Large deviations and the Malliavin calculus. 
+
+Birkhauser Prog. Math. , 45, 1984. Bladt, M. and Sørensen, M. Simple simulation of diffu-sion bridges with application to likelihood inference for diffusions. Bernoulli , pp. 645–675, 2014. Bladt, M. and Sørensen, M. Simple simulation of diffusion bridges with application to likelihood inference for diffu-sions. Bernoulli , 20(2), May 2014. ISSN 1350-7265. doi: 10.3150/12-bej501. URL http://dx.doi.org/10. 3150/12-BEJ501 .Boffi, N. M. and Vanden-Eijnden, E. Deep learning proba-bility flows and entropy production rates in active matter. 
+
+Proceedings of the National Academy of Sciences , 121 (25), 2024. Bolhuis, P. G., Chandler, D., Dellago, C., and Geissler, P. L. Transition path sampling: Throwing ropes over rough mountain passes, in the dark. Annual review of physical chemistry , 53(1):291–318, 2002. Boys, B., Girolami, M., Pidstrigach, J., Reich, S., Mosca, A., and Akyildiz, O. D. Tweedie moment projected diffusions for inverse problems. arXiv preprint arXiv:2310.06721 ,2023. Chen, R. T., Rubanova, Y., Bettencourt, J., and Duvenaud, D. K. Neural ordinary differential equations. Advances in neural information processing systems , 31, 2018. Chung, H., Kim, J., Mccann, M. T., Klasky, M. L., and Ye, J. C. Diffusion posterior sampling for general noisy in-verse problems. arXiv preprint arXiv:2209.14687 , 2022. Dellago, C., Bolhuis, P. G., and Geissler, P. L. Transition path sampling. Advances in chemical physics , 123:1–78, 2002. Delyon, B. and Hu, Y. Simulation of conditioned diffu-sion and application to parameter estimation. Stochastic Processes and their Applications , 116(11):1660–1675, November 2006. ISSN 03044149. Denker, A., Vargas, F., Padhy, S., Didi, K., Mathis, S., Bar-bano, R., Dutordoir, V., Mathieu, E., Komorowska, U. J., and Lio, P. Deft: Efficient fine-tuning of diffusion mod-els by learning the generalised h-transform. Advances in Neural Information Processing Systems , 37:19636– 19682, 2024. Dhariwal, P. and Nichol, A. Diffusion models beat GANs on image synthesis. Advances in neural information processing systems , 34:8780–8794, 2021. Domingo-Enrich, C. A taxonomy of loss func-tions for stochastic optimal control. arXiv preprint arXiv:2410.00345 , 2024. Domingo-Enrich, C., Drozdzal, M., Karrer, B., and Chen, R. T. Q. Adjoint matching: Fine-tuning flow and diffusion generative models with memoryless stochastic optimal control. arXiv preprint arXiv:2409.08861 , 2024a. Domingo-Enrich, C., Han, J., Amos, B., Bruna, J., and Chen, R. T. Q. Stochastic optimal control matching. In The Thirty-eighth Annual Conference on Neural In-formation Processing Systems , 2024b. URL https: //openreview.net/forum?id=wfU2CdgmWt .Du, Y., Plainer, M., Brekelmans, R., Duan, C., Noe, F., Gomes, C. P., Aspuru-Guzik, A., and Neklyudov, K. Doob’s Lagrangian: A sample-efficient variational ap-proach to transition path sampling. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. URL https://openreview.net/ forum?id=ShJWT0n7kX .Duistermaat, J. J., Kolk, J. A., Duistermaat, J., and Kolk, J. 
+
+Distributions . Springer, 2010. 10 Conditioning Diffusions Using Malliavin Calculus 
+
+Durham, G. B. and Gallant, A. R. Numerical techniques for maximum likelihood estimation of continuous-time diffusion processes. Journal of Business & Economic Statistics , 20(3):297–338, 2002. Eberle, A. Stochastic analysis. Available online: http://www. mi. unikoeln. de/stochana/ws1617/Eberle StochasticAnal-ysis2015. pdf , 2015. Efron, B. Tweedie’s formula and selection bias. Journal of the American Statistical Association , 106(496):1602– 1614, 2011. Elerian, O., Chib, S., and Shephard, N. Likelihood inference for discretely observed nonlinear diffusions. Economet-rica , 69(4):959–993, 2001. Elworthy, K. D. and Li, X.-M. Formulae for the derivatives of heat semigroups. Journal of Functional Analysis , 125 (1):252–286, 1994. Greco, G. A malliavin-gamma calculus approach to score based diffusion generative models for random fields. 
+
+arXiv preprint arXiv:2505.13189 , 2025. Heng, J., De Bortoli, V., Doucet, A., and Thornton, J. Sim-ulating diffusion bridges with score matching, October 2022. arXiv:2111.07243. Ho, J. and Salimans, T. Classifier-free diffusion guidance. In NeurIPS 2021 Workshop on Deep Generative Models and Downstream Applications , 2021. URL https:// openreview.net/forum?id=qw8AKxfYbI .Ho, J., Jain, A., and Abbeel, P. Denoising diffusion proba-bilistic models. Advances in neural information process-ing systems , 33:6840–6851, 2020. Hsu, E. P. Stochastic analysis on manifolds . Number 38. American Mathematical Soc., 2002. Kidger, P. On neural differential equations. arXiv preprint arXiv:2202.02435 , 2022. Kingma, D. P., Welling, M., et al. An introduction to vari-ational autoencoders. Foundations and Trends® in Ma-chine Learning , 12(4):307–392, 2019. Kramers, H. A. Brownian motion in a field of force and the diffusion model of chemical reactions. physica , 7(4): 284–304, 1940. Li, X., Wong, T.-K. L., Chen, R. T., and Duvenaud, D. Scalable gradients for stochastic differential equations. In International Conference on Artificial Intelligence and Statistics , pp. 3870–3882. PMLR, 2020. Milstein, G. N., Schoenmakers, J. G., and Spokoiny, V. Transition density estimation for stochastic differential equations via forward-reverse representations. Bernoulli ,10(2), April 2004. ISSN 1350-7265. doi: 10.3150/bj/ 1082380220. Mirafzali, E., Gupta, U., Wyrod, P., Proske, F., Venturi, D., and Marinescu, R. Malliavin calculus for score-based dif-fusion models. arXiv preprint arXiv:2503.16917 , 2025. Naesseth, C., Lindsten, F., and Blei, D. Markovian score climbing: Variational inference with KL (p|| q). Advances in Neural Information Processing Systems , 33:15499– 15510, 2020. Nualart, D. Malliavin calculus and related topics, 2006. N ¨usken, N. and Richter, L. Solving high-dimensional Hamilton–Jacobi–Bellman PDEs using neural networks: perspectives from the theory of controlled diffusions and measures on path space. Partial differential equations and applications , 2(4):48, 2021. Pidstrigach, J., Marzouk, Y., Reich, S., and Wang, S. Infinite-dimensional diffusion models. Journal of Machine Learning Research , 25(414):1–52, 2024. URL http: //jmlr.org/papers/v25/23-1271.html .Pontryagin, L. S. Mathematical theory of optimal processes .Routledge, 2018. Rogers, L. C. G. and Williams, D. Diffusions, Markov processes, and martingales: It ˆo calculus , volume 2. Cam-bridge university press, 2000. Schauer, M., Van Der Meulen, F., and Van Zanten, H. Guided proposals for simulating multi-dimensional diffu-sion bridges. Bernoulli , 23(4A), November 2017. ISSN 1350-7265. doi: 10.3150/16-BEJ833. Shi, Y., De Bortoli, V., Campbell, A., and Doucet, A. Diffu-sion Schr ¨odinger bridge matching. Advances in Neural Information Processing Systems , 36, 2024. Sommer, S., Schauer, M., and Meulen, F. Stochastic flows and shape bridges. In Statistics of Stochastic Differential Equations on Manifolds and Stratified Spaces (hybrid meeting) , number 48 in Oberwolfach Reports, pp. 18–21. Mathematisches Forschungsinstitut Oberwolfach, 2021. doi: 10.4171/OWR/2021/48. Song, J., Vahdat, A., Mardani, M., and Kautz, J. Pseudoinverse-guided diffusion models for inverse prob-lems. In International Conference on Learning Represen-tations , 2023. 11 Conditioning Diffusions Using Malliavin Calculus 
+
+Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Ermon, S., and Poole, B. Score-based generative mod-eling through stochastic differential equations. In In-ternational Conference on Learning Representations ,2021a. URL https://openreview.net/forum? id=PxTIG12RRHS .Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Er-mon, S., and Poole, B. Score-based generative modeling through stochastic differential equations. In International Conference on Learning Representations (ICLR 2021) ,2021b. Stuart, A. M. Inverse problems: a bayesian perspective. 
+
+Acta numerica , 19:451–559, 2010. Vanden-Eijnden, E. et al. Transition-path theory and path-finding algorithms for the study of rare events. Annual review of physical chemistry , 61:391–420, 2010. Vincent, P. A connection between score matching and de-noising autoencoders. Neural computation , 23(7):1661– 1674, 2011. Wang, J., Zhang, K., Xu, L., and Wang, E. Quantifying the Waddington landscape and biological paths for devel-opment and differentiation. Proceedings of the National Academy of Sciences , 108(20):8257–8262, 2011. Watanabe, S. Analysis of Wiener functionals (Malliavin calculus) and its applications to heat kernels. The annals of Probability , pp. 1–39, 1987. Williams, D. and Rogers, L. C. G. Diffusions, Markov processes, and martingales , volume 2. John Wiley & Sons, 1979. Xiao, H., Rasul, K., and Vollgraf, R. Fashion-mnist: a novel image dataset for benchmarking machine learning algorithms. arXiv preprint arXiv:1708.07747 , 2017. Yang, G., Baker, E. L., Severinsen, M. L., Hipsley, C. A., and Sommer, S. Infinite-dimensional diffusion bridge simulation via operator learning. In The 28th Interna-tional Conference on Artificial Intelligence and Statistics ,2025. URL https://openreview.net/forum? id=RZryinonfr .Zhang, L., Rao, A., and Agrawala, M. Adding conditional control to text-to-image diffusion models. In Proceedings of the IEEE/CVF international conference on computer vision , pp. 3836–3847, 2023. Zhang, Q. and Chen, Y. Path integral sampler: A stochastic control approach for sampling. In International Confer-ence on Learning Representations , 2022. Zhao, Z., Luo, Z., Sj ¨olund, J., and Sch ¨on, T. B. Condi-tional sampling within generative diffusion models. arXiv preprint arXiv:2409.09650 , 2024. 12 Conditioning Diffusions Using Malliavin Calculus 
+
+# A. Adjoint SDE for Calculating Ss
+
+Algorithm 2 Adjoint SDE Method for Calculating Ss
+
+Require: Simulation path {Xt}, Brownian increments {δB t}, where t ∈ { 0, δt, . . . , T }.
+
+1: Initialise ˜ST = 0 .
+
+2: for t = T − δt to 0 (backwards in steps of δt ) do 
+
+3: Calculate Dt via (36). 
+
+4: Update ˜St = ˜St+δt + Dt.
+
+5: end for 
+
+6: Compute score process Ss for s ∈ { 0, δt, . . . , T } via (37). We employ an adjoint stochastic differential equation (SDE) method, inspired by adjoint ordinary differential equations (ODEs) (Kidger, 2022; Pontryagin, 2018; Chen et al., 2018), to compute Ss. Specifically, we define the auxiliary variable 
+
+˜Ss as: 
+
+˜Ss := 
+
+Z Ts
+
+J⊤
+
+> t|s
+
+(σt(Xt)⊤)−1 dBt, (34) which corresponds to the score process in equation (8) when α′ ≡ 1, disregarding the normalisation factor A.We assume access to the following data obtained from a discretised Euler-Maruyama simulation of the SDE (6): • X0, X δt , . . . , X T : The states of the discretised SDE. • δB 0, δB δt , . . . , δB T −δt : The Brownian increments used in the simulation, where Xt+δt = Xt +δtb t(Xt)+ σ(Xt)δB t.Note that ˜ST = 0 . We can recursively compute ˜Ss from ˜Ss+δt using: 
+
+˜Ss =
+
+Z Ts
+
+J⊤
+
+> t|s
+
+ σ⊤
+
+> t
+
+−1 (Xt) d Bt = J⊤ 
+
+> s+δt |s
+
+˜Ss+δt +
+
+Z s+δt s
+
+J⊤
+
+> t|s
+
+ σ⊤
+
+> t
+
+−1 (Xt) d Bt,
+
+making use of the semigroup property Jt|s = Jt|s+δt Js+δt |s.Approximating the integral term, we obtain 
+
+˜Ss ≈ J⊤ 
+
+> s+δt |s
+
+˜Ss+δt + J⊤ 
+
+> τ|s
+
+ σ⊤
+
+> t
+
+−1 (Xs)δB s, (35) where τ can be any number in τ ∈ [s, s + δt ]. For τ = s, we have Js|s = Id . The term Js+δt |s can be approximated using an Euler-Maryuama step on (7), leading to Js+δt |s ≈ Id + δt ∇bs(Xs) + ∇σs(Xs)δB s.
+
+Remark A.1 . Here, the term ∇σt(Xt) δB t is meant as the derivative with respect to x of the map 
+
+x ∈ Rn 7 → σt(x)δB t ∈ Rn.
+
+This allows us to compute the difference term: 
+
+Ds := ˜Ss − ˜Ss+δt =
+
+Z s+δt s
+
+J⊤
+
+> t|s
+
+(σt(Xt)⊤)−1 dBt ≈ (δt ∇b(Xs)⊤ + ∇σ(Xs)⊤δB s) ˜Ss+δt + ( σ⊤ 
+
+> t
+
+)−1(Xs)δB s. (36) Crucially, note that these Jacobian-vector products are efficiently computed using reverse-mode autodifferentiation, avoiding explicit Jacobian computation. The algorithm proceeds by initialising ˜ST = 0 and iteratively computing ˜St backward in time for t ∈ { T − δt, . . . , δt, 0}.Finally, Ss is obtained as 
+
+Ss ≈ A−1  
+
+> T|sT−δt
+
+X
+
+> t=s,s +δt, ···
+
+α′
+
+> t
+
+Dt, (37) restoring the normalisation that was dropped in (34). 13 Conditioning Diffusions Using Malliavin Calculus 
+
+# B. Denoising Score Matching and Tweedies Formula 
+
+Here we show how our results can be applied to derive a formula for the score ∇ log pt(x) of a diffusion process. This could be done by applying Proposition 2.4 to a trivial conditioning Y = 0 and treating the reverse dynamics of the SDE (6) .However, it is instructive to rederive the analogous equation in this simplified setting, which we do in this section. We will see that it generalises Tweedie’s formula. Assume we have an SDE 
+
+dXt = bt(Xt) d t + σt(Xt) d Bt, (38) and denote by pt the density of Xt. Then we have the following representation and score matching objective: 
+
+Lemma B.1. The score can be represented as 
+
+∇ log pt(x) = E
+
+Z t
+
+> 0
+
+(σs(Xs)−1J−1 
+
+> t|s
+
+)⊤α′ 
+
+> s
+
+dBs | Xt = x
+
+
+
+.
+
+Here α′ 
+
+> s
+
+is a function which satisfies R t 
+
+> 0
+
+α′ 
+
+> s
+
+ds = 1 , and Jt|s is the Jacobian which follows the flow (7) .In particular, for any such α, the loss 
+
+L(u) = E
+
+
+
+∥ut(Xt) −
+
+Z t
+
+> 0
+
+(σs(Xs)−1J−1 
+
+> t|s
+
+)⊤α′ 
+
+> s
+
+dBs∥2
+
+
+
+(39) 
+
+has a unique minimiser given by ut(x) = ∇ log pt(x).Remark B.2 . The score matching loss (39) is a generalisation of (42) below to nonlinear SDEs. Note that in contrast to (42) , the construction in (39) straightforwardly generalises to Riemannian manifolds by replacing the squared norm and the Brownian motion by their Riemannian counterparts (Hsu, 2002), and noting that Jt|s maps between the tangent spaces 
+
+TXs M and TXt M in such a way that the stochastic integral is well defined. The loss (39) also generalises to infinite dimensions, replacing the squared norm by a Hilbert space norm and the Brownian motion by an appropriate Wiener process. The relationship between the Wiener process and the chosen norm are however more intricate. In the diffusion model case (the linear case), they have been worked out in Pidstrigach et al. (2024, Section 2.4, Section 6). 
+
+Proof. By the chain rule for Malliavin derivatives we can write 
+
+Dsφ(Xt) = ∇φ(Xt)Jt|sσs(Xs),
+
+where 
+
+Jt|s = ∇Xs Xt
+
+is the Jacobian. This implies that 
+
+∇φ(Xt) = Dsφ(Xt)σs(Xs)−1J−1 
+
+> t|s
+
+,
+
+assuming that σs is invertible. As this relationship holds for all s we can integrate over s to get 
+
+∇φ(Xt) = 
+
+Z t
+
+> 0
+
+Dsφ(Xt)σs(Xs)−1J−1 
+
+> t|s
+
+α′ 
+
+> s
+
+ds
+
+making use of the fact that α′ 
+
+> s
+
+integrates to 1. Taking expectations and using Malliavin integration by parts (see (15) ), we arrive at 
+
+E[∇φ(Xt)] = E
+
+Z t
+
+> 0
+
+Dsφ(Xt)σs(Xs)−1J−1 
+
+> t|s
+
+α′ 
+
+> s
+
+ds
+
+
+
+= E
+
+
+
+φ(Xt)
+
+Z t
+
+> 0
+
+(σs(Xs)−1J−1 
+
+> t|s
+
+)⊤α′ 
+
+> s
+
+dBs
+
+
+
+.
+
+Based on the framework from Watanabe (1987), we apply this to φ = δx the Dirac delta centred at x ∈ Rn, and get 
+
+∇ log pt(x) = ∇x log 
+
+Z
+
+pt(z)δx(z) d z = 1
+
+pt(x) ∇x
+
+Z
+
+pt(z)δx(z) d z = 1
+
+pt(x) ∇xE[δx(Xt)] = 1
+
+pt(x) E
+
+
+
+δx(Xt)
+
+Z t
+
+> 0
+
+(σs(Xs)−1J−1 
+
+> t|s
+
+)⊤α′ 
+
+> s
+
+dBs
+
+
+
+= E
+
+Z t
+
+> 0
+
+(σs(Xs)−1J−1 
+
+> t|s
+
+)⊤α′ 
+
+> s
+
+dBs | Xt = x
+
+
+
+.
+
+Since the conditional expectation is the minimiser of the L2 distance, (39) follows. 14 Conditioning Diffusions Using Malliavin Calculus 
+
+Lemma B.3. Assume that the forward SDE (38) is an Ornstein-Uhlenbeck process 
+
+dXt = − 12 Xt dt + d Bt. (40) 
+
+Then for the choice α′ 
+
+> s
+
+= es−t we get Tweedie’s formula: 
+
+∇ log pt(x) = 11 − e−t E
+
+h
+
+Xt − e−t/ 2X0 | Xt = x
+
+i
+
+, (41) 
+
+and, in particular, the loss (39) simplifies to the well-known denoising score matching loss :
+
+L(u) = E
+
+"
+
+u(Xt) − 11 − e−t (Xt − e−t/ 2X0)
+
+> 2
+
+#
+
+. (42) 
+
+Proof. We have that 
+
+Jt|s = e−(t−s)/2Id .
+
+Therefore, 
+
+∇ log pt(x) = E
+
+Z t
+
+> 0
+
+(σ(Xs)−1J−1 
+
+> t|s
+
+)⊤α′ 
+
+> s
+
+dBs | Xt = x
+
+
+
+= E
+
+Z t
+
+> 0
+
+e t−s 
+
+> 2
+
+α′ 
+
+> s
+
+dBs | Xt = x
+
+
+
+.
+
+If we choose αs = es−t, then 
+
+∇ log pt(x) = 11 − e−t E
+
+Z t
+
+> 0
+
+e− t−s 
+
+> 2
+
+dBs | Xt = x
+
+
+
+. (43) However, the solution of (40) is given by 
+
+Xt = e−t/ 2X0 +
+
+Z t
+
+> 0
+
+e− t−s 
+
+> 2
+
+dBt.
+
+Plugging this into (43), we get 
+
+∇ log pt(x) = 11 − e−t E[Xt − e−t/ 2X0 | Xt = x].
+
+Now, (42) follows again since the conditional expectation is the minimiser of the L2 distance. 
+
+# C. Experimental Details 
+
+C.1. Controlled Environment Experiments 
+
+C.1.1. E XPERIMENT SETUP 
+
+We discretised the time domain [0 , 1] into 200 equivariant grid points for the simulation and used an Euler-Maryuama scheme to simulate paths of the unconditioned SDE (6) . We approximated Ss (8) by starting at the final increment of dBt
+
+and then using an efficient adjoint method for SDEs to propagate the derivative information backwards. The full Jacobian matrix Js|t is never calculated. For the algorithms BEL first and BEL last we used δt = 1200 (see Section 3.3). We used a batch size of 2048 and iterated through 20 000 batches. We used the Adam optimizer and a neural network architecture which is loosely inspired by UNets. It projects the input data up to 256 dimensions and then has fully connected layers of size [256 , 128 , 64 , 32 , 64 , 128 , 256] with skip connections. The last layer is then a fully connected layer to the output dimension. 15 Conditioning Diffusions Using Malliavin Calculus  
+
+> (a) (b)
+
+Figure 7: We plot the results from the double well experiments for the reparametrisation trick corresponding to (a) Figure 4, the one double well experiment and (b) Figure 5, the ten dimensional double well experiment. C.1.2. M ETRICS 
+
+Both metrics compare the simulated paths with paths from the ground truth when started in yinit and conditioned on landing in yfinal (see Section 4.1.1), to see if the algorithms can approximate rare events even though they are trained on an amortised objective. We used 15 000 simulations of the trained models to calculate the metrics. 
+
+Dist. This metric calculates the average Euclidean distance of the final state of the path to the conditioned yfinal .
+
+MV. This metric calculates the coordinate-wise mean and variance along the paths of the SDE. It then compares those to the coordinate-wise mean and variance of paths mgen , v gen simulated with the ground truth drift, and calculates 
+
+MV = 
+
+vuut 1200 
+
+> 200
+
+X
+
+> i=1
+
+∥mgen  
+
+> i
+
+− mi∥2 + ∥(vgen  
+
+> t
+
+)1/2 − v1/2 
+
+> t
+
+∥2, (44) where mi and vi are the variance vectors at time t = i 
+
+> 200
+
+. The form of (44) is inspired by the Wasserstein-2 distance of two normal distributions. C.1.3. R ESULTS 
+
+Here we provide the tables with the results for our controlled environment experiments for Brownian motion Table 4. We also provide figures for the reparametrisation trick for the double well experiments in Figure 7. 
+
+C.2. Shape Processes 
+
+For the kernel parameters in the SDE (32) we set κ = 0 .1 and β = 1 .0. For all methods we use the neural network and associated parameters in Yang et al. (2025) to train the model with the Adam optimiser. We discretise the time domain [0 , 1] 
+
+into 100 equivariant grid points and use the Euler-Maruyama scheme to simulate paths of the SDEs. For each method, we train on a total of 102 .400 trajectories with a batch size of 128 . We compare to the time-reversal method (Heng et al., 2022) and the adjoint method (Baker et al., 2025) using the code provided by Baker et al. (2025). To evaluate performance, we use the mean pointwise distance between the target shape {yi}Ni=1 and the final points of M
+
+16 Conditioning Diffusions Using Malliavin Calculus 
+
+Table 2: Dimension 1 Loss MV Dist BEL average 7.6 × 10 −2 3.2 × 10 −3
+
+BEL first 8.6 × 10 −2 2.1 × 10 −2
+
+BEL last 1.5 × 10 −1 5.6 × 10 −2
+
+BEL optimal 1.1 × 10 −1 3.4 × 10 −3
+
+Reparametrization Trick 7.6 × 10 −2 2.2 × 10 −3
+
+Table 3: Dimension 10 Loss MV Dist BEL average 4.5 × 10 −1 2.3 × 10 −2
+
+BEL first 4.5 × 10 −1 7.1 × 10 −2
+
+BEL last 4.8 × 10 −1 1.9 × 10 −1
+
+BEL optimal 4.5 × 10 −1 6.1 × 10 −2
+
+Reparametrization Trick 4.5 × 10 −1 9.4 × 10 −2
+
+Table 4: Performance of various algorithms for conditioning a Brownian motion (see Section 4.1.2). Table 5: Dimension 1 Loss MV Dist BEL average 8.1 × 10 −1 1.6 × 10 −1
+
+BEL first 2.9 × 10 −1 8.4 × 10 −2
+
+BEL last 1.1 × 10 0 1.1 × 10 0
+
+BEL optimal 8.3 × 10 −1 1.9 × 10 −1
+
+Reparametrization Trick 9.2 × 10 −1 2.1 × 10 −1
+
+Table 6: Dimension 10 Loss MV Dist BEL average 3.4 × 10 −1 3.0 × 10 −1
+
+BEL first 2.1 × 10 −1 3.3 × 10 −1
+
+BEL last 5.9 × 10 −1 1.1 × 10 0
+
+BEL optimal 3.1 × 10 −1 3.0 × 10 −1
+
+Reparametrization Trick 5.5 × 10 −1 5.2 × 10 −1
+
+Table 7: Performance of our proposed algorithms for conditioning the double well SDE (see Section 4.1.3). The best-performing algorithm metrics are marked in red. 17 Conditioning Diffusions Using Malliavin Calculus 1.5 1.0 0.5 0.0 0.5 1.0 1.5 
+
+> 1.5
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+
+(a) 1.5 1.0 0.5 0.0 0.5 1.0 1.5  
+
+> 1.5
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+
+(b) 
+
+Figure 8: We plot one trajectory from the unconditioned stochastic shape process in (a), started at a circle of radius 1 and one trajectory from the process conditioned via the proposed method BEL average to end at a circle of radius 1.5 in (b). sampled bridges {xj }Mj=1 :
+
+1
+
+M N 
+
+> M
+
+X
+
+> j=1
+> N
+
+X
+
+> i=1
+
+∥xji − yi∥22. (45) We compute this metric over M = 512 trajectories with N = 50 points and report results in Table 1. 
+
+# D. Proofs 
+
+D.1. Proof of Proposition 2.4 
+
+We start by proving the following preliminary result, which is a slight generalisation of the Bismuth-Elworthy-Li formula (Bismut, 1984; Elworthy & Li, 1994). Results in a similar spirit (although for transition densities instead of scores) can be found in Milstein et al. (2004). 
+
+Theorem D.1. Let α : [0 , T ] → Rn×n be a matrix-valued differentiable function such that AT |s := αT − αs is invertible for all s ∈ [0 , T ). For T > s we have the representation formula 
+
+∇xs E[φ(XT ) | Xs = xs] = E
+
+"
+
+φ(XT )
+
+Z Ts
+
+(σt(Xt)−1Jt|sα′
+
+> t
+
+)⊤dBt | Xs = xs
+
+#
+
+A−1 
+
+> T|s
+
+. (46) 
+
+Proof. Case Y = XT (or G = Id). For any s < T it holds that 
+
+Dsφ(XT ) = ∇φ(XT )DsXT = ∇φ(XT )JT |sσs(Xs)
+
+by the chain rule of Malliavin calculus (Nualart, 2006, Chapter 2). Therefore, 
+
+∇φ(XT ) = Dsφ(XT )σs(Xs)−1J−1 
+
+> T|s
+
+, (47) and 
+
+∇xφ(XxT ) = ∇φ(XT )JT |0 = Dsφ(XT )σs(Xs)−1J−1 
+
+> T|s
+
+JT |0 = Dsφ(XT )σs(Xs)−1Js|0.
+
+Since (47) holds for any s, we can integrate along α′
+
+> s
+
+:
+
+∇xφ(XxT ) = 
+
+Z T
+
+> 0
+
+Dsφ(XT )σs(Xs)−1Js|0α′
+
+> s
+
+ds(αT − α0)−1.
+
+18 Conditioning Diffusions Using Malliavin Calculus 
+
+We now apply the Malliavin integration by parts (15) to obtain 
+
+E[∇xφ(XxT )] = E
+
+"Z T
+
+> 0
+
+Dsφ(XT )σs(Xs)−1Js|0α′
+
+> s
+
+ds(αT )−1
+
+#
+
+= E
+
+"
+
+φ(XT )
+
+Z T
+
+> 0
+
+(σs(Xs)−1Js|0α′
+
+> s
+
+)⊤dBs
+
+#
+
+(αT − α0)−1.
+
+In order to prove Proposition 2.4 (and later Lemma 3.3), we now prove that the score is a martingale, when conditioned on the observation Y :
+
+Lemma D.2. Let s ⩾ t, then we have that 
+
+∇Xt log p(Y | Xt) = E[∇Xt log ps|t(Xs | Xt) | Y, X t]. (48) 
+
+Proof. We have 
+
+∇xt log p(Y | Xt)= 1
+
+p(Y | Xt) ∇xt
+
+Z
+
+p(Y | XT = xT )p(XT = xT | Xt)d xT
+
+= 1
+
+p(Y | Xt) ∇xt
+
+Z
+
+p(Y | XT = xT )p(XT = xT | Xs = xs)p(Xs = xs | Xt)d xsdxT
+
+= 1
+
+p(Y | Xt) ∇xt
+
+Z
+
+p(Y | XT = xT )p(XT = xT | Xs = xs)p(Xs = xs | Xt)∇Xt log p(Xs = xs | Xt)d xsdxT
+
+= E[∇Xt log ps|t(Xs | Xt) | Xt, Y ].
+
+Proposition 2.4 can now be proved using φ = δx in Theorem D.1. Intuitively, this corresponds to approximating the Dirac delta distribution by a sequence of peaked Gaussians φn, and then taking the limit. On a technical level, extending Theorem D.1 is supported by the framework of Watanabe distributions, see Watanabe (1987, Section 2). 
+
+Proof of Proposition 2.4. Recall that the main ideas of the proof have already been outlined in the main text. Applying Theorem D.1 with φ = δxT , for fixed xT ∈ Rn, leads to 
+
+∇ log pT |s(XT = xT | Xs = xs) = 1
+
+pT |s(XT = xT | Xs = xs) ∇xs E[δxT (XT ) | Xs = xs]= E
+
+"
+
+δxT (XT )
+
+Z Ts
+
+(σt(Xt)−1Jt|sα′
+
+> t
+
+)⊤dBt | Xs = xs
+
+# A−1 
+
+> T|s
+
+pT |s(XT = xT | Xs = xs)= E
+
+"Z Ts
+
+(σt(Xt)−1Jt|sα′
+
+> t
+
+)⊤dBt | Xs = xs, X T = xT
+
+#
+
+A−1 
+
+> T|s
+
+.
+
+The final result of Proposition 2.4 follows transposing α and transposing the last equation; this is only a cosmetic change so that the result is more in line with algorithmic implementations. Now, using Lemma D.2 for t = T we get that 
+
+∇ log p(Y = y | Xs = xs) = E[∇Xs log pT |s(XT | Xs) | Y, X s]= E
+
+"
+
+E
+
+"Z Ts
+
+(σt(Xt)−1Jt|sα′
+
+> t
+
+)⊤dBt | Xs, X T
+
+#
+
+| Y, X s
+
+#
+
+= E
+
+"Z Ts
+
+(σt(Xt)−1Jt|sα′
+
+> t
+
+)⊤dBt | Y, X s
+
+#
+
+.
+
+19 Conditioning Diffusions Using Malliavin Calculus 
+
+D.2. Equivalence to KL-Loss Lemma D.3. Letting Lt,y 
+
+> local
+
+(ut) be defined as in (16) . Then it can be interpreted in terms of an amortized Kullback-Leibler divergence between measures on path space as follows: 
+
+Z T
+
+> 0
+
+Lt
+
+> local
+
+(ut) d t = E [KL( Py | Pu)] + C
+
+Proof. We have that 
+
+Lt,y 
+
+> local
+
+(ut) := E[∥u(Xt) − S t∥2 | Y = y]= E[∥u(Xt) − (St − E[St | Xt, Y ] + E[St | Xt, Y ]) ∥2 | Y = y]= E[∥u(Xt) − E[St | Xt, Y ]∥2 | Y = y] + E[∥S t − E[St | Xt, Y ]∥2 | Y = y]= E[∥u(Xt) − ∇ log p(Y = y | Xt)∥2 | Y = y] + E[∥S t − E[St | Xt, Y ]∥2 | Y = y]
+
+where we used that E[St | Xt, X T ] is an L2 orthogonal projection of Ss onto the set of σ(Xt, X T ) measurable random variables which u(Xt) is an element of. Integrating over this we obtain 
+
+Z T
+
+> 0
+
+Lt,y 
+
+> local
+
+(ut)d t = KL( Py | Pu) + 
+
+Z T
+
+> 0
+
+E[∥S t − E[St | Xt, X T ]∥2 | XT = xT ]d t, 
+
+where the second term is independent of u. Hence, assuming that the second term is integrable, the result follows by taking expectations on both sides. However, note that they have different finite-sample properties. 
+
+D.3. Reparametrisation Method 
+
+The pathwise reparameterisation trick has been introduced by Domingo-Enrich et al. (2024b) in order to derive the stochastic optimal control matching loss. It is the following result: 
+
+Lemma D.4 ((Domingo-Enrich et al., 2024b), Prop. 1) . Let Xx = ( Xxt ) be the solution of the SDE dXxt = b(Xxt , t ) d t +
+
+σ(t) d Bt with initial condition Xx 
+
+> 0
+
+= x. Assume that f : Rd × [0 , T ] → R and g : Rd → R are differentiable. For each 
+
+t ∈ [0 , T ], let Mt : [ t, T ] → Rd×d be an arbitrary continuously differentiable function matrix-valued function such that 
+
+Mt(t) = Id . We have that 
+
+∇xE
+
+
+
+exp 
+
+
+
+−
+
+Z T
+
+> 0
+
+f (Xxs , s ) d s − g(XxT )
+
+ 
+
+= E
+
+ 
+
+−
+
+Z T
+
+> 0
+
+Ms∇xf (Xxs , s ) d s − MT ∇g(XxT ) + 
+
+Z T
+
+> 0
+
+(Ms∇xb(Xxs , s ) − M ′
+
+> s
+
+)( σ−1)⊤(s)d Bs
+
+
+
+× exp 
+
+
+
+−
+
+Z T
+
+> 0
+
+f (Xxs , s ) d s − g(XxT )
+
+ 
+
+.
+
+(49) Looking at the proof of this result in Domingo-Enrich et al. (2024b, Subsec. C.2), we observe that when g is not differentiable, if we impose that MT = 0 , then (49) still holds. If we additionally set f ≡ 0 and b time-independent, we obtain 
+
+∇xE exp   − g(XxT ) = E
+
+ Z T
+
+> 0
+
+(Ms∇xb(Xxs , s ) − M ′
+
+> s
+
+)( σ−1)⊤(s)d Bs
+
+
+
+exp   − g(XxT )
+
+. (50) Next, we prove that relying on our approach, we can recover and generalise this result to compute ∇xEφ(XxT ) for φ that are not necessarily strictly positive or differentiable: 
+
+Proof. We apply Theorem D.1 for αs = J−1 
+
+> s|0
+
+Ms and observe that 
+
+σ−1 
+
+> s
+
+Js|0α′ 
+
+> s
+
+= σ−1 
+
+> s
+
+(Js|0αs)′ − σ−1 
+
+> s
+
+(Js|0)′αs = σ−1 
+
+> s
+
+M ′ 
+
+> s
+
+− σ−1∇b(Xs)Js|0αs = σ−1 
+
+> s
+
+(M ′ 
+
+> s
+
+− ∇ b(Xs)Ms).
+
+20 Conditioning Diffusions Using Malliavin Calculus 
+
+Therefore 
+
+E[∇xφ(XxT )] = E
+
+"
+
+φ(XT )
+
+Z T
+
+> 0
+
+(σ−1 
+
+> s
+
+Js|0α′
+
+> s
+
+)⊤dBs
+
+#
+
+(αT )−1
+
+= E
+
+"
+
+φ(XT )
+
+Z T
+
+> 0
+
+(σ−1 
+
+> s
+
+(M ′ 
+
+> s
+
+− ∇ b(Xs)Ms)) ⊤dBs
+
+#
+
+(αT − α0)−1.
+
+Since Ms is chosen in such a way that M0 = Id and MT = 0 , we have αT − α0 = − Id , and the result follows. 
+
+D.4. Gaussian Approximations 
+
+Now we use Lemma D.2 to show the equivalence of the two losses: 
+
+Lemma D.5. (Lemma 3.3) It holds that 
+
+E[∥ut(Xt, Y ) − ∇ Xt log p(Y | Xt)∥2] = C + E[∥ut(Xt, Y ) − ∇ Xt log ps|t(Xs | Xt)∥2]. (51) 
+
+Proof. We have that 
+
+E[∥ut(Xt, Y ) − ∇ Xt log p(Y | Xt)∥2] = E[∥ut(Xt, Y ) − E[∇Xt log ps|t(Xs | Xt) | Xt, Y ]∥2]
+
+by Lemma D.2. Since the conditional expectation E[· | Xt, Y ] is a orthogonal projection onto the subspace of σ(Xt, Y )-measurable random variables in L2, and s(t, X t, Y ) is an element of that subspace, we have that 
+
+E[∥ut(Xt, Y ) − ∇ Xt log p(Xs | Xt)∥2]= E[∥ut(Xt, Y ) − E[∇Xt log ps|t(Xs | Xt) | Xt, Y ]∥2] + E[∥∇ Xt log ps|t(Xs | Xt) − E[∇Xt log ps|t(Xs | Xt) | Xt, Y ]∥2]= E[∥ut(Xt, Y ) − E[∇Xt log ps|t(Xs | Xt) | Xt, Y ]∥2] + E[∥∇ Xt log ps|t(Xs | Xt)∥2]
+
+− E[∥[∇Xt log ps|t(Xs | Xt) | Xt, Y ]∥2].
+
+This proves the statement. Finally, we prove 
+
+Lemma D.6 (Lemma 3.4) . Approximating p(Xt+δt | Xt) by a Gaussian (24a) and regressing against its score is equivalent to choosing α′ 
+
+> s
+
+= 1 [t,t +δt ] and approximating the stochastic integral in Ss (8) as 
+
+Z t+δt t
+
+Js|tdBs ≈ Jt+δt |t(Bt+δt − Bt), (52) 
+
+and furthermore approximating Jt+δt |t by an Euler-Maryuama step on (7) :
+
+Jt+δt |t ≈ Id + δt ∇b(t, X t). (53) 
+
+Proof. Since we approximate 
+
+p(Xt+δt | Xt) ≈ N (Xt + δtb t(Xt), δt ),
+
+we have that 
+
+∇ log p(Xt+δt | Xt) = ( Id + δt ∇b(t, X t))( Xt+δt − (Xt + δtb (Xt))) = 1
+
+δt (Id + δt ∇b(t, X t))( Bt+δt − Bt). (54) Since δ = αt+δt − αt, plugging the normalization 1 
+
+> αt+δt −αt
+
+= 1 
+
+> δ
+
+into Ss (8) shows that the two expressions (8) and (54) are the same. 21 Conditioning Diffusions Using Malliavin Calculus 
+
+# E. Gaussian Analysis of the Variance 
+
+In this Section, we prove Lemma 3.1. First we determine the variance of the Monte Carlo estimator: 
+
+Lemma E.1. Set T = 1 , n = 1 , b = 0 and σ = 1 , i.e., Xt is a one-dimensional Brownian motion conditioned on X0 = x0
+
+and X1 = x1. Then the variance of the Monte-Carlo estimator 
+
+∇ log p1|0(B1 = x | B0 = x0) ≈
+
+Z 10
+
+α′
+
+> t
+
+J⊤
+
+> t|0
+
+(σ−1 
+
+> t
+
+)⊤dBt
+
+is given by 
+
+1
+
+α1 − α0
+
+Z 10
+
+(α′
+
+> t
+
+)2 dt +
+
+Z 10
+
+(α1 − αt)2
+
+(1 − t)2 dt + ( x1 − x0)2
+
+
+
+, (55) 
+
+assuming that α1−αs√1−s → 0 as s → 1.Proof. Without loss of generality, we assume that α′ 
+
+> s
+
+integrates to 1, and we use the notation x ≡ x0 and y ≡ xT . We need the following preliminary facts, 
+
+E[Bs | B1 = y, B 0 = x] = E[Ws − sW 1 + (1 − s)x + sy ] = (1 − s)x + sy 
+
+E[∇ log p(B1 = x | Bs) | B1 = y, B 0 = x] = E
+
+ x − Bs
+
+1 − s | B1 = y, B 0 = x
+
+
+
+= ( y − x),
+
+where Ws is a standard (unconditioned) Brownian motion. The expectation of the Monte Carlo estimator can then be computed as 
+
+E
+
+Z 10
+
+σ−1 
+
+> s
+
+Js|0α′
+
+> s
+
+dBs | B1 = y, B 0 = x
+
+
+
+= E
+
+Z 10
+
+α′
+
+> s
+
+dBs | B1 = y, B 0 = x
+
+
+
+= E
+
+Z 10
+
+α′
+
+> s
+
+d( Ws + ∇ log p(B1 = x | Bs)d s) | B1 = y, B 0 = x
+
+
+
+= E
+
+Z 10
+
+α′
+
+> s
+
+∇ log p(B1 = x | Bs)d s | B1 = y, B 0 = x
+
+
+
+= E
+
+Z 10
+
+α′
+
+> s
+
+∇ log p(B1 = x | Bs)d s
+
+
+
+=
+
+Z 10
+
+(y − x)α′
+
+> s
+
+ds = ( y − x).
+
+For the square of the estimator we obtain 
+
+E
+
+"Z 10
+
+σ−1 
+
+> s
+
+Js|0α′
+
+> s
+
+dBs
+
+2#
+
+= E
+
+"Z 10
+
+α′
+
+> s
+
+(d Ws + ∇Bs log p(B1 = x | Bs)d s)
+
+2
+
+| B1 = y
+
+#
+
+= E
+
+"Z 10
+
+α′
+
+> s
+
+dWs
+
+2#
+
++ E
+
+Z 10
+
+α′
+
+> s
+
+dWs
+
+Z
+
+α′
+
+> s
+
+(y − x)d s
+
+
+
++ E
+
+"Z 10
+
+α′
+
+> s
+
+y − Bs
+
+1 − s ds
+
+2#
+
+=
+
+Z 10
+
+(α′
+
+> s
+
+)2ds + 0 + E
+
+"Z 
+
+α′
+
+> s
+
+y − Bs
+
+1 − s ds
+
+2#
+
+.
+
+Moreover, 
+
+E
+
+"Z 
+
+α′
+
+> s
+
+y − Bs
+
+1 − s ds
+
+2#
+
+= E
+
+Z 10
+
+Z 10
+
+α′
+
+> s
+
+Bs − y
+
+1 − s α′
+
+> t
+
+Bt − y
+
+1 − t ds dt
+
+
+
+=
+
+Z 10
+
+Z 10
+
+
+
+α′
+
+> s
+
+α′
+
+> t
+
+min( s, t ) − st 
+
+(1 − s)(1 − t) + α′
+
+> s
+
+α′
+
+> t
+
+E[Bs − y]E[Bt − y](1 − s)(1 − t)
+
+
+
+ds dt (56) 22 Conditioning Diffusions Using Malliavin Calculus 
+
+The first term in (56) can simplified, 
+
+Z 10
+
+Z 10
+
+α′
+
+> s
+
+α′
+
+> t
+
+min( s, t ) − st 
+
+(1 − s)(1 − t) =
+
+Z 10
+
+Z t
+
+> 0
+
+α′
+
+> s
+
+α′
+
+> t
+
+s − st 
+
+(1 − s)(1 − t) ds dt +
+
+Z 10
+
+Z 1
+
+> t
+
+α′
+
+> s
+
+α′
+
+> t
+
+t − st 
+
+(1 − s)(1 − t) ds dt
+
+=
+
+Z 10
+
+Z t
+
+> 0
+
+α′
+
+> s
+
+α′
+
+> t
+
+s(1 − t)(1 − s)(1 − t) ds dt +
+
+Z 10
+
+Z 1
+
+> t
+
+α′
+
+> s
+
+α′
+
+> t
+
+t(1 − s)(1 − s)(1 − t) ds dt
+
+=
+
+Z 10
+
+Z t
+
+> 0
+
+α′
+
+> s
+
+α′
+
+> t
+
+s
+
+(1 − s) ds dt +
+
+Z 10
+
+Z 1
+
+> t
+
+α′
+
+> s
+
+α′
+
+> t
+
+t
+
+(1 − t) ds dt
+
+=
+
+Z 10
+
+α′
+
+> s
+
+s
+
+(1 − s)
+
+Z 1
+
+> s
+
+α′
+
+> t
+
+dt ds +
+
+Z 10
+
+α′
+
+> t
+
+t
+
+(1 − t)
+
+Z 1
+
+> t
+
+α′
+
+> s
+
+ds dt
+
+=
+
+Z 10
+
+α′
+
+> s
+
+s
+
+(1 − s) (α1 − αs) d s
+
+= 2 
+
+Z 10
+
+s
+
+1 − s u(s)′ ds, 
+
+where we have defined u(s) := 12 (α1 − αs)2. Now we see that 
+
+2
+
+Z 10
+
+s
+
+1 − s u(s)′ ds = −2
+
+
+
+u(s) s
+
+1 − s
+
+10
+
++ 2 
+
+Z 10
+
+ s
+
+1 − s
+
+′
+
+u(s) d s
+
+= 0 + 2 
+
+Z 10
+
+1(1 − s)2 u(s) d s
+
+=
+
+Z 10
+
+(α1 − αs)2
+
+(1 − s)2 ds, 
+
+where we have used the fact that α1 − αs = o  √1 − s by assumption. The second term in (56) simplifies as follows: 
+
+Z 10
+
+Z 10
+
+α′
+
+> s
+
+α′
+
+> t
+
+E[Bs − y]E[Bt − y](1 − s)(1 − t) ds dt =
+
+Z 10
+
+Z 10
+
+α′
+
+> s
+
+α′
+
+> t
+
+(x − y)((1 − s))( x − y)(1 − t)(1 − s)(1 − t) ds dt
+
+= ( x − y)2
+
+Z 10
+
+Z 10
+
+α′
+
+> s
+
+α′ 
+
+> t
+
+ds dt = ( x − y)2,
+
+so that collecting all the terms yields the claimed result. In the following determine the optimal choice of α in the simplified setting: 
+
+Lemma E.2. Assume the setting from Lemma 3.1. Then the optimal α has derivative 
+
+α′ 
+
+> s
+
+=
+
+ 12
+
+
+
+1 + √5
+
+
+
+(1 − s) 12 (−1+ √5).
+
+Proof. We assume without loss of generality that α1 = 1 and α0 = 0 . We need to optimise the following term, 
+
+Z 10
+
+(α′
+
+> s
+
+)2 ds +
+
+Z 10
+
+(α1 − αs)2
+
+(1 − s)2 ds =
+
+Z 10
+
+ β1−s′2 + (β1−s)2
+
+(1 − s)2 ds = −
+
+Z 10
+
+ βs′2 + (βs)2
+
+s2 ds, 
+
+where we have set βs := α1 − α1−s. We define 
+
+F (β) := 
+
+Z 10
+
+ βs′2 + (βs)2
+
+s2 ds, 
+
+since the last term in (19) is independent of βs. Assuming that α is a minimizer of F , it follows that ddε F (β + εφ ) = 0 for any φ such that the α defined through β + εφ satisfies the assumptions of Lemma 3.1. In particular, this condition has to be satisfied for any weakly differentiable φ such that φ0 = φ1 = 1 . Given that, we calculate 
+
+ddε
+
+Z 10
+
+ βs′ + εφ 2 + (βs + εφ )2
+
+s2
+
+
+
+ds = 2 
+
+Z 10
+
+
+
+φ′  βs′ + εφ ′ + φ(βs + εφ )
+
+s2
+
+
+
+ds. 
+
+23 Conditioning Diffusions Using Malliavin Calculus 
+
+Therefore, we arrive at 
+
+0 !
+
+=
+
+Z 10
+
+φ′βs′ + φβ s
+
+s2 ds =
+
+Z 10
+
+−φβ s′′ + φβ s
+
+s2 ds. 
+
+Since this equation needs to hold for any continuous φ with 0-boundary conditions it follows that 
+
+β′′  
+
+> s
+
+= βs
+
+s2 .
+
+Solving this with the boundary conditions β0 = 0 and β1 = 1 leads to 
+
+βs = s 12 (1+ √5),β′ 
+
+> s
+
+=
+
+ 12
+
+
+
+1 + √5
+
+
+
+s 12 (−1+ √5),
+
+as claimed. 
+
+# F. Related Work 
+
+Numerous algorithms exist for bridge simulation. For example, Markov chain Monte Carlo-based methods (Delyon & Hu, 2006; Bayer & Schoenmakers, 2013; Bladt & Sørensen, 2014; Schauer et al., 2017) and more recently, machine learning-based works (Heng et al., 2022; Du et al., 2024; Baker et al., 2025; Zhao et al., 2024). In the context of diffusion models, the most relevant approaches are Zhang et al. (2023); Denker et al. (2024). These methods rely on a fundamental equality in their derivation: 
+
+∇Xt log p(XT |Xt) = ∇Xt log p(Xt|XT ) + ∇Xt log p(Xt) ≈ ∇ Xt log p(Xt|XT ) + sθ (Xt).
+
+This formulation allows the first term on the right to be computed analytically, while the second term relies on the pre-trained score network from the diffusion process. Although this approach offers computational efficiency, it assumes that the score network accurately approximates ∇ log pt(Xt) – the gradient of the distribution from which Xt is sampled. This assumption frequently fails in practice and may become increasingly invalid after network fine-tuning or other modifications. Our approach avoids this limitation by directly learning optimal control for the current drift estimate sθ (Xt), regardless of its origin. Guidance methods share similar objectives of introducing post-hoc control (Chung et al., 2022; Song et al., 2023; Boys et al., 2023). However, these techniques rely on cheap approximations of the optimal control ∇ log pt(Y |Xt), producing samples that deviate from the true posterior or conditional distribution. Instead, they generate samples resembling high-likelihood draws from the prior distribution. While adequate for many applications, these methods cannot provide authentic conditional samples from the Bayesian posterior when such precision is required. There are also two concurrent works on Malliavin calculus and diffusion models. However, they differ in their goals, techniques and results. In Mirafzali et al. (2025) the authors establish a different Malliavin based score formula. In contrast to Lemma B.1, this construction relies on second-order Malliavin derivatives (Mirafzali et al., 2025, Theorem 3.9) and the inverse of the Malliavin matrix. In Greco (2025) the author uses Malliavin calculus to study diffusion models in infinite dimensions. This can be seen as giving justification for Tweedie’s formula (see 2.5) in the infinite dimensional case, extending the results from Pidstrigach et al. (2024). 24

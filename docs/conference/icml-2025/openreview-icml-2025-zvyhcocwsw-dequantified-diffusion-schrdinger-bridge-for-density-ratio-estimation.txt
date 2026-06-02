@@ -1,0 +1,3465 @@
+Title: Dequantified Diffusion-Schrödinger Bridge for Density Ratio Estimation
+
+URL Source: https://openreview.net/pdf?id=zvyHCOcwsw
+
+Number of Pages: 26
+
+Markdown Content:
+# Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+Wei Chen 1 Shigui Li 1 Jiacheng Li 2 Junmei Yang 2 John Paisley 3 Delu Zeng 2
+
+## Abstract 
+
+Density ratio estimation is fundamental to tasks involving f -divergences, yet existing methods often fail under significantly different distribu-tions or inadequately overlapping supports — the 
+
+density-chasm and the support-chasm problems. Additionally, prior approaches yield divergent time scores near boundaries, leading to insta-bility. We design D3RE , a unified framework for robust , stable and efficient density ratio estimation. We propose the dequantified diffu-sion bridge interpolant (DDBI ), which expands support coverage and stabilizes time scores via diffusion bridges and Gaussian dequantization. Building on DDBI, the proposed dequantified Schr ¨odinger bridge interpolant (DSBI ) incorpo-rates optimal transport to solve the Schr ¨odinger bridge problem, enhancing accuracy and effi-ciency. Our method offers uniform approximation and bounded time scores in theory, and outper-forms baselines empirically in mutual informa-tion and density estimation tasks. Code is avail-able at https://github.com/Hoemr/Dequantified-Diffusion-Bridge-Density-Ratio-Estimation.git. 
+
+## 1. Introduction 
+
+Quantifying distributional discrepancies via f -divergences-defined through density ratios r(x) = q1(x)/q 0(x) is foun-dational in tasks such as domain adaptation, generative modeling, and hypothesis testing. However, directly es-timating r(x) by modeling q0 and q1 becomes intractable in high dimensions, motivating density ratio estimation (DRE) methods that bypass explicit density modeling (Sugiyama et al., 2012). While DRE underpins modern techniques like       
+
+> 1The School of Mathematics, South China University of Tech-nology, Guangzhou 510006, China 2The School of Electronic and Information Engineering, South China University of Technol-ogy, Guangzhou 510006, China 3The Department of Electrical Engineering, Columbia University, New York, NY 10027, USA. Correspondence to: Delu Zeng <dlzeng@scut.edu.cn >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+mutual information estimation (Colombo et al., 2021) and likelihood-free inference (Thomas et al., 2022), it struggles with a critical challenge known as the density-chasm prob-lem, where multi-modal or divergent distributions lead to unstable ratio estimates (Rhodes et al., 2020). Existing methods like telescoping ratio estimation (TRE) (Rhodes et al., 2020) and its continuous extension DRE-∞
+
+(Choi et al., 2022) estimate density ratios via intermediate steps. TRE improves accuracy by adding more intermediate variables, but increases model complexity linearly. DRE-
+
+∞ uses continuous-time score matching to avoid this, yet both face a core challenge in the support-chasm problem 
+
+(see Definition 3.1), where supp (q0) ∩ supp (q1) is small or empty. This leads to inadequately overlapping supports and ill-defined ratios (Srivastava et al., 2023). To address the support-chasm problem, we unify the interpo-lation strategies in prior works as deterministic interpolants 
+
+(DI ) and propose the diffusion bridge interpolant (DBI ), which uses diffusion bridges to enable diverse trajectory exploration and smooth transitions between distributions. By Theorem 3.2 and Corollary 3.3, DBI expands support coverage and trajectory sets beyond existing approaches. A second challenge arises in prior methods: As t → 1−, the absolute time score Eqt [|∂t log qt|] diverges for both DI and DBI (Theorem 3.4), leading to unstable estimations at the boundary. To mitigate this, we propose Gaussian dequan-tization (GD ), which addresses boundary densities q0 and 
+
+q1 via Gaussian convolution, ensuring Eqt [|∂t log qt|] re-mains bounded over t ∈ [0 , 1] (Corollary 3.8). The resulting 
+
+dequantified diffusion bridge interpolant (DDBI ) balances robustness and computational efficiency. To further reduce estimation error and improve efficiency, the dequantified Schr ¨odinger bridge interpolant (DSBI ) is derived by integrating DDBI with optimal transport rear-rangement (OTR ), solving the Schr ¨odinger bridge problem (Proposition 3.6). Together, applying DDBI and DSBI to DRE leads to the Dequantified Diffusion Bridge Density 
+
+Ratio Estimation (D3RE ) framework. We summarize these developments in Table 1. Experimental results show that D3RE improves robustness and efficiency in downstream tasks such as density ratio estimation, mutual information estimation, and density es-1Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+Table 1. Comparison of advantages of interpolants in this work. 
+
+Diffusion bridge GD OTR 
+
+(robust & stable) (stable) (efficient) 
+
+DI (previous) 
+
+DBI (ours) ✓
+
+DDBI (ours) ✓ ✓
+
+DSBI (ours) ✓ ✓ ✓
+
+(a) DI (previous) (b) DBI (ours) 
+
+(c) DDBI (ours) (d) DSBI (ours) 
+
+Figure 1. Trajectory sets comparison among DI, DBI, DDBI and DSBI. Our methods yield broader trajectory sets , with interme-diate distributions exhibiting wider support than those of DI. The entropically regularized transport losses for subfigures (a-d) are 
+
+44 .17 , 31 .14 , 31 .15 , and 8.26 , respectively (See Eq. (17) for de-tails.). Lower loss indicates increased path diversity. 
+
+timation. Fig. 1 illustrates a comparison of interpolation strategies among DI, DBI, DDBI, and DSBI, with light blue points representing intermediate samples drawn from q0 and 
+
+q1. Our proposed methods (DBI, DDBI, and DSBI) enable broader exploration of alternative trajectories, producing intermediate distributions with larger support compared to DI, consistent with Theorem 3.2 and Corollary 3.3 below. The main contributions of this work are as follows: • We propose D3RE , the first unified framework to ad-dress both the density-chasm and support-chasm prob-lems via uniformly approximated density ratio estima-tion (Proposition 3.5). Our interpolants expand both the support (Theorem 3.2) and trajectory sets (Corol-lary 3.3), alleviating the support-chasm problem. • We incorporate guidance mechanisms to improve inter-polant quality: GD improves the stability of time score functions at boundary (Theorem 3.4,Corollary 3.8), while OTR leads to more stable (Theorem 3.7) and efficient (Fig. 8) estimation. • Experiments demonstrate D3RE ’s superiority in den-sity ratio estimation, mutual information estimation, and density estimation. 
+
+## 2. Background 
+
+Let X0 ∼ q0(x) and X1 ∼ q1(x) be random variables in Rd
+
+with set-theoretic supports supp (q0) and supp (q1). Upper cases X0 and X1 denote random variable, while lower cases 
+
+x0 and x1 denote the samples of random variables. 
+
+2.1. Density Ratio Estimation 
+
+Density ratio estimation (DRE) aims to estimate the density ratio r⋆(x) = q1(x) 
+
+> q0(x)
+
+using i.i.d. samples from both distribu-tions. A common approach is density ratio matching via Bregman divergence minimization (Sugiyama et al., 2012), which optimizes a parameterized ratio rθ by minimizing 
+
+BD( rθ ) = −Eq0(x0)
+
+> q1(x1)
+
+h
+
+log 11+ rθ (x0) + log rθ (x1)1+ rθ (x1)
+
+i
+
+, (1) where θ denotes the trainable parameters of rθ . The mini-mizer of Eq. (1) satisfies rθ⋆ = r⋆. However, DRE suffers from the density-chasm problem (Rhodes et al., 2020). TRE mitigates this by employing a divide-and-conquer 
+
+strategy. It partitions the interval [0 , 1] into M ∈ Z+ sub-intervals with endpoints {m/M }Mm=0 , constructing interme-diate variables Xm/M ∼ qm/M (x) via linear interpolation 
+
+Xm/M =
+
+q
+
+1 − η2 
+
+> m/M
+
+X0 + ηm/M X1, (2) where ηm/M increases from 0 to 1. The density ratio de-composes into a telescoping product 
+
+r⋆(x) = q1(x)
+
+q0(x) = 
+
+> M−1
+
+Y
+
+> m=0
+
+q(m+1) /M (x)
+
+qm/M (x)= 
+
+> M−1
+
+Y
+
+> m=0
+
+r⋆m/M (x) ≈ 
+
+> M−1
+
+Y
+
+> m=0
+
+rθm (x),
+
+(3) where r⋆m/M is the target intermediate density ratio, esti-mated by a parameterized neural network rθm with trainable parameters θm. In this case, M networks must be trained. While a larger M improves accuracy, it increases compu-tational cost and may still fail to sufficiently reduce the KL divergence, KL( qm/M ∥q(m+1) /M ), leaving the density-chasm problem unaddressed. DRE-∞ (Choi et al., 2022) extends TRE to M → ∞ , rep-resenting the log ratio as an integral of the time score 
+
+log r⋆(x) = 
+
+Z 10
+
+∂t log qt(x)d t ≈
+
+Z 10
+
+st 
+
+> θ⋆
+
+(x, t )d t, (4) where ∂t log qt(x) ≈ (log qt+∆ t(x) − log qt(x)) /∆t with an infinitesimal gap ∆t = lim M →∞ 1/M denotes the time score. The time score model st 
+
+> θ
+
+approximates the time score via minimization of 
+
+L1 = Eq(t)qt(x)
+
+h
+
+λ(t) ∂t log qt(x) − st 
+
+> θ
+
+(x, t ) 2i
+
+, (5) 2Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+where λ(·) : [0 , 1] → R+ is a time-dependent weighting function, and q(t) = U[0 , 1] is the uniform distribution over the interval [0,1]. When the time score model satisfies 
+
+∂t log qt(x) = st 
+
+> θ⋆
+
+(x, t ), the loss function reaches its mini-mum value L1(θ⋆). Unlike in TRE, only one network, st 
+
+> θ
+
+,needs to be trained in DRE-∞.
+
+2.2. Denoising Diffusion Bridge Model 
+
+Denoising diffusion models (DDMs) simulate a diffusion process {Xt}t∈[0 ,1] , which serves as a continuous bridge be-tween X0 and X1. This process is described by the solution to an Itˆ o stochastic differential equation (SDE) 
+
+dXt = f (Xt, t )d t + g(t)d Wt, (6) where {Wt}t∈[0 ,1] is a standard Wiener process, f : Rd ×
+
+[0 , 1] → Rd and g : [0 , 1] → R are termed as the drift coef-ficient and scalar diffusion coefficient of Xt, respectively. Conventional DDMs (Li et al., 2023; Song et al., 2021; Li et al., 2024a; Xu et al., 2024) require either q0 or q1 to be a simple, tractable distribution (e.g., isotropic Gaussian), which limits their ability to bridge arbitrary complex distri-butions and restricts applications such as DRE. Denoising diffusion bridge models (Zhou et al., 2024a) over-come this limitation by simulating stochastic processes that interpolate between paired distributions with X1 as end-points. These processes are derived from the SDE in Eq. (6) via Doob’s h-transform (Doob & Doob, 1984), 
+
+dXt = [ f (Xt, t ) + g2(t)h(Xt, t, X1)]d t + g(t)d Wt, (7) where h(Xt, t, X1) = ∇xt log pt(X1 | Xt) is the h func-tion representing the gradient of the log transition kernel from time t to 1. The process explicitly depends on X1
+
+and, given X0 and X1, it forms a diffusion bridge with transition kernel qt(x | X0, X1). A special case of the dif-fusion bridge, termed the Brownian bridge , arises under the conditions f (Xt, t ) := 0 , g (t) := 1 and h(Xt, t, X1) :=  
+
+> X1−Xt
+> 1−t
+
+. The Brownian bridge is defined as the solution to 
+
+dBt = B1−Bt 
+
+> 1−t
+
+dt + d Wt and its transition kernel is given by qt(b | B0, B1) = N ((1 − t)B0 + tB1, t (1 − t)Ed).
+
+## 3. Method 
+
+In this section, we we extend prior works into a unified framework called Dequantified Diffusion-bridge Density-
+
+Ratio Estimation ( D3RE ). D3RE offers a robust and ef-ficient solution for density ratio estimation, theoretically mitigating the density-chasm and support-chasm problems. 
+
+3.1. Support-chasm Problem Deterministic Interpolant. We summarize the inter-polants used in prior works, such as TRE and DRE-∞,to deterministic interpolant (DI ), defined as 
+
+I(X0, X1, t ) = αtX0 + βtX1, (8) where I : Rd × Rd × [0 , 1] → Rd is an interpolant contin-uously differentiable in (X0, X1, t ) and the time-indexed coefficients αt, β t ∈ C2[0 , 1] are monotonic with αt de-creasing and βt increasing in t. They are strictly positive and satisfy boundary conditions α0 = β1 = 1 and α1 = β0 = 0 ,with constraints αt + βt = 1 or α2 
+
+> t
+
++ β2 
+
+> t
+
+= 1 , ∀t ∈ [0 , 1] .Prior methods, such as TRE (Rhodes et al., 2020) and DRE-
+
+∞ (Choi et al., 2022), are specific cases of DI distinguished by their choices of αt and βt (see Appendix B.1). However, DRE with DI suffers from the support-chasm problem, where minimal overlap between supp (q0) and 
+
+supp (q1) leads to ill-defined ratios (Srivastava et al., 2023). 
+
+Definition 3.1 (Support-chasm Problem) . Let q0, q 1 be probability density functions with supports supp (q0) and 
+
+supp (q1), respectively. For a given threshold ε > 0, if 
+
+μ (supp (q0) ∩ supp (q1)) < ε , then a support-chasm exists between q0 and q1, where μ is the Lebesgue measure. 
+
+Diffusion Bridge Interpolant. To mitigate the support-chasm, we introduce a Brownian bridge {Bt}t∈[0 ,1] , leading to the diffusion bridge interpolant (DBI )
+
+Xt = I(X0, X1, t ) + γBt, (9) where γ ∈ R≥0 is the noise factor controlling the stochastic component Bt. This factor provides flexibility by adjusting the variability introduced by the bridge at different stages of interpolation. When γ = 0 , DBI reduces to DI. 
+
+Since Bt is a Gaussian process with zero mean and variance 
+
+t(1 − t), i.e., Bt ∼ N (0, t (1 − t)Ed), the transition kernel of the DBI can be derived follows from Eq. (9) as qt(x |
+
+X0, X1) = N (I(X0, X1, t ), t (1 − t)γ2Ed). By applying the reparameterization trick, DBI admits the equivalent form 
+
+Xt = I(X0, X1, t ) + pt(1 − t)γ2Zt, (10) where Zt ∼ N (0, Ed), ensuring analytical tractability and efficient implementation. The term pt(1 − t)γ2Zt adds controlled variability and provides robustness and flexibility to the interpolant, expanding the support of qt.
+
+Theorem 3.2 (Support Set Expansion) . Let X0 and X1 be random variables. Let qt(x) and q′
+
+> t
+
+(x) denote the marginal densities under DI and DBI, respectively. Then, for any 
+
+t ∈ (0 , 1) , the support of q′ 
+
+> t
+
+includes or expands beyond the support of qt, i.e., supp (q′
+
+> t
+
+) ⊇ supp (qt).
+
+See Appendix A.1 for detailed derivation. This result shows that DBI covers a larger or equal region of the space com-pared to DI, providing theoretical justification for its ability to mitigate the support-chasm problem in D 3RE. 3Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+Corollary 3.3 (Trajectory Set Expansion) . Under the same setup as in Theorem 3.2, let the trajectory sets generated by the DI and the DBI be denoted by T = {{ xt}t∈[0 ,1] ; xt ∈
+
+supp (qt)} and T′ = {{ x′
+
+> t
+
+}t∈[0 ,1] ; x′ 
+
+> t
+
+∈ supp (q′
+
+> t
+
+)}, respec-tively. Then, T′ contains T, i.e., T′ ⊇ T.
+
+See Appendix A.2 for details. This generalizes the support expansion result to entire paths, implying that DBI, by in-jecting noise, explores a broader set of trajectories than DI. As a result, it provides better coverage of the interpolation space, enhancing robustness across diverse distributions. 
+
+3.2. Gaussian Dequantization for Mollified Time Score 
+
+A second fundamental challenge in conventional inter-polants such as DI and DBI is the divergence of the absolute time score, as shown in Theorem 3.4. 
+
+Theorem 3.4. Let {Xt}t∈[0 ,1] be a DI defined in Eq. (8) .Under Assumption A.1 and Assumption A.2, the time score for any t ∈ (0 , 1) satisfies 
+
+Eqt [|∂t log qt|] ≥ d (1 − L) | ˙αt|
+
+αt
+
+− L | ˙βt|
+
+βt
+
+!
+
+− O 
+
+q 
+
+Eqt [∥∇ log qt∥2]
+
+
+
+,
+
+(11) 
+
+where L is the Lipschitz constant in Assumption A.2. More-over, if L < 1, this lower bound diverges to infinity 
+
+lim 
+
+> t→0+
+
+Eqt [|∂t log qt|] = −∞ ,
+
+lim  
+
+> t→1−
+
+Eqt [|∂t log qt|] = + ∞. (12) Proofs can be found in Appendix A.3. 
+
+Dequantified Diffusion Bridge Interpolant. To stabilize the time score near the boundary, we introduce Gaussian dequantization (GD) by adding controlled perturbations to boundary samples, effectively handling the boundary den-sities and resulting uniformly bounded time score across 
+
+[0 , 1] (see Corollary 3.8 for details). Specifically, for xi ∼ qi, its dequantified form x′ 
+
+> i
+
+can be obtained by 
+
+x′ 
+
+> i
+
+= xi + zε, zε ∼ N (0, ε Ed), i ∈ { 0, 1}, (13) where ε ∈ R+ is small. The resulting dequantified densities are obtained via Gaussian convolution, q′ 
+
+> i
+
+= qi ∗ N (0, ε Ed).This smoothing ensures bounded time scores near t = 0 
+
+and t = 1 (see Theorem 3.7 and Corollary 3.8 for details), improving stability in DRE. Incorporating GD into the DBI yields the dequantified diffu-sion bridge interpolant (DDBI ), formulated as 
+
+X′ 
+
+> t
+
+= I(X′
+
+> 0
+
+, X′
+
+> 1
+
+, t ) + pt(1 − t)γ2Zt. (14) The DDBI can be expressed in terms of the original DBI by defining perturbed variables as X′ 
+
+> i
+
+= Xi + Zε, where 
+
+Zε ∼ N (0, ε Ed). This results in 
+
+X′ 
+
+> t
+
+= I(X0, X1, t )+ 
+
+q
+
+t(1 − t)γ2 + ( α2 
+
+> t
+
++ β2 
+
+> t
+
+)εZt. (15) Here, the additional term (α2 
+
+> t
+
++ β2 
+
+> t
+
+)ε reflects the effect of GD, yielding smoother interpolation. As a result, the transition kernel of the DDBI, q′
+
+> t
+
+(x | x0, x1), is given by N (I(x0, x1, t ),  t(1 − t)γ2 + ( α2 
+
+> t
+
++ β2 
+
+> t
+
+)ε Ed), which shares the same mean trajectory as DBI (see Eq. (10)). We have also analyzed the uniform approximation of density ratio using the DDBI. The relationship between r(x) and 
+
+r′(x) = q′ 
+
+> 1(x)
+> q′
+> 0(x)
+
+is characterized by Proposition 3.5. 
+
+Proposition 3.5. Let r(x) and r′(x) be the density ratios with and without GD, respectively. Then, r′ is a uniform apporximation of r, with the error bounded by: 
+
+∥r′ − r∥L∞ ≤ O (ε). (16) 
+
+Thus, as ε → 0, r′(x) → r(x) in the uniform norm. 
+
+See Appendix A.4 for detailed derivation. Proposition 3.5 confirms that the dequantified density ratio r′(x) is a uni-form approximation of r(x) for sufficiently small ε.
+
+3.3. Optimal Transport Rearrangement 
+
+To further reduce estimation error and improve efficiency of DRE, we extend the probability path of DDBI by aligning it with the entropically regularized optimal transport (OT) 
+
+π2γ2 = argmin 
+
+> π∈Π( q′
+> 0,q ′
+> 1)
+
+Z
+
+∥x0 − x1∥2dπ − 2γ2H(π), (17) where Π( q′
+
+> 0
+
+, q ′
+
+> 1
+
+) is the set of all probability paths with marginals q′ 
+
+> 0
+
+and q′
+
+> 1
+
+, and H(π) is the entropy of π. The coef-ficient 2γ2 is regularization factor (details in Appendix B.2). We apply the scalable Sinkhorn algorithm (Cuturi, 2013) to mini-batches {(x′
+
+> 0
+
+, x′
+
+> 1
+
+)n}Nn=1 ∼ q′ 
+
+> 0
+
+× q′
+
+> 1
+
+, obtaining re-arranged sample pairs {(ˆ x′
+
+> 0
+
+, ˆx′
+
+> 1
+
+)n}Nn=1 ∼π2γ2 . For conve-nience, we refer to this procedure as optimal transport rear-rangement (OTR), which preserves the marginals and only changes the sample pairing. 
+
+Dequantified Schr ¨odinger Bridge Interpolant. Apply-ing OTR followed by DDBI yields the dequantified Schr¨ odinger bridge interpolant (DSBI )
+
+ˆX′ 
+
+> t
+
+= I( ˆX′
+
+> 0
+
+, ˆX′
+
+> 1
+
+, t )+ 
+
+q
+
+t(1 − t)γ2 + ( α2 
+
+> t
+
++ β2 
+
+> t
+
+)εZt, (18) where αt = 1 − t and βt = t are fixed. We show that rearranging the mini-batches via OTR leads to an interpolant that naturally solves the Schr ¨odinger bridge (SB) problem (Schr¨ odinger, 1932). 4Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+Proposition 3.6. The probability path defined by DSBI solves the SB problem 
+
+π⋆ = argmin 
+
+> π∈Π( q′
+> 0,q ′
+> 1)
+
+KL( π∥πref ), (19) 
+
+where πref is a Wiener process scaled by γ.
+
+See Appendix A.5 for proof. This result suggests that DSBI, as a principled integration of DDBI and OTR, implic-itly solves the SB problem and provides a minimum-cost stochastic interpolation between q′ 
+
+> 0
+
+and q′
+
+> 1
+
+.Furthermore, to rigorously quantify the improvement brought by OTR, we establish the following result com-paring the upper error bounds of DDBI and DSBI. 
+
+Theorem 3.7. Consider the DDBI and DSBI with αt = 1 −t,
+
+βt = t. Let π ∈ Π( q′
+
+> 0
+
+, q ′
+
+> 1
+
+) be any coupling for DDBI, and 
+
+π2γ2 the entropically regularized OT coupling for DSBI. Then, for all t ∈ [0 , 1] , the variance of the time score under DSBI is no greater than that under DSBI, i.e., 
+
+Var DSBI  
+
+> q′
+> t
+
+(∂t log q′
+
+> t
+
+) ≤ Var DDBI  
+
+> q′
+> t
+
+(∂t log q′
+
+> t
+
+). (20) 
+
+Corollary 3.8. For all t ∈ [0 , 1] , the time score of DDBI is uniformly bounded by 
+
+Eq′ 
+
+> t
+
+[|∂t log q′
+
+> t
+
+|] ≤
+
+s
+
+1
+
+σ2
+
+> t
+
+Eπ
+
+h
+
+∥X′ 
+
+> 0
+
+− X′
+
+> 1
+
+∥2i
+
++ ˙σ4 
+
+> t
+
+d
+
+2σ4
+
+> t
+
+, (21) 
+
+where σ2 
+
+> t
+
+= t(1 − t)γ2 + (2 t2 − 2t + 1) ε is strictly positive. 
+
+See Appendix A.6 and Appendix A.7 for detailed deriva-tions of Theorem 3.7 and Corollary 3.8. These results es-tablish that both DDBI and DSBI admit a bounded time-integrated time score, Eq′ 
+
+> t
+
+[|∂t log q′
+
+> t
+
+|], in contrast to the di-vergent lower bound exhibited by DI (see Theorem 3.4). Moreover, it provides a formal justification for the error reduction achieved by DSBI through the coupling π2γ2 .
+
+3.4. Dequantified Diffusion Bridge DRE 
+
+For the DDBI, r′(x) can be approximated effectively us-ing a neural network, as formulated in Definition 3.9. See Appendix A.8 for detailed derivation. 
+
+Definition 3.9 (Dequantified Diffusion bridge Density Ratio Estimation, D 3RE) . Given the marginal probability density of DDBI, q′
+
+> t
+
+(x), the log density ratio for a given point x ∈
+
+Rdcan be estimated as 
+
+log r⋆(x) ≈
+
+Z 10
+
+∂t log q′
+
+> t
+
+(x)d t, (22) where ∂t· denotes the time derivative operator. 
+
+Time Score-matching Loss. We train a time score model 
+
+st 
+
+> θ
+
+(x, t ) to approximate the time score ∂t log q′
+
+> t
+
+(x) by mini-mizing the time score-matching loss (Choi et al., 2022), 
+
+L2 = Eq(t)q′
+
+> t(x)
+
+
+
+λ(t) ∂t log q′
+
+> t
+
+(x) − st 
+
+> θ
+
+(x, t ) 2
+
+
+
+. (23) However, ∂t log q′
+
+> t
+
+(x) is intractable in practice. To bypass this, an equivalent integration-by-parts form (Song & Er-mon, 2020; Choi et al., 2022) is proposed 
+
+L3 = Eq′
+
+> 0(x0)q′
+> 1(x1)
+
+[λ(0) st 
+
+> θ
+
+(x0, 0) − λ(1) st 
+
+> θ
+
+(x1, 1)] + Eq(t)q′
+
+> t(x)
+
+
+
+∂t
+
+λ(t)st 
+
+> θ
+
+(x, t ) + 12 λ(t)st 
+
+> θ
+
+(x, t )2
+
+
+
+, (24) where ∂t [λ(t)st 
+
+> θ
+
+(x, t )] = λ(t)∂tst 
+
+> θ
+
+(x, t ) + λ′(t)st 
+
+> θ
+
+(x, t ),
+
+∂tst 
+
+> θ
+
+(x, t ) and λ′ denote the time derivative of the time score model and weighting function, respectively. The first two terms enforce the boundary conditions. L2 and L3
+
+differ only by a constant C independent of θ. In practice, for stable and effective training, the joint score-matching loss is implemented, as described in Appendix C.2. 
+
+Estimating Target Log Density Ratio. Given the optimal parameters θ⋆ obtained by minimizing L3, the log density ratio at any point x can be estimated as 
+
+log r⋆(x) ≈
+
+Z 10
+
+∂t log q′
+
+> t
+
+(x)d t ≈
+
+Z 10
+
+st 
+
+> θ⋆
+
+(x, t )d t, (25) based on Definition 3.9. See Algorithms 1 and 2 for the full training and estimation procedures using DDBI and DSBI. 
+
+Algorithm 1 Training and estimation of D 3RE with DDBI 
+
+Input: Probability densities q0 and q1, time score model 
+
+st 
+
+> θ
+
+, coefficients αt and βt, noise factor γ and ε.
+
+Initialize: trainable parameters θ of st 
+
+> θ
+
+, a given point x.
+
+x0 ∼ q0(x), x1 ∼ q1(x), t ∼ U (0 , 1) 
+
+zε ∼ N (0, ε Ed), z ∼ N (0, Ed)
+
+x′ 
+
+> 0
+
+← x0 + zε, x′ 
+
+> 1
+
+← x1 + zε % GD 
+
+x′ 
+
+> t
+
+← αtx′ 
+
+> 0
+
++ βtx′ 
+
+> 1
+
++ pt(1 − t)γ2z % DBI 
+
+θ⋆ ← Adam( θ, ∇θ L3(θ)) log r(x) ← odeint adjoint (st 
+
+> θ⋆
+
+, (0 , 1) , x)
+
+Output: estimated log density ratio log r(x).
+
+Algorithm 2 Training and estimation of D 3RE with DSBI 
+
+Input: Probability densities q0 and q1, time score model 
+
+st 
+
+> θ
+
+, coefficients αt and βt, noise factor γ and ε.
+
+Initialize: trainable parameters θ of st 
+
+> θ
+
+, a given point x.
+
+x0 ∼ q0(x), x1 ∼ q1(x), t ∼ U (0 , 1) 
+
+zε ∼ N (0, ε Ed), z ∼ N (0, Ed)
+
+x′ 
+
+> 0
+
+← x0 + zε, x′ 
+
+> 1
+
+← x1 + zε % GD 
+
+π2γ2 ← Sinkhorn (x′
+
+> 0
+
+, x′
+
+> 1
+
+, 2γ2) % OTR 
+
+(ˆ x′
+
+> 0
+
+, ˆx′
+
+> 1
+
+) ∼ π2γ2
+
+ˆx′ ← αt ˆx′ 
+
+> 0
+
++ βt ˆx′ 
+
+> 1
+
++ pt(1 − t)γ2z % DBI 
+
+θ⋆ ← Adam( θ, ∇θ L3(θ)) log r(x) ← odeint adjoint (st 
+
+> θ⋆
+
+, (0 , 1) , x)
+
+Output: estimated log density ratio log r(x).5Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+## 4. Experiments 
+
+For experiments involving D3RE , we implement both DDBI and DSBI. Unless specified otherwise, we use the follow-ing settings: αt = 1 − t, β t = t, γ 2 = 0 .5, ε = 1 e − 5
+
+and λ(t) = γ2t(1 − t). Under this configuration, the in-terpolant I(X0, X1, t ) = (1 − t)X0 + tX1 aligns with the Benamou-Brenier solution to the optimal transport problem in Euclidean space (McCann, 1997). The parameterized score model is trained with time score matching loss L3 and optimized with Adam optimization method. 
+
+4.1. Density Estimation 
+
+Let r(x) = q1(x) 
+
+> q0(x)
+
+be the target density ratio, where q1(x)
+
+is an intractable data distribution, and q0(x) is the simpler, tractable noise distribution. Once the estimated density ratio 
+
+rθ⋆ is obtained, the log-density of q1 can be approximated as log q1(x) ≈ log rθ⋆ (x) + log q0(x).
+
+2-D Synthetic Datasets. We trained DRE-∞ (baseline) and D3RE (ours) on eight 2-D synthetic datasets, includ-ing swissroll , circles , rings , moons , 8gaussians , pinwheel ,
+
+2spirals , and checkerboard , for 20,000 epochs using the joint score matching loss (details in Appendix C.2). The density estimation results are shown in Fig. 2. Data 
+
+> baseline (DI)
+> DI+OTR (ours)
+> D3RE (DDBI, ours)
+> D3RE (DSBI, ours)
+
+Figure 2. Density estimation results on eight 2-D synthetic datasets for different methods. D3RE effectively estimates the density for both multi-modal and discontinuous distributions. 
+
+Our experiments demonstrate that D3RE effectively esti-mates the density for both multi-modal and discontinu-ous distributions, outperforming DRE-∞. The baseline struggles, especially with complex datasets like rings and 
+
+checkerboard , where significant distortions occur. While the OTR trick reduces errors, it remains insufficient for intricate datasets like 2spirals and pinwheel .In contrast, the D3RE framework, leveraging both DDBI and DSBI, achieves significantly improved density estima-tion. DDBI captures fine-grained details, while DSBI pro-vides robust performance across all datasets, particularly excelling in modeling complex distributions and mitigating estimation artifacts. Further comparisons across training epochs are available in Appendix C.4. 
+
+Energy-based Modeling on MNIST. We applied the proposed D3RE framework for density estimation on the MNIST dataset, leveraging pre-trained energy-based models (EBMs) (Choi et al., 2022). Experimental details are in Ap-pendix C.4. The results are reported in bits-per-dimension (BPD). Results in Tab. 2 show that D3RE achieves the low-est BPD values across all noise types (Gaussian, Copula, and RQ-NSF), outperforming baselines and existing methods. See also Tab. 3 in the Appendix. Specifically, D3RE consistently surpasses DRE-∞ and its variant with OTR. The DSBI method delivers the best over-all results, achieving BPD values of 1.293 (Gaussian), 1.170 (Copula), and 1.066 (RQ-NSF), demonstrating its robust-ness and effectiveness in optimizing density estimates. Com-pared to traditional methods like NCE and TRE, D3RE shows significant improvements, especially under challeng-ing noise distributions like Gaussian and Copula, where baseline methods yield higher BPD. These findings under-score D3RE ’s superior performance in accurately estimating densities and modeling complex data distributions. 
+
+Table 2. Comparison of the estimated densities on MNIST dataset based on pre-trained energy-based models. The results are reported in bits-per-dim (BPD). Lower is better. The reported results for NCE and TRE are from Rhodes et al. (2020). 
+
+Method Noise type Noise BPD (↓)NCE Gaussian 2.01 1.96 TRE Gaussian 2.01 1.39 DRE-∞ Gaussian 2.01 1.33 DRE-∞+OTR Gaussian 2.01 1.313 D3RE (DDBI) Gaussian 2.01 1.297 D3RE (DSBI) Gaussian 2.01 1.293 
+
+NCE Copula 1.40 1.33 TRE Copula 1.40 1.24 DRE-∞ Copula 1.40 1.21 DRE-∞+OTR Copula 1.40 1.204 D3RE (DDBI) Copula 1.40 1.193 D3RE (DSBI) Copula 1.40 1.170 
+
+NCE RQ-NSF 1.12 1.09 TRE RQ-NSF 1.12 1.09 DRE-∞ RQ-NSF 1.12 1.09 DRE-∞+OTR RQ-NSF 1.12 1.072 D3RE (DDBI) RQ-NSF 1.12 1.072 D3RE (DSBI) RQ-NSF 1.12 1.066 
+
+6Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 0 10000 20000 30000 40000 
+
+> Epochs
+> 7.0
+> 7.5
+> 8.0
+> 8.5
+> 9.0
+> 9.5
+> 10 .0
+> MI [nats]
+> ground truth baseline (linear) baseline (Follmer) DSBI ( γ2=0.01, linear, ours) DDBI ( γ2=0.01, linear, ours)
+
+(a) d = 40 0 20000 40000 60000 80000 100000  
+
+> Epochs
+> 16
+> 17
+> 18
+> 19
+> 20
+> MI [nats]
+> ground truth baseline (linear) baseline (Follmer) DSBI ( γ2=0.01, linear, ours) DDBI ( γ2=0.01, linear, ours)
+
+(b) d = 80 0 50000 100000 150000 200000  
+
+> Epochs
+> 24
+> 26
+> 28
+> 30
+> MI [nats]
+> ground truth baseline (linear) baseline (Follmer) DSBI ( γ2=0.01, linear, ours) DDBI ( γ2=0.01, linear, ours)
+
+(c) d = 120 
+
+Figure 3. Evolution of estimated MI across epochs with varying methods and dimensions d = {40 , 80 , 120 }. D3RE outperforms the baseline in both speed and precision. DRE-∞ (Choi et al., 2022) is regarded as the ‘baseline’ in this experiment. 
+
+4.2. Mutual Information Estimation 
+
+Mutual information (MI) measures the dependency between two random variables X ∼ p(x) and Y ∼ q(y), defined as MI (X, Y) = Ep(x,y)
+
+h
+
+log p(x,y)
+
+> p(x)q(y)
+
+i
+
+. Here p(x, y) be their joint density. q(y) = N (0, σ 2Ed) and p(x) = N (0, Ed),with σ2 = 1e − 6 and d = {40 , 80 , 120 }, are two d-dimensional correlated Gaussian distributions. The exper-imental setup in DRE-∞ (Choi et al., 2022) is adapted to implement D3RE . DRE-∞ serves as the benchmark. More details can be found in Appendix C.3. The evolution of estimated MI across epochs for d =
+
+{40 , 80 , 120 }, comparing D3RE with DRE-∞, are analyzed. Results in Fig. 3 show that the red (DSBI) and green (DDBI) curves outperform the blue and yellow (DRE-∞) curves in two aspects. First, D3RE converges to the true MI value more rapidly as it expands trajectory sets (see Corollary 3.3), improving interpolation accuracy. Second, it exhibits greater stability with fewer fluctuations around the true MI, indicat-ing more reliable estimates. We conclude that D3RE outperforms the baseline in both speed and precision. For d = 120 , the MI estimated by D3RE is much robust than that of DRE-∞.
+
+4.3. Analysis and Discussion Ablation Study on γ2. The ablation study on γ2 for density estimation (Fig. 4) reveals systematic trade-offs in performance across regularization strengths. For small 
+
+γ2 = 0 .001 , the model achieves rapid initial alignment with the ground truth distribution (first row) but exhibits overfit-ting artifacts in later epochs, manifesting as irregular density peaks and deviations from the smooth ground truth structure. Intermediate values ( γ2 = 0 .01 –0.1) demonstrate balanced behavior: γ2 = 0 .01 preserves finer details while maintain-ing stability, and γ2 = 0 .1 produces smoother approxima-tions with minimal divergence from the true distribution. Larger γ2 values ( ≥ 0.5) induce excessive regularization, leading to oversmoothed estimates that fail to capture crit-Data 
+
+> 0.001
+> 0.01
+> 0.1
+> 0.5
+> 1.0
+
+Figure 4. Ablation study on the effect of γ2 for density estimation on 2-D toy data. The first row displays the results for the ground truth data. Each subsequent row, from top to bottom, corresponds to γ2 values of 0.001, 0.01, 0.1, 0.5, and 1.0, respectively. 
+
+ical modes of the 2-D data, particularly in high-density regions. Notably, γ2 = 0 .1 achieves the closest visual and structural resemblance to the ground truth, suggesting its suitability for low-dimensional tasks requiring both fidelity and robustness. These results underscore the necessity of tuning γ2 to mitigate under-regularization artifacts while preserving distributional complexity. The ablation study on varying γ2 values (Fig. 5) shows distinct convergence behaviors in MI estimation. For all di-mensions ( d = {40 , 80 , 120 }), smaller γ2 values ( ≤ 0.01 )lead to faster convergence, especially in lower dimensions (d = 40 ), but excessively small values ( γ2 = 0 .001 ) cause instability later. Larger γ2 values ( ≥ 0.1) converge more slowly but stabilize over time, particularly in higher dimen-sions ( d = 120 ). γ2 = 0 .1 offers a balance between speed and stability across all dimensions, suggesting that moderate regularization provides the best MI estimation performance. More results are provided in Appendix C.5. 
+
+Ablation Study on GD. To evaluate the effectiveness of 7Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 0 10000 20000 30000 40000 
+
+> Epochs
+> 7.0
+> 7.5
+> 8.0
+> 8.5
+> 9.0
+> 9.5
+> 10 .0
+> MI [nats]
+> ground truth baseline (linear) baseline (Follmer) DSBI ( γ2=1.0, linear, ours) DSBI ( γ2=0.1, linear, ours) DSBI ( γ2=0.01, linear, ours) DSBI ( γ2=0.001, linear, ours)
+
+(a) d = 40 0 20000 40000 60000 80000 100000  
+
+> Epochs
+> 16
+> 17
+> 18
+> 19
+> 20
+> MI [nats]
+> ground truth baseline (linear) baseline (Follmer) DSBI ( γ2=1.0, linear, ours) DSBI ( γ2=0.1, linear, ours) DSBI ( γ2=0.01, linear, ours) DSBI ( γ2=0.001, linear, ours)
+
+(b) d = 80 0 50000 100000 150000 200000  
+
+> Epochs
+> 24
+> 26
+> 28
+> 30
+> MI [nats]
+> ground truth baseline (linear) baseline (Follmer) DSBI ( γ2=1.0, linear, ours) DSBI ( γ2=0.1, linear, ours) DSBI ( γ2=0.01, linear, ours) DSBI ( γ2=0.001, linear, ours)
+
+(c) d = 120 
+
+Figure 5. Evolution of estimated MI across epochs with varying γ2 = {0.001 , 0.01 , 0.1, 1.0} and dimensions d = {40 , 80 , 120 }. For all dimensions ( d = {40 , 80 , 120 }), smaller γ2 values ( ≤ 0.01 ) lead to faster convergence. DDBI w/o GD 
+
+> DDBI w/ GD
+> DSBI w/o GD
+> DSBI w/ GD
+
+Figure 6. Ablation study on GD for eight 2-D synthetic datasets. 
+
+the proposed GD module, we conduct an ablation study by comparing model performance with and without GD, as shown in Fig. 6. Visually, both DDBI and DSBI show clear improvements in density estimation when GD is applied. Without GD, the estimated densities appear blurrier and miss fine structural details, whereas incorporating GD yields sharper and more realistic patterns. 
+
+Ablation Study on OTR. We conduct an ablation study to evaluate the role of OTR, comparing models without OTR (baseline, DI), models with OTR (DI+OTR), and models from the D3RE framework (DDBI and DSBI). In Figs. 2 and 7, DI generates distorted and misaligned intermediate distributions. This shows its limited ability to align with the target distribution. DI+OTR improves alignment but remains suboptimal. Models from the D3RE further en-hance distribution quality, with DSBI achieving the most precise alignment. This underscores OTR’s crucial role in improving intermediate distributions. Fig. 3 compares MI estimation for DDBI and DSBI across dimensions ( d = 80 , 120 ). Both outperform baseline meth-ods, but DSBI converges faster and remains closer to the ground truth. The advantage of OTR becomes more pro-nounced in high dimensions ( d = 120 ), where DSBI signifi-cantly outperforms DDBI in both speed and accuracy. Overall, OTR improves intermediate distribution alignment. When combined with diffusion bridges and GD, as in DSBI, 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> baseline (DI)
+> DI+OTR (ours)
+> D3RE (DDBI, ours)
+> D3RE (DSBI, ours)
+
+Figure 7. Density estimation results on checkerboard for different methods during training (see more results in Figs. 9 to 16). 
+
+it enables more accurate density estimation. Further com-parisons are presented in Appendix C.6. 
+
+Number of Function Evaluations. We analyze the impact of OTR on NFE, noting that DI and DDBI do not utilize OTR. It shows that applying OTR significantly reduces NFE. Fig. 8 compares NFE across four methods in DRE. The first approach exhibits the highest NFE, indicating reliance on iterative procedures requiring repeated function evaluations. The second approach achieves a moderate reduction in NFE, likely by minimizing redundant evaluations through mini-mized transport costs. DI DI+OTR DDBI DSBI (DDBI+OTR) 
+
+400 
+
+450 
+
+500 
+
+550 
+
+600 
+
+> NFE
+
+Figure 8. Comparison of NFE for four methods in density ratio estimation task. Applying OTR significantly reduces NFE. 
+
+8Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+## 5. Related Works 
+
+Density Ratio Estimation. DRE is an essential tech-nique in machine learning but faces challenges in high-dimensional settings and when distributions are significantly different. Early methods (Sugiyama et al., 2012; Gutmann & Hyv ¨arinen, 2012) often struggled with instability, known as the density-chasm problem, in these scenarios. To overcome these challenges, TRE (Rhodes et al., 2020), an extension of NCE (Gutmann & Hyv ¨arinen, 2012), introduced a divide-and-conquer approach, breaking the problem into simpler subproblems for better performance. DRE-∞ (Choi et al., 2022) further advanced this by interpolating between dis-tributions through an infinite series of bridge distributions, improving stability and accuracy. F-DRE (Choi et al., 2021) used an invertible generative model to map distributions into a common feature space before estimation. Recent methods, such as Kato & Teshima (2021), have addressed overfitting in flexible models, and Nagumo & Fujisawa (2024); Luo et al. (2024) focused on improving robustness to outliers. MDRE (Srivastava et al., 2023) tackled distribution shift through multi-class classification, offering an alternative to binary classification in high-discrepancy cases. Addition-ally, geometric approaches, like Kimura & Bondell (2025), have enhanced DRE accuracy by incorporating the geome-try of statistical manifolds. Building on these advancements, our work proposes a novel method to improve both the accuracy and robustness of high-dimensional DRE. 
+
+Diffusion Bridge. Denoising diffusion implicit models (DDIMs) (Song et al., 2020) have been proposed as an effi-cient alternative to denoising diffusion probabilistic models (DDPMs) (Ho et al., 2020), which require simulating a Markov chain for many steps to generate samples. Diffusive interpolants (Albergo et al., 2023) provide a unifying frame-work of flow-based models and diffusion models, bridging arbitrary distributions using continuous-time stochastic pro-cesses. DDBMs (Zhou et al., 2024a) are proposed as a natural alternative to cumbersome methods like guidance or projected sampling in generative processes. Our pro-posed DDBI and DSBI build upon diffusive interpolants and DDBMs by incorporating Brownian bridge into the interpolation strategy construction. 
+
+## 6. Conclusions 
+
+In this work, we propose D3RE , a unified, robust and ef-ficient framework for density ratio estimation. It provides the first framework for directly addressing both the density-chasm and support-chasm problems, enabling uniformly approximated density-ratio estimation (Proposition 3.5). By incorporating diffusion bridges and GD, we construct DDBI, which expands support coverage (Theorem 3.2, Corollary 3.3) and stabilizes the time score near boundaries (Corollary 3.8). Building upon DDBI, OTR is incorporated to derive the DSBI, which offers more efficient and sta-ble density ratio estimation (Theorem 3.7) by solving the Schr ¨odinger bridge problem (Proposition 3.6). Together, DDBI and DSBI form the core of the D3RE framework, enabling uniformly approximated and stable density-ratio estimation (Proposition 3.5). Extensive experiments validate these findings, demonstrating the superior performance of D3RE in tasks such as density-ratio estimation on synthetic data, mutual information estimation, and density estimation. While D3RE advances density ratio estimation methods, several directions remain open. Future work could explore adaptive or learned solvers to reduce function evaluation overhead, as well as more expressive interpolants to further improve robustness in handling complex or multi-modal distributions. 
+
+## Acknowledgements 
+
+This research work is supported by the Fundamental Research Program of Guangdong, China, under Grant 2023A1515011281. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. While direct societal impacts are limited, future extensions to applied domains (e.g., via our open-source codebase) should incorporate domain-specific ethical reviews per deployment contexts. 
+
+## References 
+
+Albergo, M. S., Boffi, N. M., and Vanden-Eijnden, E. Stochastic interpolants: A unifying framework for flows and diffusions. arXiv preprint arXiv:2303.08797 , 2023. Burda, Y., Grosse, R., and Salakhutdinov, R. Accurate and conservative estimates of mrf log-likelihood using reverse annealing. In Artificial Intelligence and Statistics , 2015. Choi, K., Liao, M., and Ermon, S. Featurized density ratio estimation. In Uncertainty in Artificial Intelligence , 2021. Choi, K., Meng, C., Song, Y., and Ermon, S. Density ratio estimation via infinitesimal classification. In Artificial Intelligence and Statistics , 2022. Colombo, P., Piantanida, P., and Clavel, C. A novel esti-mator of mutual information for learning to disentangle textual representations. In Annual Meeting of the Associ-ation for Computational Linguistics , 2021. Cuturi, M. Sinkhorn distances: Lightspeed computation of optimal transport. In Advances in Neural Information Processing Systems , 2013. 9Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+De Bortoli, V., Thornton, J., Heng, J., and Doucet, A. Diffu-sion Schr ¨odinger bridge with applications to score-based generative modeling. In Advances in Neural Information Processing Systems , 2021. Doob, J. L. and Doob, J. Classical Potential Theory and its Probabilistic Counterpart , volume 262. Springer, 1984. Durkan, C., Bekasov, A., Murray, I., and Papamakarios, G. Neural spline flows. In Advances in Neural Information Processing Systems , 2019. Gutmann, M. U. and Hyv ¨arinen, A. Noise-contrastive es-timation of unnormalized statistical models, with appli-cations to natural image statistics. Journal of Machine Learning Research , 13(2), 2012. Ho, J., Jain, A., and Abbeel, P. Denoising diffusion prob-abilistic models. In Advances in Neural Information Processing Systems , 2020. Kato, M. and Teshima, T. Non-negative Bregman diver-gence minimization for deep direct density ratio estima-tion. In International Conference on Machine Learning ,2021. Kimura, M. and Bondell, H. Density ratio estimation via sampling along generalized geodesics on statistical mani-folds. In Artificial Intelligence and Statistics , 2025. L ´eonard, C. Some properties of path measures. S ´eminaire de Probabilit´ es XLVI , pp. 207–230, 2014. Li, J., Chen, W., Liu, Y., Yang, J., Zeng, D., and Zhou, Z. Neural ordinary differential equation networks for fintech applications using internet of things. IEEE Internet of Things Journal , 2024a. Li, J., Chen, W., Zhou, Z., Yang, J., and Zeng, D. Deepar-attention probabilistic prediction for stock price se-ries. Neural Computing and Applications , 36(25):15389– 15406, 2024b. Li, S., Chen, W., and Zeng, D. Scire-solver: Accelerating diffusion models sampling by score-integrand solver with recursive difference. arXiv preprint arXiv:2308.07896 ,2023. Luo, R., Bao, J., Zhou, Z., and Dang, C. Game-theoretic defenses for robust conformal prediction against ad-versarial attacks in medical imaging. arXiv preprint arXiv:2411.04376 , 2024. McCann, R. J. A convexity principle for interacting gases. 
+
+Advances in Mathematics , 128(1):153–179, 1997. Nagumo, R. and Fujisawa, H. Density ratio estimation with doubly strong robustness. In International Conference on Machine Learning , 2024. Neal, R. M. Annealed importance sampling. Statistics and Computing , 11:125–139, 2001. Pooladian, A.-A., Ben-Hamu, H., Domingo-Enrich, C., Amos, B., Lipman, Y., and Chen, R. T. Multisample flow matching: Straightening flows with minibatch cou-plings. In International Conference on Machine Learning ,2023. Rhodes, B., Xu, K., and Gutmann, M. U. Telescoping density-ratio estimation. In Advances in Neural Informa-tion Processing Systems , 2020. Schr ¨odinger, E. Sur la th ´eorie relativiste de l’ ´electron et l’interpr ´etation de la m ´ecanique quantique. In Annales de l’institut Henri Poincar´ e, volume 3, pp. 269–310, 1932. Song, J., Meng, C., and Ermon, S. Denoising diffusion implicit models. In International Conference on Learning Representations , 2020. Song, Y. and Ermon, S. Improved techniques for training score-based generative models. In Advances in Neural Information Processing Systems , 2020. Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Er-mon, S., and Poole, B. Score-based generative modeling through stochastic differential equations. In International Conference on Learning Representations , 2021. Srivastava, A., Han, S., Xu, K., Rhodes, B., and Gutmann, M. U. Estimating the density ratio between distributions with high discrepancy using multinomial logistic regres-sion. arXiv preprint arXiv:2305.00869 , 2023. Sugiyama, M., Suzuki, T., and Kanamori, T. Density-ratio matching under the bregman divergence: a unified frame-work of density-ratio estimation. Annals of the Institute of Statistical Mathematics , 64:1009–1044, 2012. Thomas, O., Dutta, R., Corander, J., Kaski, S., and Gut-mann, M. U. Likelihood-free inference by ratio estima-tion. Bayesian Analysis , 17(1):1–31, 2022. Tong, A., FATRAS, K., Malkin, N., Huguet, G., Zhang, Y., Rector-Brooks, J., Wolf, G., and Bengio, Y. Improv-ing and generalizing flow-based generative models with minibatch optimal transport. Transactions on Machine Learning Research , 2024. Villani, C. et al. Optimal Transport: Old and New , volume 338. Springer, 2009. Xin, Y. et al. V-PETL bench: A unified visual parameter-efficient transfer learning benchmark. In Advances in Neural Information Processing Systems , 2024. 10 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+Xu, J., Zeng, D., and Paisley, J. Sparse inducing points in deep Gaussian processes: Enhancing modeling with denoising diffusion variational inference. In International Conference on Machine Learning , 2024. Zhao, S., Chen, W., and Wang, T. Learning few-shot sample-set operations for noisy multi-label aspect category de-tection. In International Joint Conference on Artificial Intelligence , 2023. Zhao, S., Chen, W., Wang, T., Yao, J., Lu, D., and Zheng, J. Less is enough: Relation graph guided few-shot learning for multi-label aspect category detection. In IEEE In-ternational Conference on Acoustics, Speech and Signal Processing , 2025. Zhou, L., Lou, A., Khanna, S., and Ermon, S. Denoising diffusion bridge models. In International Conference on Learning Representations , 2024a. Zhou, X., Ye, W., Wang, Y., Jiang, C., Lee, Z., Xie, R., and Zhang, S. Enhancing in-context learning via implicit demonstration augmentation. In Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , 2024b. Zhou, X., Ye, W., Lee, Z., Zou, L., and Zhang, S. Valuing training data via causal inference for in-context learning. 
+
+IEEE Transactions on Knowledge and Data Engineering ,37(6):3824 – 3840, 2025a. Zhou, X., Zhang, M., Lee, Z., Ye, W., and Zhang, S. HaDeMiF: Hallucination detection and mitigation in large language models. In International Conference on Learn-ing Representations , 2025b. 11 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+## A. Proofs 
+
+Assumption A.1. Let q0, q 1 : Rd → R+ be probability density functions satisfying: (1) q0, q 1 ∈ C2(Rd), i.e., q0 and q1 are twice differentiable and have bounded second derivatives: ∥∇ 2
+
+> x
+
+q0∥L∞ , ∥∇ 2
+
+> x
+
+q1∥L∞ < ∞; (2) q0(x) > 0, and there exists 
+
+c > 0 such that inf x q0(x) ≥ c. This condition is mild in density ratio estimation. 
+
+Assumption A.2. The conditional distributions for given Xt = xt, i.e., q0(x | xt) and q1(x | xt) have L-Lipschitz scores: 
+
+∥∇ xt log q0(x | xt)∥ ≤ Lαt
+
+, ∥∇ xt log q1(x | xt)∥ ≤ Lβt
+
+. (26) 
+
+A.1. Proof of Theorem 3.2 
+
+Proof. We first consider the support for DI. Under αt + βt = 1 , the Xt is the convex combination of X0 and X1 for any t ∈ (0 , 1) , and its corresponding support, supp (qt), is the convex hull of supp (q0) and supp (qq ), i.e., supp (qt) = 
+
+conv (supp (q0) ∪ supp (q1)) . Under α2 
+
+> t
+
++ β2 
+
+> t
+
+= 1 , Xt becomes a linear combination of x0 and x1 for any t ∈ (0 , 1) . For both cases, supp (qt) can be formulated as 
+
+supp (qt) = αtsupp (q0) + βtsupp (q1)= {αtx0 + βtx1 | x0 ∈ supp (q0), x1 ∈ supp (q1), α t + βt = 1 or α2 
+
+> t
+
++ β2 
+
+> t
+
+= 1 },
+
+where supp (q0) and supp (q1) are the supports of q0 and q1, respectively. Next, we consider the support for DBI. For given coefficients αt and βt, X′ 
+
+> t
+
+can be formulated as: 
+
+X′ 
+
+> t
+
+= I(X0, X1, t ) + pt(1 − t)γ2Zt = Xt + pt(1 − t)γ2Zt. (27) The coefficient pt(1 − t)γ2 is deterministic for a given t. Thus the support corresponding to X′
+
+> t
+
+, denoted as supp (q′
+
+> t
+
+), can be expressed as the Minkowski sum of the supports of qt and N (0, Ed):
+
+supp (q′
+
+> t
+
+) = supp (qt) + supp (N (0, Ed)) = {x + z | x ∈ supp (qt), z ∈ supp (N (0, Ed)) },
+
+where supp (N (0, Ed)) = Rd. The Minkowski sum supp (qt) + supp (N (0, Ed)) is at least as large as supp (qt), i.e., 
+
+supp (q′
+
+> t
+
+) ⊇ supp (qt). This completes the proof. 
+
+A.2. Proof of Corollary 3.3 
+
+Proof. Let the trajectory sets for DI and DBI be denoted by T = {{ xt}t∈[0 ,1] ; xt ∈ supp (qt)} and T′ = {{ x′
+
+> t
+
+}t∈[0 ,1] ; x′ 
+
+> t
+
+∈
+
+supp (q′
+
+> t
+
+)}, respectively. Let {xt}t∈[0 ,1] be an arbitrary element of T. From Theorem 3.2, we have supp (q′
+
+> t
+
+) ⊇ supp (qt) for any t ∈ (0 , 1) , meaning that xt ∈ supp (q′
+
+> t
+
+). Hence we have {xt}t∈[0 ,1] ∈ T′. This directly implies T′ ⊇ T.
+
+A.3. Proof of Theorem 3.4 
+
+Proof. For the DI, the time derivative of its log-density is governed by the Fokker-Planck equation: 
+
+∂t log qt = −∇ · ut − ut · ∇ log qt, (28) where ∇· and ∇ are the divergence and gradient operators w.r.t. xt. ut(xt) = Eπ [ ˙ αtX0 + ˙βtX1 | Xt = xt] is the drift term. Taking expectations over qt and applying the triangle inequality and Cauchy-Schwarz inequality to this equation: 
+
+Eqt [|∂t log qt|] = Eqt [| − ∇ · ut − ut · ∇ log qt|]
+
+≥ Eqt [||∇ · ut| − | ut · ∇ log qt|| ] (triangle inequality )
+
+≥ Eqt [|∇ · ut|] − Eqt [|ut · ∇ log qt|]
+
+≥ Eqt [|∇ · ut|] − Eqt [∥ut∥ · ∥∇ log qt∥] (Cauchy-Schwarz inequality )
+
+(29) 
+
+(1) Lower bound of Eqt [|∇ · ut|]. The divergence term ∇ · ut is computed via the Jacobian of the inverse mapping: 
+
+∇ · ut = tr (∇ut) = tr 
+
+
+
+Eπ
+
+h
+
+˙αt∇xt X0 + ˙βt∇xt X1 | Xt = xt
+
+i 
+
+= Eπ
+
+h
+
+˙αttr (∇xt X0) + ˙βttr (∇xt X1) | xt
+
+i
+
+.
+
+(30) 12 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+For a given sample (x0, x1) ∼ π, differentiating the the interpolation constraint xt = αtx0 + βtx1 implicitly gives 
+
+Ed = αt∇xt x0 + βt∇xt x1. Rearranging yields ∇xt x0 = α−1 
+
+> t
+
+Ed − βtα−1 
+
+> t
+
+∇xt x1 and ∇xt x1 = β−1 
+
+> t
+
+Ed − αtβ−1 
+
+> t
+
+∇xt x0.Decomposing ∇xt x0 into its independent case value and a residual: 
+
+∇xt x0 = α−1 
+
+> t
+
+Ed + Rt, (31) where Rt = −βtα−1 
+
+> t
+
+∇xt x1 denote the residual term in the Jacobian decomposition. By Assumption A.2 and the definition of the score function of the conditional distribution, ∇xt log q0(x0 | xt) = −∇ xt x0 · ∇ x0 log q0(x0 | xt), the Lipschitz continuity of the conditional scores implies ∥∇ xt x0∥op ≤ Lα −1 
+
+> t
+
+and ∥∇ xt x1∥op ≤ Lβ −1 
+
+> t
+
+. Here ∥ · ∥ op denotes the operator norm. Hence, the absolute value of the trace of the residual term satisfies: 
+
+|tr (Rt)| ≤ d · ∥ Rt∥op = dα −1 
+
+> t
+
+βt∥∇ xt X1∥op ≤ dα −1 
+
+> t
+
+βt · Lβt
+
+= dLα −1 
+
+> t
+
+. (32) This directly leads to the conditional expectation: |Eqt [tr (Rt) | Xt]| ≤ Eqt [|tr (Rt)| | Xt] ≤ dLα −1 
+
+> t
+
+. Thus, the conditional expectation of tr (∇xt X0) satisfies: 
+
+|Eqt [tr (∇xt X0) | Xt]| = Eqt
+
+tr  α−1 
+
+> t
+
+Ed + Rt
+
+ | Xt
+
+ = Eqt
+
+dα −1 
+
+> t
+
++ tr (Rt) | Xt
+
+
+
+= dα −1 
+
+> t
+
++ Eqt [tr (Rt) | Xt]
+
+≥ dα −1 
+
+> t
+
+− | Eqt [tr (Rt) | Xt]|≥ dα −1 
+
+> t
+
+− dLα −1 
+
+> t
+
+= dα −1 
+
+> t
+
+(1 − L).
+
+(33) Similarly, we have |Eqt [tr (∇xt X1) | xt]| ≥ dβ −1 
+
+> t
+
+(1 − L). Base on these lower bounds and applying the triangle inequality, we have: 
+
+Eqt [|∇ · ut|] = Eqt
+
+h
+
+Eqt
+
+h
+
+˙αttr (∇xt X0) + ˙βttr (∇xt X1) | Xt
+
+i i 
+
+≥ Eqt
+
+h
+
+| ˙αt| | Eqt [tr (∇xt X0) | Xt]| − | ˙βt| | Eqt [tr (∇xt X1) | Xt]|
+
+i
+
+≥ Eqt
+
+h
+
+d| ˙αt|α−1 
+
+> t
+
+(1 − L) − | ˙βt|Eqt [|tr (∇xt X1)| | Xt]
+
+i
+
+≥ Eqt
+
+h
+
+d| ˙αt|α−1 
+
+> t
+
+(1 − L) − | ˙βt| · dLβ −1
+
+> t
+
+i  |tr (∇xt X1)| ≤ d · ∥∇ xt X1∥op ≤ dLβ −1
+
+> t
+
+
+
+= d
+
+
+
+(1 − L)| ˙αt|α−1 
+
+> t
+
+− L| ˙βt|β−1
+
+> t
+
+
+
+.
+
+(34) 
+
+(2) Upper bound of Eqt [∥ut∥ · ∥∇ log qt∥]. Applying Cauchy-Schwarz: 
+
+Eqt [∥ut∥ · ∥∇ log qt∥] ≤
+
+q
+
+Eqt [∥ut∥2] ·
+
+q
+
+Eqt [∥∇ log qt∥2]=
+
+s
+
+Eqt
+
+
+
+Eπ
+
+h
+
+˙αtX0 + ˙βtX1 Xt
+
+i 2
+
+·
+
+q
+
+Eqt [∥∇ log qt∥2]
+
+≤
+
+r
+
+Eqt
+
+h
+
+Eπ
+
+h
+
+∥ ˙αtX0 + ˙βtX1∥2 Xt
+
+ii 
+
+·
+
+q
+
+Eqt [∥∇ log qt∥2]
+
+≤
+
+q
+
+2 ˙ α2 
+
+> t
+
+Eq0 [∥X0∥2] + 2 ˙β2 
+
+> t
+
+Eq1 [∥X1∥2] ·
+
+q
+
+Eqt [∥∇ log qt∥2] = O
+
+q 
+
+Eqt [∥∇ log qt∥2]
+
+
+
+.
+
+(35) Here the drift norm Eqt [∥ut∥2] is bounded by the second moments of X0 and X1, which are finite under our assumptions. 
+
+(3) Lower bound of Eqt [|∂t log qt|]. Finally, bring Eq. (34) and Eq. (35) back to Eq. (29), the lower bound of Eqt [|∂t log qt|]
+
+can be derived: Eqt [|∂t log qt|] ≥ Eqt [|∇ · ut|] − Eqt [∥ut∥ · ∥∇ log qt∥]
+
+≥ d (1 − L) | ˙αt|
+
+αt
+
+− L | ˙βt|
+
+βt
+
+!| {z }
+
+> Divergence term
+
+− O 
+
+q 
+
+Eqt [∥∇ log qt∥2]
+
+| {z }
+
+> Residual term
+
+. (36) 13 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+The residual term O(pEqt [∥∇ log qt∥2]) is finite under Assumption A.2 (Lipschitz scores imply bounded Fisher informa-tion). Hence, the divergence term dominates asymptotically. Near the boundaries t → 0+ and t → 1−, the terms | ˙αt| 
+
+> αt
+
+and | ˙βt| 
+
+> βt
+
+dominate due to the monotonicity and boundary conditions: (1) As t → 0+ : αt → 1, βt → 0, | ˙αt|
+
+αt
+
+∼ | ˙α0|, | ˙βt|
+
+βt
+
+∼ ˙β+0
+
+βt
+
+→ +∞.
+
+(2) As t → 1− : αt → 0, βt → 1, | ˙αt|
+
+αt
+
+∼ | ˙α− 
+
+> 1
+
+|
+
+αt
+
+→ +∞, | ˙βt|
+
+βt
+
+∼ | ˙β1|.
+
+(37) For any L < 1, the prefactor 1 − L > 0 ensures: 
+
+lim 
+
+> t→1−
+
+Eqt [∥∂t log qt∥] ≥ lim 
+
+> t→1−
+
+d(1 − L) | ˙αt|
+
+αt
+
+= + ∞. (38) This concludes the universal boundary divergence. 
+
+A.4. Proof of Proposition 3.5 
+
+Proof. Assume both q0 and q1 are smooth with sufficient differentiability. The Gaussian-dequantified densities are given by: 
+
+q′
+
+> i
+
+(x) = ( qi ∗ N (0, ε Ed))( x) = 
+
+Z
+
+qi(x′)N (x; x′, ε Ed)d x′
+
+=
+
+Z
+
+qi(x′)
+
+h
+
+δ(x − x′) + ε
+
+2 ∇2 
+
+> x′
+
+δ(x − x′) + O(ε2)
+
+i
+
+dx′ (Taylor expansion around x′)= qi(x) + ε
+
+2
+
+Z
+
+qi(x′)∇2 
+
+> x′
+
+δ(x − x′)d x′ + O(ε2)= qi(x) + ε
+
+2 ∇2
+
+> x
+
+qi(x) + O(ε2), (Integration by parts ),
+
+(39) where ∇2 
+
+> x′
+
+is the Laplacian operator, δ(x − x′) is the Dirac delta. Substituting these two expansions into the dequantified density ratio r′(x) = q′ 
+
+> 1(x)
+> q′
+> 0(x)
+
+, we have: 
+
+r′(x) = q′
+
+> 1
+
+(x)
+
+q′
+
+> 0
+
+(x) = q1(x) + ε 
+
+> 2
+
+∇2
+
+> x
+
+q1(x) + O(ε2)
+
+q0(x) + ε 
+
+> 2
+
+∇2
+
+> x
+
+q0(x) + O(ε2)= q1(x)
+
+q0(x) + ε
+
+2
+
+∇2
+
+> x
+
+q1(x)
+
+q0(x) − ε
+
+2 r(x) ∇2
+
+> x
+
+q0(x)
+
+q0(x) + O(ε2) (First-order expansion of a fraction )= r(x) + ε
+
+2
+
+ ∇2
+
+> x
+
+q1(x)
+
+q0(x) − r(x) ∇2
+
+> x
+
+q0(x)
+
+q0(x)
+
+| {z }
+
+> ∆( x)
+
++O(ε2).
+
+(40) To bound r′(x) − r(x) in L∞, the supremum can be computed under Assumption A.1: 
+
+∥r′ − r∥L∞ ≤ ε
+
+2 sup 
+
+> x
+
+|∆( x)| + O(ε2)= ε
+
+2 sup 
+
+> x
+
+∇2
+
+> x
+
+q1(x)
+
+q0(x) − r(x) ∇2
+
+> x
+
+q0(x)
+
+q0(x) + O(ε2)
+
+≤ ε
+
+2 sup 
+
+> x
+
+∇2
+
+> x
+
+q1(x)
+
+q0(x) + ε
+
+2 sup 
+
+> x
+
+r(x) ∇2
+
+> x
+
+q0(x)
+
+q0(x) + O(ε2)
+
+≤ ε
+
+2
+
+∥∇ 2
+
+> x
+
+q1∥L∞
+
+inf  
+
+> x
+
+q0(x) + ∥∇ 2
+
+> x
+
+q0∥L∞
+
+inf  
+
+> x
+
+q0(x) sup 
+
+> x
+
+r(x)
+
+!
+
++ O(ε2)= ε
+
+2 inf  
+
+> x
+
+q0(x)
+
+ ∥∇ 2
+
+> x
+
+q1∥L∞ + ∥∇ 2
+
+> x
+
+q0∥L∞ ∥r∥L∞
+
+ + O(ε2).
+
+(41) 14 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+Under Assumption A.1, inf  
+
+> x
+
+q0(x) has lower bound and these norms have upper bound. Then as ε → 0,
+
+∥r′ − r∥L∞ ≤ O (ε), (42) where the constant C is given by: C = ∥∇ 2    
+
+> xq1∥L∞+∥∇ 2
+> xq0∥L∞∥r∥L∞
+> 2 inf
+> xq0(x)
+
+. Hence, as ε → 0, we have r′(x) → r(x), verifying the stated proposition. 
+
+A.5. Proof of Proposition 3.6 
+
+Proof. Based on Theorem 2.4 of (L ´eonard, 2014), (De Bortoli et al., 2021) established that the solution to the SB problem as detailed in Eq. (19), π⋆, satisfies the SB conditions: (1) the optimization problem for π⋆ is equivalent to the entropically regularied OT problem, with the optimal coupling π2γ2 defined in Eq. (17); (2) for samples (x′
+
+> 0
+
+, x′
+
+> 1
+
+) ∼ π⋆, the associated conditional path distributions π⋆(· | x′
+
+> 0
+
+, x′
+
+> 1
+
+) minimize the KL divergence: E(x′ 
+
+> 0,x′
+> 1)∼π⋆
+
+KL ( π⋆(· | x′
+
+> 0
+
+, x′
+
+> 1
+
+)∥πref (· | x′
+
+> 0
+
+, x′
+
+> 1
+
+)) ,where πref is the reference path distribution satisfying log πref (x′
+
+> 0
+
+, x′
+
+> 1
+
+) = ∥x′ 
+
+> 0−x′
+> 1∥2
+> 2γ2
+
++ const . These conditional distributions are optimized using Brownian bridges of diffusion scale γ, conditioned on the endpoints x′ 
+
+> 0
+
+and x′
+
+> 1
+
+. The marginal distribution at intermediate time t along the Brownian bridge is given by qt(x | x′
+
+> 0
+
+, x′
+
+> 1
+
+) = N (x | (1 − t)x′ 
+
+> 0
+
++ tx′
+
+> 1
+
+, t (1 − t)γ2Ed) (Tong et al., 2024). Since our proposed OTR method uses Sinkhorn’s algorithm to solve the entropically regularized OT problem, and the probability paths of our DDBI with αt = 1 − t and βt = t align with those of the Brownian bridge, a trajectory x′
+
+> t
+
+generated by first sampling (x′
+
+> 0
+
+, x′
+
+> 1
+
+) ∼ π⋆, then sampling xt ∼ qt(· | x′
+
+> 0
+
+, x′
+
+> 1
+
+) satisfies the SB conditions, thus verifying the proposition. 
+
+A.6. Proof of Theorem 3.7 
+
+Proof. To analyze Var q′ 
+
+> t
+
+(∂t log q′
+
+> t
+
+), applying the law of total variance to Var q′ 
+
+> t
+
+(∂t log q′
+
+> t
+
+):
+
+Var q′ 
+
+> t
+
+(∂t log q′
+
+> t
+
+) = E(X′ 
+
+> 0,X′
+> 1)∼π
+
+[Var ( ∂t log q′
+
+> t
+
+(X′ 
+
+> t
+
+| X′
+
+> 0
+
+, X′
+
+> 1
+
+))] + Var (X′ 
+
+> 0,X′
+> 1)∼π
+
+(E [∂t log q′
+
+> t
+
+(X′ 
+
+> t
+
+| X′
+
+> 0
+
+, X′
+
+> 1
+
+)]) . (43) For any paired endpoints (X′
+
+> 0
+
+, X′
+
+> 1
+
+) ∼ π, the interpolant X′ 
+
+> t
+
+follows a Gaussian distribution conditioned on the endpoints 
+
+X′ 
+
+> t
+
+| (X′
+
+> 0
+
+, X′
+
+> 1
+
+) ∼ q′
+
+> t
+
+(· | X′
+
+> 0
+
+, X′
+
+> 1
+
+) = N  μt, σ 2 
+
+> t
+
+Id
+
+, where μt = αtX′ 
+
+> 0
+
++ βtX′
+
+> 1
+
+, σ 2 
+
+> t
+
+= t(1 − t)γ2 + ( α2 
+
+> t
+
++ β2 
+
+> t
+
+)ε. The conditional score ∂t log q′
+
+> t
+
+(X′ 
+
+> t
+
+| X′
+
+> 0
+
+, X′
+
+> 1
+
+) is derived explicitly as: 
+
+∂t log q′
+
+> t
+
+(X′ 
+
+> t
+
+| X′
+
+> 0
+
+, X′
+
+> 1
+
+) = ∂∂t log N  μt, σ 2 
+
+> t
+
+Id
+
+ = ∂∂t log 
+
+
+
+(2 πσ 2 
+
+> t
+
+)−d/ 2 exp 
+
+
+
+− ∥X′ 
+
+> t
+
+− μt∥2
+
+2σ2
+
+> t
+
+ 
+
+= − d
+
+2˙σ2
+
+> t
+
+σ2
+
+> t
+
++ ˙αtX′ 
+
+> 0
+
++ ˙βtX′
+
+> 1
+
+σ2
+
+> t
+
+· (X′ 
+
+> t
+
+− μt) + ∥X′ 
+
+> t
+
+− μt∥2
+
+2˙σ2
+
+> t
+
+σ4
+
+> t
+
+= − d ˙σ2
+
+> t
+
+2σ2
+
+> t
+
++ ˙αtX′ 
+
+> 0
+
++ ˙βtX′
+
+> 1
+
+σt
+
+· Zt + ˙σ2 
+
+> t
+
+∥Zt∥2
+
+2σ2
+
+> t
+
+.
+
+(44) 
+
+The term Eπ [Var ( ∂t log q′
+
+> t
+
+(X′ 
+
+> t
+
+| X′
+
+> 0
+
+, X′
+
+> 1
+
+))] . Taking the variance on both sides of Eq. (44) and taking expectation over the coupling distribution π:
+
+Eπ [Var( ∂t log q′
+
+> t
+
+(X′ 
+
+> t
+
+| X′
+
+> 0
+
+, X′
+
+> 1
+
+))] = Eπ
+
+"
+
+Var ˙αtX′ 
+
+> 0
+
++ ˙βtX′
+
+> 1
+
+σt
+
+· Zt
+
+!
+
++ Var 
+
+
+
+− d ˙σ2
+
+> t
+
+2σ2
+
+> t
+
+
+
++ Var 
+
+
+
+− ˙σ2 
+
+> t
+
+∥Zt∥2
+
+2σ2
+
+> t
+
+#
+
+= 1
+
+σ2
+
+> t
+
+Eπ
+
+
+
+˙αtX′ 
+
+> 0
+
++ ˙βtX′
+
+> 1
+> 2
+
++ 0 + ˙σ4
+
+> t
+
+4σ4
+
+> t
+
+Var( ∥Zt∥2)
+
+
+
+= 1
+
+σ2
+
+> t
+
+Eπ
+
+
+
+˙αtX′ 
+
+> 0
+
++ ˙βtX′
+
+> 1
+> 2
+
+
+
++ ˙σ4 
+
+> t
+
+d
+
+2σ4
+
+> t
+
+.
+
+(45) Specifically, when αt = 1 − t and βt = t, this reduces to Eπ [Var( ∂t log q′
+
+> t
+
+(X′ 
+
+> t
+
+| X′
+
+> 0
+
+, X′
+
+> 1
+
+))] = 1
+
+> σ2
+> t
+
+Eπ
+
+h
+
+∥X′ 
+
+> 0
+
+− X′
+
+> 1
+
+∥2i
+
++ ˙σ4 
+
+> td
+> 2σ4
+> t
+
+.
+
+The term Var ( E [∂t log q′
+
+> t
+
+(X′ 
+
+> t
+
+| X′
+
+> 0
+
+, X′
+
+> 1
+
+)]) . Taking the variance on both sides of Eq. (44) and taking expectation over the 15 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+coupling distribution π:
+
+Var π (E [∂t log q′
+
+> t
+
+(X′ 
+
+> t
+
+| X′
+
+> 0
+
+, X′
+
+> 1
+
+)]) = Var π E
+
+"
+
+− d ˙σ2
+
+> t
+
+2σ2
+
+> t
+
++ ˙αtX′ 
+
+> 0
+
++ ˙βtX′
+
+> 1
+
+σt
+
+· Zt + ˙σ2 
+
+> t
+
+∥Zt∥2
+
+2σ2
+
+> t
+
+#! 
+
+= Var π − d ˙σ2
+
+> t
+
+2σ2
+
+> t
+
++ ˙αtX′ 
+
+> 0
+
++ ˙βtX′
+
+> 1
+
+σt
+
+· E[Zt] + ˙σ2
+
+> t
+
+2σ2
+
+> t
+
+E ∥Zt∥2!
+
+= Var π
+
+˙αtX′ 
+
+> 0
+
++ ˙βtX′
+
+> 1
+
+σt
+
+· 0 + ˙σ2
+
+> t
+
+2σ2
+
+> t
+
+d
+
+!
+
+= 0 .
+
+(46) The last equality holds because Zt is a Gaussian noise, leading to Zt ∼ N (0, Ed) and ∥Zt∥2 ∼ χ(d).Bringing Eqs. (45) and (46) into Eq. (43), the variance term Var q′ 
+
+> t
+
+(∂t log q′
+
+> t
+
+) becomes: 
+
+Var q′ 
+
+> t
+
+(∂t log q′
+
+> t
+
+) = 
+
+Z 10
+
+ 1
+
+σ2
+
+> t
+
+Eπ
+
+h
+
+∥X′ 
+
+> 0
+
+− X′
+
+> 1
+
+∥2i
+
++ ˙σ4 
+
+> t
+
+d
+
+2σ4
+
+> t
+
+
+
+dt = Eπ
+
+h
+
+∥X′ 
+
+> 0
+
+− X′
+
+> 1
+
+∥2i Z 10
+
+1
+
+σ2
+
+> t
+
+dt +
+
+Z 10
+
+˙σ4 
+
+> t
+
+d
+
+2σ4
+
+> t
+
+dt, (47) when αt = 1 − t and βt = t. Thus, the difference between the upper bound of the variance for DSBI and DDBI becomes: 
+
+Var DDBI  
+
+> q′
+> t
+
+(∂t log q′
+
+> t
+
+) − Var DSBI  
+
+> q′
+> t
+
+(∂t log q′
+
+> t
+
+)=Eπ
+
+h
+
+∥X′ 
+
+> 0
+
+− X′
+
+> 1
+
+∥2i
+
+− Eπ2γ2
+
+
+
+ˆX′ 
+
+> 0
+
+− ˆX′
+
+> 1
+> 2
+
+
+
+=
+
+h
+
+Eπ
+
+h
+
+∥X′ 
+
+> 0
+
+− X′
+
+> 1
+
+∥2i
+
+− 2γ2H(π2γ2 )
+
+i
+
+−
+
+
+
+Eπ2γ2
+
+
+
+ˆX′ 
+
+> 0
+
+− ˆX′
+
+> 1
+> 2
+
+
+
+− 2γ2H(π2γ2 )
+
+
+
+≥ 0.
+
+(48) This inequality holds because π2γ2 is the solution to the entropically regularized OT problem. This completes the proof. 
+
+A.7. Proof of Corollary 3.8 
+
+Proof. Directly applying the Jensen’s inequality to Eq′ 
+
+> t
+
+[|∂t log q′
+
+> t
+
+|] yields: 
+
+Eq′ 
+
+> t
+
+[|∂t log q′
+
+> t
+
+|] ≤
+
+q
+
+Eq′ 
+
+> t
+
+[( ∂t log q′
+
+> t
+
+)2] = 
+
+q
+
+Var q′ 
+
+> t
+
+(∂t log q′
+
+> t
+
+) +  Eq′ 
+
+> t
+
+[∂t log q′
+
+> t
+
+]2. (Property of variance ). (49) The first term on the r.h.s. is bounded according to Theorem 3.7, satisfying Var q′ 
+
+> t
+
+(∂t log q′
+
+> t
+
+) = 1
+
+> σ2
+> t
+
+Eπ
+
+h
+
+∥X′ 
+
+> 0
+
+− X′
+
+> 1
+
+∥2i
+
++ ˙σ4 
+
+> td
+> 2σ4
+> t
+
+with σ2 
+
+> t
+
+= t(1 − t)γ2 + ( α2 
+
+> t
+
++ β2 
+
+> t
+
+)ε. The second term on the r.h.s. vanishes identically Eq′ 
+
+> t
+
+[∂t log q′
+
+> t
+
+] = R ∂tq′
+
+> t
+> q′
+> t
+
+q′
+
+> t
+
+dx =
+
+R ∂tq′
+
+> t
+
+dx = ∂t
+
+ R q′
+
+> t
+
+dx = ∂t(1) = 0 . Thus, the term Eq′ 
+
+> t
+
+[|∂t log q′
+
+> t
+
+|] is bounded by: 
+
+Eq′ 
+
+> t
+
+[|∂t log q′
+
+> t
+
+|] ≤
+
+s
+
+1
+
+σ2
+
+> t
+
+Eπ
+
+h
+
+∥X′ 
+
+> 0
+
+− X′
+
+> 1
+
+∥2i
+
++ ˙σ4 
+
+> t
+
+d
+
+2σ4
+
+> t
+
+< ∞. (50) 
+
+A.8. Derivation of Definition 3.9 
+
+Proof. Let {X′
+
+> t
+
+}t∈[0 ,1] be a DDBI. It has a transition kernel q′
+
+> t
+
+(x | x0, x1) and marginal probability density q′
+
+> t
+
+(x). By dividing the interval [0 , 1] into M discrete intervals, the log dequantified density ratio for a given point x can be derived: 
+
+log r′(x) = log q′
+
+> 1
+
+(x)
+
+q′
+
+> 0
+
+(x) = log q′ 
+
+> 1/M
+
+(x)
+
+q′
+
+> 0
+
+(x)
+
+q′ 
+
+> 2/M
+
+(x)
+
+q′ 
+
+> 1/M
+
+(x) · · · q′
+
+> 1
+
+(x)
+
+q′  
+
+> (M−1) /M
+
+(x) = 
+
+> M−1
+
+X
+
+> m=0
+
+log q′ 
+
+> (m+1) /M
+
+(x)
+
+q′ 
+
+> m/M
+
+(x) . (51) 16 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+According to the Taylor’s formula, we have log(1 + x) ≈ x while x approaches 0. In this case, while M is large enough so that the difference between pm/M (x | x0, x1) and p(m−1) /M (x | x0, x1) approaches 0, we have 
+
+log q′ 
+
+> (m+1) /M
+
+(x)
+
+q′ 
+
+> m/M
+
+(x) = log 1 + q′ 
+
+> (m+1) /M
+
+(x) − q′ 
+
+> m/M
+
+(x)
+
+q′ 
+
+> m/M
+
+(x)
+
+!
+
+≈ q′ 
+
+> (m+1) /M
+
+(x) − q′ 
+
+> m/M
+
+(x)
+
+q′ 
+
+> M
+
+(x) . (52) In the limit as M → ∞ , the difference term q′    
+
+> (m+1) /M (x)−q′
+> m/M (x)
+> q′
+> M(x)
+
+can be seen as the approximation of ∂∂τ log q′ 
+
+> τ
+
+(x)
+
+evaluated at τ = m/M . Taking the limit as M → ∞ for both sides of Eq. (51), we can derive 
+
+log r′(x) = lim   
+
+> M→∞
+> M−1
+
+X
+
+> m=0
+
+log q′ 
+
+> (m+1) /M
+
+(x)
+
+q′ 
+
+> m/M
+
+(x)
+
+≈ lim   
+
+> M→∞
+> M−1
+
+X
+
+> m=0
+
+q′ 
+
+> (m+1) /M
+
+(x) − q′ 
+
+> m/M
+
+(x)
+
+q′ 
+
+> M
+
+(x)
+
+≈ lim   
+
+> M→∞
+> M−1
+
+X
+
+> m=0
+
+∂∂τ log q′ 
+
+> τ
+
+(x) τ =m/M 
+
+=
+
+Z 10
+
+∂t log q′ 
+
+> τ
+
+(x)d t. 
+
+(53) According to Proposition 3.5, the density ratio r′(x) uniformly approximates the target density ratio r⋆(x), i.e. 
+
+log r(x) ≈ log r′(x) ≈
+
+Z 10
+
+∂t log q′ 
+
+> τ
+
+(x)d t. (54) This completes the proof of this proposition. 17 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+## B. Preliminaries 
+
+B.1. Special Cases of DI 
+
+In the case of TRE, the interpolation strategy, as detailed in Eq. (2), represents a specific case of I, characterized by 
+
+αt = p1 − η2 
+
+> t
+
+, β t = ηt, with t taking discrete values 0, 1/M, 2/M, . . . , 1. For DRE-∞, the coefficients are defined as 
+
+αt = exp {− 0.25( βmax − βmin )t2 − 0.5βmin t} and βt = p1 − α2 
+
+> t
+
+for the MNIST dataset and αt = 1 − t and βt = t for other datasets. The corresponding stochastic process for the former one aligns with the solution to variance preserving (VP) SDEs (Song et al., 2021; Li et al., 2024b; Xin et al., 2024; Zhou et al., 2025b). 
+
+B.2. From Optimal Transport to Entropic Regularization 
+
+The static OT problem seeks to find a coupling π between two probability distributions q0 and q1 that minimizes a given cost function. For the 2-Wasserstein distance with a Euclidean ground cost c(x0, x1) = ∥x0 − x1∥2, the optimization problem is given by: 
+
+W22 (q0, q 1) = inf 
+
+> π∈Π( q0,q 1)
+
+Z
+
+> Rd×Rd
+
+∥x0 − x1∥2dπ(x0, x1), (55) where Π( q0, q 1) denotes the set of joint probability measures with marginals q0 and q1. The optimal solution for compactly supported distributions (Villani et al., 2009) is characterized by straight-line interpolations between samples: 
+
+Xt = (1 − t)X0 + tX1, t ∈ [0 , 1] , (56) where X0 ∼ q0 and X1 ∼ q1. This interpolation aligns with the Benamou-Brenier formulation (McCann, 1997; Zhou et al., 2024b), where the transport paths minimize the kinetic energy in the space of probability measures. The natural connections between optimal transport theory and straight-line interpolations motivate the concept of Batch Optimal Transport (BatchOT) (Pooladian et al., 2023; Zhao et al., 2025). BatchOT provides a pseudo-deterministic coupling mechanism by extending the OT principles to minibatch sampling. This ensures practical scalability and aligns theoretical transport paths with computational requirements. Despite its theoretical elegance, solving the OT problem at scale is computationally challenging due to its cubic complexity in the number of samples. Entropic regularization alleviates this issue by introducing an entropy penalty: 
+
+W22,ξ (q0, q 1) = inf 
+
+> π∈Π( q0,q 1)
+
+Z
+
+> Rd×Rd
+
+∥x0 − x1∥2dπ(x0, x1) − ξH(π), (57) where ξ > 0 is the regularization parameter and H(π) denotes the entropy of π. This formulation ensures convexity and allows scalable computation via Sinkhorn’s algorithm (Cuturi, 2013). Entropic regularization connects OT with the Schr ¨odinger bridge (SB) problem, which models stochastic interpolation between distributions. Given a reference Wiener process scaled by γ, the SB problem finds the most probable stochastic process π that satisfies the marginal constraints q0 and q1:
+
+π⋆ = argmin 
+
+> π∈Π( q0,q 1)
+
+KL( π ∥ πref ), (58) where πref is a reference process. The SB solution corresponds to an entropy-regularized OT plan with ξ = 2 γ2:
+
+Xt = (1 − t)X0 + tX1 + pt(1 − t)γ2Zt, (59) where Zt ∼ N (0, Ed). This formulation introduces stochasticity into the transport paths, effectively modeling uncertainty and noise. 
+
+## C. Experimental Details and More Results 
+
+C.1. Comparison of the Trajectory Sets for Interpolation Strategies 
+
+In this section, we provide a detailed comparison of interpolation strategies, specifically deterministic interpolant (DI), diffusion bridge interpolant (DBI), dequantified diffusion bridge interpolant (DDBI), and dequantified Schr ¨odinger bridge interpolant (DSBI). Their intermediate samples and corresponding distributions are visualized in Fig. 1. 18 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+(a) DI: DI constrains intermediate samples to fixed linear paths between q0(x) and q1(x), resulting in narrow bands across the trajectory space (Fig. 1(a)). While dense along the paths, DI severely limits support and fails to explore alternative trajectories, making it inflexible and unsuitable for diverse distributions. 
+
+(b) DBI: DBI introduces stochasticity through Brownian Bridge noise, expanding support and enabling broader trajectory exploration (Fig. 1(b)). Compared to DI, DBI provides greater coverage and variability while retaining tractability, reducing the rigidity of interpolation paths (Zhao et al., 2023). 
+
+(c) DDBI: Extending DBI, DDBI modulates the noise with deterministic interpolation weights and diffusion components. This results in more dispersed trajectories (Fig. 1(c)) and a larger coverage of the intermediate distributions, balancing controlled stochasticity with enhanced flexibility (Zhou et al., 2025a). 
+
+(d) DSBI: DSBI offers full stochastic control over noise and leverages entropy-regularized optimal transport, resulting in widely dispersed trajectories and efficient utilization of the trajectory space (Fig. 1(d)). By minimizing transition loss, DSBI achieves the largest support set and highest diversity among the methods, producing rich intermediate distributions. Overall, our proposed methods (DBI, DDBI and DSBI) demonstrate clear advantages over deterministic baselines by achieving more comprehensive trajectory space exploration and flexible intermediate distribution generation. These results are consistent with our theoretical findings on support set and path set expansion, as formalized in Theorem 3.2 and Corollary 3.3. 
+
+C.2. Joint Score Matching 
+
+In this section, we integrate the time score st 
+
+> θ
+
+∈ R and data score sx 
+
+> θ
+
+∈ Rd to formulate the joint score st, x 
+
+> θ
+
+: [ st 
+
+> θ
+
+, sx 
+
+> θ
+
+] ∈ Rd+1 .
+
+This joint score is incorporated into the training objective defined in Eq. (24), resulting in a joint score matching objective (Choi et al., 2022): 
+
+L4(θ) = 2 Ex∼q′
+
+> 0(x)
+
+[λ(0) st, x 
+
+> θ
+
+(x, 0)[ t]] − 2Ex∼q′
+
+> 1(x)
+
+[λ(1) st, x 
+
+> θ
+
+(x, 1)[ t]] + Et∼q(t)Ex∼q′
+
+> t(x)
+
+Ev∼q(v)
+
+2λ(t)∂tst, x 
+
+> θ
+
+(x, t )[ t] + 2 λ′(t)st, x 
+
+> θ
+
+(x, t )[ t]+λ(t)∥st, x 
+
+> θ
+
+(x, t )[ x]∥22 + 2 λ(t)vT∇xst, x 
+
+> θ
+
+(x, t )[ x]v ,
+
+(60) where v ∼ q(v) = N (0, Ed) follows a standard Gaussian distribution, the terms st, x 
+
+> θ
+
+(x, t )[ x] and st, x 
+
+> θ
+
+(x, t )[ t] represent the data and time score components of st, x 
+
+> θ
+
+(x, t ), respectively. 
+
+C.3. Mutual Information Estimation 
+
+Mutual information (MI) measures the dependency between two random variables X ∼ p(x) and Y ∼ q(y), quantifying how much information one variable contains about the other. In this experiment, we employ D3RE to estimate the MI between two d-dimensional correlated Gaussian distributions. Specifically, we consider q(y) = N (0, σ 2Ed) and 
+
+p(x) = N (0, Ed), where σ2 = 1 e − 6 and d = {40 , 80 , 120 }. Let p(x, y) be the joint density of X and Y. The MI between X and Y is defined as MI (X, Y) = Ex,y∼p(x,y)
+
+h
+
+log p(x,y)
+
+> p(x)q(y)
+
+i
+
+, and can be approximated via DRE. We adapt the experimental setup of (Choi et al., 2022) to implement D 3RE. To construct the joint distribution, we use q0(x) = N (0, Ed) and q1(x) = N (0, Σ) , where Σ is block diagonal with 
+
+Λ = [[1 , ρ ] , [ρ, 1]] as 2 × 2 sub-matrices. For q1, it is designed as a multivariate normal distribution with a block diagonal covariance matrix along the block diagonal. Each Λ represents the covariance between variable pairs, while off-diagonal blocks remain zero, ensuring no correlation across pairs. The DDBI and DSBI are implemented, given by 
+
+X′ 
+
+> t
+
+= αtX0 + βtX1 + pt(1 − t)γ2 + ( α2 
+
+> t
+
++ β2 
+
+> t
+
+)εZt, where X0 ∼ q0(x), X1 ∼ q1(x), and Zt ∼ N (0, Ed). We estimate the density ratio r(x) = q1(x) 
+
+> q0(x)
+
+, yielding MI (X, Y) ≈ Ex∼q1(x)[log r(x)] .We train the score model using the joint score matching loss (details in Appendix C.2). The batch size is set to 512 for 
+
+d = {40 , 80 , 160 } and 256 for d = 320 , with iteration steps of {40 k, 100 k, 400 k, 500 k}, respectively. DRE-∞ serves as the baseline method. Results, shown in Fig. 3, demonstrate that D3RE , especially DSBI, produces MI estimates significantly closer and faster to the ground truth compared to the baseline, highlighting its superiority in accurately capturing mutual dependencies between variables. 19 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+C.4. Density Estimation Energy-based Modeling on MNIST. We applied the proposed D3RE framework to density estimation on the MNIST dataset, leveraging pre-trained energy-based models (EBMs) (Choi et al., 2022). Let q1(x) denote the MNIST data distribution and q0(x) a simple noise distribution with three different settings, as reported in (Rhodes et al., 2020): Gaussian noise, Gaussian copula, and Rational Quadratic Neural Spline Flow (RQ-NSF) (Durkan et al., 2019). We applied an modified version of DDBI of the form X′ 
+
+> t
+
+= αtX0 +βtEBM (X1)+ pt(1 − t)γ2 + ( α2 
+
+> t
+
++ β2 
+
+> t
+
+)εZt, where X0 ∼ q0(x), X1 ∼ q1(x),
+
+Zt ∼ N (0, Ed), αt = exp {− 0.25( βmax − βmin )t2 − 0.5βmin t} and βt = p1 − α2 
+
+> t
+
+. βmin and βmax are set to 0.1 and 20, respectively. The results are reported in bits-per-dimension (BPD), evaluated as BPD = − 1  
+
+> dln 2
+
+Ex∼q1(x) [log q1(x)] , where the expectation reflects the log-density of the MNIST dataset. Exact BPD computation is infeasible for EBMs; therefore, we estimate it using two annealed MCMC methods: Annealed Importance Sampling (AIS) (Neal, 2001) and Reverse Annealed Importance Sampling Estimator (RAISE) (Burda et al., 2015).  
+
+> Table 3. Comparison of the estimated log-density on MNIST dataset based on pre-trained energy-based models. The results are reported in BPD. Lower is better. The reported results for NCE and TRE are sourced from (Rhodes et al., 2020).
+
+Method Noise type Noise Direct (↓) RAISE (↓) AIS (↓)NCE Gaussian 2.01 1.96 1.99 2.01 TRE Gaussian 2.01 1.39 1.35 1.35 DRE-∞ Gaussian 2.01 1.33 1.33 1.33 DRE-∞+OTR, ours Gaussian 2.01 1.313 1.31 1.31 D3RE (DDBI), ours Gaussian 2.01 1.297 1.30 1.29 D3RE (DSBI), ours Gaussian 2.01 1.293 1.29 1.29 NCE Copula 1.40 1.33 1.48 1.45 TRE Copula 1.40 1.24 1.23 1.22 DRE-∞ Copula 1.40 1.21 1.21 1.21 DRE-∞+OTR, ours Copula 1.40 1.204 1.19 1.18 D3RE (DDBI), ours Copula 1.40 1.193 1.19 1.19 D3RE (DSBI), ours Copula 1.40 1.170 1.19 1.18 NCE RQ-NSF 1.12 1.09 1.10 1.10 TRE RQ-NSF 1.12 1.09 1.09 1.09 DRE-∞ RQ-NSF 1.12 1.09 1.08 1.08 DRE-∞+OTR, ours RQ-NSF 1.12 1.072 1.07 1.06 D3RE (DDBI), ours RQ-NSF 1.12 1.072 1.06 1.06 D3RE (DSBI), ours RQ-NSF 1.12 1.066 1.06 1.06 
+
+2-D Synthetic Datasets. In this section, we present density estimation results on eight synthetic datasets for different methods. From left to right, the epochs are 0, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000, 18000 and 20000. Corresponding results are shown in Figs. 9 to 16. D 3RE (including DDBI and DSBI) achieved the best performance on all datasets and was able to learn the best results with fewer epochs. 
+
+C.5. Ablation Study on γ2
+
+Mutual Information Estimation. The ablation study on varying γ2 values (Fig. 5) reveals distinct convergence behaviors in MI estimation across epochs. For all dimensions ( d = {40 , 80 , 120 }), smaller γ2 values ( ≤ 0.01 ) lead to faster initial convergence toward the DRE-∞ baseline, particularly in lower dimensions ( d = 40 ). However, excessively small γ2 = 0 .001 
+
+introduces instability in later epochs, causing slight deviations from the baseline. In contrast, larger γ2 values ( ≥ 0.1) show slower initial convergence but stabilize over longer training periods, especially in higher dimensions ( d = 120 ). Notably, 
+
+γ2 = 0 .1 strikes a balance between convergence speed and stability, consistently aligning with the baseline across all dimensions. These findings suggest that the optimal γ2 selection is influenced by both the dimensionality and training duration, with moderate regularization ( γ2 = 0 .01 –0.1) providing robust MI estimation performance. 20 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 
+
+Density Estimation. The ablation study on γ2 for density estimation (Fig. 4) reveals systematic trade-offs in performance across regularization strengths. For small γ2 = 0 .001 , the model achieves rapid initial alignment with the ground truth distribution (first row) but exhibits overfitting artifacts in later epochs, manifesting as irregular density peaks and deviations from the smooth ground truth structure. Intermediate values ( γ2 = 0 .01 –0.1) demonstrate balanced behavior: γ2 = 0 .01 
+
+preserves finer details while maintaining stability, and γ2 = 0 .1 produces smoother approximations with minimal divergence from the true distribution. Larger γ2 values ( ≥ 0.5) induce excessive regularization, leading to oversmoothed estimates that fail to capture critical modes of the 2-D data, particularly in high-density regions. Notably, γ2 = 0 .1 achieves the closest visual and structural resemblance to the ground truth, suggesting its suitability for low-dimensional tasks requiring both fidelity and robustness. These results underscore the necessity of tuning γ2 to mitigate under-regularization artifacts while preserving distributional complexity. We also present density estimation results on eight synthetic datasets for varing values of γ2. From left to right, the epochs are 0, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000, 18000 and 20000. Corresponding results are shown in Figs. 17 to 24. 
+
+C.6. Ablation Study on OTR 
+
+Fig. 3 compares the MI estimation performance of DDBI and DSBI across different dimensions ( d = 80 , 120 ). DDBI uses diffusion bridges and Gaussian dequantization, while DSBI adds OTR to achieve better alignment. In panel (a), both DDBI and DSBI outperform the baseline methods. DDBI shows stable performance and converges close to the ground truth. However, DSBI, with OTR, achieves faster convergence and higher accuracy, staying closer to the ground truth throughout training. In panel (b), the impact of OTR becomes more evident. Although DDBI still outperforms the baseline methods, its convergence is slower, and its accuracy is lower compared to DSBI. By leveraging OTR, DSBI demonstrates superior MI estimation performance across all training epochs and remains closer to the ground truth in high-dimensional settings (d = 120 ). OTR significantly improves the alignment of intermediate distributions and enhances model performance. When combined with diffusion bridges and Gaussian dequantization, as in DSBI, OTR achieves its full potential. It allows the model to estimate complex distributions more accurately. 
+
+Number of Function Evaluations. We analyze the impact of OTR on NFE, noting that DI and DDBI do not utilize OTR. Our observations show that applying OTR significantly reduces NFE. Fig. 8 compares NFE across four methods in DRE, highlighting substantial variations in computational efficiency. The first approach exhibits the highest NFE, indicating reliance on iterative procedures requiring repeated function evaluations. The second approach achieves a moderate reduction in NFE, likely by minimizing redundant evaluations through minimized transport costs. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000    
+
+> baseline (DI)
+> DI+OTR (ours)
+> D3RE (DDBI, ours)
+> D3RE (DSBI, ours)
+> Figure 9. Density estimation results on swissroll for different methods during training.
+
+21 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> baseline (DI)
+> DI+OTR (ours)
+> D3RE (DDBI, ours)
+> D3RE (DSBI, ours)
+
+Figure 10. Density estimation results on circles for different methods during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> baseline (DI)
+> DI+OTR (ours)
+> D3RE (DDBI, ours)
+> D3RE (DSBI, ours)
+
+Figure 11. Density estimation results on rings for different methods during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> baseline (DI)
+> DI+OTR (ours)
+> D3RE (DDBI, ours)
+> D3RE (DSBI, ours)
+
+Figure 12. Density estimation results on moons for different methods during training. 
+
+22 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> baseline (DI)
+> DI+OTR (ours)
+> D3RE (DDBI, ours)
+> D3RE (DSBI, ours)
+
+Figure 13. Density estimation results on 8gaussians for different methods during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> baseline (DI)
+> DI+OTR (ours)
+> D3RE (DDBI, ours)
+> D3RE (DSBI, ours)
+
+Figure 14. Density estimation results on pinwheel for different methods during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> baseline (DI)
+> DI+OTR (ours)
+> D3RE (DDBI, ours)
+> D3RE (DSBI, ours)
+
+Figure 15. Density estimation results on 2spirals for different methods during training. 
+
+23 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+baseline (DI) 
+
+DI+OTR (ours) 
+
+D3RE (DDBI, ours) 
+
+D3RE (DSBI, ours) 
+
+Figure 16. Density estimation results on checkerboard for different methods during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> 0.001
+> 0.01
+> 0.1
+> 0.5
+> 1.0
+
+Figure 17. Density estimation results on swissroll for varing values of γ2 during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> 0.001
+> 0.01
+> 0.1
+> 0.5
+> 1.0
+
+Figure 18. Density estimation results on circles for varing values of γ2 during training. 
+
+24 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> 0.001
+> 0.01
+> 0.1
+> 0.5
+> 1.0
+
+Figure 19. Density estimation results on rings for varing values of γ2 during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> 0.001
+> 0.01
+> 0.1
+> 0.5
+> 1.0
+
+Figure 20. Density estimation results on moons for varing values of γ2 during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> 0.001
+> 0.01
+> 0.1
+> 0.5
+> 1.0
+
+Figure 21. Density estimation results on 8gaussians for varing values of γ2 during training. 
+
+25 Dequantified Diffusion-Schr¨ odinger Bridge for Density Ratio Estimation 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> 0.001
+> 0.01
+> 0.1
+> 0.5
+> 1.0
+
+Figure 22. Density estimation results on pinwheel for varing values of γ2 during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> 0.001
+> 0.01
+> 0.1
+> 0.5
+> 1.0
+
+Figure 23. Density estimation results on 2spirals for varing values of γ2 during training. 0 2000 4000 6000 8000 10000 12000 14000 16000 18000 20000 
+
+> 0.001
+> 0.01
+> 0.1
+> 0.5
+> 1.0
+
+Figure 24. Density estimation results on checkerboard for varing values of γ2 during training. 
+
+26

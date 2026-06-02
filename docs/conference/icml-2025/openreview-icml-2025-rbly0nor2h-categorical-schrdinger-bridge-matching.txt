@@ -1,0 +1,1166 @@
+Title: Categorical Schrödinger Bridge Matching
+
+URL Source: https://openreview.net/pdf?id=RBly0nOr2h
+
+Number of Pages: 25
+
+Markdown Content:
+# Categorical Schr¨ odinger Bridge Matching 
+
+Grigoriy Ksenofontov 1 2 Alexander Korotin 1 3 
+
+## Abstract 
+
+The Schr ¨odinger Bridge (SB) is a powerful frame-work for solving generative modeling tasks such as unpaired domain translation. Most SB-related research focuses on continuous data space RD and leaves open theoretical and algorithmic questions about applying SB methods to discrete data, e.g, on finite spaces SD . Notable examples of such sets S are codebooks of vector-quantized (VQ) representations of modern autoencoders, tokens in texts, categories of atoms in molecules, etc. In this paper, we provide a theoretical and algorith-mic foundation for solving SB in discrete spaces using the recently introduced Iterative Markovian Fitting (IMF) procedure. Specifically, we theoreti-cally justify the convergence of discrete-time IMF (D-IMF) to SB in discrete spaces. This enables us to develop a practical computational algorithm for SB, which we call Categorical Schr ¨odinger Bridge Matching (CSBM). We show the perfor-mance of CSBM via a series of experiments with synthetic data and VQ representations of images. The code of CSBM is available at this repository. 
+
+## 1 Introduction 
+
+The Schr ¨odinger bridge (Schr ¨odinger, 1931, SB) problem has recently attracted the attention of the machine learning community due to its relevance to modern challenges in gen-erative modeling and unpaired learning. Recently, a variety of methods have been proposed to solve SB in continuous spaces ; see (Gushchin et al., 2023b) for a recent survey. One modern approach to solving SB is the Iterative Marko-vian Fitting (IMF) framework (Peluchetti, 2023; Shi et al., 2023; Gushchin et al., 2024b). Specifically, within this framework, the discrete-time IMF procedure (Gushchin               
+
+> 1Skoltech, Moscow, Russia 2MIPT, Moscow, Russia
+> 3AIRI, Moscow, Russia. Correspondence to: Grigoriy Ksenofontov <g.ksenofontov@skoltech.ru >, Alexander Korotin
+> <a.korotin@skoltech.ru >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+et al., 2024b, D-IMF) has shown promising results in cer-tain unpaired learning problems, enabling faster generation (inference) times than its predecessors. Unfortunately, the D-IMF procedure heavily relies on cer-tain theoretical properties of particular SB setups in con-tinuous spaces. At the same time, a vast amount of real-world data is either discrete by nature , such as texts (Austin et al., 2021; Gat et al., 2024), molecular graphs (Vignac et al., 2022; Qin et al., 2024; Luo et al., 2024), sequences (Campbell et al., 2024), etc., or discrete by construction 
+
+like vector-quantized representations of images and audio (Van Den Oord et al., 2017; Esser et al., 2021). These cases highlight a fundamental limitation, as D-IMF is not directly applicable to such data. In this work, we address this gap by making the following contributions: 
+
+• Theory. We provide the theoretical grounds for applying the D-IMF to solve the SB problem in discrete spaces. • Practice. We provide a computational algorithm to im-plement the D-IMF in practice for discrete spaces. 
+
+Notations. Consider a state space X and a time set 
+
+{tn}N +1  
+
+> n=0
+
+, where 0 = t0 < t 1 < · · · < t N < t N +1 = 1 
+
+are N ≥ 1 time moments. The space X N +2 is referred to as the path space and represents all possible trajectories 
+
+(x0, x in , x tN +1 ), where xin def 
+
+= ( xt1 , . . . , x tN ) corresponds to the intermediate states. Let P(X N +2 ) be the space of probability distributions over paths. Each q ∈ P (X N +2 )
+
+can be interpreted as a discrete in time X -valued stochastic process. We use q(x0, x in , x tN +1 ) to denote its density at 
+
+(x0, x in , x tN +1 ) ∈ X N +2 and use q(·|· ) to denote its con-ditional distributions, e.g., q(x1|x0), q(xin |x0, x 1). Finally, we introduce M(X N +2 ) ⊂ P (X N +2 ) as the set of all 
+
+Markov processes q, i.e., those processes which satisfy the equality q(x0, x in , x tN +1 ) = q(x0) QN +1  
+
+> n=1
+
+q(xtn |xtn−1 ).
+
+## 2 Background and Related Works 
+
+In this section, we review the formulation and existing ap-proaches to the Schr ¨odinger Bridge (SB) problem, with a focus on its generative applications. We begin with the static SB problem ( M2.1). Next, we highlight the challenges of extending SB methods from continuous to discrete state spaces ( M2.3). We proceed to the dynamic SB formulation, 1Categorical Schr¨ odinger Bridge Matching 
+
+motivating its importance in practice ( M2.4). This leads to the Iterative Markovian Fitting (IMF) procedure and its discrete-time variant D-IMF ( M2.5). Finally, we summarize the known characterizations of SB (Table 1) and identify the object of our study, namely, establishing theoretical guarantees for the discrete state and time setting ( M2.6). 
+
+2.1 The Static Schr¨ odinger Bridge Problem 
+
+Consider two distributions p0, p 1 ∈ P (X ) and all distribu-tions q ∈ P (X 2) whose marginal distributions are p0, p 1, re-spectively. The set of such distributions Π( p0, p 1) ⊂ P (X 2)
+
+is called the set of transport plans . In addition, suppose we are given a reference distribution qref ∈ P (X 2).
+
+The Static Schr ¨odinger Bridge (SB) problem (Schr ¨odinger, 1931; L ´eonard, 2013) consists of finding the transport plan q ∈ Π( p0, p 1) closest to qref in terms of the Kull-back–Leibler (KL) divergence: 
+
+q∗(x0, x 1) = argmin 
+
+> q∈Π( p0,p 1)
+
+KL (q(x0, x 1)|| qref (x0, x 1)) , (1) With mild assumptions on components of the problem (X , p 0, p 1, q ref ), the solution q∗ to this problem uniquely exists; it is called the static SB. Notably, the static SB problem is equivalent to another well-celebrated problem – the Entropic Optimal Transport (Cu-turi, 2013, EOT). Indeed, (1) can be written as 
+
+min  
+
+> q∈Π( p0,p 1)
+
+Eq(x0,x 1) log q(x0, x 1)
+
+qref (x0, x 1) =min 
+
+> q∈Π( p0,p 1)
+
+Eq(x0,x 1)
+
+− log qref (x0, x 1)| {z }
+
+> def
+> =c(x0,x 1)
+
+−H(q) =min 
+
+> q∈Π( p0,p 1)
+
+Eq(x0,x 1)c(x0, x 1) − H(q) , (2) where H(q) denotes the entropy of transport plan q(x0, x 1)
+
+and c(x0, x 1) is a transport cost function. 
+
+2.2 Practical Learning Setup of SB 
+
+Over the last decade, researchers have approached SB/EOT problems in various studies because of their relevance to real-world tasks (Peyr ´e et al., 2019; Gushchin et al., 2023b). In our paper, we consider the following learning setup, which is usually called the generative setup. We assume that a learner is given empirical datasets 
+
+{xm 
+
+> 0
+
+}Mm=1 ⊂ X and {xk 
+
+> 1
+
+}Kk=1 ⊂ X , which are i.i.d. samples from unknown data distributions p0 and p1,respectively. The goal is to leverage these samples to find a solution bq ≈ q∗ to the SB problem (2) between the distributions p0, p 1. The solution should permit the out-of-sample estimation , i.e., for any xnew  
+
+> 0
+
+, one should be able to generate new xnew  
+
+> 1
+
+∼ bq(x1|xnew  
+
+> 0
+
+).In the related literature, this setup is mainly explored in the context of unpaired (unsupervised) domain translation. In this task, the datasets consist of samples from two different data distributions (domains), and the goal is to learn a trans-formation from one domain to the other (Zhu et al., 2017, Figure 2). The problem is inherently ill-posed because, the-oretically, there may be multiple possible transformations. In many applications of unpaired learning, it is crucial to preserve semantic information during the translation, for example, the image content in image-to-image translation. Therefore, SB and EOT are suitable tools for this task as they allow controlling the properties of the learned trans-lation by selecting the reference distribution qref in (1) or the transport cost c in (2) . Over the last several years, many such SB/EOT methods for unpaired learning have been de-veloped; see (Gushchin et al., 2023b) for a survey. 
+
+2.3 Discrete and Continuous State Space X in SB 
+
+Most methods (Mokrov et al., 2024; De Bortoli et al., 2021; Vargas et al., 2021; Gushchin et al., 2023a; 2024b; Korotin et al., 2024; Gushchin et al., 2024a; Shi et al., 2023; Liu et al., 2022a; Chen et al., 2022) use neural networks to approximate q∗ and specifically focus on solving SB in 
+
+continuous state spaces , e.g., X = RD . This allows us to apply SB to many unpaired translation problems, e.g., the above-mentioned image-to-image translation or biological tasks related to the analysis and modeling of single-cell data (Pariset et al., 2023; Tong et al., 2024). Despite advances in computational SB methods, signifi-cant challenges remain when adapting these generative ap-proaches to discrete state spaces X :1. Their underlying methodological principles are mostly incompatible with discrete spaces X . For example, (Shi et al., 2023; Gushchin et al., 2023a; Vargas et al., 2021; Liu et al., 2022a) use stochastic differential equations (SDE) which are not straightforward to generalize and use in discrete spaces; (Mokrov et al., 2024) heavily re-lies on MCMC sampling from unnormalized density which is also a separate challenge for large discrete spaces X ; (Gushchin et al., 2024a; Korotin et al., 2024; Gushchin et al., 2024b) theoretically work only for the EOT problem with the quadratic cost on X = RD , etc. 2. Extending any generative modeling techniques to dis-crete data is usually a challenge. For example, models such as GANs (Goodfellow et al., 2014) require back-propagation through the generator – for discrete data is usually done via heuristics related to the Gumbel trick (Jang et al., 2017); flow matching methods (Liu et al., 2022b) can be used for discrete data (Gat et al., 2024) but require numerous methodological changes, etc. At the same time, a significant portion of modern data is 2Categorical Schr¨ odinger Bridge Matching 
+
+inherently discrete, as discussed in M1. Despite its preva-lence, the Schr ¨odinger Bridge framework for discrete spaces remains underdeveloped, motivating our focus. We assume that the state space X is discrete and rep-resented as X = SD . Here S is a finite set, and for convenience, we say that it is the space of cate-gories, e.g., S = {1, 2, . . . , S }. One may also consider 
+
+X = S1 × · · · × SD for D categorical sets. This does not make any principal difference, so we use 
+
+S1 = · · · = SD to keep the paper’s exposition simple. 
+
+Discrete EOT Methods. We would like to mention, for the sake of completeness, that there is a broad area of research known as discrete EOT, which might appear to be closely related to our work. It includes, e.g., the well-celebrated Sinkhorn algorithm (Cuturi, 2013) and gradient-based methods (Dvurechensky et al., 2018; Dvurechenskii et al., 2018). However, such algorithms are not relevant to our work, as they consider a different setting from the gener-ative one ( M2.2) and target different problems. Specifically, discrete EOT assumes that the available data samples are themselves discrete distributions, i.e., p0 = 1
+
+> M
+
+PMm=1 δxm 
+
+> 0
+
+,p1 = 1
+
+> K
+
+PKk=1 δxk 
+
+> 0
+
+(the weights may be non-uniform), and the goal is to find a bi-stochastic matrix ∈ RM ×K (a.k.a. the discrete EOT plan) which optimally matches the given sam-ples. Since this matrix is a discrete object, such methods are called discrete. Works (H ¨utter & Rigollet, 2021; Pooladian & Niles-Weed, 2021; Manole et al., 2024; Deb et al., 2021) aim to advance discrete EOT methods to be used in genera-tive setups by providing out-of-sample estimators. However, they work only for continuous state space X = RD . It remains an open question whether discrete solvers can be used for generative scenarios in discrete space X = SD .
+
+2.4 From Static to Dynamic SB Problems 
+
+The static SB problem (1) can be thought of as a problem of finding a stochastic process acting at times t = 0 , 1.Usually, one considers an extension of this problem by incorporating additional time moments (De Bortoli et al., 2021; Gushchin et al., 2024b). Let us introduce N ≥ 1
+
+intermediate time points 0 = t0 < t 1 < · · · < t N <tN +1 = 1 , extending q to these moments. Consequently, 
+
+q becomes a process over the states at all time steps, i.e., 
+
+q ∈ P (X N +2 ). Similarly to the static formulation (1) ,let us be given marginal distributions p0, p 1 ∈ P (X ) with a reference process qref ∈ P (X N +2 ). Then the dynamic Schr¨ odinger Bridge problem is 
+
+min   
+
+> q∈ΠN(p0,p 1)
+
+KL (q(x0, x in , x 1)|| qref (x0, x in , x 1)) , (3) where ΠN (p0, p 1) ⊂ P (X N +2 ) is a set of all discrete-time stochastic processes in which initial and terminal marginal distributions are p0 and p1. In turn, the solution q∗ to this itself becomes an X -valued stochastic process. Note that: KL (q(x0, x in , x 1)|| qref (x0, x in , x 1)) = 
+
+KL (q(x0, x 1)|| qref (x0, x 1)) + 
+
+Eq(x0,x 1)
+
+KL (q(xin |x0, x 1)|| qref (xin |x0, x 1))  . (4) Since conditional distributions q(xin |x0, x 1) can be chosen independently of q(x0, x 1), we can consider 
+
+q(xin |x0, x 1) = qref (xin |x0, x 1). It follows that the sec-ond term becomes 0 for every x0, x 1. As a result, we see that the joint distribution q∗(x0, x 1) for time t = 0 , 1 of the dynamic SB (3) is the solution to the static SB (1) for the reference distribution given by the qref (x0, x 1).At this point, a reader may naturally wonder: why does one consider the more complicated Dynamic SB, especially considering that it boils down to simpler Static SB ?In short, the dynamic solution allows for leveraging the so-called reciprocal and Markov properties of q∗ (it is discussed below), which can be effectively utilized in developing com-putational algorithms for SB (Liu et al., 2023; Shi et al., 2023; Peluchetti, 2023). In fact, most of the computational methods listed at the beginning of M2.3 operate with the dynamic SB formulation. While some methods (De Bortoli et al., 2021; Gushchin et al., 2024b) consider formulation (3) with discrete time and finite amount N of time moments, (Shi et al., 2023; Chen et al., 2022; Gushchin et al., 2024a) work with continuous time t ∈ [0 , 1] . Informally , one may identify it with discrete time but N = ∞. In discussions, we will refer to the continuous time case this way in the rest of the paper to avoid unnecessary objects and notations .The scope of our paper is exclusively the discrete-time in dynamic SB ( N < ∞) as it is more transparent and feasible to analyze. To conclude this section, we introduce an important defini-tion that is specifically relevant to the dynamic SB. 
+
+Reciprocal Processes. A process r ∈ P (X N +2 ) is called a reciprocal process with respect to the reference process 
+
+qref if its conditional distributions given the endpoints x0, x 1
+
+match those of the reference process, i.e.: 
+
+r(xin | x0, x 1) = qref (xin | x0, x 1).
+
+The set of all reciprocal processes for the reference process 
+
+qref is denoted by Rref (X N +2 ) ⊂ P (X N +2 ).
+
+2.5 Iterative Markovian Fitting (IMF) Procedure 
+
+In practice, the most commonly considered case of dynamic SB is when qref ∈ M (X N +2 ) ⊂ P (X N +2 ), i.e., qref is a 3Categorical Schr¨ odinger Bridge Matching 
+
+Continuous time 
+
+(N = ∞)
+
+Discrete time 
+
+(N < ∞)
+
+Theory 
+
+(SB characterization) 
+
+Practice 
+
+(SB algorithm) 
+
+Theory 
+
+(SB characterization) 
+
+Practice 
+
+(SB algorithm) 
+
+Continuous space 
+
+X = RD Theorem 3.2 (L´ eonard et al., 2014) DSBM M4(Shi et al., 2023) Theorem 3.1 (Gushchin et al., 2024b) ASBM M3.5 (Gushchin et al., 2024b) 
+
+Discrete space 
+
+X = SD
+
+DDSBM M3.1 (Kim et al., 2024) Our work (M3) 
+
+Table 1. A summary of SB problem setups and existing (D-)IMF-related results. The table lists theoretical statements characterizing the SB solution ( as the unique both Markovian and reciprocal process between two given distributions ) which allows to apply the (D-)IMF procedure to provably get the SB solution q∗, see (Shi et al., 2023, Theorem 8). The table also lists related computational algorithms. 
+
+Markovian process . In this case, the solution q∗ to SB is also known to be a Markovian process. This feature motivated the researchers to develop the Iterative Markovian Fitting 
+
+(IMF) procedure for solving SB based on Markovian and reciprocal projections of stochastic processes. Originally, the IMF procedure (Peluchetti, 2023; Shi et al., 2023) was considered the continuous time (N = ∞), but recently, it has been extended to the finite amount of time moments (Gushchin et al., 2024b), i.e., N < ∞. We recall their definitions of the projections for finite N . In this case, the procedure is called the D-IMF (discrete-time IMF). 
+
+Reciprocal Projection. Consider a process q ∈ P (X N +2 ).Then the reciprocal projection proj Rref (q) with respect to the reference process qref is a process given by: 
+
+[proj Rref (q)] ( x0, x in , x 1) = qref (xin |x0, x 1)q(x0, x 1).
+
+Markovian Projection. Consider q ∈ P (X N +2 ). Then the Markovian projection proj M(q) is given by: 
+
+[proj M(q)] ( x0, x in , x 1) = = q(x0) 
+
+> N+1
+
+Y
+
+> n=1
+
+q(xtn |xtn−1 )
+
+| {z }
+
+> forward representation
+
+== q(x1) 
+
+> N+1
+
+Y
+
+> n=1
+
+q(xtn−1 |xtn )
+
+| {z }
+
+> backward representation
+
+(5) The reciprocal projection obviously preserves the joint distri-bution q(x0, x 1) of a process at time moments t = 0 , 1. The Markovian projection, in general, alters q(x0, x 1) but pre-serves the joint distributions {q(xtn , x tn−1 )}N +1  
+
+> n=1
+
+at neigh-boring time moments and the marginal distributions q(xtn ).
+
+The D-IMF procedure is initialized with any process 
+
+q0 ∈ ΠN (p0, p 1). Then the procedure alternates between reciprocal proj Rref and Markovian proj M projections: 
+
+q2l+1 = proj Rref 
+
+ q2l ,q2l+2 = proj M
+
+ q2l+1  . (6) Since both the Markovian and reciprocal projections pre-serve marginals p0, p 1 at times t = 0 , 1, respectively, we have that each ql ∈ ΠN (p0, p 1). In certain configurations of 
+
+N , X , qref , IMF provably converges to the dynamic SB q∗
+
+in KL, i.e., lim l→∞ KL  ql∥q∗ = 0 . Specifically, the con-vergence easily follows from the generic proof argument in (Shi et al., 2023, Theorem 8) as soon as it is known that q∗
+
+is the unique process in ΠN (p0, p 1) that is both Markovian and reciprocal . We provide Table 1, summarizing the con-figurations for which this characterization of SB is known. We also list the related practical algorithms. Finally, we would like to emphasize that the convergence rate of the (D-)IMF procedure notably depends on the num-ber N of time steps . In fact, for each N it is its own separate procedure with a different Markovian projection (5) , see (Gushchin et al., 2024b, Figure 6a). 
+
+2.6 Object of Study 
+
+As it is clear from Table 1, for the setup with the discrete space X = SD and finite amount of time moments N < ∞,there is still no theoretical guarantee that the SB is the unique Markovian and reciprocal process. This leaves a large gap in D-IMF usage in this case, and we close it in our paper. At the same time, we note that there is a very recent IMF-based algorithm DDSBM (Kim et al., 2024) for the discrete state space X but continuous time ( N = ∞). However, since working with continuous time is infeasible in practice, the authors discretize the time grid to a large finite N . Due to this, the authors apply the D-IMF procedure, although it still lacks any theoretical ground in this case. In contrast, our work shows that theoretically even N = 1 is enough. 4Categorical Schr¨ odinger Bridge Matching 
+
+## 3 Categorical Schr¨ odinger Bridge Matching 
+
+We start by establishing the convergence of the D-IMF framework ( N < ∞) to the SB under a general Markov reference process ( M3.1) with the proofs in Appendix B. Then we provide a practical optimization procedure and implementation details of the proposed method ( M3.2). 
+
+3.1 Theoretical Foundation 
+
+The result of (Gushchin et al., 2024b, Theorem 3.6) char-acterizes the SB solution in X = RD and N < ∞ as the unique Markovian and Reciprocal process which allows the usage of D-IMF procedure. However, that proof assumes a specific reference process qref = qW induced by the Wiener process W (EOT with the quadratic cost) and thus cannot handle a general Markov qref or discrete X .Below we provide our main theoretical result for the discrete 
+
+space X and general Markov reference process qref which characterizes SB and immediately allows the usage of D-IMF ( N < ∞) procedure to get it. 1
+
+Theorem 3.1 (Characterization of the solution for the dynamic SB problem on a discrete space X with a Markovian reference qref ). Let X be a finite discrete space and let p0, p 1 ∈ P (X ) be distributions with full support. Let qref ∈ M (X N +2 ) be a reference Markov process with full support on X N +2 . If q∗ ∈ P (X N +2 )
+
+satisfies the following conditions: 1. q∗(x0) = p0(x0) and q∗(x1) = p1(x1), i.e., 
+
+q∗(x0, x 1) is a transport plan from Π( p0, p 1);2. q∗ ∈ M (X N +2 ) and q∗ ∈ R ref (X N +2 ), i.e., q∗
+
+is both the reciprocal and Markov ,then q∗ is the unique solution of the dynamic SB (3) .
+
+Our theorem immediately yields the following corollary. 
+
+Corollary 3.2 (Convergence of D-IMF on discrete spaces) .
+
+The sequence {ql}∞ 
+
+> l=0
+
+produced by the D-IMF procedure on a discrete space X and for a Markov reference process from the theorem above converges to q∗ in KL: 
+
+lim  
+
+> l→∞
+
+KL  ql∥q∗ = 0 .
+
+3.2 Practical Implementation 
+
+In this subsection, we discuss our computational algorithm to implement D-IMF and get the SB problem solution q∗.Since we consider a finite amount N of time steps, the processes q ∈ P (X N +2 ) are discrete-time Markov chains 
+
+> 1
+
+In fact, our proof argument can be applied to any X , i.e., not only discrete, thus, the ASBM algorithm (Gushchin et al., 2024b) for continuous X = RD can be applied for general Markov qref .
+
+(DTMC). A DTMC is defined by N + 1 transition matrices 
+
+Qn of size |X | × |X | , where [Qn]xtn−1 xtn represents the probability of transitioning from state xtn−1 to state xtn :
+
+q(xtn |xtn−1 ) = [ Qn]xtn−1 xtn .
+
+Thus, in theory, one can model any such DTMC q explicitly. However, in practice, the size |X | may be large. In particular, we consider the case X = SD , where S is a categorical space leading to exponential amount SD of elements in X .This raises two natural questions: (a) how to choose a refer-ence process qref and work with it? and (b) how to parame-terize and update the process q during D-IMF steps? Both these questions will be answered in the following generic discussion about the parameterization and implementation of reciprocal and Markovian projections. 
+
+3.2.1 Implementing the Reciprocal Projection. The reciprocal projection is rather straightforward if we can draw samples from our current process q(x0, x 1) and the reference bridge qref (xtn−1 |x0, x 1). Indeed, sampling 
+
+(x0, x tn−1 , x 1) ∼ proj Rref (q) is just merging these two. 
+
+3.2.2 Choosing a Reference Process. As it is clear from the paragraph above, it is reasonable to consider reference processes qref ∈ M (X N +2 ) for which sampling from their bridge qref (xtn−1 |x0, x 1) is easy. We give two popular ex-amples of qref which appear in related work (Austin et al., 2021) that lead to practically meaningful cost c for EOT (2) .For both examples, we start with dimension D = 1 .
+
+Case 1 (Uniform Reference qunif ). In this case, we as-sume that the set of categories S is unordered, e.g., atom types, text tokens, latent variables, etc. Define a process where the state stays in the current category xtn−1 with high probability, while the remaining probability is distributed uniformly among all other categories. This process qunif is called uniform and has transitions matrices Qn:
+
+[Qn]xtn−1 xtn =
+
+(
+
+1 − α, if xtn = xtn−1 , 
+
+> αS−1
+
+, if xtn̸ = xtn−1 , (7) where α ∈ [0 , 1] is the stochasticity parameter that controls the probability of transitioning to a different category. 
+
+Case 2 (Gaussian Reference qgauss ). If we know that the categories are ordered, specifically, S = (1 , 2, . . . , S ), and two neighboring categories are assumed to be related, the transitions may be chosen to reflect this. Consider the Gaus-sian -like reference process qgauss with [Qn]xtn−1 xtn =
+
+      
+
+> exp −4( xtn −xtn−1 )2(α∆) 2
+> !P∆
+> δ=−∆exp
+> 
+> −4δ2(α∆) 2
+> 
+
+, xtn̸ = xtn−1 ,
+
+1 − P 
+
+> xtn ̸=xtn−1
+
+[Qn]xtn−1 xtn , xtn = xtn−1 ,
+
+(8) where α > 0 is an analog of the variance parameter, and 
+
+∆ = S − 1 is a maximum distance between categories. 5Categorical Schr¨ odinger Bridge Matching 
+
+Dimension D > 1. The construction of qunif (or qgauss ) gen-eralizes to higher D by combining several such independent processes (one per dimension). The bridges qref (xin |x0, x 1)
+
+can be easily derived analytically and sampled thanks to the Markov property and the Bayes’ formula. For more details on the construction and selection of refer-ence processes qref , please refer to Appendix D.1. 
+
+3.2.3 Parameterization of the Learnable Process. 
+
+There are |SD | = SD possible states x = ( x1, . . . , x D )
+
+in the space, where S is the number of categories for each variable. Consequently, each transition matrix Qn is of size 
+
+SD × SD , i.e., it grows exponentially in dimension D. Due to this, explicit modeling of the transition matrices of the process that we learn is computationally infeasible. We follow the standard practice in discrete generative models (Hoogeboom et al., 2021; Austin et al., 2021; Gat et al., 2024; Campbell et al., 2024) and model the transition prob-ability via combining two popular techniques: posterior sampling and factorization over the dimensions. Firstly, we parameterize the transitions qθ (xtn |xtn−1 ) as follows: 
+
+qθ (xtn |xtn−1 ) = E eqθ (ex1|xtn−1 )
+
+qref (xtn |xtn−1 , ex1) , (9) where eqθ (ex1|xtn−1 ) is a learnable distribution. This param-eterization assumes that sampling of xtn given xtn−1 can be done by first sampling some “endpoint” ex1 ∼ eqθ (ex1|xtn−1 ),and then sampling from the bridge qref (xtn |xtn−1 , ex1). Sec-ond, the parameterization for eqθ (ex1|xtn−1 ) is factorized: 
+
+eqθ (ex1|xtn−1 ) ≈
+
+> D
+
+Y
+
+> d=1
+
+eqθ (exd
+
+> 1
+
+|xtn−1 ).
+
+In this case, for each xtn−1 , we just need to predict a row-stochastic D × S matrix of probabilities eqθ (exd
+
+> 1
+
+|xtn−1 ). See Appendix A for a discussion of the limitations of this ap-proach. Following the common practices, we employ a neu-ral network SD → D × S which outputs a row-stochastic matrix for each input xtn−1 . Typically, predicting endpoints at each time step n − 1 would require N + 1 distinct mod-els for each eqθ (ex1|xtn−1 ). Instead, we use a single neural network with an additional input indicating the timestep. 
+
+3.2.4 Implementing the Markovian Projection. The Markovian projection is a little bit more complex than the reciprocal one and requires learning a process. From M2.5, the goal of the projection is to find a Markov process whose transition probabilities match those of the given reciprocal process q. Fortunately, we show that this can be achieved by minimizing an objective that closely resembles the optimiza-tion of the variational bound used in diffusion models (Ho et al., 2020; Austin et al., 2021; Hoogeboom et al., 2021). 
+
+Proposition 3.3. Let q ∈ R ref (X N +2 ) be a given recipro-cal process. Then, the Markovian projection proj M(q) ∈M(X N +2 ) can be obtained by minimizing: 
+
+Algorithm 1 Categorical SB matching (CSBM) 
+
+Input: number of intermediate time steps N ;number of outer iterations L ∈ N;initial coupling q0(x0, x 1);reference process qref .
+
+Output: forward model qθ (xtn |xtn−1 );backward model qη (xtn−1 |xtn ).
+
+for l = 1 to L do Forward step (repeat until convergence) :
+
+Sample n ∼ U [1 , N + 1] ;Sample (x0, x 1) ∼ p1(x1) QN +1  
+
+> n=1
+
+qη (xtn−1 |xtn );Sample xtn−1 ∼ qref (xtn−1 |x0, x 1);Train qθ by minimizing Lθ (21); 
+
+Backward step (repeat until convergence) :
+
+Sample n ∼ U [1 , N + 1] ;Sample (x0, x 1) ∼ p0(x0) QN +1  
+
+> n=1
+
+qθ (xtn |xtn−1 );Sample xtn ∼ qref (xtn |x0, x 1);Train qη by minimizing Lη (22); 
+
+end for 
+
+L(m) def 
+
+= Eq(x0,x 1)
+
+" NX
+
+> n=1
+
+Eqref (xtn−1 |x0,x 1)
+
+KL  qref (xtn |xtn−1 , x 1)|| m(xtn |xtn−1 ) −− Eqref (xtN |x0,x 1) [log m(x1|xtN )] 
+
+#
+
+, (10) 
+
+among the Markov processes m ∈ M(X N +2 ). Fur-thermore, this objective is also equivalent to optimizing PN +1  
+
+> n=1
+
+Eq(xtn−1 )KL  q(xtn |xtn−1 )∥m(xtn |xtn−1 ).
+
+Note that the key distinction from standard losses in dif-fusion models, such as (Austin et al., 2021, Equation 1), lies in the sampling of xtn−1 . Instead of drawing from the noising process qref (xtn−1 |x1), it is sampled from the ref-erence bridge distribution qref (xtn−1 |x0, x 1). As a result, with the proposed parametrization and Markovian projec-tion representation, we can effectively apply the learning methodology from D3PM (Austin et al., 2021). The explicit loss formulation is provided in Appendix D.2. 
+
+3.2.5 Practical Implementation of the D-IMF Proce-dure. With the reciprocal and Markovian projections fully established, we now proceed to the implementation of the D-IMF procedure. This method is conventionally applied in a bidirectional manner (Shi et al., 2023; Gushchin et al., 2024b), incorporating both forward and backward represen-tations (5) . This is because training in a unidirectional man-ner has been shown to introduce an error in IMF (De Bortoli et al., 2024, Appendix I). Therefore, we follow a bidirec-tional approach, which naturally leads to the Categorical Schr¨ odinger Bridge Matching (CSBM) Algorithm 1. 6Categorical Schr¨ odinger Bridge Matching 
+
+## 4 Experimental Illustrations 
+
+We evaluate our CSBM algorithm across several setups. First, we analyze the convergence of D-IMF on discrete data ( M4.1). Then, we demonstrate how CSBM performs with different reference processes in 2D experiments ( M4.2). Next, we test CSBM’s ability to translate images using the colored MNIST dataset ( M4.3), varying the number of steps 
+
+N . We then present an experiment on the CelebA dataset (M4.4), showcasing CSBM’s performance in a latent space. Finally, we explore the text domain by solving sentiment transfer on the Amazon Reviews dataset (Appendix C.4). Experimental details are provided in Appendix D.3 and ad-ditional immages in Appendix D.4. 
+
+4.1 Convergence of D-IMF on Discrete Spaces 
+
+In this section, we derive analytical expressions for D-IMF and compare its convergence on discrete data under sev-eral setups. As noted in M2.5, the Markovian projection preserves the one-step transition probabilities of the given process q2l+1 . Thus, our task reduces to replicating: 
+
+q2l+2  xtn |xtn−1
+
+ = q2l+1  xtn |xtn−1
+
+, ∀n ∈ [1 , N +1] .
+
+For each D-IMF iteration, these transition matrices can be extracted from the joint distribution: 
+
+q2l+1 (xtn , x tn−1 ) = X
+
+> x0,x 1∈X
+
+h
+
+q2l+1 (x0, x 1) ·· qref  xtn |x0, x 1
+
+qref  xtn−1 |xtn , x 1
+
+i
+
+,
+
+where qref  xtn |x0, x 1
+
+ and qref  xtn−1 |xtn , x 1
+
+ could be de-rived using Markov property and Bayes’ formula. Given q2l+1 (xtn , x tn−1 ), we obtain the desired transi-tion distribution q2l+2 (xtn |xtn−1 ) = [Q2l+2  
+
+> n
+
+]xtn−1 ,x tn 
+
+by normalizing the joint distribution over the marginal 
+
+q2l+1 (xtn−1 ), which is computed by summing over all 
+
+xtn ∈ SD in q2l+1 (xtn , x tn−1 ). We then get the conditional distribution q2l+2 (x1|x0) by multiplying the transition ma-trices Q2l+2  
+
+> n
+
+, i.e., q2l+2 (x1|x0) = 
+
+hQN +1  
+
+> n=1
+
+Q2l+2 
+
+> n
+
+i
+
+> x0,x 1
+
+.Finally, we reweight this conditional distribution with 
+
+p0(x0) to obtain a new coupling q2l+2 (x0, x 1) =
+
+p0(x0)
+
+hQN +1  
+
+> n=1
+
+Q2l+2 
+
+> n
+
+i
+
+> x0,x 1
+
+of the next iteration. All of these equations are tractable and can be efficiently computed for small values of S and D. Therefore, in our experiment, we solve the SB problem with S = 50 and 
+
+D = 1 between the following marginals: 
+
+p0(x0) = 1
+
+S , p1(x1) = x1
+
+PSs=1 s .
+
+To assess convergence as in Corollary 3.2, we also required to have the ground-truth bridge q∗, which we compute via 
+
+(a) Dependence on the stochastisity parameter α.
+
+(b) Dependence on the number of time steps N with qgauss .
+
+(c) Dependence on the number of time steps N with qunif .
+
+Figure 1. Dependence of convergence of D-IMF procedure on dis-crete data under different N , α and qref .
+
+the Sinkhorn algorithm (Cuturi, 2013). As a cost matrix, we use the negative logarithm of a cumulative transition matrix QN +1  
+
+> n=1
+
+Qn. The resulting convergence curves, shown in Figure 1, indicate notably fast convergence of KL  ql∥q∗.
+
+4.2 Illustrative 2D Experiments 
+
+In this experiment, we take the initial distribution p0 as a 2D Gaussian and the target distribution p1 as a Swiss Roll. Both are discretized into S = 50 categories, resulting in a 2-dimensional categorical space with |X | = S2 = 50 × 50 
+
+points. Compared to the previous experiment, this setup in-volves working with N matrices of size 2 500 × 2 500 , mak-ing it a significantly more demanding computational task. Therefore, from now on, we solve the SB problem using our proposed Algorithm 1. The goal of this experiment is to ex-amine the impact of the reference processes qgauss and qunif .Thus, we train CSBM with N = 10 intermediate steps with different α and qref . For qgauss , we test α ∈ { 0.02 , 0.05 }. In the case of qunif we use α ∈ { 0.01 , 0.005 }.Figure 2 demonstrates that increasing the parameter α in-creases the number of jumps. In the case of qgauss , the jumps mostly happen only to neighboring categories (Fig-ures 2c and 2d). In the case of qunif , the jumps happen to all categories (Figures 2e and 2f). This is aligned with the construction of the reference processes. 7Categorical Schr¨ odinger Bridge Matching                         
+
+> (a) x∼p0(b) x∼p1
+> (c) Low stochasticity, qgauss
+> α= 0 .02 .
+> (d) High stochasticity, qgauss
+> α= 0 .05 .
+> (e) Low stochasticity, qunif
+> α= 0 .005 .
+> (f) High stochasticity, qunif
+> α= 0 .01 .
+> Figure 2. SB between 2D Gaussian and Swiss-Roll distributions learned by our CSBM algorithm with different reference processes
+> qunif and qgauss with varying parameters α.
+
+Remark. Beyond the theoretical objectives established in Proposition 3.3, one can match the distributions using alternative loss functions, such as MSE, or through adver-sarial methods, as in ASBM (Gushchin et al., 2024b). For completeness, we conducted additional experiments using the MSE loss and observed results comparable to those obtained with KL. Details on the experimental setup and loss generalization are provided in Appendix C.1. 
+
+4.3 Unpaired Translation on Colored MNIST 
+
+Here, we work with the MNIST dataset with randomly col-ored digits. Inspired by (Gushchin et al., 2024b, Appendix C.3), we consider an unpaired translation problem between classes “2” and “3” of digits. In our case, we work in the discrete space of images, but not in a continuous space.                                   
+
+> (a) x∼p0(b) N= 2 (c) N= 4
+> (d) x∼p0(e) N= 10 (f) N= 25
+> (g) x∼p0(h) N= 50 (i) N= 100
+> Figure 3. Results of colored digits unpaired translation “3” →“2” learned by our CSBM algorithm with reference process qgauss and varying number of time moments N.
+
+Specifically, each pixel is represented using three 8-bit chan-nels (RGB), i.e., S = 256 , and the data space is of size 
+
+256 D , where D = 32 × 32 × 3. The goal of this experiment is to evaluate the capability of CSBM to perform unpaired translation with different numbers of intermediate steps N .Since each color channel values have an inherent order, we utilize the Gaussian reference process qgauss with α = 0 .01 .The results in Figure 3 suggest that even with a low N = 2 ,the generated outputs maintain decent visual quality and preserve the color. However, some pixelation appears in the samples, which is likely due to the factorization of the learned process (recall M3.2.3). The effect declines slightly as N increases, reflecting a trade-off between model sim-plicity and the ability to capture inter-feature dependencies. Moreover, it can be observed that similarity reduces propor-tionally to N . We hypothesize that this issue is related to underfitting, since all models were trained with the same number of gradient updates. Presumably, a larger N requires proportionally more updates to adequately train all transition probabilities (9) . Additionally, we experiment with qunif 
+
+with details provided in Appendix C.2. 8Categorical Schr¨ odinger Bridge Matching 
+
+> Low stochasticity
+
+(a) x ∼ p0 (b) CSBM ( ours ) (c) ASBM (Gushchin et al., 2024b) (d) DSBM (Shi et al., 2023) 
+
+> High stochasticity
+
+(e) x ∼ p0 (f) CSBM ( ours ) (g) ASBM (Gushchin et al., 2024b) (h) DSBM (Shi et al., 2023) 
+
+Figure 4. Comparison of male → female translation on the CelebA 128 × 128 dataset using CSBM (ours), ASBM, and DSBM. ASBM and DSBM operate in continuous pixel space, whereas CSBM operates in a discrete latent space of VQ-GAN (Esser et al., 2021). The low-stochasticity setting for CSBM corresponds to α = 0 .005 , while the high-stochasticity setting corresponds to α = 0 .01 of the reference process qunif . The images for ASBM and DSBM are taken from (Gushchin et al., 2024b). 
+
+4.4 Unpaired Translation of CelebA Faces 
+
+Here, we present an unpaired image-to-image translation experiment on the CelebA dataset using vector quantiza-tion. Specifically, we focus on translating images from the 
+
+male to the female domain. We train VQ-GAN autoen-coder (Esser et al., 2021) to represent 128 × 128 images as D = 256 features with S = 1024 categories (a.k.a. the codebook). This formulation reduces complexity, as the data to be modeled has a dimensionality of SD = 1024 256 .Indeed, this is smaller than the raw colored MNIST image space ( M4.3) and considerably smaller than the raw pixel space of CelebA. As there is no clear relation between the elements of the codebook, we use uniform reference qref .We test α ∈ { 0.005 , 0.01 } and N = 100 .For completeness, we compare our CSBM method with ASBM (Gushchin et al., 2024b) and DSBM (Shi et al., 2023), which operate in the continuous pixel space. For the rationale behind not training them in the latent space , see Appendix C.3. We take their results from (Gushchin et al., 2024b, M4.2). Qualitatively, we achieve comparable visual results (Figure 4). Notably, the background remains nearly identical across all images for CSBM, which is not the case for all other methods, especially in high stochasticity setups. 
+
+Table 2. Metrics comparison of CSBM ( ours ), (Gushchin et al., 2024b, ASBM), and (Shi et al., 2023, DSBM) for unpaired male 
+
+→ female translation on the CelebA 128 × 128 dataset.                           
+
+> Low stochasticity High stochasticity Metric CSBM
+> α= 0 .005
+> ASBM
+> ϵ= 1
+> DSBM
+> ϵ= 1
+> CSBM
+> α= 0 .01
+> ASBM
+> ϵ= 10
+> DSBM
+> ϵ= 10
+> FID ( ↓)10.60 16.86 24.06 14.68 17.44 92.15 CMMD ( ↓)0.165 0.216 0.365 0.212 0.231 1.140 LPIPS ( ↓)0.175 0.242 0.246 0.170 0.294 0.386
+
+The standard FID (Heusel et al., 2017), CMMD (Jaya-sumana et al., 2024), and LPIPS (Zhang et al., 2018) metrics comparison in Table 2 quantitatively demonstrates that our approach achieves better results than the other methods on the test set. Still, it is important to note that our experiments are conducted with N = 100 in D-IMF, which is higher than the N = 3 used in continuous-space D-IMF in ASBM, i.e., the trade-off between the number of time steps N and the generation quality should be taken into account. 9Categorical Schr¨ odinger Bridge Matching 
+
+## Acknowledgements 
+
+The work was supported by the grant for research centers in the field of AI provided by the Ministry of Economic Development of the Russian Federation in accordance with the agreement 000000C313925P4F0002 and the agreement with Skoltech №139-10-2025-033. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+## References 
+
+Austin, J., Johnson, D. D., Ho, J., Tarlow, D., and Van Den Berg, R. Structured denoising diffusion models in discrete state-spaces. Advances in Neural Information Processing Systems , 34:17981–17993, 2021. Banerjee, A., Merugu, S., Dhillon, I. S., and Ghosh, J. Clus-tering with Bregman divergences. Journal of machine learning research , 6(Oct):1705–1749, 2005. Campbell, A., Yim, J., Barzilay, R., Rainforth, T., and Jaakkola, T. Generative flows on discrete state-spaces: Enabling multimodal flows with applications to protein co-design. In Salakhutdinov, R., Kolter, Z., Heller, K., Weller, A., Oliver, N., Scarlett, J., and Berkenkamp, F. (eds.), Proceedings of the 41st International Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research , pp. 5453–5512. PMLR, 21– 27 Jul 2024. URL https://proceedings.mlr. press/v235/campbell24a.html .Chen, T., Liu, G.-H., and Theodorou, E. Likelihood train-ing of Schr ¨odinger bridge using forward-backward SDEs theory. In International Conference on Learning Repre-sentations , 2022. Cuturi, M. Sinkhorn distances: Lightspeed computation of optimal transport. Advances in neural information processing systems , 26, 2013. De Bortoli, V., Thornton, J., Heng, J., and Doucet, A. Diffu-sion Schr ¨odinger bridge with applications to score-based generative modeling. Advances in Neural Information Processing Systems , 34:17695–17709, 2021. De Bortoli, V., Korshunova, I., Mnih, A., and Doucet, A. Schr ¨odinger bridge flow for unpaired data transla-tion. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. URL https: //openreview.net/forum?id=1F32iCJFfa .Deb, N., Ghosal, P., and Sen, B. Rates of estimation of opti-mal transport maps using plug-in estimators via barycen-tric projections. Advances in Neural Information Process-ing Systems , 34:29736–29753, 2021. Dvurechenskii, P., Dvinskikh, D., Gasnikov, A., Uribe, C., and Nedich, A. Decentralize and randomize: Faster algo-rithm for Wasserstein barycenters. In Advances in Neural Information Processing Systems , pp. 10760–10770, 2018. Dvurechensky, P., Gasnikov, A., and Kroshnin, A. Com-putational optimal transport: Complexity by accelerated gradient descent is better than by Sinkhorn’s algorithm. In 
+
+International conference on machine learning , pp. 1367– 1376. PMLR, 2018. Esser, P., Rombach, R., and Ommer, B. Taming transformers for high-resolution image synthesis. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 12873–12883, 2021. Gat, I., Remez, T., Shaul, N., Kreuk, F., Chen, R. T., Syn-naeve, G., Adi, Y., and Lipman, Y. Discrete flow match-ing. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., Courville, A., and Bengio, Y. Generative adversarial nets. In Advances in neural information processing systems , pp. 2672–2680, 2014. Gu, S., Chen, D., Bao, J., Wen, F., Zhang, B., Chen, D., Yuan, L., and Guo, B. Vector quantized diffusion model for text-to-image synthesis. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 10696–10706, 2022. Gushchin, N., Kolesov, A., Korotin, A., Vetrov, D., and Bur-naev, E. Entropic neural optimal transport via diffusion processes. In Advances in Neural Information Processing Systems , 2023a. Gushchin, N., Kolesov, A., Mokrov, P., Karpikova, P., Spiri-donov, A., Burnaev, E., and Korotin, A. Building the bridge of Schr ¨odinger: A continuous entropic optimal transport benchmark. In Thirty-seventh Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2023b. Gushchin, N., Kholkin, S., Burnaev, E., and Korotin, A. Light and optimal Schr ¨odinger bridge matching. In 
+
+Forty-first International Conference on Machine Learn-ing , 2024a. Gushchin, N., Selikhanovych, D., Kholkin, S., Burnaev, E., and Korotin, A. Adversarial Schr ¨odinger bridge match-ing. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024b. URL https: //openreview.net/forum?id=L3Knnigicu .10 Categorical Schr¨ odinger Bridge Matching 
+
+He, J., Wang, X., Neubig, G., and Berg-Kirkpatrick, T. A probabilistic formulation of unsupervised text style trans-fer. In International Conference on Learning Representa-tions , 2020. Heusel, M., Ramsauer, H., Unterthiner, T., Nessler, B., and Hochreiter, S. GANs trained by a two time-scale update rule converge to a local Nash equilibrium. In Advances in neural information processing systems , pp. 6626–6637, 2017. Ho, J., Jain, A., and Abbeel, P. Denoising diffusion proba-bilistic models. Advances in Neural Information Process-ing Systems , 33:6840–6851, 2020. Hoogeboom, E., Nielsen, D., Jaini, P., Forr ´e, P., and Welling, M. Argmax flows and multinomial diffusion: Learning categorical distributions. Advances in Neural Information Processing Systems , 34:12454–12465, 2021. H ¨utter, J.-C. and Rigollet, P. Minimax estimation of smooth optimal transport maps. 2021. Jang, E., Gu, S., and Poole, B. Categorical reparameteriza-tion with Gumbel-softmax. In International Conference on Learning Representations , 2017. Jayasumana, S., Ramalingam, S., Veit, A., Glasner, D., Chakrabarti, A., and Kumar, S. Rethinking FID: To-wards a better evaluation metric for image generation. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 9307–9315, 2024. Kholkin, S., Ksenofontov, G., Li, D., Kornilov, N., Gushchin, N., Burnaev, E., and Korotin, A. Diffusion & adversarial Schr ¨odinger bridges via iterative proportional Markovian fitting. arXiv preprint arXiv:2410.02601 ,2024. Kim, J. H., Kim, S., Moon, S., Kim, H., Woo, J., and Kim, W. Y. Discrete diffusion Schr ¨odinger bridge matching for graph transformation. arXiv preprint arXiv:2410.01500 ,2024. Korotin, A., Gushchin, N., and Burnaev, E. Light Schr ¨odinger bridge. In The Twelfth International Confer-ence on Learning Representations , 2024. Kudo, T. and Richardson, J. SentencePiece: A simple and language independent subword tokenizer and detokenizer for neural text processing. In Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing: System Demonstrations , pp. 66–71, 2018. L ´eonard, C. A survey of the Schr ¨odinger problem and some of its connections with optimal transport. arXiv preprint arXiv:1308.0215 , 2013. L ´eonard, C., Rœlly, S., and Zambrini, J.-C. Reciprocal pro-cesses. a measure-theoretical point of view. Probability Surveys , 11:237–269, 2014. Li, J., Jia, R., He, H., and Liang, P. Delete, retrieve, generate: a simple approach to sentiment and style transfer. In Pro-ceedings of the 2018 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long Papers) ,pp. 1865–1874, 2018. Liu, A., Broadrick, O., Niepert, M., and Broeck, G. V. d. Dis-crete copula diffusion. arXiv preprint arXiv:2410.01949 ,2024. Liu, G.-H., Chen, T., So, O., and Theodorou, E. Deep generalized Schr ¨odinger bridge. Advances in Neural Information Processing Systems , 35:9374–9388, 2022a. Liu, G.-H., Vahdat, A., Huang, D.-A., Theodorou, E., Nie, W., and Anandkumar, A. I2 sb: Image-to-image Schr¨ odinger bridge. In International Conference on Ma-chine Learning , pp. 22042–22062. PMLR, 2023. Liu, X., Gong, C., et al. Flow straight and fast: Learning to generate and transfer data with rectified flow. In The Eleventh International Conference on Learning Repre-sentations , 2022b. Luo, F., Li, P., Yang, P., Zhou, J., Tan, Y., Chang, B., Sui, Z., and Sun, X. Towards fine-grained text sentiment transfer. In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics , pp. 2013– 2022, 2019. Luo, X., Wang, Z., Lv, J., Wang, L., Wang, Y., and Ma, Y. CrystalFlow: A flow-based generative model for crys-talline materials. arXiv preprint arXiv:2412.11693 , 2024. Manole, T., Balakrishnan, S., Niles-Weed, J., and Wasser-man, L. Plugin estimation of smooth optimal transport maps. The Annals of Statistics , 52(3):966–998, 2024. Mokrov, P., Korotin, A., Kolesov, A., Gushchin, N., and Bur-naev, E. Energy-guided entropic neural optimal transport. In The Twelfth International Conference on Learning Representations , 2024. URL https://openreview. net/forum?id=d6tUsZeVs7 .Mukherjee, S., Kasner, Z., and Du ˇsek, O. Balancing the style-content trade-off in sentiment transfer using polarity-aware denoising. In International Conference on Text, Speech, and Dialogue , pp. 172–186. Springer, 2022. Ni, J., Li, J., and McAuley, J. Justifying recommendations using distantly-labeled reviews and fine-grained aspects. 11 Categorical Schr¨ odinger Bridge Matching 
+
+In Proceedings of the 2019 conference on empirical meth-ods in natural language processing and the 9th interna-tional joint conference on natural language processing (EMNLP-IJCNLP) , pp. 188–197, 2019. Papineni, K., Roukos, S., Ward, T., and Zhu, W.-J. BLEU: a method for automatic evaluation of machine transla-tion. In Proceedings of the 40th annual meeting of the Association for Computational Linguistics , pp. 311–318, 2002. Pariset, M., Hsieh, Y.-P., Bunne, C., Krause, A., and De Bor-toli, V. Unbalanced diffusion Schr ¨odinger bridge. arXiv preprint arXiv:2306.09099 , 2023. Peebles, W. and Xie, S. Scalable diffusion models with transformers. In Proceedings of the IEEE/CVF interna-tional conference on computer vision , pp. 4195–4205, 2023. Peluchetti, S. Diffusion bridge mixture transports, Schr ¨odinger bridge problems and generative modeling. 
+
+Journal of Machine Learning Research , 24(374):1–51, 2023. Peyr ´e, G., Cuturi, M., et al. Computational optimal transport. 
+
+Foundations and Trends® in Machine Learning , 11(5-6): 355–607, 2019. Pooladian, A.-A. and Niles-Weed, J. Entropic estimation of optimal transport maps. arXiv preprint arXiv:2109.12004 ,2021. Prabhumoye, S., Tsvetkov, Y., Salakhutdinov, R., and Black, A. W. Style transfer through back-translation. In Pro-ceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) ,pp. 866–876, 2018. Qin, Y., Madeira, M., Thanou, D., and Frossard, P. De-FoG: Discrete flow matching for graph generation. arXiv preprint arXiv:2410.04263 , 2024. Radford, A., Wu, J., Child, R., Luan, D., Amodei, D., Sutskever, I., et al. Language models are unsupervised multitask learners. OpenAI blog , 1(8):9, 2019. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., and Ommer, B. High-resolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition , pp. 10684–10695, 2022. Ronneberger, O., Fischer, P., and Brox, T. U-net: Con-volutional networks for biomedical image segmenta-tion. In Medical image computing and computer-assisted intervention–MICCAI 2015: 18th international confer-ence, Munich, Germany, October 5-9, 2015, proceedings, part III 18 , pp. 234–241. Springer, 2015. Salimans, T., Goodfellow, I., Zaremba, W., Cheung, V., Rad-ford, A., and Chen, X. Improved techniques for training GANs. In Advances in neural information processing systems , pp. 2234–2242, 2016. Schr ¨odinger, E. ¨Uber die Umkehrung der Naturgesetze .Verlag der Akademie der Wissenschaften in Kommission bei Walter De Gruyter u. Company, 1931. Shen, T., Lei, T., Barzilay, R., and Jaakkola, T. Style transfer from non-parallel text by cross-alignment. Advances in neural information processing systems , 30, 2017. Shi, Y., Bortoli, V. D., Campbell, A., and Doucet, A. Dif-fusion Schr ¨odinger bridge matching. In Thirty-seventh Conference on Neural Information Processing Systems ,2023. URL https://openreview.net/forum? id=qy07OHsJT5 .Tong, A. Y., Malkin, N., Fatras, K., Atanackovic, L., Zhang, Y., Huguet, G., Wolf, G., and Bengio, Y. Simulation-free Schr ¨odinger bridges via score and flow matching. In 
+
+International Conference on Artificial Intelligence and Statistics , pp. 1279–1287. PMLR, 2024. Van Den Oord, A., Vinyals, O., et al. Neural discrete rep-resentation learning. Advances in neural information processing systems , 30, 2017. Vargas, F., Thodoroff, P., Lamacraft, A., and Lawrence, N. Solving Schr ¨odinger bridges via maximum likelihood. 
+
+Entropy , 23(9):1134, 2021. Vignac, C., Krawczuk, I., Siraudin, A., Wang, B., Cevher, V., and Frossard, P. Digress: Discrete denoising diffusion for graph generation. arXiv preprint arXiv:2209.14734 ,2022. Wang, K., Hua, H., and Wan, X. Controllable unsupervised text attribute transfer via editing entangled latent repre-sentation. Advances in Neural Information Processing Systems , 32, 2019. Xu, M., Geffner, T., Kreis, K., Nie, W., Xu, Y., Leskovec, J., Ermon, S., and Vahdat, A. Energy-based diffusion language models for text generation. arXiv preprint arXiv:2410.21357 , 2024. Zhang, R., Isola, P., Efros, A. A., Shechtman, E., and Wang, O. The unreasonable effectiveness of deep features as a perceptual metric. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 586–595, 2018. Zhu, J.-Y., Park, T., Isola, P., and Efros, A. A. Unpaired image-to-image translation using cycle-consistent adver-sarial networks. In Proceedings of the IEEE international conference on computer vision , pp. 2223–2232, 2017. 12 Categorical Schr¨ odinger Bridge Matching 
+
+## A Limitations 
+
+One limitation of the proposed algorithm stems from the factorization of the transitional probabilities (see M3.2.3). This simplification comes at the cost of losing some information, as dependencies between features at the same step are not explicitly accounted for. However, it should be taken into account that this limitation is inherent to the most modern flow-based (Campbell et al., 2024; Gat et al., 2024) and diffusion-based (Hoogeboom et al., 2021; Austin et al., 2021) methods for discrete data. Recent approaches aim to address this issue by modeling the transition joint distribution using copulas (Liu et al., 2024) or energy functions (Xu et al., 2024). Additionally, in the Colored MNIST experiments ( M4.3) the reference process varies slightly with N , due to implementation specifics. The MSE between cumulative transition matrices is bounded by 10 −4, confirming that the induced discrepancies are statistically insignificant. Thus, these differences are negligible and do not impact the experiment’s goals or broader implications. 
+
+## B Proofs 
+
+Proof of Theorem 3.1. As stated in the theorem, we consider a process q(x0, x in , x 1) ∈ ΠN (p0, p 1) with N ≥ 1 intermediate time steps that is both Markov and reciprocal and a reference Markov process qref ∈ M (X N +2 ). We focus on the joint distribution of the boundary elements x0, x1, and a selected intermediate state xtn , where n ∈ [1 , N ]. This distribution, 
+
+p(x0, x tn , x 1), can be expressed in two equivalent ways using the Markov or the reciprocal properties: 
+
+q(x0, x 1)qref (xtn |x0, x 1)
+
+| {z }
+
+> by reciprocal property
+
+= q(x0, x tn , x 1) = p(x0)q(xtn |x0)q(x1|xtn )
+
+| {z }
+
+> by Markov property
+
+.
+
+Rearranging this equation and applying the logarithm thus we get: 
+
+log q(x1|x0) = log q(xt|x0) + log q(x1|xtn ) − log qref (xtn |x0, x 1).
+
+Note that all the probability terms are strictly positive by the theorem’s assumption. The knowledge that the last term 
+
+log qref (xtn |x0, x 1) is Markov leads to following equation: 
+
+log q(x1|x0) = log q(xtn |x0) + log q(x1|xtn ) − log 
+
+ qref (x0)qref (xtn |x0)qref (x1|xtn )
+
+qref (x0, x 1)
+
+
+
+== log q(xtn |x0) − log qref (xtn |x0) − log qref (x0)
+
+| {z } 
+
+> def
+> =f0(x0,x tn )
+
++ log q(x1|xtn ) − log qref (x1|xtn )
+
+| {z } 
+
+> def
+> =f1(xtn ,x 1)
+
++ log qref (x0, x 1).
+
+Thus, we get: 
+
+f (x0, x 1) def 
+
+= log q(x1|x0) − log qref (x0, x 1) = f0(x0, x tn ) + f1(xtn , x 1). (11) Notably, f (x0, x 1) can be represented as a sum of two single-variable functions, g0(x0) and g1(x1). This could be observed by setting x1 = x† in (11), where x† ∈ X is some fixed point in the state space. Indeed, we have: 
+
+f (x0, x 1) − f (x0, x †) =  
+
+f0(x0, x tn ) + f1(xtn , x 1) −  
+
+f0(x0, x tn ) − f1(xtn , x †) = f1(xtn , x 1) − f1(xtn , x †).
+
+Fixing x1 = x† makes f (x0, x †) depend only on x0, so, we define g0(x0) def 
+
+= f (x0, x †). Likewise, with fixed xtn , the difference f (x0, x 1) − f (x0, x †) depends only on x1. Thus, we set g1(x1) def 
+
+= f (x0, x 1) − f (x0, x †). Finally, we obtain: 
+
+log q(x1|x0) = g0(x0) + g1(x1) + log qref (x0, x 1).
+
+Exponentiating both sides and multiplying by p(x0), we derive: 
+
+q(x0, x 1) = eg0(x0)
+
+| {z } 
+
+> ψ(x0)
+
+qref (x1|x0) eg1(x1)
+
+| {z } 
+
+> ϕ(x1)
+
+.
+
+According to (L ´eonard, 2013, Theorem 2.8), this formulation describes the optimal transport plan q∗ for the Static Schr ¨odinger Bridge problem between p0 and p1. Alternatively, this can be derived as in (Gushchin et al., 2024b). Given that the assumption of the theorem ensures q(xin |x0, x 1) = qref (xin |x0, x 1), it follows that q(x0, x in , x 1) is a dynamic Schr¨ odinger Bridge q∗(x0, x in , x 1).13 Categorical Schr¨ odinger Bridge Matching 
+
+Proof of Proposition 3.3. Thanks to (Gushchin et al., 2024b, Proposition 3.5), it is known that 
+
+[proj M(q)]( x0, x in , x 1) = argmin   
+
+> m∈M (XN+2 )
+
+KL (q(x0, x in , x 1)∥m(x0, x in , x 1)) , (12) where q ∈ R ref (X N +2 ) is a reciprocal process. Thus, we can decompose this KL divergence as follows: KL (q(x0, x in , x 1)∥m(x0, x in , x 1)) = Eq(x0,x in ,x 1) log q(x0, x in , x 1)
+
+m(x0, x in , x 1)= Eq(x0,x in ,x 1) log p0(x0)q(x1|x0)qref (xin |x0, x 1)
+
+m(x0)m(x1|xtN ) QNn=1 m(xtn |xtn−1 ) . (13) Here, the denominator can be represented this way because m is a Markov process, while the numerator is expressed using the reciprocal property of q. Next, we separate the corresponding colored terms, leading to: (13) = −Eq(x0,x tN ,x 1) [log m(x1|xtN )] 
+
+| {z }
+
+> L1
+
++Eq(x0,x in ,x 1) log 
+
+QNn=1 qref (xtn |xtn−1 , x 1)
+
+QNn=1 m(xtn |xtn−1 ) ++ KL (p0(x0)∥m(x0)) 
+
+| {z }
+
+> L0
+
++ Eq(x1,x 0) [log q(x1|x0)] 
+
+| {z }
+
+> C1
+
+. (14) Rewriting the product inside the logarithm (violet term) as a sum of KL divergences, we obtain the following equation: (14) = L1 +
+
+> N
+
+X
+
+> n=1
+
+Eq(x1,x tn−1 )KL  qref (xtn |xtn−1 , x 1)∥m(xtn |xtn−1 ) + L0 + C1. (15) We observe that, by construction, the Markov process m preserves the terminal distribution when represented in a forward manner (5), i.e., m(x0) = p0(x0). Consequently, L0 can be omitted since KL = 0 , which completes the proof: (15) = L1 +
+
+> N
+
+X
+
+> n=1
+
+Eq(x1,x tn−1 )KL (qref (xtn |xtn−1 , x 1)|| m(xtn |xtn−1 )) + C1. (16) Additionally, because the Markovian projection (5) leaves the neighbouring-time joint distribution q(xtn−1 , x tn ) unchanged, we can train m with the alternative objective: KL (q(x0, x in , x 1)∥m(x0, x in , x 1)) = Eq(x0,x in ,x 1) log q(x0, x in , x 1)
+
+m(x0, x in , x 1) == 
+
+> N+1
+
+X
+
+> n=1
+
+Eq(xtn−1 )KL  q(xtn |xtn−1 )∥m(xtn |xtn−1 ) + KL (p0(x0)∥m(x0)) 
+
+| {z }
+
+> L0
+
+. (17) Similarly, we discard L0, leaving us with an objective that minimizes the divergence between one-step transition probabilities of the given process q and the desired Markov process m.
+
+## C Additional Experiments 
+
+C.1 Alternative Losses 
+
+Proposition 3.3 shows that two equivalent KL-based training objectives yield the same optimal solution. This naturally suggests a generalization to a broader class of divergences D.14 Categorical Schr¨ odinger Bridge Matching 
+
+The Original Objective. First, let us consider the original objective function given in (16) . To ensure that substituting an alternative divergence does not alter its minima, the replacement must be equivalent in this context. Specifically, the L1 term can be reformulated as the KL divergence between a Kronecker delta distribution and the transition distribution of m, i.e.: 
+
+L1 = −Eq(x0,x tN ,x 1) [log m(x1|xtN )] = Eq(x0,x tN ,x 1)Eδx1 (ex1)
+
+
+
+log δx1 (ex1)
+
+m(ex1|xtN )
+
+
+
+== Eq(x0,x tN ,x 1)KL (δx1 (ex1)∥m(ex1|xtN )) = Eq(x0,x tN ,x 1)KL (q(x1|xtN , x 1)∥m(ex1|xtN )) .
+
+Consequently, the L1 term can be moved under the sum of the violet term, leading to: (16) = 
+
+> N+1
+
+X
+
+> n=1
+
+Eq(x1,x tn−1 )KL  qref (xtn |xtn−1 , x 1)∥m(xtn |xtn−1 ) + C1.
+
+By restricting the choice of divergences to the Bregman family, we ensure that the minimum is attained at the same value, namely, Eq(x1|xtn−1 )
+
+qref (xtn |xtn−1 , x 1) = q(xtn |xtn−1 ) (Banerjee et al., 2005). Thus, any Bregman divergence can be used as the objective. As an example, we consider the MSE loss as an alternative to the KL divergence: 
+
+argmin    
+
+> m∈M (XN+2 )
+> N+1
+
+X
+
+> n=1
+
+Eq(x1,x tn−1 )KL  qref (xtn |xtn−1 , x 1)∥m(xtn |xtn−1 ) == argmin    
+
+> m∈M (XN+2 )
+> N+1
+
+X
+
+> n=1
+
+Eq(x1,x tn−1 )
+
+h
+
+qref (xtn |xtn−1 , x 1) − m(xtn |xtn−1 )
+
+i2
+
+(18) Applying this loss parametrization from M3.2.3 and repeating the derivation leads to the following objectives: 
+
+LMSE (θ) =  
+
+> N+1
+
+X
+
+> n=1
+
+Eq(x0,x 1)Eqref (xtn−1 |x0,x 1)
+
+h
+
+qref (xtn |xtn−1 , x 1) − Eeqθ (ex1|xtn−1 )[qref (xtn |xtn−1 , ex1)] 
+
+i2
+
+, (19) 
+
+LMSE (η) =  
+
+> N+1
+
+X
+
+> n=1
+
+Eq(x0,x 1)Eqref (xtn |x0,x 1)
+
+h
+
+qref (xtn−1 |xtn , x 0) − Eeqη (ex0|xtn )[qref (xtn−1 |xtn , ex0)] 
+
+i2
+
+, (20) for forward and backward parametrization, respectively. To test the MSE loss, we repeat the 2D domain translation experiment between the Gaussian and Swiss-Roll distributions. It could be observed that the generated samples and trajectories with the MSE loss in Figure 5 appear visually similar to those obtained using the KL loss shown in Figure 2. 
+
+(a) x0 ∼ p0, x1 ∼ p1. (b) Low stochasticity, 
+
+qgauss with α = 0 .02 .
+
+(c) High stochasticity, 
+
+qgauss with α = 0 .05 .
+
+(d) Low stochasticity, 
+
+qunif with α = 0 .005 .
+
+(e) High stochasticity, 
+
+qunif with α = 0 .01 .
+
+Figure 5. SB between 2D Gaussian and Swiss-Roll distributions learned by our CSBM algorithm with MSE loss in Equations (19) and (20) for different reference processes qunif and qgauss with varying parameters α.
+
+The Alternative Objective. Analogous reasoning extends to the alternative objective in (17) . Although the conditional distribution q(xtn |xtn−1 ) is generally unavailable in closed form, it can be sampled. This property suggests employing an adversarial training strategy, following the approach in (Gushchin et al., 2024b). 15 Categorical Schr¨ odinger Bridge Matching 
+
+C.2 Unpaired Translation on Colored MNIST with qunif 
+
+We perform an additional Colored-MNIST experiment using a uniform reference process qunif . Here we set N = 25 and test 
+
+α ∈ { 0.01 , 0.05 }. Mini-batch OT is not applied at the D-IMF 1 iteration. The samples in Figure 6 demonstrate the failure to match the digit colors, showing that a uniform transition matrix is not suitable for this domain.                        
+
+> (a) x∼p0.(b) α= 0 .01 .(c) α= 0 .05 .(d) x∼p1.(e) α= 0 .01 .(f) α= 0 .05 .
+> Figure 6. Results of colored digits unpaired translation learned by our CSBM algorithm with reference process qunif and varying stochasticity parameter α.
+
+C.3 Continuous Methods in Latent Space 
+
+For completeness, we also trained DSBM in the latent space. For a fair comparison, we train DSBM on the same latent space used for CSBM, following the approach in (Rombach et al., 2022, Appendix G). Concretely, because the decoder expects discrete tokens, our pipeline proceeds as follows: (1) map the images to their continuous latent representations, (2) apply DSBM in this continuous space, (3) vector-quantize the resulting latents, and (4) pass the quantized tokens through the decoder. Unfortunately, the results are not satisfactory, as the model tended to collapse to the identity mapping with ϵ = 1 
+
+and ϵ = 10 (see Figure 7). Due to these limitations, we do not proceed with training ASBM and choose not to compare both methods with CSBM in such settings. One may ask why CSBM performs better in this setting. We hypothesize that this is due to the choice of the reference process qunif , which is better suited to the VQ-GAN latent space.                    
+
+> (a) x∼p0.(b) ϵ= 1 .(c) ϵ= 10 .
+> (d) x∼p1.(e) ϵ= 1 .(f) ϵ= 10 .
+> Figure 7. Results of training DSBM (Shi et al., 2023) on VQ-GAN lantent space of CelebA. The VQ-GAN model is the same as in the main experiments ( M4.4).
+
+16 Categorical Schr¨ odinger Bridge Matching 
+
+Table 3. Metrics comparison of CSBM ( ours ), CAAE (Shen et al., 2017), Del.&Ret. (Li et al., 2018), Seq2SentiSeq (Luo et al., 2019), BST (Prabhumoye et al., 2018), FGIM (Wang et al., 2019), PST (He et al., 2020) and SCT 1 (Mukherjee et al., 2022) for unpaired negative 
+
+↔ positive style transfer on the Amazon Reviews dataset. Bold denotes the best value, and underline the second best. Metrics of baseline methods are taken from (Mukherjee et al., 2022) and marked with a superscript †.Metric CSBM 
+
+α = 0 .005 
+
+CSBM 
+
+α = 0 .01 CAAE † Del.&Ret. † Seq2SentiSeq † BST † FGIM † PST † SCT 1†
+
+Accuracy ( ↑) 79.3 76.5 88.6 69.9 92.4 93.5 79.3 91.5 82.0 NLL ( ↓) 5.4 5.4 74.0 85.1 42.0 61.0 116.8 65.9 79.6 BLEU ( ↑) 72.5 74.8 3.2 14.7 0.0 0.9 10.6 9.5 13.7 
+
+Table 4. Style transfers of CSBM ( ours ), Del.&Ret. (Li et al., 2018), BST (Prabhumoye et al., 2018), FGIM (Wang et al., 2019), PST (He et al., 2020) and SCT 1 (Mukherjee et al., 2022) on Amazon Reviews dataset. Samples of baseline methods are taken from (Mukherjee et al., 2022) and marked with a superscript †.                                          
+
+> negative →positive positive →negative
+> Source movie was a waste of money : this movie totally sucks .my daughter loves them : )
+> CSBM
+> α= 0 .005 movie was great value for the money : this movie totally wass . my daughter hates them :(
+> CSBM
+> α= 0 .01 movie was great value for the money : this movie totally superb . my daughter hates them :(
+> Del.&Ret. †our favorite thing was a movie story : the dream class roll ! my daughter said i was still not acknowledged .
+> BST †stan is always a great place to get the food . do n’t be going here .
+> FGIM †movie is a delicious atmosphere of : this movie totally sucks movie ! i should not send dress after me more than she would said not ?
+> PST †this theater was a great place , we movie totally amazing . yup daughter has left ourselves .
+> SCT 1†movie : a great deal of money : this movie is absolutely perfect . my daughter hates it : my daughter .
+> Source nothing truly interesting happens in this book . best fit for my baby : this product is wonderful ! !
+> CSBM
+> α= 0 .005 everything truly interesting happens in this book . not fit for my baby : this product is junk !!
+> CSBM
+> α= 0 .01 everything truly interesting happens in this book . not fit for my baby : this product is bad !!
+> Del.&Ret. †nothing truly interesting happens in this book . my mom was annoyed with my health service is no notice .
+> BST †very good for the best . bad customer service to say the food , and it is n’t .
+> FGIM †nothing truly interesting happens in this book make it casual and spot . do not buy my phone : this bad crap was worst than it ?
+> PST †haha truly interesting happens in this book . uninspired .
+> SCT 1†in this book is truly a really great book . not good for my baby : this product is great ! ! ! ! ! ! ! !
+
+C.4 Unpaired Text Style Transfer of Amazon Reviews 
+
+This section examines the text domain, focusing on style transfer in the Amazon Reviews corpus (Ni et al., 2019). The task is to convert reviews with negative sentiment into ones with positive sentiment and vice versa. We adopt the filtered, pre-processed split of (Mukherjee et al., 2022). Reviews are tokenized with a unigram SentencePiece model (Kudo & Richardson, 2018) that has a vocabulary size set to S = 8 192 . Each review is then padded or truncated to a fixed length of 
+
+D = 100 . We evaluate the uniform reference process qref for α ∈ { 0.005 , 0.01 }. The reported scores are averaged over both transfer directions negative ↔ positive and compared with baselines, using the metrics from (Mukherjee et al., 2022). To mirror the image-domain protocol, we select analogous text metrics. Target alignment is measured with the Hugging Face pipeline’s default sentiment classifier, complemented by the negative log-likelihood (NLL) under GPT-2 Large (Radford et al., 2019). Similarity between the transferred text and its source is measured with BLEU (Papineni et al., 2002). Quantitative metrics appear in Table 3, while representative samples are shown in Table 4. CSBM excels at content preservation, achieving the highest BLEU score and the lowest NLL, indicating fluent, meaning-faithful rewrites. Its sentiment-transfer accuracy is lower than half of the methods, yet manual inspection of the samples in Table 4 suggests that most generations convey the correct polarity. 17 Categorical Schr¨ odinger Bridge Matching 
+
+## D Practical Details 
+
+D.1 Construction and Selection of Reference Processes qref 
+
+Construction of qref . The article touches only briefly on how the reference processes qref are built. In the current scheme, qref is assembled by chaining intermediate transition probabilities qref (xtn |xtn−1 ). Consequently, the full end-to-end transition qref (x1|x0) varies with the choice of α, the transition matrix Qn, and the discretizations level N , rather than remaining fixed across settings. Due to this, for example, the increasing number of steps N forces us to choose a smaller 
+
+α. If α remains too large, the overall transition probability qref (x1|x0) converges to the stationary distribution, making every start state equally likely to reach every end state. A uniform distribution is not inherently wrong, but it defeats our aim, as we want α to control the overall stochasticity in the process. Thus, building a non-uniform, non-Gaussian qref is considerably more challenging, prompting us to explore new construction strategies in the future. 
+
+Selection of α. Across many experiments, we observed a pattern for choosing α. Overall, the general idea follows the same intuition as choosing ϵ in continuous SB methods (Shi et al., 2023; Gushchin et al., 2024b). Specifically, lower values of α
+
+lead to less stochasticity in the trajectories, resulting in higher similarity to the input data but a lower-quality approximation of the target distribution. At very low values, the model may collapse due to insufficient stochasticity. Conversely, higher values of α introduce more variability, reducing similarity to the initial data. Beyond a certain point, excessively large values 
+
+α make the model difficult to train, leading to a drop in both quality and similarity. Unfortunately, the effective range of these behaviors is highly dependent on the dataset and the chosen reference process. Nonetheless, we provide reasonable baseline values from which one can begin and adjust as needed. 
+
+D.2 Loss Function of CSBM 
+
+In this section, we outline the optimization procedure for the parameterization in (9) , obtained by substituting m = qθ into (10) . Following (Austin et al., 2021), we parameterize the model to predict the terminal point x1 or x0 for the forward or backward reparameterization, respectively, and adopt a hybrid loss that sums the base loss with the loss Lsimple , scaled by a weighting factor λ. The resulting training objective is therefore given by: 
+
+L(θ) = Eq(x0,x 1)
+
+" NX
+
+> n=1
+
+Eqref (xtn−1 |x0,x 1)
+
+KL 
+
+
+
+qref (xtn |xtn−1 , x 1)∥Eeqθ (ex1|xtn−1 )[qref (xtn |xtn−1 , ex1)] 
+
+
+
+− λ
+
+> Lsimple
+
+z }| {
+
+log eqθ (ex1|xtn−1 )
+
+− Eqref (xtN |x0,x 1) [log eqθ (x1|xtN )] 
+
+#
+
+. (21) Since the backward decomposition of m also holds for Proposition 10, we can apply a similar parametrization. In this case, we use a neural network with parameters η to predict x0:
+
+L(η) = Eq(x0,x 1)
+
+" N +1 X
+
+> n=2
+
+Eqref (xtn |x0,x 1)
+
+KL  qref (xtn−1 |xtn , x 0)∥Eeqη (ex0|xtn )[qref (xtn−1 |xtn , ex0)]  − λ
+
+> Lsimple
+
+z }| {
+
+log eqη (ex0|xtn )
+
+− Eqref (xt1 |x0,x 1) [log eqη (x0|xt1 )] 
+
+#
+
+. (22) For further details on the training process, we refer the reader to (Austin et al., 2021). 
+
+D.3 Training Aspects 
+
+For the implementation of the training logic, we use the official D3PM repository (Austin et al., 2021) as a reference: 
+
+https://github.com/google-research/google-research/tree/master/d3pm 
+
+18 Categorical Schr¨ odinger Bridge Matching                                         
+
+> Table 5. Hyperparameters for experiments. Lr denotes the learning rate, and mrepresents millions. Params indicate the number of model parameters, where for the CelebA dataset, the first value corresponds to the model and the second to the VQ-GAN. Experiment Initial coupling D-IMF outer iterations D-IMF=1 grad updates D-IMF grad updates NBatch size Lr Params 2D Ind 10 400 000 40 000 10 512 0.0004 46588 Colored MNIST MB 3200 000 40 000 2,4,
+> 10 ,25 ,
+> 50 ,100 128 0.0002 34m CelebA Ind 4800 000 40 000 100 32 0.0004
+> 93m +70m Amazon Reviews Ind 5800 000 40 000 100 32 0.0004 100m
+
+Shared Aspects. For all experiments, we use the AdamW optimizer with fixed betas of 0.95 and 0.99 . Additionally, we apply Exponential Moving Average (EMA) smoothing to stabilize training and enhance final model performance. The EMA decay rate is consistently tuned across all experiments and set to 0.999 , except for the Colored MNIST experiment, where it is set to 0.9999 . For all experiments, we set the weighting factor of Lsimple to 0.001 .For the 2D and colored MNIST experiment, we follow the preprocessing approach from (Austin et al., 2021), where the logits of qθ (ex1|xtn−1 ) are modeled directly as the output of a neural network. Notably, various previous works have introduced different initial couplings q0(x0, x 1), such as the standard indepen-dent coupling p0(x0)p1(x1) (Shi et al., 2023; Gushchin et al., 2024b), couplings derived from a reference process, e.g., 
+
+p0(x0)qref (x1|x0) (Shi et al., 2023), and mini-batch OT couplings referred as MB, i.e., discrete Optimal Transport solved on mini-batch samples (Tong et al., 2024). For a more comprehensive overview of coupling strategies, see (Kholkin et al., 2024). In this work, we focus exclusively on the independent and mini-batch initial coupling. 
+
+Experiment-specific Aspects. For the 2D experiment (M4.2), we use a simple MLP model with hidden layers of size 
+
+[128 , 128 , 128] and ReLU activations. To condition on time, we use a simple lookup table, i.e., an embedding layer of size 2.For the colored MNIST experiment (M4.3), we follow (Austin et al., 2021) and use an architecture based on a PixelCNN++ backbone (Salimans et al., 2016), utilizing a U-Net (Ronneberger et al., 2015) with a ResNet-like structure. The model operates at four feature map resolutions, with two convolutional residual blocks per resolution level and a channel multiplier of (1 , 2, 2, 2) . At the 16 × 16 resolution level, a self-attention block is incorporated between the convolutional blocks. For time encoding, we apply Transformer sinusoidal position embeddings to each residual block. We train the model on a training subset of size 60 000 and generate images from the hold-out set. For the CelebA experiment (M4.4), we employ VQ-Diffusion (Gu et al., 2022), which consists of two models: VQ-GAN (Esser et al., 2021) and a transformer-based diffusion model. The VQ-GAN component is trained using the official repository: 
+
+https://github.com/CompVis/taming-transformers .We slightly modify the experimental setup of unconditional generation for CelebA-HQ from (Esser et al., 2021) by reducing the number of resolution levels to three, with scaling factors of (1 , 2, 4) . This adjustment accounts for our use of CelebA at 
+
+128 × 128 resolution, compared to 256 × 256 in CelebA-HQ. The discrete diffusion model is adopted from: 
+
+https://github.com/microsoft/VQ-Diffusion .Our diffusion model consists of multiple transformer blocks, each incorporating full attention and a feed-forward network (FFN). We follow the small model configuration from (Gu et al., 2022), which consists of 18 transformer blocks with an increased channel size of 256. The FFN is implemented using two convolutional layers with a kernel size of 3, and the channel expansion rate is set to 2. Additionally, we inject time step information through the AdaLN operator. We train the model on 162 770 pre-quantized images of celebrities. For evaluation, we compute FID and CMMD using 
+
+11 816 hold-out images to ensure consistency with the evaluation protocol from (Gushchin et al., 2024b). Likewise, the images presented in the main text of the paper are generated using this hold-out set. 19 Categorical Schr¨ odinger Bridge Matching 
+
+For the Amazon experiment (Appendix C.4), we train a unigram SentencePiece tokenizer (Kudo & Richardson, 2018) that includes explicit start-of-sentence ( <s> ) and padding ( <pad> ) tokens, following the procedure of (Austin et al., 2021). The backbone is the DiT model (Peebles & Xie, 2023), with the implementation available at: 
+
+https://github.com/kuleshov-group/mdlm .We employ the “small” variant with 12 transformer blocks, each with a hidden size of 768 and 12 attention heads. Every block contains multi-head self-attention, rotary positional embeddings, and an MLP with a dropout rate of 0.1. Noise-level information is injected via a 128-dimensional AdaLN modulation vector. The model is trained on 104 000 pre-tokenized reviews and evaluated on 2 000 reviews from the held-out test set. The rest hyperparameters are presented in Table 5. 
+
+Computational Time. Training the 2D experiment requires several hours on a single A100 GPU. The colored MNIST experiment takes approximately two days to train using two A100 GPUs. The most computationally demanding task, the CelebA and Amazon Reviews experiments, requires around five days of training on four A100 GPUs. 
+
+D.4 Additional Images                                
+
+> (a) x∼p1.(b) N= 2 .(c) N= 4 .(d) N= 10 .
+> (e) x∼p1.(f) N= 25 .(g) N= 50 .(h) N= 100 .
+> Figure 8. Results of colored digits unpaired translation “2” →“3” learned by our CSBM algorithm with reference process qgauss and varying number of time moments N.
+
+20 Categorical Schr¨ odinger Bridge Matching 
+
+> Low stochasticity
+
+(a) x ∼ p1. (b) CSBM ( ours ) (c) ASBM (Gushchin et al., 2024b) (d) DSBM (Shi et al., 2023) 
+
+> High stochasticity
+
+(e) x ∼ p1 (f) CSBM ( ours ) (g) ASBM (Gushchin et al., 2024b) (h) DSBM (Shi et al., 2023) 
+
+Figure 9. Comparison of female → male translation on the CelebA 128 × 128 dataset using CSBM (ours), ASBM, and DSBM. The low-stochasticity setting for CSBM corresponds to α = 0 .005 , while the high-stochasticity setting corresponds to α = 0 .01 . The stochasticity parameters for ASBM and DSBM are taken from (Gushchin et al., 2024b). 
+
+21 Categorical Schr¨ odinger Bridge Matching 
+
+Figure 10. male → female translation trajectories on the CelebA 128 × 128 dataset using CSBM with α = 0 .01 . Each column corresponds to time moments 0, 10 , 25 , 50 , 75 , 90 , and 101 .
+
+22 Categorical Schr¨ odinger Bridge Matching 
+
+Figure 11. male → female translation trajectories on the CelebA 128 × 128 dataset using CSBM with α = 0 .005 . Each column corresponds to time moments 0, 10 , 25 , 50 , 75 , 90 , and 101 .
+
+23 Categorical Schr¨ odinger Bridge Matching 
+
+Figure 12. female → male translation trajectories on the CelebA 128 × 128 dataset using CSBM with α = 0 .01 . Each column corresponds to time moments 0, 10 , 25 , 50 , 75 , 90 , and 101 .
+
+24 Categorical Schr¨ odinger Bridge Matching 
+
+Figure 13. female → male translation trajectories on the CelebA 128 × 128 dataset using CSBM with α = 0 .005 . Each column corresponds to time moments 0, 10 , 25 , 50 , 75 , 90 , and 101 .
+
+25

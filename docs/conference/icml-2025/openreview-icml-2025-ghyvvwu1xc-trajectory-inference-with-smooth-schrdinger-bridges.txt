@@ -1,0 +1,2288 @@
+Title: Trajectory Inference with Smooth Schrödinger Bridges
+
+URL Source: https://openreview.net/pdf?id=GHyvvWu1XC
+
+Number of Pages: 29
+
+Markdown Content:
+# Trajectory Inference with Smooth Schr¨ odinger Bridges 
+
+Wanli Hong * 1 2 Yuliang Shi * 3 Jonathan Niles-Weed 1 4 
+
+# Abstract 
+
+Motivated by applications in trajectory infer-ence and particle tracking, we introduce Smooth Schr ¨odinger Bridges . Our proposal generalizes prior work by allowing the reference process in the multi-marginal Schr ¨odinger Bridge problem to be a smooth Gaussian process, leading to more regular and interpretable trajectories in applica-tions. Though na ¨ıvely smoothing the reference process leads to a computationally intractable problem, we identify a class of processes (includ-ing the Mat ´ern processes) for which the resulting Smooth Schr ¨odinger Bridge problem can be lifted 
+
+to a simpler problem on phase space, which can be solved in polynomial time. We develop a practical approximation of this algorithm that outperforms existing methods on numerous simulated and real single-cell RNAseq datasets. 
+
+# 1. Introduction 
+
+The trajectory inference problem —reconstructing the paths of particles from snapshots of their evolution—is funda-mental to modern data science, with applications in single-cell biology (Huguet et al., 2022a; Saelens et al., 2019; Schiebinger et al., 2019; Sha et al., 2023; Tong et al., 2020), fluid dynamics (Brunton et al., 2020; Ouellette et al., 2006), and astronomical object tracking (Kubica et al., 2007; Li-ounis et al., 2020). Given observations of a collection of indistinguishable particles at discrete times, the statistician aims to infer the continuous trajectories that generated this data. A leading approach (Chen et al., 2019; Chizat et al., 2022;        
+
+> *Equal contribution 1Center for Data Science, New York Uni-versity, New York, United States 2Shanghai Frontiers Science Center of Artificial Intelligence and Deep Learning New York Uni-versity Shanghai Shanghai, China 3Department of Mathematics, The University of British Columbia, Vancouver, Canada 4Courant Institute of Mathematical Science, New York University, New York, United States. Correspondence to: Jonathan Niles-Weed
+> <jnw@cims.nyu.edu >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+Lavenant et al., 2024) builds on Schr ¨odinger’s remarkable thought experiment (Schr ¨odinger, 1931; Schr ¨odinger, 1932), formulating trajectory inference as a Kullback–Leibler mini-mization problem. Suppose that a set of particles is observed at times t0, . . . , t K ∈ [0 , 1] and that the particles’ arrange-ment at time tk is represented by a probability measure μk,for all k ∈ [K]. The multi-marginal Schr ¨odinger bridge 
+
+corresponding to these observations is the solution of 
+
+min   
+
+> P∈P (Ω)
+
+D( P |R) s.t. Pk = μk, ∀k ∈ [K], (1) where D is the Kullback–Leibler divergence, Pk denotes the time marginal of P at time tk, and R is the law of a refer-ence process, typically Brownian motion. (See Appendix A for a complete list of notation.) This formulation has an ele-gant quasi-Bayesian interpretation: the Schr ¨odinger bridge matches the observed marginal distributions while keeping particle trajectories as faithful as possible to the prior R.While extensively studied both theoretically and method-ologically, this classical Schr ¨odinger Bridge (SB) approach has a critical limitation: its trajectories inherit the roughness of Brownian paths, leading to noisier estimators and less in-terpretable posterior paths; see Figure 1, left side. Moreover, when the experimenter aims to track the positions of indi-vidual particles in a system evolving over time, inference with the Brownian motion prior fails to “borrow strength” from adjacent time points, resulting in less accurate results; see Figure 2, left side. The literature on trajectory inference contains various pro-posals for encouraging smooth paths, inspired by spline algorithms on Rd or the dynamics of physical systems. (A full comparison with prior work appears in Appendix B.) However, from the perspective of Schr ¨odinger’s original formulation, these modifications sacrifice the clear statis-tical interpretation of (1) . We develop a new approach: a smooth version of the Schr ¨odinger Bridge problem in which the Brownian motion is replaced by a smooth Gaus-sian process. This proposal has an appealing statistical grounding: like Gaussian process regression (Rasmussen & Williams, 2006), it provides a flexible and principled way to perform non-parametric estimation while incorporating prior smoothness assumptions. As Figures 1 and 2, right side, show, the resulting estimates significantly outperform the vanilla Schr ¨odinger Bridge, producing better estimates with smoother paths. 1Smooth Schr¨ odinger Bridges 
+
+Figure 1. Comparison between the classical SB and smooth SB with Mat ´ern prior on a trajectory inference task for the petal dataset (Huguet et al., 2022a). Colored points are observed data and paths are inferred trajectories. Our smooth SB approach gen-erates much smoother and more concentrated trajectories. 
+
+Our contributions: 
+
+• We propose a class of Gaussian processes suitable as priors for smooth SB problems, which we show can be 
+
+lifted to simpler SB problems on phase space. • We show that a message passing algorithm for the resulting lifted SB problem converges in time quadratic in K, an exponential improvement over the baseline approach. • We develop an efficient approximation of our algo-rithm that outperforms existing methods in practice, in several cases by 2–5x. 
+
+# 2. Background 
+
+2.1. The Multi-Marginal Schr¨ odinger Bridge 
+
+Let R be a measure on the space Ω = C([0 , 1]; Rd) of continuous Rd-valued paths, and let μ0, . . . , μ K be proba-bility measures on Rd. Fix a sequence of times t0 = 0 <t1 · · · < t K = 1 . Given ω ∈ Ω, we write ωk = ω(tk)
+
+for k ∈ [K]. Given a probability measure P on Ω and 
+
+k ∈ [K], let Pk be the marginal distribution of P at time tk,that is, let Pk be the element of P(Rd) obtained by pushing 
+
+P forward under the map ω 7 → ωk. The multi-marginal Schr ¨odinger Bridge (1) exists under suitable moment con-ditions on μ0, . . . , μ K (L ´eonard, 2014), and the strict con-vexity of the Kullback–Leibler divergence guarantees that when a solution exists, it is unique. Though phrased as a minimization problem over the space 
+
+P(Ω) , the Schr ¨odinger bridge problem admits a “static” reformulation as a multi-marginal entropic optimal transport problem over the space P(Rd(K+1) ). Write R[K] for the joint law of ω := ( ω0, . . . , ω K ) for ω ∼ R.
+
+Lemma 2.1. There is an one-to-one correspondence be-
+
+Figure 2. Comparison between the classical SB and smooth SB. The observations come from 20 independent trajectories of a Mat ´ern Gaussian process with ν = 3 .5. The two pictures de-pict the posterior identification of particles obtained by solving the SB problem with two different priors. Our smooth SB approach recovers trajectories much more accurately. 
+
+tween solutions to (1) and solutions to 
+
+min 
+
+> P[K]∈P (Rd(K+1) )
+
+D( P[K]|R[K]), P k = μk, ∀k ∈ [K]. (2) 
+
+Moreover, if each measure μk is absolutely continuous with finite entropy and R[K] has density exp( −C(ω)) , then this problem is equivalent to 
+
+min 
+
+> P[K]∈P (Rd(K+1) )
+
+Z
+
+C(ω)P[K](ω) dω + D P[K]
+
+> K
+
+O
+
+> k=0
+
+μk
+
+!
+
+Pk = μk, ∀k ∈ [K].
+
+(3) The reformulation in Lemma 2.1 is essential because it elim-inates the need to optimize over probability measures on the infinite-dimensional space Ω. Though (3) was derived for absolutely continuous measures, the expression is sensi-ble for arbitrary marginal measures. Following a common convention in the literature (see, e.g., Pooladian & Niles-Weed, 2024), we therefore take (3) as the basic definition of the multi-marginal Schr ¨odinger bridge in what follows. Importantly, when the measures μk are finitely supported, the resulting optimization problem is finite-dimensional. 
+
+2.2. Sinkhorn’s algorithm for multi-marginal transport 
+
+Specializing to the case where each of the marginals μk
+
+is supported on a finite set Xk of size at most n, the joint measure P[K] can be represented by a finite—albeit expo-nentially large—order (K + 1) tensor, of total size nK+1 .A direct method to solve (3) in this case uses Sinkhorn’s cel-ebrated scaling Algorithm 1. Sinkhorn’s algorithm is based on the observation that the optimal solution P ∗  
+
+> [T]
+
+to (3) is of the form P ∗ 
+
+> [T]
+
+(x) = exp( −C(x)) QKk=0 v∗
+
+> k
+
+(xk) for all 
+
+x = ( x0, . . . , x K ) ∈ QKk=0 Xk, for some “scaling func-tions” v∗ 
+
+> k
+
+: Xk → R+, k ∈ [K]. Algorithm 1 produces a 2Smooth Schr¨ odinger Bridges 
+
+sequence of iterates v(ℓ) 
+
+> k
+
+, k ∈ [K], ℓ ≥ 0, which converge to these optimal scalings. 
+
+Algorithm 1 Vanilla Sinkhorn Algorithm 
+
+Input: μ0, ..., μ K
+
+Initialize v(0) 0 , ..., v(0)  
+
+> K
+
+∈ (R+)n, ℓ = 0 .
+
+while not converged do 
+
+ℓ ← ℓ + 1 
+
+for k = 0 , ..., K do 
+
+Compute S(ℓ) 
+
+> k
+
+using (4) with 
+
+n
+
+v(ℓ)
+
+> i
+
+o
+
+> i<k
+
+and 
+
+n
+
+v(ℓ−1) 
+
+> i
+
+o
+
+> i>k
+
+v(ℓ) 
+
+> k
+
+← μk ⊘ S(ℓ)
+
+> k
+
+end for end while 
+
+Return (v(ℓ) 
+
+> k
+
+)k∈[K]
+
+The key subroutine in Algorithm 1 is an operation called “marginalization”: given current iterates (vi)i∈[K], the marginalization along coordinate k is the function Sk :
+
+Xk → R+ defined by 
+
+Sk(xk) := 
+
+> K
+
+X
+
+> i=0
+> i̸=k
+
+X
+
+> xi∈X i
+
+exp( −C(x)) 
+
+> K
+
+Y 
+
+> i=0
+> i̸=k
+
+vi(xi) . (4) The complexity of computing Sk directly is exponential in K, since the sum in (4) has an exponential number of terms. Moreover, no general polynomial-time algorithms for even approximating (4) exist under standard computa-tional complexity assumptions (Altschuler & Boix-Adser `a, 2023, Lemma 3.7). Together, these facts suggest that (3) will only be computationally feasible under special assumptions on R.A crucial observation (Altschuler & Boix-Adser `a, 2023; Chizat et al., 2022), which has driven the near-universal choice of Brownian motion as a prior, is that when R is a 
+
+Markov process, (4) can be computed in Poly( K, |X | ) time. The tractability of marginalization when R is a Markov process follows from the decomposition 
+
+exp( −C(x)) = R[K](x) = R0(x0)
+
+> K
+
+Y
+
+> k=1
+
+Rk|k−1(xk|xk−1) ,
+
+which shows that the exponential-size sum in (4) factors into K sums, each of which can be computed efficiently. The assumption that R is Markov extends even to works that consider priors other than Brownian motion (Bunne et al., 2023; Vargas et al., 2021). This raises what appears to be an inherent tension: efficient algorithms for (3) rely on the assumption that the process 
+
+R is Markov; however, limiting to the case of Markov pro-cesses necessarily precludes consideration of priors R with smooth sample paths (see Lemma C.1). This observation suggests the pessimistic conclusion that no practical algo-rithm exists for solving Schr ¨odinger bridges with smooth priors. However, the key contribution of this work is to show that this conclusion is false . The next section identifies a class of smooth priors for which (3) can be solved efficiently. 
+
+2.3. Autoregressive Gaussian processes 
+
+To develop our proposal for efficient smooth Schr ¨odinger bridges, we focus on the class of continuous-time Gaus-sian autoregressive processes , a classic model in statistics and signal processing (Phillips, 1959). They are also a widespread choice in applications: as we show below (The-orem 2.3 and Proposition 2.4), the famous Mat ´ern kernel 
+
+gives rise to such processes. While it is known that such pro-cesses offer crucial efficiency benefits in Gaussian process regression (Gilboa et al., 2015), their algorithmic implica-tions for the SB problem have not been explored prior to this work. 
+
+Definition 2.2 (Rasmussen & Williams, 2006, Appendix B) . Let m be a positive integer. A Gaussian process t 7 →
+
+ω(t) defined on Cm−1(R; Rd) is a Gaussian autoregressive process (GAP) of order m if it is a stationary solution to the stochastic differential equation 
+
+dm
+
+dt m ω(t) + am−1
+
+dm−1
+
+dt m−1 ω(t) + · · · + a0ω(t) = σξ (t) ,
+
+for some constants a0, . . . , a m−1 ∈ R and σ ∈ Rd×d,where ξ(t) denotes a white-noise process on Rd with in-dependent coordinates. The key fact about GAPs, which we leverage to develop efficient algorithms, is that, even though aGAP ω is typically not Markov, the process η := (ω, dω/dt, . . . , d m−1ω/dt m−1) taking values in phase space Rd×m is a Markov process. We call η the “lifted” Gaussian process corresponding to ω. The main observa-tion driving our practical algorithm for smooth Schr ¨odinger bridges is that when R is a GAP, problem (3) admits an effi-cient algorithm obtained by lifting the optimization problem to phase space. GAPs form a rich class of smooth Gaussian processes. Moreover, they admit a simple characterization in terms of their covariance functions. Recall that a Gaussian pro-cess ω taking values in C(R; Rd) is characterized by two functions m : R → Rd and κ : R2 → Rd×d, which satisfy 
+
+m(t) = Eω(t), κ(s, t )ij = cov( ω(s)i, ω (t)j ) .
+
+The process is stationary if κ(s, t ) = k(t − s) for some 
+
+k : R → Rd×d. For notational convenience, we focus on the zero-mean case, where m ≡ 0, though our results apply 3Smooth Schr¨ odinger Bridges 
+
+to the general case as well. Zero-mean, stationary Gaus-sian processes are characterized entirely by the covariance function k.We summarize the important properties of GAPs in the following theorem. 
+
+Theorem 2.3 (Saat c¸ i, 2012, Section 2.2) . Let ω be a zero-mean continuous, stationary Gaussian process on Rd with covariance function k. Then ω is a GAP of order m if and only if its spectral density Sω (τ ) := 12π
+
+R ∞−∞ k(t)e−itτ dt ∈
+
+Cd×d is of the form 
+
+Sω (τ ) = σσ τ /f (τ 2) , ∀τ ∈ R
+
+where f is a polynomial of degree m.Moreover, if ω is a GAP of order m, then η := (ω, dω/dt, . . . , d m−1ω/dt m−1) is a zero-mean, stationary Gauss–Markov process. 
+
+With Theorem 2.3 in hand, we easily obtain many examples of GAPs. Crucially, this includes Gaussian processes cor-responding to the Mat ´ern kernel, the most popular smooth Gaussian process in applications, defined by the covariance function 
+
+k(t) ∝ σ2(√2νt/ℓ )ν Kν (√2νt/ℓ ) , (5) where Kν is the modified Bessel function of the second kind and ν and ℓ are positive parameters. 
+
+Proposition 2.4 (Hartikainen & S ¨arkk ¨a, 2010, Section 4.1) .
+
+Suppose ω is a Gaussian process on C(R; R) whose covari-ance function is a Mat ´ern kernel for smoothness parameter 
+
+ν = m − 1/2, for m ∈ N. Then ω is a GAP of order m.
+
+By Theorem 2.3, the same holds true in the multidimen-sional case if each coordinate is taken to be independent of Mat´ ern covariance. Though the above characterization is formulated for station-ary processes, our algorithm also applies to the nonstation-ary case, for instance, to the case of integrated Brownian motion: dm 
+
+> dt m
+
+ω(t) = σξ (t). Taking m = 1 recovers the standard Schr ¨odinger bridge, and m = 2 gives rise to the so-called “momentum Schr ¨odinger bridge,” previously studied in (Chen, Conforti, Georgiou, and Ripani, 2019; Chen, Liu, Tao, and Theodorou, 2023). The integrated Brownian mo-tion prior possesses close connections to spline regression; see (Saatc ¸i, 2012, Section 2.2.3) for more details. 
+
+# 3. Lifting Schr¨ odinger Bridges 
+
+The remainder of this paper is devoted to giving an efficient algorithm for smooth SBs whose reference process is a GAP. In this section, we leverage the structure of GAPs to lift (3) to a higher-dimensional problem, with better structure. In Section 4, we show that this reformulated problem can be solved by a belief propagation algorithm in a number of iter-ations that scales linearly with K. Finally, in Section 5, we develop a practical approximation of the belief propagation algorithm, with overall runtime quadratic in K.In what follows, for notational convenience, we focus on the case d = 1 . (We discuss the runtime considerations assciated with larger d in Section 6.) Let R be the law of a mean zero GAP ω of order m
+
+for an integer m > 0. Theorem 2.3 guarantees that 
+
+η := ( ω, dω/dt, . . . , d m−1ω/dt m−1) is a stationary Gauss– Markov process on Rm, whose law we denote by ˜R. We write ˜R[K] for the joint law of the finite-dimensional vector 
+
+η := ( η0, . . . , η K ), which is Gaussian with mean 0 and covariance matrix ˜Σ ∈ Rm(K+1) ×m(K+1) .We first show that the smooth Schr ¨odinger bridge prob-lem corresponding to R can be rewritten in terms of ˜R.Suppose for concreteness that μk is supported on a finite set Xk ⊆ R, and write X[K] = QKk=0 Xk. We write 
+
+Y[K] := R(m−1)( K+1) . Given a probability measure ˜P
+
+on phase space Z[K] := X[K] × Y [K] whose marginal dis-tribution on Y[K] is absolutely continuous, we write p(x, y)
+
+for its density with respect to the product of the counting measure on X[K] and the Lebesgue measure on Y[K]. We will use the variable z = ( x, y) to denote an element of 
+
+Z[K].We obtain the following: 
+
+Lemma 3.1. Assume that each of the marginals μk is sup-ported on a finite set Xk. There is a one-to-one correspon-dence between solutions to (3) and solutions to 
+
+min 
+
+> p
+
+12
+
+Z
+
+> Y[K]
+
+X
+
+> x∈X [K]
+
+z⊤ ˜Σ−1z p(z) dy − H (p),pxk = μk, ∀k ∈ [K],
+
+(6) 
+
+where H(p) := − R
+
+> Y[K]
+
+P 
+
+> x∈X [K]
+
+p(z) log p(z) dy and the minimization is taken over all densities on Z[K] under which the marginal law of xk is equal to μk.
+
+We refer to (6) as the lifted Schr ¨odinger Bridge problem, since it is obtained by lifting the optimization problem from densities on X[K] to densities on Z[K].At first sight, the lifted problem (6) is no improvement over (3) —indeed, the situation seems to have become worse due to the introduction of the continuous variables y. How-ever, we now show that unlike (3) , problem (6) is directly amenable to efficient algorithms. The first step is to leverage the Gauss–Markov property of ˜R[K] to simplify (6) . Recall the fundamental fact that, under ˜R, the law of η has the Markov property. Given 
+
+z = ( x, y) ∈ Z [K] and k ∈ [K], we write zk = ( xk, yk)
+
+4Smooth Schr¨ odinger Bridges    
+
+> ηk−1
+> αk−1
+> ωk−1
+> αk−1,k ηk
+> αk
+> ωk
+> βk−1
+> γk−1
+> δ+
+> k−1δ−
+> k
+> βk
+> γk
+> · · · · · ·
+
+Figure 3. A portion of the graphical model corresponding to the joint law of ω and η.
+
+for the kth coordinate of z, which takes values in Zk. The Markov property then implies that zk+1 is independent of 
+
+z0, . . . , zk−1, conditioned on zk. At the level of densities, this implies the decomposition 
+
+r(z) = r(z0)
+
+> K
+
+Y
+
+> k=1
+
+r(zk|zk−1)
+
+∝ r(z0)
+
+> K
+
+Y
+
+> k=1
+
+exp 
+
+
+
+− 12 Qk(zk−1, zk)
+
+
+
+,
+
+(7) where r(z0) ∝ exp( − 12 z⊤ 
+
+> 0
+
+˜Σ−10,0z0) and each Qk is a quadratic function: 
+
+Qk(zk−1, zk) := ( zk−Akzk−1)T Λ−1 
+
+> k
+
+(zk−Akzk−1) ,
+
+for matrices Ak := ˜Σk,k −1( ˜Σk−1,k −1)−1 ∈ Rm×m and 
+
+Λk := ˜Σk,k − ˜Σk,k −1( ˜Σk−1,k −1)−1 ˜Σk−1,k ∈ Rm×m.These representations follow directly from standard for-mulas for Gaussian conditioning, and admit explicit expres-sions in terms of the kernel k of the GAP (Saat c¸ i, 2012, Section 2.3.1). This decomposition represents the first term in (6) as a “tree-structured cost” (Haasler et al., 2021a), therefore rendering the marginalization in (4) amenable to belief propagation methods. We develop such a method in the next section. 
+
+# 4. Belief Propagation 
+
+The goal of this section is to show that a belief propagation 
+
+algorithm can be used to efficiently solve the lifted prob-lem (6) . Belief propagation (Kschischang et al., 2001; Pearl, 1982) is a canonical approach for performing inference in high-dimensional models whose densities possess simple factorizations, such as the one given in (7) . The use of be-lief propagation algorithms for Sinkhorn-type problems is not new (Haasler et al., 2021a; Singh et al., 2022; Teh & Welling, 2001); however, we stress that their application to Schr¨ odinger bridges with smooth priors is novel. To develop our algorithm, we first reformulate (4) in the language of graphical models. (See Koller & Friedman, 2009; Wainwright & Jordan, 2007, for background.) The probabilistic structure of ω and the lifted process η under 
+
+˜R means that we can represent their joint distribution by a simple hidden Markov model (see Figure 3), with ob-served variables {ωk}Kk=0 and hidden variables {ηk}Kk=0 .These correspond to variable nodes in Section 3, denoted by circles. The dependencies among these variables nodes are repre-sented by factor nodes (squares in Figure 3): the factor nodes αk−1,k connecting ηk−1 and ηk enforce the joint law of the pair (ηk−1, η k), and the factor nodes αk connecting 
+
+ηk and ωk enforce the deterministic requirement that the first coordinate of ηk equals ωk. We associate to αk−1,k the 
+
+factor node potential Φk : Zk−1 × Z k given by 
+
+Φ1(z0, z1) := exp − z⊤ 
+
+> 0
+
+˜Σ−10,0z0 + Q1(z0, z1)2
+
+!
+
+Φk(zk−1, zk) := exp 
+
+
+
+− Qk(zk−1, zk)2
+
+
+
+k > 1,
+
+so that 
+
+r(z) ∝
+
+> K
+
+Y
+
+> k=1
+
+Φk(zk−1, zk) .
+
+To find the optimal solution p∗ to (6) , we use a belief propa-gation algorithm (Algorithm 2). The algorithm iteratively updates “messages” traveling between factor and variable nodes, which are depicted in Figure 3. The “vertical” mes-sages βk, γk are real-valued functions on Xk which encode information about the ω marginals of p∗, while the “hori-zontal” messages δ+ 
+
+> k
+
+, δ− 
+
+> k
+
+are real-valued functions on Zk
+
+which encode information about the joint distribution of 
+
+ηk and its neighbors ηk−1 and ηk+1 These messages are iteratively updated back and forth across the graph via the application of the following operators: 
+
+Ik(δ− 
+
+> k
+
+, δ + 
+
+> k
+
+)( xk) : = 
+
+Z
+
+> Yk
+
+δ− 
+
+> k
+
+(xk, yk)δ+ 
+
+> k
+
+(xk, yk)dyk
+
+Lk−1(δ+ 
+
+> k
+
+, β k)( zk−1) : = 
+
+X 
+
+> xk∈X k
+
+Z
+
+> Yk
+
+Φk(zk−1, zk)δ+ 
+
+> k
+
+(zk)βk(xk)dyk
+
+Rk(δ−
+
+> k−1
+
+, β k−1)( zk) : = 
+
+X
+
+> xk−1∈X k−1
+
+Z
+
+> Yk−1
+
+Φk(zk−1, zk)δ− 
+
+> k
+
+(zk−1)βk(xk−1)dyk−1
+
+(8) Since these operators involve manipulating functions on the space Zk, they are not directly implementable. In this section, we regard these operators as single basic operators for the purpose of complexity analysis. We develop effi-cient techniques to bypass their direct evaluation in the next section. 5Smooth Schr¨ odinger Bridges 
+
+The main result of this section is that Algorithm 2 implicitly implements the Sinkhorn algorithm (Algorithm 1) for the multi-marginal entropic optimal transport problem (3) , with cost given by 
+
+exp( −C(x)) = 
+
+Z
+
+· · · 
+
+Z KY
+
+> k=1
+
+Φk(zk−1, zk)dy0 · · · dyK .
+
+(9) This connection allows us to develop a rigorous conver-gence guarantee for Algorithm 2. Indeed, (9) implies that 
+
+exp( −C(x)) is, up to a normalizing constant, the joint den-sity of R[K], so that Algorithm 1, and hence Algorithm 2, solves the smooth Schr¨ odinger Bridge problem. 
+
+Algorithm 2 Belief Propagation with Continuous Massages 
+
+1: Input: Factor node potentials {Φk}K−1 
+
+> k=0
+
+, distributions 
+
+{μk}Kk=0 on {X k}Kk=0 .
+
+2: Initialize ℓ = 0 , δ+ 
+
+> K
+
+≡ 1, δ− 
+
+> 0
+
+≡ 1, and β(0)  
+
+> k
+
+: Xk → R+,
+
+k ∈ [K] arbitrary 
+
+3: while not converged do 
+
+4: ℓ ← ℓ + 1 
+
+5: for k = K, ..., 1 do {/* left pass */ }
+
+6: δ+ 
+
+> k−1
+
+← L k−1(δ+ 
+
+> k
+
+, β (ℓ−1)  
+
+> k
+
+)
+
+7: end for 
+
+8: γ(ℓ)0 ← I 0(δ− 
+
+> 0
+
+, δ +0 )
+
+9: β(ℓ)0 ← μ0 ⊘ γ(ℓ)0
+
+10: for k = 1 , ..., K do {/* right pass */ }
+
+11: δ− 
+
+> k
+
+← R k(δ−
+
+> k−1
+
+, β (ℓ)
+
+> k−1
+
+)
+
+12: γ(ℓ) 
+
+> k
+
+← I k(δ− 
+
+> k
+
+, δ + 
+
+> k
+
+)
+
+13: β(ℓ) 
+
+> k
+
+← μk ⊘ γ(ℓ)
+
+> k
+
+14: end for 
+
+15: end while 
+
+16: Return (β(ℓ) 
+
+> k
+
+)k∈[K]
+
+Theorem 4.1. Algorithm 2 is equivalent to Algorithm 1 with cost given by (9) , in the sense that, if the initialization of Algorithm 2 and Algorithm 1 satisfy 
+
+β(0)  
+
+> k
+
+= v(0)  
+
+> k
+
+∀k ∈ [K] (10) 
+
+then, for all ℓ ≥ 0 and all k = 0 , ..., K , we have 
+
+γ(ℓ) 
+
+> k
+
+= S(ℓ) 
+
+> k
+
+, β (ℓ) 
+
+> k
+
+= v(ℓ) 
+
+> k
+
+. (11) 
+
+In particular, we have the following two consequences: (1) Algorithm 2 achieves an ε-approximate solution for (3) in ˜O(KC max /ε −1) iterations, where Cmax =max x∈X [T ] C(x) and ˜O(·) hides polylogarithmic factors in the problem parameters. (2) The solution of (6) is given by 
+
+p(z) ∝
+
+> K
+
+Y
+
+> k=1
+
+Φk(zk−1, zk)
+
+> K
+
+Y
+
+> k=0
+
+β∗ 
+
+> k
+
+(xk) (12) 
+
+where (β∗ 
+
+> k
+
+)k∈[K] is the fixed point of Algorithm (2) .
+
+The representation in (12) implies that the output of Al-gorithm 2 can be used to efficiently manipulate and sam-ple from the solution to the smooth SB problem; see Ap-pendix D for details. 
+
+# 5. Approximate Belief Propagation 
+
+The final ingredient of our algorithm is an approximation scheme to efficiently implement the operators in (8) . We use the technique proposed by Noorshams & Wainwright (2013): we decompose the continuous messages in a suit-able orthonormal basis. The orthonormal decomposition method provides two key benefits. First, by truncating the series at a sufficiently high order, we can create an accurate representation of the messages using only a finite number of orthogonal coefficients. Second, the key update rules in Algorithm 2 described in (8) involve taking the L2 inner product of two continuous messages. Expressing the mes-sages in an orthonormal basis simplifies these operations considerably. Let {ϕik}∞ 
+
+> i=0
+
+represent an orthonormal basis in the space 
+
+L2(Rm−1). The subscript k indicates that one is free to choose different bases for different k ∈ [K].We express the horizontal messages δ+ 
+
+> k
+
+and δ− 
+
+> k
+
+in terms of this basis as follows: 
+
+δ+ 
+
+> k
+
+(zk) = 
+
+> ∞
+
+X
+
+> i=1
+
+ℓik(xk)ϕik(yk), (13) 
+
+δ− 
+
+> k
+
+(zk) = 
+
+> ∞
+
+X
+
+> i=1
+
+rik(xk)ϕik(yk), (14) where r and ℓ denote the coefficients for rightward and leftward messages and the coefficients are given by 
+
+ℓik(xk) := 
+
+Z
+
+δ+ 
+
+> k
+
+(xk, yk)ϕik(yk)dyk
+
+rik(xk) := 
+
+Z
+
+δ− 
+
+> k
+
+(xk, yk)ϕik(yk)dyk,
+
+Utilizing the orthonormal expansions from (13) - (14) , we can re-write Algorithm 2 so that it operates directly on the coefficients lk := ( ℓik)∞ 
+
+> i=0
+
+and rk := ( rik)∞
+
+> i=0
+
+, which are functions from Xk to ℓ2.First, by L2(Yk) orthogonality, the update rule for γk can be written 
+
+Ik(δ+ 
+
+> k
+
+, δ − 
+
+> k
+
+)( xk) = ⟨l(xk), r(xk)⟩.
+
+6Smooth Schr¨ odinger Bridges 
+
+Note that in this notation, we can write 
+
+βk(xk) = μk(xk)/γ k(xk) = μk(xk)⟨l(xk), r(xk)⟩−1
+
+We now consider the update rule for the left and right mes-sages. The following lemma shows how to express these updates in terms of coefficients. 
+
+Lemma 5.1. Fix functions δ+ 
+
+> k
+
+= P∞ 
+
+> i=1
+
+ℓik ⊗ ϕik and βk.Then the coefficients of δ+ 
+
+> k−1
+
+= Lk−1(δ+ 
+
+> k
+
+, β k) in the basis 
+
+(ϕik−1)∞ 
+
+> i=1
+
+are given by 
+
+ℓik−1(xk−1) = X 
+
+> xk∈X k
+
+βk(xk)
+
+> ∞
+
+X
+
+> j=1
+
+ℓjk(xk)Γ ij k−1(xk−1, x k) ,
+
+(15) 
+
+where Γij k−1(xk−1, x k) denotes 
+
+Z Z 
+
+ϕik−1(yk−1)ϕjk(yk)Φ k(zk−1, zk)dyk−1dyk . (16) 
+
+Similarly, if δ− 
+
+> k−1
+
+= P∞ 
+
+> i=1
+
+rik−1 ⊗ ϕik−1, then the coeffi-cients of δ− 
+
+> k
+
+= Rk(δ−
+
+> k−1
+
+, β k−1) in the basis (ϕik)∞ 
+
+> i=1
+
+are given by 
+
+rik(xk) = 
+
+X
+
+> xk−1∈X k−1
+
+βk−1(xk−1)
+
+> ∞
+
+X
+
+> j=1
+
+rjk−1(xk−1)Γ ij k−1(xk−1, x k) .
+
+(17) To obtain a practical procedure, we replace the infinite sums in (13) - (14) with finite approximations. Choosing a suffi-ciently large M , and using the first M orthonormal func-tions on the basis to approximate δ+ 
+
+> k
+
+and δ− 
+
+> k
+
+, we repeat the previous steps to derive the update rules, expressed as matrix-vector multiplications. 
+
+βk(xk) ← μ(xk)( lk(xk)T rk(xk)) −1, (18) 
+
+lk−1(xk−1) ← X 
+
+> xk∈X k
+
+βk(xk)Γk−1(xk−1, x k)lk(xk) (19) 
+
+rk(xk) ← (20) 
+
+X
+
+> xk−1∈X k−1
+
+βk−1(xk−1)rTk−1(xk−1)Γk−1(xk−1, x k)
+
+where lk−1(xk−1) and rk(xk) are vectors in RM and 
+
+Γk−1(xk−1, x k) is a matrix in RM ×M whose element in row i and column j is given by Γij k−1(xk−1, x k).Upon convergence of this algorithm, we obtain the coeffi-cients rk and lk, and thereby obtain estimates of β∗ 
+
+> k
+
+. As discussed after Theorem 4.1, these messages can be used directly for downstream tasks involving the Schr ¨odinger bridge. 
+
+Algorithm 3 Approximate Belief Propagation Algorithm Precompute Γ0, ..., ΓK−1 ∈ Rn×n×M ×M by (16). Initialize {rk(xk)}k,x k and {lk(xk)}k,x k as M dimen-sional vectors filled with 1’s 
+
+while not converged do for k = K, ..., 1 do 
+
+Update lk−1 by (19) 
+
+end for 
+
+Calculate β0 by (18) 
+
+for k = 1 , ..., K do 
+
+Update rk by (20) Calculate βk by (18) 
+
+end for end while 
+
+Return rk and lk
+
+# 6. Time complexity and practical considerations 
+
+Implementing Algorithm 3 requires selecting bases 
+
+({ϕik}∞
+
+> i=1
+
+)k∈[K] along with a number of coefficients M . The computational complexity of the resulting algorithm scales directly with M , which we summarize in the following result. 
+
+Theorem 6.1. Executing T iterations of Algorithm 3 takes O(T Kn 2M 2) time. In particular, executing T =˜O(KC max ε−1) iterations takes ˜O(K2n2M 2Cmax ε−1)
+
+time. 
+
+Theorem 4.1 suggests that T = ˜O(KC max ε−1) iterations suffice to obtain a ε-approximate solution to (6) ; unfortu-nately, however, we lack a rigorous approximation guaran-tee quantifying the difference between the output of Algo-rithm 3 and that of Algorithm 2. Nevertheless, the success of our empirical results (Section 7) indicates that Algo-rithm 3 does offer a good approximation for the solution to the smooth SB problem. We leave the open question of demonstrating this fact theoretically to future work. The main tuning parameter of our algorithm is the choice of 
+
+M . In principle, this choice should depend on the smooth-ness of the messages δ+ 
+
+> k
+
+and δ− 
+
+> k
+
+, the order m of the GAP, and the dimension d. Since δ+ 
+
+> k
+
+and δ− 
+
+> k
+
+correspond to Gaus-sian densities, their expansion in many reasonable bases (for example, Fourier or Wavelet bases) will exhibit strong decay; however, since they are defined on Yk = R(m−1) d,standard smoothness arguments would predict that the nec-essary number of coefficients scales exponentially with the product md .However, the dependence on d can be somewhat ame-liorated under additional assumptions. Suppose that the GAP has independent coordinates and the orthogonal bases have tensor product structure, so that each basis element 7Smooth Schr¨ odinger Bridges 
+
+ϕ ∈ L2(R(m−1) d) satisfies ϕ(y) = Qdj=1 φ(j)(y(j)) for 
+
+φ(j) ∈ L2(Rm−1) and where y(j) corresponds to the deriva-tives of the jth coordinate of ω. In this case, the tensor Γ
+
+factors across each dimension into the tensor product of 
+
+d smaller tensors ˜Γ(j),(j = 1 , ..., d ). Suppose the num-ber of coefficients we use is equal for each dimension, i.e. 
+
+˜Γ(j) ∈ Rn×n×M 1   
+
+> d×M1
+> d
+
+, then the complexity of steps (19) and (20) drops to O(dn 2M 1+ 1 
+
+> d
+
+) by taking advantage of this lower rank structure. In this important special case, therefore, the time complexity of our algorithm scales more benignly with d, which allows us to take larger M when 
+
+d rises. A record of the running time of one iteration of message passing against M and dimension d is presented in Table 9. 
+
+# 7. Experiments 
+
+We test our algorithm on two kinds of low-dimensional smooth trajectory inference tasks. The first kind aims at tracking the exact trajectory of each individual particle (e.g. Figure 2), which we refer to as the One-By-One (OBO) tracking task in the following text. For this kind of task, we evaluate the performance by calculating the distance of each inferred trajectory and the ground truth and measure the per-centage of time that the algorithm tracks a particle correctly. For the second kind, the task is to infer the group trajectories of point clouds whose evolution has geometric structure. We provide two ways to evaluate the performance for this kind of task, similar to the evaluation in Banerjee et al.. We first keep all the observations and visualize the trajectories and see if they form a pattern that is close to the ground-truth pattern. Secondly, we will leave out observations at a certain timestep and instead infer the position of particles at this timestep and evaluate the distance between the inferred and real observations, which we call Leave-One-Timestep-Out (LOT) tasks. Our code for reproducing these experiments is available on Github. 1
+
+7.1. One-By-One tracking 
+
+For OBO tasks, we consider three synthetic datasets where trajectories of particles intersect frequently. We compare our algorithm with the standard Schr ¨odinger Bridge (SB) and a modification based on computing the W2 optimal matching at each step (W2M). We test on three data sets, two 2-dimensional data sets (Fig 7 in Appendix F) and a 3-dimensional data set consisting of the simulated orbits of an N -body physical system (Fig. 4). Smooth SB performs second-best on the Tri-stable diffusion dataset and substan-tially outperforms other approaches on the more challenging 
+
+N -Body and Gaussian Process data. Quantitative evalua-tions are summarized in Table 1. Full experimental details   
+
+> 1https://github.com/WanliHongC/Smooth_SB
+> Figure 4. Visualization of orbits in 3D space. The colors of trajec-tories depend on the starting point. The second row is the visu-alization of the XY-space projection of the corresponding above plot.
+> Table 1. A comparison between smooth SB and two baseline parti-cle tracking methods. Information on evaluation metrics appears in Appendix F.
+
+Dataset Method JumpP 5p acc Mean ℓ2
+
+Tri-stable SSB (ours) 1.12e-1 0.798 1.42e-2 Diffusion BMSB 5.20e-1 0.171 6.79e-1 W2M 2.25e-2 0.956 1.37e-8 
+
+N Body SSB (ours) 5.00e-4 0.999 5.48e-4 
+
+BMSB 1.14e-1 0.641 5.43e-1 W2M 1.08e-1 0.649 5.50e-1 2D SSB (ours) 5.60e-3 0.991 3.57e-4 
+
+Gaussian BMSB 1.37e-1 0.612 2.82e-1 Process W2M 6.60e-2 0.760 2.32e-1 appear in Appendix F. 
+
+7.2. Point clouds trajectory inference 
+
+We also test our algorithm on five challenging baselines in the trajectory inference literature. We compare our al-gorithm quantitatively on tasks of LOT with three other state-of-the-art algorithms: MIOFlow (Huguet et al., 2022b), DMSB (Chen et al., 2023) and F&S (Chewi et al., 2021). A visualization of the output of our algorithm appears in Fig-ure 5, 6 and the quantitative results for the LOT tasks are provided in Table 2. Our algorithm can recover the geomet-ric pattern in each low-dimensional dataset by generating smooth trajectories. We can also apply our algorithm to somewhat higher dimensional settings by appropriately tun-ing the number of coefficients in the orthonormal expansion. In particular, in our experiments on the 10-dimensional Dyngen cycle dataset shown in Figure 6, we use 4 approx-imation coefficients for each of the first 5 dimensions and 1 approximation coefficient for the each of the last 5 di-mensions. Despite the small number of coefficients, the resulting trajectories are still meaningful. Full experimental details appear in Appendix F. 8Smooth Schr¨ odinger Bridges          
+
+> Figure 5. Visualization of trajectory inference on various datasets by lifted SB, for the 5D Dyngen Tree data, we visualize the 2D projection of the first three dimensions in the second row.
+> Figure 6. Visualization of trajectory inference on the 10D Dyngen cycle dataset projected by Phate, we visualize the 2D projection of the first dimension against the second to fifth dimension.
+> Table 2. Performance comparison on the Leave-One-Timestep-Out task at step jbetween our algorithm and the state-of-art algorithms. Our algorithm is typically best or second-best . DMSB failed to converge on the Dyg dataset despite extensive tuning. Information on evaluation metrics appears in Appendix F.
+
+Dataset Method W1(↓) MG(↓) MI (↓)
+
+Petal SSB (ours) 2.70e-2 2.21e-5 3.75e-3 
+
+j = 2 MIOFlow 2.22e-1 9.06e-3 1.11e-1 DMSB 2.10e-1 5.52e-3 3.68e-2 F&S 2.05e-2 2.85e-5 4.48e-3 
+
+EB SSB (ours) 8.45e-2 2.46e-3 5.04e-2 
+
+j = 2 MIOFlow 1.34e-1 1.36e-3 2.81e-2 
+
+DMSB 1.46e-1 9.43e-3 9.72e-2 F&S 8.72e-2 1.47e-3 3.88e-2 
+
+Dyg Tree SSB (ours) 9.81e-2 1.64e-3 3.51e-2 
+
+j = 1 MIOFlow 2.33e-1 2.82e-2 1.73e-1 DMSB * * *F&S 9.78e-2 2.00e-3 4.64e-2 
+
+Dyg Cycle SSB (ours) 1.94e-1 2.85e-2 1.71e-1 
+
+j = 7 MIOFlow 4.25e-1 1.57e-1 4.11e-1 DMSB * * *F&S 2.84e-1 2.91e-2 1.70e-1 
+
+# 8. Discussions and Future Directions 
+
+We have presented a new method for trajectory inference and particle tracking based on smooth Schr ¨odinger bridges, which achieves very good performance on a number of chal-lenging benchmarks. The main limitations of our proposal are related to the approximate implementation developed in Section 5. As we have discussed, our proposal suffers from the curse of dimensionality, because the number of coefficients M typically scales exponentially with respect to both the order of the GAP ( m) and the dimension of the observations ( d). In numerical experiments, relatively small values of M (of order 1000) seem to perform well for problems up to dimension 10. An important question for future work is to either develop an approach with better dimensional scaling or, alternatively, show that the exponen-tial scaling in dimension is unavoidable, as is the case for Wasserstein barycenters (Altschuler & Boix-Adser `a, 2022). Implementing our approach also requires selecting a suitable GAP to use as a reference process. As our experiments make clear, it is not necessary that the reference process match the data generating process precisely (see, e.g., Figure 2). However, picking an appropriate variance for the Gaussian process is important for good performance (see Figure 16). In our experiments, choosing σ ≈ σdata where σdata is a diagonal matrix containing the empirical standard deviation along each dimension, typically works well. Finally, we have considered a definition of the Schr ¨odinger bridge which enforces the strict marginal constraint Pk =
+
+μk. In applications, it is natural to assume that observa-tions of the particles are corrupted with noise, which mo-tivates a version of the SB with an approximate constraint 
+
+Pk ≈ μk (Chizat et al., 2022; Lavenant et al., 2024). It is possible to incorporate noisy observations into the graphical model framework we describe above by introducing a suit-able potential at the factor nodes αk. A similar approach generalizes to other missing data problems, for instance, when some dimensions are not observed. We leave this extension to future work. 
+
+# Acknowledgements 
+
+JNW acknowledges the support of National Science Foun-dation grant DMS-2339829. 
+
+# Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 9Smooth Schr¨ odinger Bridges 
+
+# References 
+
+Altschuler, J. M. and Boix-Adser `a, E. Wasserstein barycen-ters are NP-hard to compute. SIAM Journal on Mathe-matics of Data Science , 4(1):179–203, February 2022. ISSN 2577-0187. doi: 10.1137/21m1390062. URL 
+
+http://dx.doi.org/10.1137/21M1390062 .Altschuler, J. M. and Boix-Adser `a, E. Polynomial-time algorithms for multimarginal optimal transport problems with structure. Math. Program. , 199(1-2, Ser. A):1107– 1178, 2023. ISSN 0025-5610. doi: 10.1007/s10107-022-01868-7. URL https://doi.org/10.1007/ s10107-022-01868-7 .Banerjee, A., Lee, H., Sharon, N., and Moosm ¨uller, C. Ef-ficient trajectory inference in Wasserstein space using consecutive averaging. In The 28th International Confer-ence on Artificial Intelligence and Statistics .Benamou, J.-D., Gallou ¨et, T. O., and Vialard, F.-X. Second-order models for optimal transport and cubic splines on the Wasserstein space. Foundations of Com-putational Mathematics , 19(5):1113–1143, Oct 2019. ISSN 1615-3383. doi: 10.1007/s10208-019-09425-z. URL https://link.springer.com/content/ pdf/10.1007/s10208-019-09425-z.pdf .Borisov, I. S. On a criterion for Gaussian random processes to be Markovian. Theory of Probability & Its Applica-tions , 27(4):863–865, 1983. doi: 10.1137/1127097. URL 
+
+https://doi.org/10.1137/1127097 .Brunton, S. L., Noack, B. R., and Koumoutsakos, P. Machine learning for fluid mechanics. An-nual Review of Fluid Mechanics , 52(Volume 52, 2020):477–508, 2020. ISSN 1545-4479. doi: https://doi.org/10.1146/annurev-fluid-010719-060214. URL https://www.annualreviews.org/ content/journals/10.1146/annurev-fluid-010719-060214 .Bunne, C., Hsieh, Y., Cuturi, M., and Krause, A. The Schr ¨odinger bridge between Gaussian measures has a closed form. In Ruiz, F. J. R., Dy, J. G., and van de Meent, J. (eds.), International Conference on Artificial Intelligence and Statistics, 25-27 April 2023, Palau de Congressos, Valencia, Spain , volume 206 of Proceedings of Machine Learning Research , pp. 5802–5833. PMLR, 2023. URL https://proceedings.mlr.press/ v206/bunne23a.html .Cannoodt, R., Saelens, W., Deconinck, L., and Saeys, Y. Spearheading future omics analyses using dyngen, a multi-modal simulator of single cells. Nature Communi-cations , 12(1):3942, 2021. Chen, T., Liu, G., Tao, M., and Theodorou, E. A. Deep momentum multi-marginal Schr ¨odinger bridge. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), Advances in Neural Information Processing Systems 36: Annual Con-ference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, Decem-ber 10 - 16, 2023 , 2023. URL http://papers. nips.cc/paper_files/paper/2023/hash/ b2c39fe6ce838440faf03a0f780e7a63-Abstract-Conference.html .Chen, Y., Conforti, G., and Georgiou, T. T. Measure-valued spline curves: An optimal transport viewpoint. 
+
+SIAM Journal on Mathematical Analysis , 50(6):5947– 5968, 2018. doi: 10.1137/18M1166249. URL https: //doi.org/10.1137/18M1166249 .Chen, Y., Conforti, G., Georgiou, T. T., and Ripani, L. Multi-marginal Schr ¨odinger bridges , pp. 725–732. Springer In-ternational Publishing, 2019. ISBN 9783030269807. doi: 10.1007/978-3-030-26980-7 75. URL http://dx. doi.org/10.1007/978-3-030-26980-7_75 .Chewi, S., Clancy, J., Le Gouic, T., Rigollet, P., Stepa-niants, G., and Stromme, A. Fast and smooth in-terpolation on Wasserstein space. In Banerjee, A. and Fukumizu, K. (eds.), Proceedings of The 24th In-ternational Conference on Artificial Intelligence and Statistics , volume 130 of Proceedings of Machine Learning Research , pp. 3061–3069. PMLR, 13–15 Apr 2021. URL https://proceedings.mlr.press/ v130/chewi21a.html .Chizat, L., Zhang, S., Heitz, M., and Schiebinger, G. Trajectory inference via mean-field Langevin in path space. In Koyejo, S., Mohamed, S., Agarwal, A., Belgrave, D., Cho, K., and Oh, A. (eds.), Ad-vances in Neural Information Processing Systems ,volume 35, pp. 16731–16742. Curran Associates, Inc., 2022. URL https://proceedings.neurips. cc/paper_files/paper/2022/file/ 6a5181cfe76f67b37a7e1bb19837abdf-Paper-Conference.pdf .Clancy, J. and Suarez, F. Wasserstein-Fisher-Rao splines. 
+
+arXiv preprint arXiv:2203.15728 , 2022. De Bortoli, V., Thornton, J., Heng, J., and Doucet, A. Diffu-sion Schr ¨odinger bridge with applications to score-based generative modeling. Advances in Neural Information Processing Systems , 34:17695–17709, 2021. Flamary, R., Courty, N., Gramfort, A., Alaya, M. Z., Bois-bunon, A., Chambon, S., Chapel, L., Corenflos, A., Fa-tras, K., Fournier, N., et al. Pot: Python optimal trans-10 Smooth Schr¨ odinger Bridges 
+
+port. Journal of Machine Learning Research , 22(78):1–8, 2021. Gilboa, E., Saatci, Y., and Cunningham, J. P. Scaling multi-dimensional inference for structured Gaussian processes. 
+
+IEEE Trans. Pattern Anal. Mach. Intell. , 37(2):424–436, 2015. doi: 10.1109/TPAMI.2013.192. URL https: //doi.org/10.1109/TPAMI.2013.192 .Gushchin, N., Kolesov, A., Korotin, A., Vetrov, D. P., and Burnaev, E. Entropic neural optimal transport via diffusion processes. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), 
+
+Advances in Neural Information Processing Systems ,volume 36, pp. 75517–75544. Curran Associates, Inc., 2023. URL https://proceedings.neurips. cc/paper_files/paper/2023/file/ eeac51414a11484d048432f614d5bb1b-Paper-Conference.pdf .Haasler, I., Ringh, A., Chen, Y., and Karlsson, J. Multi-marginal optimal transport with a tree-structured cost and the Schr ¨odinger bridge problem. SIAM J. Control Op-tim. , 59(4):2428–2453, 2021a. ISSN 0363-0129. doi: 10.1137/20M1320195. URL https://doi.org/10. 1137/20M1320195 .Haasler, I., Singh, R., Zhang, Q., Karlsson, J., and Chen, Y. Multi-marginal optimal transport and probabilistic graphical models. IEEE Transactions on Information Theory , 67(7):4647–4668, 2021b. doi: 10.1109/TIT.2021. 3077465. Hartikainen, J. and S ¨arkk ¨a, S. Kalman filtering and smooth-ing solutions to temporal Gaussian process regression models. In 2010 IEEE International Workshop on Ma-chine Learning for Signal Processing , pp. 379–384, 2010. doi: 10.1109/MLSP.2010.5589113. Huguet, G., Magruder, D. S., Tong, A., Fasina, O., Kuchroo, M., Wolf, G., and Krishnaswamy, S. Manifold interpolating optimal-transport flows for trajectory inference. In Koyejo, S., Mohamed, S., Agarwal, A., Belgrave, D., Cho, K., and Oh, A. (eds.), Ad-vances in Neural Information Processing Systems ,volume 35, pp. 29705–29718. Curran Associates, Inc., 2022a. URL https://proceedings.neurips. cc/paper_files/paper/2022/file/ bfc03f077688d8885c0a9389d77616d0-Paper-Conference.pdf .Huguet, G., Magruder, D. S., Tong, A., Fasina, O., Kuchroo, M., Wolf, G., and Krishnaswamy, S. Manifold inter-polating optimal-transport flows for trajectory inference. 
+
+Advances in neural information processing systems , 35: 29705–29718, 2022b. Justiniano, J., Rumpf, M., and Erbar, M. Approximation of splines in Wasserstein spaces. ESAIM: Control, Opti-misation and Calculus of Variations , 30:64, 2024. ISSN 1262-3377. doi: 10.1051/cocv/2024008. URL http: //dx.doi.org/10.1051/cocv/2024008 .Koller, D. and Friedman, N. Probabilistic graphical mod-els . Adaptive Computation and Machine Learning. MIT Press, Cambridge, MA, 2009. ISBN 978-0-262-01319-2. Principles and techniques. Kschischang, F. R., Frey, B. J., and Loeliger, H.-A. Fac-tor graphs and the sum-product algorithm. IEEE Trans. Inform. Theory , 47(2):498–519, 2001. ISSN 0018-9448. doi: 10.1109/18.910572. URL https://doi.org/ 10.1109/18.910572 .Kubica, J., Denneau, L., Grav, T., Heasley, J., Jedicke, R., Masiero, J., Milani, A., Moore, A., Tholen, D., and Wainscoat, R. J. Efficient intra- and inter-night linking of asteroid detections using kd-trees. Icarus , 189(1):151–168, 2007. ISSN 0019-1035. doi: https://doi.org/10.1016/j.icarus.2007.01. 008. URL https://www.sciencedirect.com/ science/article/pii/S0019103507000528 .Lavenant, H., Zhang, S., Kim, Y.-H., and Schiebinger, G. Toward a mathematical theory of trajectory inference. The Annals of Applied Probability , 34(1A), February 2024. ISSN 1050-5164. doi: 10.1214/23-aap1969. URL http: //dx.doi.org/10.1214/23-AAP1969 .L ´eonard, C. A survey of the Schr ¨odinger problem and some of its connections with optimal transport. Discrete Contin. Dyn. Syst. , 34(4):1533–1574, 2014. ISSN 1078-0947. doi: 10.3934/dcds.2014.34.1533. URL https: //doi.org/10.3934/dcds.2014.34.1533 .Lin, T., Ho, N., Cuturi, M., and Jordan, M. I. On the com-plexity of approximating multimarginal optimal transport. 
+
+Journal of Machine Learning Research , 23(65):1–43, 2022. URL http://jmlr.org/papers/v23/19-843.html .Liounis, A. J., Small, J. L., Swenson, J. C., Lyzhoft, J. R., Ashman, B. W., Getzandanner, K. M., Moreau, M. C., Adam, C. D., Leonard, J. M., Nelson, D. S., et al. Au-tonomous detection of particles and tracks in optical im-ages. Earth and Space Science , 7(8):e2019EA000843, 2020. Moon, K. R., Van Dijk, D., Wang, Z., Gigante, S., Burkhardt, D. B., Chen, W. S., Yim, K., Elzen, A. v. d., Hirn, M. J., Coifman, R. R., et al. Visualizing structure and transitions in high-dimensional biological data. Nature biotechnol-ogy , 37(12):1482–1492, 2019. 11 Smooth Schr¨ odinger Bridges 
+
+Noorshams, N. and Wainwright, M. J. Belief propagation for continuous state spaces: Stochastic message-passing with quantitative guarantees. J. Mach. Learn. Res. , 14: 2799–2835, 2013. ISSN 1532-4435. Ouellette, N. T., Xu, H., and Bodenschatz, E. Aquantitative study of three-dimensional Lagrangian particle tracking algorithms. Experiments in Fluids , 40(2):301–313, Feb 2006. ISSN 1432-1114. doi: 10.1007/s00348-005-0068-7. URL 
+
+https://link.springer.com/content/ pdf/10.1007/s00348-005-0068-7.pdf .Pavon, M., Trigila, G., and Tabak, E. G. The data-driven Schr ¨odinger bridge. Communications on Pure and Ap-plied Mathematics , 74(7):1545–1573, 2021. Pearl, J. Reverend Bayes on inference engines: A distributed hierarchical approach. In Waltz, D. L. (ed.), Proceed-ings of the National Conference on Artificial Intelligence, Pittsburgh, PA, USA, August 18-20, 1982 , pp. 133–136. AAAI Press, 1982. URL http://www.aaai.org/ Library/AAAI/1982/aaai82-032.php .Phillips, A. W. The estimation of parameters in systems of stochastic differential equations. Biometrika , 46(1-2): 67–76, 1959. ISSN 0006-3444. doi: 10.2307/2332809. URL https://doi.org/10.2307/2332809 .Pooladian, A.-A. and Niles-Weed, J. Plug-in estimation of Schr ¨odinger bridges. 08 2024. URL https://arxiv. org/pdf/2408.11686.pdf .Rasmussen, C. E. and Williams, C. K. I. Gaussian pro-cesses for machine learning . Adaptive Computation and Machine Learning. MIT Press, Cambridge, MA, 2006. ISBN 978-0-262-18253-9. Saat c¸ i, Y. Scalable inference for structured Gaussian pro-cess models . PhD thesis, Citeseer, 2012. Saelens, W., Cannoodt, R., Todorov, H., and Saeys, Y. A comparison of single-cell trajectory inference methods. Nature Biotechnology , 37(5):547–554, April 2019. ISSN 1546-1696. doi: 10.1038/s41587-019-0071-9. URL http://dx.doi.org/10.1038/ s41587-019-0071-9 .Schiebinger, G., Shu, J., Tabaka, M., Cleary, B., Subra-manian, V., Solomon, A., Gould, J., Liu, S., Lin, S., Berube, P., Lee, L., Chen, J., Brumbaugh, J., Rigol-let, P., Hochedlinger, K., Jaenisch, R., Regev, A., and Lander, E. S. Optimal-transport analysis of single-cell gene expression identifies developmental trajectories in reprogramming. Cell , 176(4):928–943.e22, 2019. ISSN 0092-8674. doi: https://doi.org/10.1016/j.cell.2019.01. 006. URL https://www.sciencedirect.com/ science/article/pii/S009286741930039X .Schr ¨odinger, E. ¨Uber die Umkehrung der Naturgesetze. 
+
+Angewandte Chemie , 44(30):636–636, 1931. Schr ¨odinger, E. Sur la th ´eorie relativiste de l’ ´electron et l’interpr ´etation de la m ´ecanique quantique. Ann. Inst. H. Poincar ´e, 2(4):269–310, 1932. ISSN 0365-320X. URL http://www.numdam.org/item? id=AIHP_1932__2_4_269_0 .Sha, Y., Qiu, Y., Zhou, P., and Nie, Q. Reconstructing growth and dynamic trajectories from single-cell tran-scriptomics data. Nature Machine Intelligence , 6(1):25– 39, November 2023. ISSN 2522-5839. doi: 10.1038/ s42256-023-00763-w. URL http://dx.doi.org/ 10.1038/s42256-023-00763-w .Shen, Y., Berlinghieri, R., and Broderick, T. Multi-marginal schr ¨odinger bridges with iterative reference refinement. In The 28th International Conference on Artificial Intelli-gence and Statistics .Singh, R., Zhang, Q., and Chen, Y. Learning hidden Markov models from aggregate observations. Auto-matica , 137:110100, 2022. ISSN 0005-1098. doi: https://doi.org/10.1016/j.automatica.2021.110100. URL https://www.sciencedirect.com/ science/article/pii/S0005109821006294 .Sinkhorn, R. Diagonal equivalence to matrices with pre-scribed row and column sums. Amer. Math. Monthly , 74: 402–405, 1967. ISSN 0002-9890. doi: 10.2307/2314570. URL https://doi.org/10.2307/2314570 .Teh, Y. W. and Welling, M. The unified propaga-tion and scaling algorithm. In Dietterich, T. G., Becker, S., and Ghahramani, Z. (eds.), Advances in Neural Information Processing Systems 14 [Neu-ral Information Processing Systems: Natural and Synthetic, NIPS 2001, December 3-8, 2001, Vancou-ver, British Columbia, Canada] , pp. 953–960. MIT Press, 2001. URL https://proceedings. neurips.cc/paper/2001/hash/ d0fb963ff976f9c37fc81fe03c21ea7b-Abstract.html .Tong, A., Huang, J., Wolf, G., Van Dijk, D., and Krishnaswamy, S. TrajectoryNet: A dynamic opti-mal transport network for modeling cellular dynam-ics. In Daum ´e, III, H. and Singh, A. (eds.), Pro-ceedings of the 37th International Conference on Ma-chine Learning , volume 119 of Proceedings of Machine Learning Research , pp. 9526–9536. PMLR, 13–18 Jul 2020. URL https://proceedings.mlr.press/ v119/tong20a.html .Vargas, F., Thodoroff, P., Lamacraft, A., and Lawrence, N. Solving Schr ¨odinger bridges via maximum likeli-hood. Entropy , 23(9):Paper No. 1134, 30, 2021. doi: 12 Smooth Schr¨ odinger Bridges 
+
+10.3390/e23091134. URL https://doi.org/10. 3390/e23091134 .Wainwright, M. J. and Jordan, M. I. Graphical models, exponential families, and variational inference. Founda-tions and Trends® in Machine Learning , 1(1–2):1–305, 2007. ISSN 1935-8245. doi: 10.1561/2200000001. URL 
+
+http://dx.doi.org/10.1561/2200000001 .13 Smooth Schr¨ odinger Bridges 
+
+# A. List of notation 
+
+• P(X ): the set of Borel probability measures on X .• D( ·|· ): Kullback–Leibler divergence. For probability measures P and R,
+
+D(P |R) := 
+
+(R log dP dR dP P ≪ R
+
++∞ otherwise. • C(R; Rd), Cm(R; Rd): continuous (respectively, m-times continuously differentiable) functions from R to Rd.• [N ], [N ]+: for a positive integer N , [N ] is the set 0, ..., N while [N ]+ is the set 1, ..., N .• R+: the set of positive real numbers • Xk: the support of μk, assumed to be finite, Yk: the space R(m−1) d, identified with the possible values of 
+
+(dω/dt, . . . , d m−1ω/dt m−1) at t = tk, Zk: the phase space Xk × Y k.• X[T ] = Q  
+
+> k∈[T]
+
+Xk, Y[T ] = Q  
+
+> k∈[T]
+
+Yk, Z[T ] = Q  
+
+> k∈[T]
+
+Zk.• 1ok (xk): the indicator function 1ok (xk) := 
+
+(
+
+1 if xk = ok
+
+0 otherwise. • ⊙ and ⊘: point-wise multiplication and division • Poly( K1, . . . , K ℓ): a (multivariate) polynomial function in parameters K1, . . . , K ℓ.
+
+# B. Prior work 
+
+There has been significant prior work on both the Schr ¨odinger bridge problem and its applications in trajectory inference. Here, we briefly survey some important related contributions. The Schr ¨odinger bridge has been the subject of significant theoretical interest since its introduction; see (L ´eonard, 2014) for historical details and additional context. Currently, there are many methodological approaches to the Schr ¨odinger bridge problem (see, e.g. De Bortoli et al., 2021; Gushchin et al., 2023; Pavon et al., 2021; Pooladian & Niles-Weed, 2024), almost all of which focus on the two-marginal case (in our notation K = 1 ). As was forcefully pointed out by Altschuler & Boix-Adser `a, the multi-marginal case presents significantly greater computational challenges (Altschuler & Boix-Adser `a, 2022; 2023); indeed, no general-purpose algorithms with running time polynomial in K exist. However, it is possible to obtain polynomial-time algorithms in certain special cases (Altschuler & Boix-Adser `a, 2023). Our work shows that smooth Schr¨ odinger bridges with GAP priors are such a case. The connection between multi-marginal entropic OT problems and belief propagation has been highlighted in a number of prior works dating back more than two decades (Singh et al., 2022; Haasler et al., 2021b; Teh & Welling, 2001), though apparently without connection to smooth Schr ¨odinger Bridge problems. The exception is the “momentum Schr ¨odinger bridge” of (Chen, Conforti, Georgiou, and Ripani, 2019; Chen, Liu, Tao, and Theodorou, 2023), which is, implicitly, an example of a smooth Schr ¨odinger with prior given by integrated Brownian motion; the Sinkhorn algorithm proposed in (Chen et al., 2019) can be viewed as an ad hoc version of belief propagation for this special case. However, those works do not make the connection with smooth Gaussian processes, and their algorithm does not apply to more general GAPs. The importance of the Schr ¨odinger bridge problem for trajectory inference was implicitly recognized in the pioneering work (Schiebinger et al., 2019), and developed mathematically by (Chizat et al., 2022; Lavenant et al., 2024). The fact that the vanilla Shr ¨odinger bridge problem uses a Markov prior is crucial for algorithms (Chizat et al., 2022), but has also been recognized as an undesirable feature that has led to the development of different trajectory inference methods which give rise to smoother paths. Apart from (Shen et al.), which proposes a “robust” version of the Schr ¨odinger Bridge problem in which a single reference process is replaced by a family of (Markov) reference processes, these alternate methods largely abandon Schr ¨odinger’s formulation and develop very different techniques. Many of the most successful methods are based on measure-valued generalizations of splines (Banerjee et al.; Benamou et al., 2019; Chen et al., 2018; Chewi et al., 2021; Clancy & Suarez, 2022; Justiniano et al., 2024). Other methods based on neural networks have also been proposed (Huguet et al., 2022a; Tong et al., 2020). We compare these methods in our experimental section. 14 Smooth Schr¨ odinger Bridges 
+
+# C. Additional results and omitted proofs 
+
+The following lemma shows that any Markov Gaussian process with differentiable sample paths is essentially trivial. 
+
+Lemma C.1. Let ω : R+ → R be a real-valued Gaussian process that is Markovian and almost surely differentiable. Assume Var[ ω(t)] > 0 for all t ≥ 0. Then ω(t) = E[ω(t)|ω(0)] for all t ≥ 0 almost surely. Proof of Lemma C.1. Since ω is an almost surely differentiable Gaussian process, we know that the covariance kernel 
+
+K(t, s ) := E[ω(t)ω(s)] = Cov( ω(t), ω (s)) is differentiable in both coordinates and ∂2 
+
+> ∂x 1∂x 2
+
+K(t, s ) exists. It is well known (see (Borisov, 1983)) that a real-valued Gaussian process is Markovian if and only if, for any t1 ≤ t2 ≤ t3, we have 
+
+K(t1, t 2)K(t2, t 3) = K(t1, t 3)K(t2, t 2). (21) Let t ≤ s and ε > 0. From (21) , we have K(s, s )K(t, s + ε) = K(t, s )K(s, s + ε). Dividing each side by ε and taking the limit as ε → 0, we obtain 
+
+K(s, s ) ∂∂x 2
+
+K(t, s ) = K(t, s ) ∂∂x 2
+
+K(s, s ). (22) Similarly, we also have K(t, t ) ∂∂x 1 K(t, s ) = K(t, s ) ∂∂x 1 K(t, t ). Combining these two identities, it follows that 
+
+K(t, t )K(s, s ) ∂2
+
+∂x 1∂x 2
+
+K(t, s ) = K(t, s ) ∂∂x 1
+
+K(t, t ) ∂∂x 2
+
+K(s, s ). (23) Note that ∂∂x 1 K(t, s ) = Cov( ω′(t), ω (s)) and ∂2 
+
+> ∂x 1∂x 2
+
+K(t, s ) = Cov( ω′(t), ω ′(s)) by interchanging differentiation and expectation. For any s, by taking t = s in (23), we obtain 
+
+Var( ω′(s))Var( ω(s)) = Cov( ω′(s), ω (s)) 2, (24) which further implies that 
+
+Var( ω′(s)|ω(s)) = Var( ω′(s)) − Cov( ω′(s), ω (s)) 2
+
+Var( ω(s)) = 0 .
+
+Let gs : [0 , s ] 7 → R+ be given by 
+
+gs(t) := Var( ω′(s)|ω(t)) . (25) We have shown that gs(s) = 0 . Moreover, for any t ∈ [0 , s ), we have 
+
+g′
+
+> s
+
+(t) = ddt 
+
+
+
+Var( ω′(s)) − Cov( ω′(s), ω (t)) 2
+
+Var( ω(t)) 
+
+
+
+(26) 
+
+= 2
+
+K(t, t )2
+
+ ∂∂x 1
+
+K(t, t ) · ∂∂x 2
+
+K(t, s )2 − ∂∂x 2
+
+K(t, s ) · ∂2
+
+∂x 1∂x 2
+
+K(t, s ) · K(t, t )
+
+
+
+(27) 
+
+= 2
+
+K(t, t )2
+
+∂∂x 1
+
+K(t, t ) · ∂∂x 2
+
+K(t, s )2 − ∂∂x 2
+
+K(t, s ) · K(t, s ) · ∂∂x 1
+
+K(t, t ) · 
+
+> ∂∂x 2
+
+K(s, s )
+
+K(s, s )
+
+!
+
+(28) 
+
+= 2
+
+K(t, t )2
+
+ ∂∂x 1
+
+K(t, t ) · ∂∂x 2
+
+K(t, s )2 − ∂∂x 2
+
+K(t, s )2 · ∂∂x 1
+
+K(t, t )
+
+
+
+= 0 , (29) where the third line uses (23) and the last line uses (22) . Consequently, we have shown that Var( ω′(s)|ω(t)) = 0 for any 
+
+t < s . We complete the proof by applying the Cauchy–Schwarz inequality: for any s > 0, we have 
+
+Var ( ω(s)|ω(0)) = Var ( ω(s) − ω(0) | ω(0)) ≤ s
+
+Z s
+
+> 0
+
+Var ( ω′(ℓ)|ω(0)) dℓ = 0 . (30) Therefore, ω(s) = E[ω(s)|ω(0)] almost surely for all s > 0.15 Smooth Schr¨ odinger Bridges 
+
+C.1. Proof of Lemma 2.1 
+
+This follows directly from known arguments in the two-marginal case (see L´ eonard, 2014), which we recapitulate below. We first show the equivalence between (1) and (2) , which requires no assumptions on the marginal measures. We can decompose the measure R as R(ω) = R(ω | ω)R[K](ω), where R(ω | ω) denotes the conditional law of ω given the values 
+
+ω = ( ω0, . . . , ω K ), and similarly for P . By the chain rule for Kullback–Leibler divergence, we obtain 
+
+D( P | R) = D( P[K] | R[K]) + Eω∼P[K] D( P (· | ω) | R(· | ω)) .
+
+For any choice of P[K], choosing P (ω | ω) = R(ω | ω) makes the second term vanish. Therefore, any solution P ∗ of (1) must be of the form P ∗
+
+> [K]
+
+(ω)R(ω | ω) for a solution P ∗ 
+
+> [K]
+
+of (2), and conversely. For the second claim, we assume that each of the measures μk is absolutely continuous with finite entropy, and that R[K]
+
+has a density. In this case, any feasible solution to (2) , i.e., any P[K] such that D( P[K]∥R[K]) < ∞, must be absolutely continuous with respect to R[K] and hence have a density as well, which we also denote by P[K]. We obtain 
+
+D(P[K] | R[K]) = 
+
+Z
+
+log P[K](ω)exp( −C(ω)) P[K](ω) dω
+
+=
+
+Z
+
+C(ω)P[K](ω) dω +
+
+Z
+
+P[K](ω) log P[K](ω)
+
+Q 
+
+> k∈[K]
+
+μk(ωk) dω +
+
+Z
+
+P[K](ω) log Y
+
+> k∈[K]
+
+μk(ωk) dω .
+
+The marginal constraints imply that 
+
+Z
+
+P[K](ω) log Y
+
+> k∈[K]
+
+μk(ωk) dω = X
+
+> k∈[K]
+
+Z
+
+μk(ωk) log μk(ωk) dω k .
+
+Since each μk has finite entropy by assumption, this sum is finite and constant over the constraint set, so it can be dropped from the objective without changing the solutions. 
+
+C.2. Proof of Lemma 3.1 
+
+Lemma 3.1 can be reformulated as follows: there is a one-to-one correspondence between solutions to 
+
+max 
+
+> P[K]
+
+X
+
+> x∈X [K]
+
+P[K](x) log( r(x)) − X
+
+> x∈X [K]
+
+P[K](x) log 
+
+P[K](x)/ Y
+
+> k∈[K]
+
+μk(xk)
+
+
+
+Pk = μk, ∀k ∈ [K]
+
+(31) and 
+
+max 
+
+> p
+
+Z
+
+> Y[K]
+
+X
+
+> x∈X [K]
+
+p(z) log( r(z)) dy −
+
+Z 
+
+> Y[T]
+
+X 
+
+> x∈X [T]
+
+p(z) log( p(z)) dy
+
+pxk = μk ∀k ∈ [T ],
+
+(32) where the maximization in (31) is taken over distributions in P(X[T ]) and the maximization in (32) is taken over probability densities on Z[K].First, note for any P[T ] satisfying the marginal constraints Pk = μk for all k ∈ [K],
+
+X
+
+> x∈X [K]
+
+P[K](x) log Y
+
+> k∈[K]
+
+μk(xk) = X
+
+> k∈[K]
+
+X
+
+> x∈X [K]
+
+P[K](x) log μk(xk) = X
+
+> k∈[K]
+
+X 
+
+> xk∈X k
+
+μk(xk) log μk(xk) .
+
+Therefore, the term P 
+
+> x∈X [K]
+
+P[K] log Q 
+
+> k∈[K]
+
+μk(xk) in (31) is constant on the feasible set and can be dropped from the objective. Next, by the law of total probability, 
+
+Z 
+
+> Y[T]
+
+X 
+
+> x∈X [T]
+
+p(z) log( r(z)) dy =
+
+Z 
+
+> Y[T]
+
+X 
+
+> x∈X [T]
+
+p(z) log( r(x)) dy +
+
+Z 
+
+> Y[T]
+
+X 
+
+> x∈X [T]
+
+p(z) log( r(y|x)) dy (33) 16 Smooth Schr¨ odinger Bridges 
+
+and Z 
+
+> Y[T]
+
+X 
+
+> x∈X [T]
+
+p(z) log( p(z)) dy =
+
+Z 
+
+> Y[T]
+
+X 
+
+> x∈X [T]
+
+p(z) log( p(x)) dy +
+
+Z 
+
+> Y[T]
+
+X 
+
+> x∈X [T]
+
+p(z) log( p(y|x)) , d y. (34) where r(x) and r(y|x) denotes the marginal density of the x variables and conditional density of the y variables under 
+
+˜R[T ], and analogously for p. It follows from exchanging the order of integration and summation that the first terms on the right-hand side of (33) and (34) recover the two terms in (31) (assuming we have dropped P 
+
+> x∈X [K]
+
+P[K] log Q 
+
+> k∈[K]
+
+μk(xk)
+
+from (31) ). We may combine the second terms of (33) and (34) to obtain that the remaining term in the objective of (32) reads X 
+
+> x∈X [T]
+
+p(x)
+
+Z 
+
+> Y[T]
+
+p(y|x) log( r(y|x)
+
+p(y|x) )dy. (35) It follows from the strict concavity of log x that (35) is at most 0 and equals 0 if and only if p(y|x) = r(y|x) for every 
+
+x and p(·| x)-almost every y. Since r is a probability density function, the equality condition is equivalent to saying that for every x ∈ X [T ] we have p(·| x) = r(·| x) Lebesgue almost everywhere. Therefore, if P ∗  
+
+> [T]
+
+is a maximizer for (31) then P ∗ 
+
+> [T]
+
+(x)r(y|x) is a maximizer for (32) . On the other hand, if p∗(z) is a maximizer for (32) , then R  
+
+> Y[T]
+
+p∗(z)dy is a maximizer for (31). 
+
+C.3. Proof of Theorem 4.1 
+
+We first prove that if the initialization of Algorithm 1 and Algorithm 2 satisfy 
+
+β(0)  
+
+> k
+
+= v(0)  
+
+> k
+
+∀k ∈ [K] (36) then, at the end of each while loop in both algorithms, 
+
+γ(ℓ) 
+
+> k
+
+= S(ℓ) 
+
+> k
+
+,β(ℓ) 
+
+> k
+
+= v(ℓ)
+
+> k
+
+for all k ∈ [K].We proceed by induction. We first investigate the first for loop in Algorithm 2 (the “left pass”). By backwards induction on 
+
+k = K, . . . , 1, we obtain that at the conclusion of the left pass 
+
+δ+
+
+> k−1
+
+(zk−1) = 
+
+Z
+
+· · · 
+
+Z X 
+
+> xk,...,x K
+> K
+
+Y
+
+> i=k
+
+Φi−1(zi−1, zi)β(ℓ−1)  
+
+> i
+
+(xi)dyk . . . d yK ∀k ∈ [K]+ , (37) where the integration is taken over (yk, . . . , yK ) ∈ QKi=k Yi and the sum is taken over (xk, . . . , x K ) ∈ QKi=k Xi
+
+Therefore, the updates to γ0 and β0 satisfy 
+
+γ(ℓ)0 (x0) = I0(1 , δ +0 )( z0)= X
+
+> x1,...,x K
+
+Z
+
+· · · 
+
+Z
+
+> Y[K]
+> K
+
+Y
+
+> i=1
+
+Φi−1(zi−1, zi)β(ℓ−1)  
+
+> i
+
+(xi)dy
+
+= X
+
+> x1,...,x K
+
+exp( −C(x)) 
+
+> K
+
+Y
+
+> i=1
+
+β(ℓ−1)  
+
+> i
+
+(xi)= S(ℓ)0 (x0) ,
+
+where the last equality uses the induction hypothesis β(ℓ−1)  
+
+> k
+
+= v(ℓ−1)  
+
+> k
+
+, and consequently 
+
+β(ℓ)0 (x0) = μ0(x0)/S(ℓ)0 (x0) = v(ℓ)0 (x0) .
+
+17 Smooth Schr¨ odinger Bridges 
+
+We now show by induction on k that γ(ℓ) 
+
+> k
+
+= S(ℓ) 
+
+> k
+
+and β(ℓ) 
+
+> k
+
+= v(ℓ) 
+
+> k
+
+at the conclusion of the “right pass”. We have already established the base case k = 0 . For k ≥ 1, as in the left pass, the updates in the right pass satisfy 
+
+δ− 
+
+> k
+
+(zk) = 
+
+Z
+
+· · · 
+
+Z X
+
+> x0,...,x k−1
+> k
+
+Y
+
+> i=1
+
+Φi−1(zi−1, zi)β(ℓ)
+
+> i−1
+
+(xi)dy0 · · · dyk . (38) Combining (37) and (38) implies that 
+
+β(ℓ) 
+
+> k
+
+(xk) = Ik(δ+ 
+
+> k
+
+, δ − 
+
+> k
+
+)=
+
+> K
+
+X 
+
+> i=0
+> i̸=k
+
+Z
+
+· · · 
+
+Z
+
+> Y[K]
+> K−1
+
+Y
+
+> i=0
+
+Φi(zi, zi+1 )
+
+> k−1
+
+Y
+
+> i=0
+
+β(ℓ) 
+
+> i
+
+(xi)
+
+> K
+
+Y
+
+> i=k+1
+
+β(ℓ−1)  
+
+> i
+
+(xi)dy
+
+=
+
+> K
+
+X 
+
+> i=0
+> i̸=k
+
+Z
+
+· · · 
+
+Z
+
+> Y[K]
+
+exp( −C(x)) 
+
+> k−1
+
+Y
+
+> i=0
+
+β(ℓ) 
+
+> i
+
+(xi)
+
+> K
+
+Y
+
+> i=k+1
+
+β(ℓ−1)  
+
+> i
+
+(xi)= S(ℓ) 
+
+> k
+
+(xk) ,
+
+where the final equality holds by induction. As in the k = 0 case, this implies β(ℓ) 
+
+> k
+
+= v(ℓ) 
+
+> k
+
+. This proves the claim. The first implication, on the time complexity of Algorithm 2, follows directly from existing analysis of multi-marginal entropic optimal transport problems (Altschuler & Boix-Adser `a, 2023; Lin et al., 2022). Indeed, those works show that Algorithm 1 yields an ε-approximate solution to a discrete multi-marginal entropic optimal transport problem with arbitrary cost tensor C in Poly( K, C max /ε ) iterations. As each iteration of Algorithm 1 corresponds to an iteration of Algorithm 2, a similar guarantee holds for Algorithm 2. In particular, (Lin et al., 2022, Theorem 4.3 and proof of Theorem 4.5) shows that 
+
+K ¯R/ ε iterations suffice, where ¯R can be taken to be of order Cmax + log( KnC max /ε ).The second implication, on the form of the optimum, follows from the same considerations as Lemma 3.1. The proof of Lemma 3.1 establishes a direct link between solutions of (3) and (6) . Specifically, if P ∗  
+
+> [T]
+
+is the optimal solution for 3, then 
+
+p∗ defined by p∗(z) := r(y|x)P ∗ 
+
+> [T]
+
+(x) is the corresponding solution for (6) . Notice that P ∗(x) ∝ r(x) QKk=0 v∗
+
+> k
+
+(xk), with 
+
+{v∗
+
+> k
+
+} being the fixed point of Algorithm 1. Thus, 
+
+p∗(z) ∝ r(z)
+
+> K
+
+Y
+
+> k=0
+
+v∗
+
+> k
+
+(xk) ∝
+
+> K
+
+Y
+
+> k=1
+
+Φk(zk−1, zk)
+
+> K
+
+Y
+
+> k=0
+
+v∗
+
+> k
+
+(xk),
+
+proving (12) . Since we have already shown that the iterations of Algorithms 1 and 2 agree, they have the same fixed points, and v∗ 
+
+> k
+
+= β∗ 
+
+> k
+
+, as desired. 
+
+C.4. Proof of Lemma 5.1 
+
+We compute: 
+
+ℓik−1(xk−1) = 
+
+Z
+
+> Yk−1
+
+ϕik−1(yk−1)δ+
+
+> k−1
+
+(zk−1)dyk−1
+
+= X 
+
+> xk∈X k
+
+Z Z  
+
+> Yk×Y k−1
+
+ϕik−1(yk−1)Φ k(zk−1, zk)δ+ 
+
+> k
+
+(zk)βk(xk)dykdyk−1
+
+= X 
+
+> xk∈X k
+> ∞
+
+X
+
+> j=1
+
+Z Z  
+
+> Yk×Y k−1
+
+ϕik−1(yk−1)Φ k(zk−1, zk)ℓik(xk)ϕjk(yk)βk(xk)dykdyk−1
+
+= X 
+
+> xk∈X k
+
+βk(xk)
+
+> ∞
+
+X
+
+> j=1
+
+ℓjk(xk)Γ ij k (xk−1, x k) .
+
+The computation for rik is analogous. 18 Smooth Schr¨ odinger Bridges 
+
+C.5. Proof of Theorem 6.1 
+
+For each iteration of Algorithm 3, we run 2K sub-iterations for updating the left and right messages lk and rk. The intermediate step (18) for the calculation of βk has complexity O(nM ). The major update steps (19) and (20) involve matrix-vector multiplication with a matrix of size nM × nM , which has complexity O(n2M 2). Therefore, the total complexity of the algorithm is given by O(T Kn 2M 2).
+
+# D. Practical implementation with the Haar basis 
+
+The Haar Wavelet basis stand out as an natural choice in the context of this work because of its positivity properties: since the messages need to be positive, using orthonormal bases that consist of positive functions guarantees that the approximation is positive as well. Recall that Xk is a finite collection with n members and Yk = Rm−1. Set a sequence of positive integers 
+
+M1, . . . , M m−1, with each number tied to a dimension of Yk. Our goal is to utilize M = M1 × · · · × Mm−1 orthonormal polynomials to execute the algorithm. Let ⃗ i ∈ [M1]+ × · · · × [Mm−1]+ with ⃗ in representing the n-th component of ⃗ i. We define the following: 
+
+ϕ⃗ ik := Zk1B⃗ ik
+
+B⃗ ik := 
+
+> m−1
+
+Y
+
+> n=1
+
+
+
+− Kn
+
+2 δk + ( ⃗ in − 1) δk, − Kn
+
+2 δk +⃗ inδk
+
+ (39) Here, Zk serves as the normalization constant ensuring that ϕ⃗ ik has a unit L2-norm; effectively, Zk is the reciprocal of the volume of the hypercube B⃗ ik. The parameter δk is chosen via: 
+
+Kn
+
+2 δk = C ·
+
+r
+
+max 
+
+n
+
+Var( η(2)  
+
+> k
+
+), . . . , Var( η(m) 
+
+> k
+
+)
+
+o
+
+(40) where C is a hyper-parameter that one can tune and a typical choice is 3. With the set {ϕ⃗ ik} determined, we show how to compute Γ0, ..., ΓK−1 at the start of Algorithm 5. By setting δk to be very small, we can leverage this approximation: 
+
+Γk(xk, x k+1 ,⃗ i,⃗ j ) = 
+
+Z Z 
+
+ϕ⃗ ik(yk)ϕ⃗ jk+1 (yk+1 )Φ k(zk, zk+1 )dykdyk+1 (41) 
+
+≈ Vol( B⃗ ik)Vol( B⃗ jk+1 )Φ k(xk, y⃗ ik, x k+1 y⃗ jk+1 ), (42) where y⃗ ik is the midpoint of the hypercube B⃗ ik. Remember, Φk(zk, zk+1 ) indicates the conditional density of the reference process r(zk+1 |zk) for k ≥ 1, and shifts to the unconditional joint density r(z0, z1) at k = 0 . Evaluating the relevant Gaussian densities allows us to compute Γk(xk, x k+1 ,⃗ i,⃗ j ) efficiently. When Algorithm 5 reaches convergence, the representation in (12) can be used to efficiently manipulate p (for instance, to generate samples). In particular, (12) shows that p inherits the Markov property of r, so to sample from p it suffices to compute the pairwise marginals p(zk, zk+1 ), which are proportional to 
+
+Z
+
+· · · 
+
+Z X 
+
+> i∈[K]
+> i̸=k,k +1
+
+X
+
+> xi∈X k
+> K
+
+Y
+
+> k=1
+
+Φk(zk−1, zk)
+
+> K
+
+Y
+
+> k=0
+
+β∗ 
+
+> k
+
+(xk)dy0 · · · dyk−1dyk+2 · · · yK .
+
+This may be computed efficiently by repeatedly contracting one coordinate at a time, as in the left pass of Algorithm 2. When Algorithm 3 is implemented using wavelets, p(zk, zk+1 ) can be approximated by pk(xk,⃗ i, x k+1 ,⃗ j ), which approxi-mates p(xk, y ⃗ ik, x k+1 , y ⃗ jk+1 ). With p(xk,⃗ i, x k+1 ,⃗ j ) in hand, we propose two trajectory inference methods. The first method, which is stochastic, generates trajectory samples following the distribution p(zk, zk+1 ), as outlined in Algorithm 4. The other way to rebuild the trajectories involves utilizing argmax operations on the belief tensor, and it is summarized as Algorithm 5 19 Smooth Schr¨ odinger Bridges 
+
+Algorithm 4 Trajectory Inference Through Sampling 
+
+Input: p0, ..., pK−1 ∈ Rn×n×M ×M and x0 ∈ X 0
+
+Marginalize p0 to a probability distribution on X0 × { y⃗ i
+
+> 0
+
+}, denote it as pint 
+
+Sample y0 proportional to pint (x0, ·)
+
+for k = 0 , ..., K − 1 do 
+
+Let ⃗ ik be the index of yk in {y⃗ ik}
+
+Sample (xk+1 , yk+1 ) proportional to pk(xk,⃗ i k, ·, ·)
+
+end for 
+
+Return {x0, ..., x K } and {y0, ..., y K }
+
+Algorithm 5 Trajectory Inference Through ArgMax 
+
+Input: p0, ..., pK−1 ∈ Rn×n×M ×M and x0 ∈ X 0
+
+Marginalize p0 to a probability distribution on X0 × { y⃗ i
+
+> 0
+
+}, denote it as pint 
+
+Set y0 as the maximizer of pint (x0, ·)
+
+for k = 0 , ..., K − 1 do 
+
+Let ⃗ ik be the index of yk in {y⃗ ik}
+
+Set (xk+1 , yk+1 ) as the maximizer of pk(xk,⃗ i k, ·, ·)
+
+end for 
+
+Return {x0, ..., x K } and {y0, ..., y K }
+
+# E. Log-domain Implementation of Algorithm 5 
+
+In the execution of the algorithm, some values could fall below machine precision, triggering numerical problems. Take, for instance, the wavelet basis: we aim to estimate Γk by computing Φk at a specific point. However, if yk or yk+1 
+
+drifts significantly away from its mean, Φk ends up zero. For the sake of numerical stability, we derive the log-domain implementation of Algorithm 5 in the section. Recall that M is the total number of orthonormal polynomials that we use to perform the approximate message passing algorithm. Define the log version of quantities 
+
+ˆℓk(xk) := log( ℓk(xk)) and ˆrk(xk) := log( rk(xk)) (43) 
+
+ˆck(xk) := log( ck(xk)) and ˆΓi,j k (xk, x k+1 ) := log (Γ k(xk, x k+1 , i, j )) (44) For k = 0 , ..., K , the log-domain updates are summarized as follows: 
+
+ˆℓik(xk) = log X
+
+> xk+1 ∈X k+1
+> M
+
+X
+
+> j=1
+
+exp 
+
+
+
+ˆck+1 (xk+1 ) + ˆℓjk+1 (xk+1 ) + ˆΓi,j k (xk, x k+1 )
+
+!
+
+(45) 
+
+ˆrit(xt) = log X
+
+> xt−1∈X t−1
+> M
+
+X
+
+> j=1
+
+exp 
+
+
+
+ˆct−1(xt−1) + ˆ rjt−1(xt−1) + ˆΓj,i t−1(xt−1, x t)
+
+!
+
+(46) 
+
+ˆck(xk) := log( ck(xk)) = − log 
+
+
+
+> M
+
+X
+
+> j=1
+
+exp 
+
+ˆljk(xk) + ˆ rjk(xk)
+
+ .
+
+Note that one can use the logsumexp function in scientific computing packages to implement the log-domain updates given above. And, for the wavelet decomposition, ˆΓi,j k (xk, x k+1 ) can be efficiently approximated by calling a SciPy 
+
+scipy.stats.norm.logpdf function. 
+
+# F. Experiment Details 
+
+We first summarize the different data sets, metrics, and experimental findings. For all experiments, we consider datasets with the number of points being constant at each step and each particle has uniform weight. For the kernel, we use either Matern kernel with ν = 1 .5 or ν = 2 .5.20 Smooth Schr¨ odinger Bridges  
+
+> Figure 7. Visualization of matching results on Tri-stable diffusion and 2D Matern datasets.
+
+F.1. Individual particle tracking Smooth Gaussian process: (2D version of Figure 2 ): Each particle follows a 2D Gaussian process with dimension-independent covariance matrix generated by Matern kernel with ν = 3 .5, ℓ = 1 , σ = 1 . Our algorithm can recover most of the trajectories correctly by selecting smoother trajectories than the other two algorithms. 
+
+Tri-stable diffusion process: Particles are initialized randomly around zero by a normal distribution and follow the evolution of a deterministic dynamic system. This dynamic is considered in (Lavenant et al., 2024), each particle will be absorbed into one of the three attraction points with increasing velocity as the distance to the attraction point decreases. We find when particles are close to each other and have similar velocities, our algorithm has the chance to lose track of the particles during sampling. The W2 matching performs almost perfectly in this scenario by choosing the closest particle. 
+
+N-body physical system: This dataset simulates the orbits of eight planets that circle a star and the task is to keep track of each planet’s orbit in the system. The 2D version is considered in (Chewi et al., 2021), but they only consider smooth interpolations between objects and provide no guarantee of the correctness of matching. The visualization result is presented in Figure 4. The W2 matching and standard SB make many mistakes when trajectories are close to each other while our algorithm gives near-perfect tracking. Our quantitative evaluation appears in Table 1. We use several metrics to evaluate our results: JumpP is the observed likelihood that a particle transitions to a different path at each time increment. 5p acc quantifies the proportion of a sequence of five consecutive steps that remain on the same trajectory. The Mean ℓ2 metric is the average of all ℓ2 distances between each sampled trajectory and the ground truth trajectory that maintains the longest continuous alignment with the sample. 
+
+F.2. Point cloud inference Petal: The Petal dataset was introduced in (Huguet et al., 2022b) which mimics natural dynamics of cellular differentiation and bifurcation. 
+
+Converging Gaussian: This dataset was constructed by (Clancy & Suarez, 2022). It models cellular dynamics using Gaussian point clouds that split and converge over time. Points are sampled evenly around the center of the circles. 
+
+Embryoid Body: This sc-RNAseq dataset records statistical data of embryoid body (EB) differentiation over a period of 27 days with 5 snapshots taken between days of 0-3, 6-9, 12-15, 18-21, and 24-27. The dimension of the original data was reduced to 2 using a nonlinear dimensionality reduction technique called PHATE (Moon et al., 2019) in (Tong et al., 2020). We inherit this 2D projection dataset from them. 
+
+Dyngen Tree (Dyg Tree): This is another sc-RNAseq dataset crafted by (Huguet et al., 2022b) using Dyngen (Cannoodt et al., 2021). The data is embedded into dimension 5 also using PHATE. This dataset contains one bifurcation and is considered to be more challenging than the Petal dataset. 
+
+Dyngen Cycle (Dyg Cycle): Another 10 -D sc-RNAseq dataset inherited from (Banerjee et al.). 21 Smooth Schr¨ odinger Bridges 
+
+We subsample each dataset to a moderate size and make nt constant over all timesteps. Our quantitative evaluation uses the following metrics: W1 is the Wasserstein-ℓ1 distance, MG is the Maximum Mean Discrepancy with Gaussian kernel K(x, y ) := Pni,j =1 (xi − yj )2/2, and MI is the Maximum Mean Discrepancy with identity kernel K(x, y ) = ⟨x, y ⟩.Table 3 presents additional results on other LOT tasks.    
+
+> Table 3. Performance comparison on LOT tasks at step jbetween our algorithm and the state-of-art algorithms.
+
+Dataset Method W1(↓) MG(↓) MI (↓)
+
+Petal SSB (ours) 2.98e-2 3.26e-5 5.53e-3 
+
+j = 4 MIOFlow 1.76e-1 9.97e-3 1.14e-1 DMSB 2.63e-1 9.18e-3 1.15e-2 F&S 2.44e-2 4.41e-5 7.33e-3 
+
+EB SSB (ours) 6.00e-2 3.88e-4 2.04e-2 
+
+j = 3 MIOFlow 1.29e-1 3.31e-3 5.26e-2 DMSB 2.46e-1 4.69e-2 2.37e-1 F&S 7.42e-2 1.46e-3 3.88e-2 
+
+Dyg Tree SSB (ours) 1.09e-1 4.67e-3 6.73e-2 
+
+j = 2 MIOFlow 2.23e-1 1.57e-2 1.34e-1 DMSB * * *F&S 9.23e-2 1.43e-3 3.93e-2 F.3. Implementation details 
+
+We ran our experiments on an x86-64 setup. Smooth SB (ours) and F&S do not require GPU support; for DMSB and MIOFlow experiments, we utilized an NVIDIA A100-SXM4-80GB. In tracking individual particles, standard SB with Brownian motion prior and W2 matching is implemented by Python’s OT library (Flamary et al., 2021). Check out Table 4 for detailed dataset info.      
+
+> Table 4. The table provides detailed statistics of all the datasets we experimented on. Since the number of particles is constant over time, we use nto denote the number of observations at each time step and Kstands for the total number of time steps excluding the initial observation. The Figure column stands for the label of figures where this dataset is presented in the main body text.
+
+Name K n Dimension Figure Author Smooth Gaussian Process 20 20 1 2 us Smooth Gaussian Process (2D) 20 25 2 7 us Tri-stable Diffusion 20 20 2 7 (Lavenant et al., 2024) N Body 50 8 3 4 us Petal 5 40 2 1,5 (Huguet et al., 2022b) Converging Gaussian 3 48 2 5 (Clancy & Suarez, 2022) Embryoid Body 4 100 2 5 (Tong et al., 2020) Dyngen Tree 5 40 5 5 (Huguet et al., 2022b) Dyngen Cycle 15 25 10 6 (Banerjee et al.) Throughout our experiments, we employ either a Matern prior with parameters ν = 1 .5, ℓ = 3 or ν = 2 .5, ℓ = 2 , as specified in (5) , utilizing the wavelet basis. We conduct 200 iterations of message-passing algorithms ( T = 200 ). The initial covariance, ˜Σ0,0, is derived from the stationary distribution’s covariance of the lifted Gaussian process corresponding to 22 Smooth Schr¨ odinger Bridges 
+
+the kernel, ensuring ˜Σk,k remains steady over time (refer to Equation (2.39) in (Saat c¸ i, 2012) for stationary distribution calculation). We assume all observations occur equally over the time period t = 2 , hence the observation duration is 
+
+dt = 2 /K , which is utilized to compute covariance between timesteps. For datasets with dimensions greater than one, the kernel is assumed to be identical and independent for each dimension, simplifying the tensor Γ by factoring it across dimensions, thereby reducing the computational load in the matrix-vector multiplication during the message-passing phase. We assume an equal allocation of coefficients per dimension, thus Mi = ( M ) 1 
+
+> d
+
+for each i = 1 , ..., d . For the kernel with 
+
+ν = 2 .5, we express Mi = ( m1, m 2) as a tuple where Mi = m1m2 represents the count of approximation coefficients in the velocity and acceleration dimension. Each task has a fixed Mi choice except for the Dyngen Cycle dataset, with the kernel’s variance calculated as σ = cσ data , where σdata is the dataset’s standard deviation and c is an adjustable hyper-parameter. Detailed parameter settings for each task can be found in 5 and 6.  
+
+> Table 5. Detailed parameter setting of our algorithm for all the experiments for Figures 2, 7, 5 and 4
+
+Dataset Name ν M Mi Dimension c
+
+Smooth Gaussian Process 2.5 200 (40,5) 1 1Smooth Gaussian Process (2D) 2.5 1024 (8,4) 2 1Tri-stable Diffusion 1.5 1024 32 2 1N Body 2.5 1728 (4,3) 3 4Petal 1.5 400 20 2 0.5 Converging Gaussian 1.5 900 30 2 0.5 Embryoid Body 1.5 144 12 2 1Dyngen Tree 1.5 1024 4 5 0.5 Dyngen Cycle 1.5 1024 (4) ×5 + (1) × 5 10 2.5     
+
+> Table 6. Detailed parameter setting of our algorithm for the LOT tasks in Table 3 and 2 where we only used Matern kernel with ν= 1 .5
+> and all the parameters are the same as the corresponding experiment in Table 5 except for c.
+
+Petal j = 2 Petal j = 4 EB j = 2 EB j = 3 Dyg Tree j = 1 Dyg Tree j = 2 Dyg Cycle j = 7 
+
+c 0.5 0.45 1 1 0.3 0.25 2.5 
+
+Implementation of Sampling: In the point cloud matching, where creating trajectories or inferring positions of the left-out timestep requires generating new points, we use conditional Gaussian sampling. Initially, yk for all data points are sampled from calculated probability tensors pk. Under wavelet basis, the sample we get pins down the range of the yk , we then calculate the conditional Gaussian density for yk given xk and simply use sampling and rejecting to get a valid velocity sample. Given that the lifted Gaussian process is Markovian, we condition on two consecutive observations to generate extra points for constructing trajectories or estimating positions at unobserved timesteps. 
+
+F.4. Details of other algorithms Standard Schr ¨odinger Bridges: The single hyper-parameter in regular SB is the scaling factor s for the correlation between successive time steps, defined as cov( i, j ) = s min( i, j ). Table 7 shows the configuration.  
+
+> Table 7. Detailed parameter setting of standard Schr¨ odinger Bridges
+
+Smooth Gaussian process (1D & 2D) N-Body Tri-stable Diffusion s 0.5 0.3 0.03 23 Smooth Schr¨ odinger Bridges 
+
+F&S: Natural cubic splines were our interpolation method of choice, as detailed in Chewi et al., 2021, Appendix D, and we wrote our own code for implementation. The visual results of the same experiments in Figure 5 are shown in Figure 8 & 9. In the case of the Dyngen dataset, F&S’s matching is significantly poorer than what our algorithm achieves. This underscores a crucial flaw of the standard W2 matching—it lacks the capacity to split mass effectively when the data distribution is uniform. The primary culprit is Dyngen’s asymmetric bifurcation structure.     
+
+> Figure 8. Visualization of trajectory inference on various dataset by F&S, for the 5D Dyngen Tree data, we visualize the 2D projection of the first three dimensions in the second row.
+> Figure 9. Visualization of trajectory inference on various dataset by FSI, for the 10 D Dyngen Cycle data, we visualize the 2D projection of the first dimension against the second to fifth dimensions.
+
+MIO Flow 2: We build upon the baseline settings from (Huguet et al., 2022b), with tuning for optimal performance. Here’s the prime parameter configuration we achieved:, 1. Petal (complete): λe = 1 e − 2, λ d = 25 , other variables adhere to the default Petal (hold one out = F alse ) setup. 2. Petal (leave one out): λe = 1 e − 3, n local epochs = 40 , n epochs = 0 , remaining parameters align with the default Petal (hold one out = T rue ) configuration. 3. Embryoid Body (complete & leave one out): gae embeded dim = 2 , other settings match the default Embryoid Body configuration. 
+
+> 2https://github.com/KrishnaswamyLab/MIOFlow
+
+24 Smooth Schr¨ odinger Bridges 
+
+4. Converging Gaussian (complete): λe = 1 e − 3, λ d = 15 , n local epochs = 20 , all others follow the default Petal 
+
+(hold one out = False) guidelines. 5. Dyg Tree & Cycle (complete): parameters match the default Dyngen (hold one out = False) specifications. 6. Dyg Tree & Cycle (leave one out): n local epochs = 0 , n epochs = 50 , rest conforms to the default Dyngen 
+
+(hold one out = True) settings. ,Visual comparisons for these experiments, as seen in Figure 5, are presented in Figure 10 & 11. DMSB 3: By primarily     
+
+> Figure 10. Visualization of trajectory inference on various dataset by MIO, for the 5D Dyngen Tree data, we visualize the 2D projection of the first three dimensions in the second row.
+> Figure 11. Visualization of trajectory inference on various dataset by MIO, for the 10 D Dyngen Cycle data, we visualize the 2D projection of the first dimension against the second to fifth dimensions.
+
+using the default parameters from (Chen et al., 2023), alongside some refinements, here’s the top-notch parameter set:, 1. Petal (leave one out): n epoch = 2 , num stage = 13 , num marg = 6 , other values are consistent with the default Petal setup. 
+
+> 3https://github.com/TianrongChen/DMSB
+
+25 Smooth Schr¨ odinger Bridges 
+
+2. Embryoid Body (leave one out): n epoch = 2 , num stage = 13 , other settings align with the default Petal configuration. , tuning this algorithm as each network requires approximately 5 hours for training. We anticipate enhanced DMSB performance with more extensive data and training duration. Moreover, the trajectory generation process of DMSB does not capture the geometry of the dataset well (see Figure 12 as an illustration), hence we do not provide additional visualization for this algorithm here.  
+
+> Figure 12. Trajectories drawn by DMSB can not reflect the underlying geometric structure of the Petal dataset well.
+
+F.5. Additional Results and Analysis Extended quantitative results on one-by-one particle tracking: We provide more metrics in Table 8 for evaluating the performance of one-by-one particle tracking, which is an extend version of Table 1. • JumpP : the observed likelihood that a particle transitions to a different path at every increment in time. • 3p acc : the proportion of a sequence of three consecutive steps that remain on the same trajectory. • 5p acc : the proportion of a sequence of five consecutive steps that remain on the same trajectory. • Traj acc : the fraction of trajectories sampled that are correctly matched at each step. For a given sampled trajectory, we match it with a ground-truth trajectory that maintains the longest continuous alignment with the sample. We say this ground truth trajectory is the matched trajectory of the sample. • Max ℓ2: the maximum ℓ2 distance found between a sampled trajectory and its matched ground truth across every sample. • Mean ℓ2: the average ℓ2 distance found between a sampled trajectory and its matched ground truth across every sample. • TrajKL : the KL-divergence between the matched trajectory histogram and the uniform distribution over the ground-truth trajectories. 
+
+Visualization of LOT tasks: We provide the visualization of the sampled point in the Leave-One-Out tasks in Figures 13 and 15 corresponding to results in Table 2. For all the cases, our algorithm is able to draw similar patterns to the ground truth. 
+
+Impact of scale hyper-parameter c: Recall that the variance of the Mat ´ern kernel in our experiments is chosen to be 
+
+σ = cσ data for a positive hyperparameter c. We need to choose an appropriate c such that the algorithm is able to search for 26 Smooth Schr¨ odinger Bridges 
+
+Dataset Model JumpP 3p acc 5p acc Traj acc Max ℓ2 Mean ℓ2 TrajKL 
+
+1D Mat´ ern SSB (ours) 4.77e-2 0.930 0.893 0.530 1.912e-01 2.552e-03 0.000360 
+
+Process BME 6.08e-1 0.191 0.079 0.001 1.463e+00 2.708e-01 0.036132 W2 2.18e-1 0.621 0.412 0.050 4.641e-01 1.526e-01 0.138629 Tri-stable SSB (ours) 1.12e-1 0.852 0.798 0.489 1.020e-01 1.419e-02 0.011770 Diffusion BME 5.20e-1 0.300 0.170 0.018 6.787e-01 6.595e-02 0.047383 W2 2.25e-2 0.971 0.956 0.800 1.377e-08 2.112e-09 0.000000 
+
+N body SSB (ours) 5.00e-4 0.999 0.999 0.983 2.083e-01 5.475e-04 0.000100 
+
+BME 1.14e-1 0.796 0.641 0.000 9.719e-01 5.426e-01 0.026030 W2 1.08e-1 0.804 0.649 0.000 8.679e-01 5.495e-01 0.173287 2D Mat´ ern SSB (ours) 5.60e-3 0.993 0.991 0.904 4.181e-03 3.571e-04 0.000000 
+
+Process BME 1.38e-1 0.764 0.612 0.179 1.418e+00 2.819e-01 0.038109 W2 6.60e-2 0.867 0.760 0.360 1.015e+00 2.321557e-01 0.110904  
+
+> Table 8. Performance metrics for different models across various datasets for particle matching.
+
+the next matching point that constructs a smooth interpolation. If c is too small, then the velocity space of the algorithm searching will not be enough to incorporate the correct particles, this leads to the consequence that some of the particles will not be matched at all. If c is too large, then it will result in more randomness in the algorithm, which will hurt the performance of OBO tracking and blur the underlying geometric structure in pattern matching. See Figure 16 on the Petal dataset for illustrations. In practical implementation, we increase c if we find all the sampled velocities are concentrated at the center of the velocity grids and decrease c if they are concentrated at the border instead. 
+
+Time and Space Complexity Analysis: our algorithm spends most of the time running the message passing algorithm. The running time complexity of one iteration of message passing is given by O(KM 2n2). Since we use dimension independent kernel, the tensor can be factorized across dimensions, we take Mi = M 1 
+
+> d
+
+, and a single iteration in this case has complexity 
+
+O(dT M 1+ 1 
+
+> d
+
+n2), this allows us to take more coefficient when dimension increases. We give the run time record for one iteration of message passing when T = 10 and N = 20 in Table 9          
+
+> Table 9. Running time record (in seconds) of one iteration of message passing, Miis taken to be round (M1/d ). One observes that the running time decreases for fixed Mwhen dincreases due to the dimension independence.
+
+d=1 d=2 d=3 M=1024 80.91 6.32 5.21 M=512 20.87 2.59 1.29 M=256 5.36 0.82 0.45 M=128 1.42 0.26 0.26 27 Smooth Schr¨ odinger Bridges 
+
+Figure 13. Visualization of sampled timestep in the LOT tasks for Dyngen datasets. The blue ’x’ points are the left-out ground truth, the star points are inferred timestep by our algorithm. 
+
+Figure 14. Visualization of sampled timestep in the LOT tasks for Dyngen Tree dataset. The blue ‘x’ points are the left-out ground truth, the star points are inferred timestep by our algorithm. 
+
+28 Smooth Schr¨ odinger Bridges 
+
+Figure 15. Visualization of sampled timestep in the LOT tasks for Dyngen Cycle datasets. The blue ‘x’ points are the left-out ground truth, the star points are inferred timestep by our algorithm. 
+
+Figure 16. Visualization of matching on the Petal dataset. We observe when c = 0 .1 some observations have no matching at all, while when c = 1 , 2, the matching contains more randomness and mistakes. 
+
+29

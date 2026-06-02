@@ -1,0 +1,1966 @@
+Title: Neural Guided Diffusion Bridges
+
+URL Source: https://openreview.net/pdf?id=4LClOWTAth
+
+Number of Pages: 21
+
+Markdown Content:
+# Neural Guided Diffusion Bridges 
+
+Gefan Yang 1 Frank van der Meulen 2 Stefan Sommer 1
+
+Abstract 
+
+We propose a novel method for simulating condi-tioned diffusion processes (diffusion bridges) in Euclidean spaces. By training a neural network to approximate bridge dynamics, our approach eliminates the need for computationally intensive Markov Chain Monte Carlo (MCMC) methods or score modeling. Compared to existing meth-ods, it offers greater robustness across various diffusion specifications and conditioning scenar-ios. This applies in particular to rare events and multimodal distributions, which pose challenges for score-learning- and MCMC-based approaches. We introduce a flexible variational family, par-tially specified by a neural network, for approxi-mating the diffusion bridge path measure. Once trained, it enables efficient sampling of indepen-dent bridges at a cost comparable to sampling the unconditioned (forward) process. 
+
+1. Introduction 
+
+Diffusion processes play a fundamental role in various fields such as mathematics, physics, evolutionary biology, and, re-cently, generative models. In particular, diffusion processes conditioned to hit a specific point at a fixed future time, which are often referred to as diffusion bridges , are of great interest in situations where observations constrain the dy-namics of a stochastic process. For example, in generative modeling, stochastic imputation between two given images, also known as the image translation task, uses diffusion bridges to model dynamics (Zhou et al., 2024; Zheng et al., 2025). In the area of stochastic shape analysis and computa-tional anatomy, random evolutions of biological shapes of organisms are modeled as non-linear diffusion bridges, and simulating such bridges is critical to solving inference and      
+
+> 1Department of Computer Science, University of Copenhagen, Universitetsparken 1, 2100 København, Denmark 2Department of Mathematics, Vrije Universiteit Amsterdam, De Boelelaan 1111, 1081HV Amsterdam, The Netherlands. Correspondence to: Gefan Yang <gy@di.ku.dk >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+registration problems (Arnaudon et al., 2022; Baker et al., 2024b; Yang et al., 2025). Additionally, diffusion bridges play a crucial role in Bayesian inference and parameter esti-mations based on discrete-time observations. (Delyon & Hu, 2006; van der Meulen & Schauer, 2017; 2018; Pieschner & Fuchs, 2020) Simulation of diffusion bridges in either Euclidean space or manifolds is nontrivial since, in general, there is no closed-form expression for transition densities, which is key to con-structing the conditioned dynamics via Doob’s h-transform (Rogers & Williams, 2000). This task has gained a great deal of attention in the past decades (Beskos et al., 2006; Delyon & Hu, 2006; Schauer et al., 2017; Whitaker et al., 2016; Bierkens et al., 2021; Mider et al., 2021; Heng et al., 2022; Chau et al., 2024; Baker et al., 2024a). Among them, one common approach is to use a proposed bridge process (called guided proposal ) as an approximation to the true bridge. Then either MCMC or Sequential Monte Carlo (SMC) methods are deployed to sample the true bridge via the tractable likelihood ratio between the true and pro-posed bridges. Another solution is to use the score-matching 
+
+technique (Hyvarinen, 2005; Vincent, 2011) to directly ap-proximate the intractable score of the transition probability using gradient-based optimization. Here, a neural network is trained with samples from the unconditioned process (Heng et al., 2022) or adjoint process (Baker et al., 2024a), and plugged into numerical solving schemes, for example, Euler-Maruyama. Several recent studies deal with the extension of bridge simulation techniques beyond Euclidean spaces to manifolds (Sommer et al., 2017; Jensen & Sommer, 2023; Grong et al., 2024; Corstanje et al., 2024). All of these rely on either a type of guided proposal or score matching. Both guided-proposal-based and score-learning-based bridge simulation methods have certain limitations: the guided proposal requires a careful choice of a certain “aux-iliary process”. (Mider et al., 2021) provided various strate-gies, but it is fair to say that guided proposals are mostly use-ful when combined with MCMC or Sequential Monte Carlo (SMC) methods. In case of a strongly nonlinear diffusion or high-dimensional diffusion, the simulation of bridges us-ing guided proposals combined with MCMC (most notably the preconditioned Crank-Nicolson (pCN) scheme (Cotter et al., 2013)) or SMC may be computationally demanding. On the other hand, score-matching relies on sampling un-1Neural Guided Diffusion Bridges 
+
+conditioned processes, and it performs poorly for bridges conditioned on rare events, as the unconditioned process rarely explores those regions, resulting in inaccurate esti-mation. Additionally, the canonical score-matching loss requires the inversion of σσ ⊤ with σ denoting the diffu-sion coefficient of the process. This rules out hypo-elliptic diffusions, where σσ ⊤ is singular. It also poses computa-tional challenges for high-dimensional diffusions, further exacerbating the difficulty of obtaining stable and accurate minimization of the loss. To address these issues, we introduce a new bridge sim-ulation method called neural guided diffusion bridge . It consists of the guided proposal introduced in (Schauer et al., 2017) with an additional correction drift term that is parametrized by a learnable neural network. The family of laws on path space induced by such improved proposals provides a rich variational family for approximating the law of the diffusion bridge. Once the variational approximation has been learned, independent samples can be generated at a cost similar to that of sampling the unconditioned (forward) process. The contributions of this paper are as follows: • We propose a simple diffusion bridge simulation method inspired by the guided proposal framework, avoiding the need for score modelling or intensive MCMC or SMC updates. Once the network has been trained, obtaining independent samples from the vari-ational approximation is trivial and computationally cheap; • Unlike score-learning-based simulation methods, which rely on unconditional samples for learning, our method is grounded to learn directly from conditional samples. This results in greater training efficiency, es-pecially for learning the bridges that are conditioned on rare events. • We validate the method through numerical experi-ments ranging from one-dimensional linear to high-dimensional nonlinear cases, offering qualitative and quantitative analyses. Advantages and disadvantages compared to the guided proposal (Mider et al., 2021) and two score-learning-based methods, (Heng et al., 2022) and (Baker et al., 2024a), are included. 
+
+2. Related Work 
+
+Diffusion bridge simulation: This topic has received con-siderable attention over the past two decades and it is hard to give a short complete overview. Early contributions are (Clark, 1990; Chib et al., 2004; Delyon & Hu, 2006; Beskos et al., 2006; Lin et al., 2010; Golightly & Wilkinson, 2010). The approach of guided proposals that we use here was intro-duced in (Schauer et al., 2017) for fully observed uniformly elliptic diffusions and later extend to partially observed hypo-elliptic diffusions in (Bierkens et al., 2020). Another class of methods approximate the intractable tran-sition density using machine learning or kernel-based tech-niques. (Heng et al., 2022) applied score-matching to define a variational objective for learning the additional drift in the reversed diffusion bridge. (Baker et al., 2024a) pro-posed learning the additional drift directly in the forward bridge via sampling from an adjoint process. (Chau et al., 2024) leveraged Gaussian kernel approximations for drift estimation. The method we propose is a combination of existing ideas. It used the guided proposals from (Schauer et al., 2017) to construct a conditioned process, but learns an additional drift term parametrized by a neural network using variational inference. 
+
+Diffusion Schr ¨odinger bridge: The diffusion bridge prob-lem addressed in this paper may appear similar to the diffu-sion Schr ¨odinger bridge (DSB) problem due to their names, but they are fundamentally different. A diffusion bridge is a process conditioned to start and end at specific points, often used for simulating individual sample paths under endpoint constraints. In contrast, a Schr ¨odinger bridge connects two marginal distributions over time by finding the most likely stochastic process (relative to a reference diffusion) that matches these marginals. While both modify the original dynamics, the diffusion bridge imposes hard constraints on endpoints, whereas the Schr ¨odinger bridge enforces them in distribution. Although DSB has gained attention for ap-plications in generative modelling (Thornton et al., 2022; De Bortoli et al., 2021; Shi et al., 2024; Tang et al., 2024), it is important to recognize the distinctions between these problems. 
+
+Neural SDE: Neural SDEs generalize neural ODEs (Chen et al., 2018) by introducing stochasticity, enabling the model-ing of systems with inherently random dynamics. Research in this area can be broadly divided into two categories: (1) modeling terminal state data (Tzen & Raginsky, 2019a;b), and (2) modeling entire trajectories (Li et al., 2020; Kidger et al., 2021). Our approach falls into the latter category, leveraging trainable drift terms and end-point constraints to capture full trajectory dynamics. 
+
+3. Preliminaries: Recap on Guided Proposals 
+
+3.1. Problem Statement 
+
+Let (Ω , F, P) be a probability space with filtration 
+
+{F t}t∈[0 ,T ], W a dw-dimensional P-Wiener process, b :[0 , T ] × Rd → Rd and σ : [0 , T ] × Rd → Rd×dw the drift-and diffusion coefficients. A d-dimensional {F t}-adapted diffusion process X with the law of P is defined as the 2Neural Guided Diffusion Bridges 
+
+strong solution to the stochastic differential equation (SDE): 
+
+dXt = b(t, X t)d t + σ(t, X t)d Wt, X 0 = x0 ∈ Rd. (1) The coefficients b, σ are assumed to be Lipschitz continuous and of linear growth to guarantee the existence of a strong solution Xt (Øksendal, 2014, Chapter 5.2). In addition, we impose the standing assumption that X admits smooth transition densities p with respect to the Lebesgue measure 
+
+λ on (Rd, B(Rd)) , where B(Rd) is the Borel algebra of Rd.That is, P(Xt ∈ A | Xs = x) = R 
+
+> A
+
+p(t, y | s, x )λ(d y) for 
+
+0 ≤ s < t ≤ T , A ⊂ Rd.
+
+Notation 3.1. Let P◦, P⋆ and P• be measures on (Ω , F),we denote the laws of X on C([0 , T ], Rd) under P◦, P⋆ and 
+
+P• by L◦, L⋆ and L• respectively. For notational ease, the expectations under P◦, P⋆ and P• (and similarly L◦, L⋆ and 
+
+L•) are denoted by E◦, E⋆ and E• respectively. The process 
+
+X under L◦, L⋆ and L• is sometimes denoted by X◦, X ⋆
+
+and X• respectively. For any measure Q on (Ω , F), we always denote its restriction to Ft by Qt.The following proposition combines Proposition 4.4 and Example 4.6 in (Pieper-Sethmacher et al., 2025). It shows how the dynamics of X change under observing certain events at time T .
+
+Proposition 3.2. Fix t < T . Let y ∈ Rd and q(· | y) be a probability density function with respect to a finite measure 
+
+ν. Let h(t, x ) = R 
+
+> Rd
+
+p(T, y | t, x )q(v | y)ν(d y), and define the measure P⋆t on Ft by dP⋆t := h(t,X t) 
+
+> h(0 ,x 0)
+
+dPt. Then under the new measure P⋆t , the process X solves the SDE 
+
+dXt = b⋆(t, X t) d t + σ(s, X s) d W ⋆s ,b⋆(s, x ) = b(s, x ) + a(s, x )r(s, x ), X0 = x0. (2) 
+
+where r(s, x ) = ∇x log h(s, x ), a(s, x ) = σ(s, x )σ⊤(s, x )
+
+and W ⋆ is a P⋆-Wiener process. Furthermore, for any bounded and measurable function g
+
+and 0 ≤ t1 ≤ ... ≤ tn < T ,
+
+E⋆[g(Xt1 , ..., X tn )] =
+
+Z
+
+> Rd
+
+E[g(Xt1 , ..., X tn ) | XT = y] ξ(d y), (3) 
+
+where ξ is the measure defined on (Rd, B(Rd)) via 
+
+ξ(d y) = p(T, y | 0, x 0)q(v | y)ν(d y)
+
+R 
+
+> Rd
+
+p(T, y | 0, x 0)q(v | y)ν(d y) . (4) 
+
+Remark 3.3 . A Bayesian interpretation of Equation (4) can be obtained by considering the following hierarchical model: 
+
+v | y ∼ q(v | y), (5a) 
+
+y ∼ p(T, y | 0, x 0). (5b) Here, y is considered as the parameter that gets assigned the prior density p(T, y | 0, x 0) and v is the observation. Therefore, ξ is the posterior distribution of y and (3) shows that sampling of the conditioned process can be done by first sampling the endpoint xT from distribution ξ, followed by sampling a bridge connecting x0 and xT .Throughout the paper, we will consider q(v | y) =
+
+ψ(v; Ly, Σ) , where L ∈ Rd′×d with d′ ≤ d and L of full (row) rank. Here, ψ(x; μ, Σ) denotes the density of the N (μ, Σ) -distribution, evaluated at x. For example, for a two-dimensional diffusion y = y1 y2
+
+⊤ observing only the first component y1 corresponds to L = 1 0
+
+as Ly = y1. In our simulation experiments, we will assume 
+
+Σ = ϵ2I, for a small value of ϵ, which is close to observing without error. Taking ϵ strictly positive stabilizes numerical computations. 
+
+3.2. Guided Proposal 
+
+If p were known in closed form, then the conditioned process could be directly sampled from Equation (2). This is rarely the case. For this reason, let ˜X be an auxiliary diffusion process that admits transition densities ˜p in closed form. Let 
+
+˜h(t, x ) = R 
+
+> Rd
+
+˜p(T, y | t, x )q(v | y)ν(d y). Define 
+
+Et := ˜h(t, X t)˜h(0 , x 0) exp 
+
+Z t
+
+> 0
+
+(∂s + A)˜h
+
+˜h (s, X s) d s
+
+!
+
+, (6) where A is the infinitesimal generator of the process X, i.e. for any f in its domain Af (x) = P 
+
+> i
+
+bi(t, x )∂if (t, x ) + 
+
+> 12
+
+P 
+
+> i,j
+
+aij (t, x )∂ij f (t, x ). Let t < T . Under weak condi-tions (see e.g. (Palmowski & Rolski, 2002, Lemma 3.1)), 
+
+E[Et] = 1 . Using ˜h we can define the guided proposal. 
+
+Definition 3.4. (Schauer et al., 2017) If we define the change of measure dP◦ 
+
+> t
+
+= EtdPt, then, under P◦ 
+
+> t
+
+, the pro-cess X solves the SDE 
+
+dXs = b◦(s, X s) d s + σ(s, X s) d W ◦ 
+
+> s
+
+,b◦(s, x ) = b(s, x ) + a(s, x )˜ r(s, x ), X0 = x0, (7) where s ∈ [0 , t ], ˜r(t, x ) = ∇x log ˜h(t, x ) and W ◦ is a P◦ 
+
+> t
+
+-Wiener process. The process X under the law P◦ 
+
+> t
+
+is known as the guided proposal. Intuitively, X◦ is constructed to resemble the true condi-tioned process X⋆ by replacing r by ˜r. Crucially, as its drift and diffusion coefficients are known in closed form, the guided proposal can be sampled using efficient numerical SDE solvers such as Euler-Maruyama. The definition of the guided process can be extended to 
+
+[0 , T ] by continuity. Whereas Pt ≪ P◦ 
+
+> t
+
+for t < T the mea-sures will typically be singular in the limit t ↑ T . Neverthe-less, P⋆t ≪ P◦ 
+
+> t
+
+may still hold under this limiting operation 3Neural Guided Diffusion Bridges 
+
+and this is what matters for our purposes. In (Schauer et al., 2017) and (Bierkens et al., 2020), precise conditions are given under which P⋆T ≪ P◦ 
+
+> T
+
+. In the case of condition-ing on the event {LX T = v} –so there is no noise on the observation– this is subtle. We postpone a short discussion on this to Section 3.4 to argue that all numerical examples considered in Section 5 will not break down in case the noise level on the observation, ϵ, tends to zero. We then get the following theorem from (Bierkens et al., 2020, Theorem 2.6) that states the change of laws from L◦ to L⋆.
+
+Theorem 3.5. If certain assumptions (Bierkens et al., 2020, Assumptions 2.4, 2.5) hold, then 
+
+dL⋆
+
+dL◦ (X) = ˜h(0 , x 0)
+
+h(0 , x 0) ΨT (X), (8) 
+
+where 
+
+ΨT (X) = exp 
+
+Z T
+
+> 0
+
+(∂t + A)˜h
+
+˜h (s, X s)d s
+
+!
+
+. (9) 
+
+3.3. Guided Proposal Induced by Linear Process 
+
+The choice of the auxiliary process ˜X, which determines 
+
+˜h and hence the guided process, offers some flexibility, as long as the conclusion of Theorem 3.5 applies. We now specialize to the case where the process ˜X solves a lin-ear SDE, as in this case ˜h can be obtained by solving a finite-dimensional system of ordinary differential equations (ODEs). Specifically, we assume ˜X solves 
+
+d ˜Xt = ˜b(t, ˜Xt) d t + ˜ σ(t) d Wt,
+
+˜b(t, x ) = β(t) + B(t)x, ˜X0 = x0. (10) Let ˜A denote the infinitesimal generator of the process ˜X.Since ˜h solves (∂t + ˜A)˜h = 0 , we can replace (∂t + A)˜h
+
+by (A − ˜A)˜h. This gives 
+
+Ψt(X) = exp 
+
+Z t
+
+> 0
+
+G(s, X s)d s
+
+
+
+, t ≤ T, (11) 
+
+G(s, x ) := 
+
+D
+
+b(s, x ) − ˜b(s, x ), ˜r(s, x )
+
+E
+
+− 12 tr 
+
+
+
+[a(s, x ) − ˜a(s)] 
+
+h ˜H(s) − (˜ r˜r⊤)( s, x )
+
+i 
+
+. (12) Here, ˜H(s) is the negative Hessian of log ˜h(s, x ), which turns out to be independent of x, ˜a(s) = (˜ σ˜σ⊤)( s). Under the choice of q(v | y) = ψ(v; Ly, Σ) and ˜X, ˜H and ˜r are given by 
+
+˜H(t) = L⊤(t)M (t)L(t), (13) 
+
+˜r(t, x ) = L⊤(t)M (t)( v − u(t) − L(t)x), (14) where M (t) = ( M †(t)) −1 and L, M † and u satisfy the sys-tem of backward ODEs (See (Mider et al., 2021, Theorem 2.4)): 
+
+dL(t) = −L(t)B(t) d t, L(T ) = L, (15a) 
+
+dM †(t) = −L(t)˜ a(t)L⊤(t) d t, M †(T ) = Σ , (15b) 
+
+du(t) = −L(t)β(t) d t, u(T ) = 0 . (15c) 
+
+Remark 3.6 . A simple choice of ˜X is a scaled Brownian motion, i.e. ˜Xt = ˜ σW t. If ˜σ˜σ⊤ is invertible, then 
+
+∇x log ˜ p(T, v | s, x ) = (˜ σ˜σ⊤)−1 v − xT − s . (16) Therefore, the guided proposal has drift b(s, x ) +
+
+σ(s, x )σ⊤(s, x )(˜ σ˜σ⊤)−1(v − x)/(T − s). If σ(s, x ) = ˜ σ
+
+this reduces to the guiding term proposed in (Delyon & Hu, 2006). 
+
+3.4. Choice of Linear Process 
+
+The linear process is defined by the triplet of functions 
+
+(β, B, ˜σ). In choosing this triplet, two considerations are of importance: 1. In case of conditioning on the event {LX T = v} –so no extrinsic noise on the observation– the triplet needs to satisfy certain “matching conditions” (see (Bierkens et al., 2020, Assumption 2.4)) to ensure P⋆ ≪ P◦. For uniformly elliptic diffusions, this only affects ˜σ. In case L = Id, so the conditioning is on the full state, ˜σ
+
+should be chosen such that ˜a(T ) = a(T, x T ). Hence, for this setting, we can always ensure absolute conti-nuity. For the partially observed case, it is necessary to assume that a is of the form a(t, x ) = s(t, Lx ) for some matrix values map s. In that case, it suffices to choose ˜a such that L˜a(T )L⊤ = Ls (T, v )L⊤. In case the diffusivity does not depend on the state, a natural choice is to take ˜σ = σ to guarantee absolute continuity. For hypo-elliptic diffusions, the restrictions are a bit more delicate. On top of conditions on ˜σ, it is also re-quired to match certain properties in the drift by choice of B. With the exception of the FitzHugh-Nagumo (FHN) model studied in Section 5.3, in all examples that we consider in Section 5 we have ensured these properties are satisfied. The numerical simulation re-sults for FHN model presented in (Bierkens et al., 2020) strongly suggest that the conditions posed in that paper are actually more stringent than needed for absolute continuity. For this reason, we chose the aux-iliary process just as in (Bierkens et al., 2020). 2. Clearly, the closer ˜b to b and ˜a to a, the more the guided proposal resembles the true conditioned pro-cess. This can for instance be seen from log Ψ T (X) = 
+
+4Neural Guided Diffusion Bridges 
+
+R T  
+
+> 0(A− ˜A)˜h
+> ˜h
+
+(s, X s)d s, which vanishes if the coeffi-cients are equal. As proposed in (Mider et al., 2021), a practical approach is to compute the first-order Tay-lor expansion at the point one conditions on, i.e., 
+
+β(t) = b(t, v ), B (t)x = Jb(t, v )( x − v), where Jb
+
+is the Jacobian of b(t, x ) with respect to x. Compared to simply taking a scaled Brownian motion, this choice can result in a guided proposal that better mimics true conditioned paths. 
+
+3.5. Strategies for Improving upon Guided Proposals 
+
+Although the guided proposal takes the conditioning into account, its sample paths may severely deviate from true conditioned paths. This may specifically be the case for strong nonlinearity in the drift or diffusivity. There are different ways of dealing with this. • If we write the guided path as functional of the driving Wiener process, one can update the driving Wiener in-crements using the pCN within a Metropolis-Hastings algorithm. Details are provided in Appendix A.1, see also the discussion in (Mider et al., 2021). • Devising better choices for B, β and ˜σ.• Adding an extra term to the drift of the guided pro-posal by a change of measure, where a neural network parametrizes this term. We take this approach here and further elaborate on it in the upcoming section. 
+
+4. Methodology 
+
+4.1. Neural Guided Diffusion Bridge 
+
+For a specific diffusion process, it may be hard to specify the maps B, β and ˜σ, which may lead to a guided pro-posal whose realizations look rather different from the ac-tual conditioned paths. For this reason, we propose to adjust the dynamics of the guided proposal by adding a learnable bounded term σ(s, x )ϑθ (s, x ) to the drift. Specifically, let 
+
+ϑθ : [0 , T ] × Rd → Rd be a function parameterized by 
+
+θ ∈ Θ, where Θ denotes the parameter space. Define: 
+
+κt := exp 
+
+Z t
+
+> 0
+
+ϑ⊤ 
+
+> θ
+
+(s, X s)d W ◦ 
+
+> s
+
+− 12
+
+Z t
+
+> 0
+
+∥ϑθ (s, X s)∥2ds
+
+
+
+.
+
+(17) We impose the following assumption on ϑθ :
+
+Assumption 4.1. The map ϑθ is bounded and x 7 → ϑθ (s, x )
+
+is Lipschitz continuous, uniformly in s ∈ [0 , T ].The Lipschitz continuity ensures κt is a martingale with 
+
+E[κT ] = 1 . Define a new probability measure P• on 
+
+(Ω , FT ) by 
+
+dP• := κT dP◦ (18) Then by Girsanov’s theorem, the process W • 
+
+> t
+
+:= W ◦ 
+
+> t
+
+−
+
+R t 
+
+> 0
+
+ϑθ (s, X s)d s is a P•-Wiener process. We now define a new diffusion process X• under P•:
+
+Definition 4.2. The neural guided diffusion bridge is a diffusion process that is defined as the strong solution to the SDE: 
+
+dXt = b• 
+
+> θ
+
+(t, X t) d t + σ(t, X t) d W • 
+
+> t
+
+,b• 
+
+> θ
+
+(s, x ) = b◦(s, x ) + σ(s, x )ϑθ (s, x ), X0 = x0, (19) where b◦(s, x ) = b(s, x )+ a(s, x )˜ r(s, x ) is defined in Equa-tion (7). A unique strong solution X• to Equation (19) is guaranteed due to Assumption 4.1. We propose to construct ϑθ as a learnable neural network, whose goal is to approximate the difference of drift coeffi-cients. When ϑθ = σ⊤(r − ˜r), the discrepancy between P•
+
+and P⋆ vanishes. Lipschitz continuity of the neural net can be achieved by employing sufficiently smooth activation functions and weight normalization. Gradient clipping can prevent extreme growth on x. In our numerical experiments, we use either tanh or LipSwish (Chen et al., 2019) activa-tions and gradient clipping by the norm of 1.0 to fulfill such conditions. To learn the map ϑθ , we propose a loss function derived from a variational approximation where the set of mea-sures {P• 
+
+> θ
+
+; θ ∈ Θ} provides a variational class for approxi-mating P⋆. The following theorem shows that minimizing 
+
+θ 7 → DKL (P• 
+
+> θ
+
+|| P⋆) is equivalent to minimizing L as defined below. 
+
+Theorem 4.3. If we define the loss function by 
+
+L(θ) := E•
+
+Z T
+
+> 0
+
+ 12 ∥ϑθ (s, X s)∥2 − G(s, X s)
+
+
+
+ds, (20) 
+
+then 
+
+DKL (P• 
+
+> θ
+
+|| P⋆) = L(θ) − log ˜h(0 , x 0)
+
+h(0 , x 0) , (21) 
+
+with G(s, x ) as defined in Equation (12) .
+
+The proof is given in Appendix A.2. Note that under P•,the law of X depends on θ and therefore the dependence of L on θ is via both ϑθ and the samples from X under θ-parameterized P•. If θopt is a local minimizer of L and 
+
+L(θopt ) = log ˜h(0 ,x 0) 
+
+> h(0 ,x 0)
+
+, then θopt is a global minimizer. This implies DKL (P• 
+
+> θopt
+
+|| P⋆) = 0 from which we obtain 
+
+P• 
+
+> θopt
+
+= P⋆. (Heng et al., 2022) applied a similar varia-tional formulation. However, contrary to our approach, in this work the drift of the bridge proposal is learned from unconditional forward samples. Not surprisingly, this can be inefficient when conditioning on a rare event. 5Neural Guided Diffusion Bridges 
+
+It can be seen that L is low bounded by log ˜h(0 ,x 0) 
+
+> h(0 ,x 0)
+
+. In gen-eral, h is not known in closed form, but in some simple settings it is. In such settings, we can directly inspect the value of the lower bound and assess whether the trained neu-ral network is optimal. In Section 5.1, we provide examples for such sanity checks. 
+
+4.2. Reparameterization and Numerical Implementation 
+
+Optimizing L by gradient descent requires sampling from a parameterized distribution P• and backpropagating the gradients through the sampling. To estimate the gradient, We use the reparameterization trick proposed in (Kingma & Welling, 2022). Specifically, the existence of a strong solution X• to Equation (19) means that there is a measur-able map ϕθ : C([0 , T ], Rdw ) → C ([0 , T ], Rd), such that 
+
+X• = ϕθ (W •). Here, we have dropped the dependence of 
+
+ϕθ on the initial condition x0 as it is fixed throughout. The objective Equation (20) can be then rewritten as: 
+
+L(θ) = E•
+
+Z T
+
+> 0
+
+ 12 ∥ϑθ (t, ϕ θ (Wt)∥2 − G(t, ϕ θ (Wt)) 
+
+
+
+dt. 
+
+(22) Choose a finite discrete time grid T := {tm}m=0 ,1,...,M ,with t0 = 0 , t M = T . Let X• 
+
+> tm
+
+, W • 
+
+> tm
+
+be the evaluations of X•, W • at t = tm respectively, {x•(n) 
+
+> tm
+
+}, {w•(n) 
+
+> tm
+
+}, n =1, . . . , N be collections of samples of X• 
+
+> tm
+
+, W • 
+
+> tm
+
+, and 
+
+x•(n) 
+
+> t0
+
+= ϕθ (w•(n) 
+
+> t0
+
+) = x0. Then Equation (22) can be approximated by the Monte Carlo approximation: 
+
+L(θ) ≈ 1
+
+N
+
+> N
+
+X
+
+> n=1
+> M
+
+X
+
+> m=1
+
+ 12 ∥ϑθ (tm−1, ϕ θ (w•(n) 
+
+> tm−1
+
+)) ∥2
+
+−G(tm−1, ϕ θ (w•(n) 
+
+> tm−1
+
+)) 
+
+o
+
+δt. (23) In practice, x•(n) 
+
+> tm
+
+= ϕθ (w•(n) 
+
+> tm
+
+) is implemented as a numeri-cal SDE solver fθ (w•(n) 
+
+> tm
+
+, t m−1, x •(n) 
+
+> tm−1
+
+) that takes the previ-ous step (tm−1, x •(n) 
+
+> tm−1
+
+) as additional arguments. As x•(n)
+
+> tm−1
+
+also depends on θ, the gradient with respect to θ needs to be computed recursively. Leveraging automatic differentiation frameworks, all gradients can be efficiently recorded in an acyclic computational graph during the forward integration, enabling the backpropagation for updating θ. While the complexity of backpropagation scales linearly with M and quadratically with d—a property inherent to gradient-based optimization methods—our approach remains highly effi-cient for moderate-dimensional problems and provides a robust foundation for further scalability improvements. Fur-ther details about the gradient computation can be found in Appendix A.3 and the numerical algorithm is shown as Algorithm 1 
+
+Algorithm 1 Neural guided bridge training 
+
+Input: Discrete time grid T := {tm}m=0 ,1...,M , initial 
+
+θ, number of iterations K
+
+Solve Equation (15) on T backwards, obtain and store 
+
+{ ˜H(tm)},{˜r(tm, ·)} using Equations (13) and (14). 
+
+repeat for n = 1 , . . . , N do 
+
+Sample w•(n) = {w•(n) 
+
+> tm
+
+} on T .Solve Equation (19) on T with w•(n) = {w•(n) 
+
+> tm
+
+},obtain {x•(n) 
+
+> tm
+
+}.
+
+end for 
+
+Approximate L(θ) by Equation (23). Backpropagate ∇θ L(θ) and update ϑθ by gradient de-scent. 
+
+until Iteration count > K 
+
+5. Experiments 
+
+5.1. Linear Processes 
+
+We consider one-dimensional linear processes with ana-lytically tractable conditional drifts, including Brownian motion with constant drift and the Ornstein–Uhlenbeck pro-cess. For these models, the lower bound of θ 7 → L(θ) can be explicitly computed, serving as a benchmark to assess whether the neural network reaches this bound. Additional details are provided in Appendix B.2. 
+
+Brownian bridge: Consider a one-dimensional Brownian motion with constant drift: dXt = γdt + σdWt. As its transition density p(t, x t | s, x s) is Gaussian, the fully-observed process conditioned on {XT = v}, satisfies the SDE: 
+
+dX⋆t = v − X⋆t
+
+T − t dt + σdWt. (24) We construct the guided proposal using the auxiliary process 
+
+˜Xt = σW t. It is easy to see that X• solves the SDE: 
+
+dX• 
+
+> t
+
+=
+
+
+
+γ + v − X•
+
+> t
+
+T − t + σϑ θ (t, X • 
+
+> t
+
+)
+
+
+
+dt + σdWt. (25) By comparing X• with X⋆, it is clear that the optimal map 
+
+ϑ is given by ϑθopt (t, x ) = −γ/σ . Additionally, the lower bound on L, log ˜h(0 ,x 0) 
+
+> h(0 ,x 0)
+
+, is analytically tractable since the transition densities ˜p of ˜X are Gaussian. In Figure 6a, we track how the training varies over iterations under different settings of γ and σ, which leads to different lower bounds. It can be seen that all the trainings converge to corresponding theoretical lower bounds. Figure 2 compares the trained map 
+
+ϑθ with the optimal map ϑθopt . The neural network matches the optimal map in regions well supported by the training data, but the approximation error grows outside these re-gions—a common limitation of neural network training. Figure 3 shows the empirical marginal densities of the neu-ral bridge alongside the analytical densities obtained from 6Neural Guided Diffusion Bridges 
+
+independent simulations of Equations (24) and (25). The learned and analytical distributions are in close agreement. 
+
+Ornstein-Uhlenbeck bridge: We now consider the Ornstein-Uhlenbeck (OU) process: 
+
+dXt = γ(μ − Xt)d t + σdWt, (26) which requires a t, x -dependent ϑθopt to correct the guided proposal. Upon choosing ˜Xt = σW t, the neural bridge satisfies the SDE: 
+
+dX• 
+
+> t
+
+=
+
+
+
+γ(μ − X• 
+
+> t
+
+) + v − X•
+
+> t
+
+T − t + σϑ θ (t, X • 
+
+> t
+
+)
+
+
+
+dt+σdWt.
+
+(27) As with Brownian motion, the OU process has Gaussian transition densities and is therefore analytically tractable. Using this property, we derive the optimal map ϑθopt and the corresponding lower bound on L, given in Equations (46) and (47). We vary the parameters γ, μ, and σ and plot the resulting training-loss curves alongside the analytical lower bound in Figure 6b; in every case the loss converges to its respective bound. Figure 4 compares the outputs of the trained network with the optimal map, and Figure 5 shows the empirical marginal densities of the learned neural bridge with those of the analytical bridge obtained from independent simulations of Equations (27) and (44). From the above two experiments, we conclude that the neural network is able to learn the optimal drift with the proposed loss function and that the neural guided bridge is very close to the true bridge in terms of KL divergence (reflected by the very small differences between training losses and analytical lower bounds). In the remaining nu-merical examples no closed form expression is available for 
+
+h(0 , x 0) and therefore performance can only be assessed qualitatively. 
+
+5.2. Cell Diffusion Model 
+
+(Wang et al., 2011) introduced a model for cell differentia-tion which serves as a test case for diffusion bridge simu-lation in (Heng et al., 2022; Baker et al., 2024a). Cellular expression levels Xt = Xt, 1 Xt, 2
+
+⊤ are governed by the 2-dimensional SDE: 
+
+dXt =
+
+
+
+> X4
+> t, 1
+> 2−4+X4
+> t, 1
+
++ 2−4
+
+> 2−4+X4
+> t, 2
+
+− Xt, 1
+
+> X4
+> t, 2
+> 2−4+X4
+> t, 2
+
++ 2−4
+
+> 2−4+X4
+> t, 1
+
+− Xt, 2
+
+ dt+σdWt, (28) driven by a 2-dimensional Wiener process W . The highly nonlinear drift makes this a challenging case. The guided neural bridge is constructed as an OU process: 
+
+d ˜Xt = {1 − ˜Xt}dt + σdWt, (29) with 1 = 1 1⊤. We study three representative fully-observed cases that result in distinct dynamics for the condi-tional processes: (1) events that are likely under the forward process, which we refer to as “normal” events; (2) rare events; and (3) events that cause trajectories to exhibit multi-ple modes, where the marginal probability at certain times is multimodal. We compare our method to (a) the guided pro-posal (Schauer et al., 2017); (b) bridge simulation via score matching (Heng et al., 2022); and (c) bridge simulation using adjoint processes (Baker et al., 2024a). The topleft panel of Figure 1 shows realisations of forward samples of the process. The other panels show performance of the neural guided bridge upon conditioning on various events, that we detail below. Further details on these experiments are presented in Appendix B.3. 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+
+> t
+> 0.00.51.01.52.0
+> Xt
+> Xt, 1
+> Xt, 2
+> x0
+
+(a) Unconditioned 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+> t
+> 0.00.51.01.52.0
+> Xt
+> Xt, 1
+> Xt, 2
+> x0
+> v
+
+(b) Normal event 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+
+> t
+> −0.20.00.20.40.60.81.01.2
+> Xt
+> Xt, 1
+> Xt, 2
+> x0
+> v
+
+(c) Rare event 0 1 2 3 4 5 
+
+> t
+> −1.0
+> −0.50.00.51.01.5
+> Xt
+> Xt, 1
+> Xt, 2
+> x0
+> v
+
+(d) Multi-modality 
+
+Figure 1. Top left (a): 30 realisations from the unconditioned cell diffusion model (Cf. Equation (28)). Top right (b): 30 realisations from the learned conditional process on a “normal event” v =
+
+2.0 −0.1⊤; Bottom left (c): 30 realisations from the learned conditional process on a rare event v = 1.0 −0.1⊤; Bottom right (d): 30 realisations from the learned conditional process on event v = −1.0 −1.0⊤ that causes multi-modality. Except in panel (d), all processes start from x0 = 0.1 −0.1⊤ and run up to time T = 4 .0. In (d), the process starts from x0 =
+
+−1.0 −1.0⊤ and runs up to time T = 5 .0.
+
+In all the experiments in the following we take σ = 0 .1.
+
+Normal event: We set x0 = 0.1 −0.1⊤, T = 4 and 
+
+v = 2.0 −0.1⊤. From the topleft panel in Figure 1 it is clear that this corresponds to a normal event: balls around v at time T get non-negligible mass under the un-conditioned process. In Figure 1b, we show 30 sample paths obtained from sampling the trained neural bridge and Figure 7 shows a comparison to the three baseline meth-ods mentioned above. Since the true conditional process is analytically intractable, we generated 100 , 000 samples from the forward (unconditional) process Equation (28), and obtained 172 samples that satisfy ∥LX T − v∥ ≤ 0.01 , and only show first 30 samples in the figure. Those samples can be treated as samples close to true bridges. Overall, all four methods successfully recover the true dynamics. The perfor-7Neural Guided Diffusion Bridges 
+
+mance of all four methods considered is comparable.Note that the adjoint bridge sample paths appear slightly more dispersed. 
+
+Rare event: We set x0 = 0.1 −0.1⊤ and T = 4 as before but now we take v = 1.0 −0.1⊤, which is a rare event. Unlike the “normal event” case, the true dynamics cannot be recovered by forward sampling from the uncondi-tioned process, as it is highly improbable that paths end up in a small ball around v. In Figure 1c, we show 30 sample paths obtained from sampling the trained neural bridge and Figure 7 shows a comparison to the three baseline methods mentioned above. All methods except the adjoint forward approach capture the correct trajectory dynamics, consistent with findings in (Baker et al., 2024a). Among the remaining three, trajectories from the neural bridge align more closely with those from the guided proposal than those from score matching. In the score matching method, samples of Xt, 1
+
+show higher variance prior to t = 3 .5, suggesting less ac-curate score estimates. This is expected, as score matching learns its drift from samples of the unconditioned process which rarely reaches small balls around v, leading to poor approximation quality. 
+
+Multi-modality: In both of the previous cases, each com-ponent’s marginal distribution at times (0 , T ] is unimodal. However, with some special initial conditions, multimodal-ity can arise, which poses a challenging task where one would like to recover all modes. Specifically, let x0 =
+
+−1.0 −1.0⊤, T = 5 .0 and v = −1.0 −1.0⊤. In Figure 1d, we show 30 sample paths obtained from sampling the trained neural bridge and Figure 7 shows a comparison to the three baseline methods mentioned above. Both the adjoint bridge and score matching fail to model the dynam-ics accurately. In contrast, the neural bridge and guided proposal yield similar marginal distributions. However, good performance of the guided proposal may take many MCMC iterations, or possibly the use of multiple (interact-ing) chains. Once trained, the neural bridge can generate independent samples, at a cost comparable to unconditioned forward simulations, while maintaining sampling quality close to that of the guided proposal. Across all three tasks, the neural bridge shows strong adapt-ability and achieves performance comparable to the guided proposal, with the added benefit of faster independent sam-pling. In contrast, the other two methods exhibit limitations under specific settings. 
+
+5.3. FitzHugh-Nagumo Model 
+
+We consider the FitzHugh-Nagumo model, which is a pro-totype of an excitable system, considered for example in (Ditlevsen & Samson, 2019; Bierkens et al., 2020). It is described by the SDE: 
+
+dXt =
+
+( 1 
+
+> χ
+
+− 1
+
+> χ
+
+γ −1
+
+
+
+Xt +
+
+" s−X3
+
+> t, 1
+> χ
+
+α
+
+#) 
+
+dt +
+
+0
+
+σ
+
+
+
+dWt
+
+(30) We condition the process by the value of its first component by setting L = 1 0 and hence condition on the event 
+
+LX T = v ∈ R. We construct the guided proposal as pro-posed in (Bierkens et al., 2020) using the Taylor expansion 
+
+−x3 ≈ 2v3 − 3v2x at x = v. Thus, ˜X satisfies the SDE 
+
+d ˜Xt =
+
+(" 1−3v3 
+
+> χ
+
+− 1
+
+> χ
+
+γ −1
+
+#
+
+˜Xt +
+
+" 2v3+sχ
+
+α
+
+#) 
+
+dt +
+
+0
+
+σ
+
+
+
+dWt
+
+(31) Suppose {χ, s, γ, α, σ } = {0.1, 0, 1.5, 0.8, 0.3}. We ex-amine the conditional behaviour of X within t ∈ [0 , 2.0] 
+
+under two scenarios: (1) conditioning on a normal event 
+
+v = −1.0; and (2) conditioning on a rare event v = 1 .1. As the score-matching and adjoint-process methods have not been proposed in the setting of a partially observed state, we only compare our method to the guided proposal. 
+
+Normal event: Figure 11 compares sample trajectories generated by the neural bridge and guided proposal. As a reference, paths obtained by unconditional sampling are added, where any path not ending close to the endpoint has been rejected. Both methods capture the key features of the conditioned dynamics, closely matching the reference trajectories. However, the neural bridge achieves this using independently drawn samples after training, whereas the guided proposal requires a long MCMC chain. The simi-larity between the neural bridge and the guided proposal confirms that the neural bridge effectively approximates the conditioned distribution, indicating accurate modeling of the dynamics under normal event conditioning. 
+
+Rare event: In Figure 12 we redo the experiment under conditioning on a rare event. Both the neural bridge and the guided proposal successfully capture the bimodal structure in the trajectories, as reflected by the two distinct clusters in the Xt, 1 paths, particularly evident after t ≈ 0.5. How-ever, the guided proposal matches the reference distribution more closely, especially in the concentration and spread of trajectories beyond time t = 1 .5.
+
+5.4. Stochastic Landmark Matching 
+
+Finally, we present a high-dimensional stochastic nonlinear conditioning task: stochastic landmark matching, see for instance (Arnaudon et al., 2022). We consider a stochastic model that describes the evolution of n distinct landmarks in Rd of a closed nonintersecting curve in Rd. The state at time t, Xt, consists of the concatenation of each of the 
+
+n landmark locations at time t. Hence, Xt takes values in 
+
+Rdn . The stochastic landmark model defined in (Arnaudon et al., 2022), for ease of exposition considered without mo-8Neural Guided Diffusion Bridges                                                  
+
+> OU ( d= 1 )Cell ( d= 2 )FHN ( d= 2 )Landmark ( d= 20 )Methods #Params Time #Params Time #Params Time #Params Time Adjoint forward (Baker et al., 2024a) 21 ,969 162 .68 s22 ,114 265 .06 sN/A N/A 114 ,744 543 .80 s
+> Score matching (Heng et al., 2022) 26 ,353 65 .55 s26 ,498 103 .38 sN/A N/A 26 ,766 353 .05 s
+> Neural guided bridge (ours) 921 44 .12 s2,306 94 .79 s3,362 113 .77 s15 ,188 122 .48 s
+> Table 1. Benchmarks with two other deep-learning based methods. Neither adjoint forward nor score matching is available for the FHN partially observed conditioning case (denoted as “N/A”, not applicable in the table). All the experiments are conducted with the parameters described in Appendix B.
+
+mentum variables, defines the process (Xt, t ∈ [0 , T ]) as the solution to the SDE 
+
+dXt = Q(Xt)d Wt, Q(Xt)ij := k(X(i) 
+
+> t
+
+, X (j) 
+
+> t
+
+)Id. (32) Here Id is the d-dimensional identity matrix, W is a dn -dimensional Wiener process and k is a kernel function 
+
+Rd × Rd → R. In our numerical experiments we chose the Gaussian kernel k(s, y ) = 12 α exp 
+
+
+
+− ∥x−y∥2
+
+> 2κ2
+
+
+
+. The kernel parameters are chosen to be α = 0 .3, κ = 0 .5 to ensure a strong correlation between a wide range of landmarks. Note that the diffusion coefficient Q is state-dependent. To demonstrate the necessity of constructing such a state-dependent diffusion coefficient, consider the process ˜X
+
+solving the SDE 
+
+d ˜Xt = Q(v)d Wt, (33) where the diffusion constant is constant. As a result, the system becomes linear. The processes defined by Equa-tion (32) and Equation (33) are fundamentally different. In particular, Equation (32) guarantees that t 7 → Xt gener-ates a stochastic flow of diffeomorphisms (Sommer et al., 2021). This diffeomorphic setting preserves the shape struc-ture during evolution, whereas the linear process defined by Equation (33) does not. As illustrated in Figure 13, a vi-sual comparison (using identical driving Wiener processes) reveals that the linear process disrupts the shape topology, leading to overlaps and intersections. The diffusion process defined by Equation (33) can however be used as auxiliary process in the construction of guided proposals. We opted for this choice in our numerical experiments. In our numerical experiments, we chose one ellipse as the starting point and another ellipse as the endpoint of the bridge. Each ellipse is discretized by 50 landmarks, leading to the dimension of Xt being 100. We took T = 1 .0. In the leftmost column of Figure 14 we fix a Wiener process and show on the top- and middle row the guided proposal and neural bridge using this Wiener process. We observed that due to the very simple choice of auxiliary process, the guided proposal has difficulty reaching the final state. In fact, we had to increase ϵ2 to 2e − 3 for not running into numerical instabilities. Here, one can see that the additional learning by the neural bridge gives much better performance. In the bottom row, we used the guided proposal with the same Wiener process as initialization, augmented by running 
+
+5000 pCN iterations and plotted the final iteration. From this, one can see that these iterations provide another way to improve upon the guided proposal in the top row. The other columns repeat the same experiment with different Wiener process initializations. Due to the high-dimension of the problem, repeated simulation required for pCN steps may be computationally expensive. We benchmarked our method on the four test cases described above, comparing it to two other deep learning-based ap-proaches in Table 1. The comparison considers the number of network parameters and total training time, with all meth-ods trained using the same number of gradient descent steps and batch sizes. Our method outperforms both alternatives in terms of model size and training efficiency. 
+
+6. Conclusions and Limitations 
+
+We propose the neural guided diffusion bridge, a novel method for simulating diffusion bridges that enhances guided proposals through variational inference, eliminat-ing the need for MCMC or SMC. This approach enables efficient independent sampling with comparable quality in challenging tasks where existing score-learning-based meth-ods struggle. Extensive experiments, including both quanti-tative and qualitative evaluations, validate the effectiveness of our method. However, as the framework is formulated variationally and optimized by minimizing DKL (P• 
+
+> θ
+
+|| P⋆),it exhibits mode-seeking behaviour, potentially limiting its ability to explore all modes compared to running multiple MCMC chains. Despite this limitation, our method provides a computationally efficient alternative to guided proposals, particularly in generating independent samples from the conditioned process. Our approach focuses on better approximating the drift of the conditioned process while keeping the guiding term that ensures the process hits v at time T relatively simple. In future work, an interesting direction to obtain improved re-sults consists in trying to jointly learn ϑθ and the parameters of the linear process ( ˜σ, B, β). Also, as the gradient updat-ing relies on backpropagating through the whole numeri-cal SDE solvers, techniques such as the stochastic adjoint sensitivity method (Li et al., 2020) and adjoint matching (Domingo-Enrich et al., 2025) can be introduced to improve the efficiency of the computation. Another venue of future research consists of extending our approach to conditioning on partial observations at multiple future times. 9Neural Guided Diffusion Bridges 
+
+Acknowledgements 
+
+The authors thank anonymous reviewers and Thorben Pieper-Sethmacher (TU Delft) for their valuable comments and suggestions, which have helped to improve the clarity and quality of this work. The work presented in this paper was supported by the Villum Foundation Grant 40582, and the Novo Nordisk Foundation grant NNF18OC0052000. 
+
+Impact statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning and Statistics. There are many poten-tial societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+References 
+
+Arnaudon, A., van der Meulen, F., Schauer, M., and Sommer, S. Diffusion bridges for stochastic hamilto-nian systems and shape evolutions. SIAM Journal on Imaging Sciences , 15(1):293–323, March 2022. ISSN 1936-4954. doi: 10.1137/21M1406283. URL http: //arxiv.org/abs/2002.00885 .Baker, E. L., Schauer, M., and Sommer, S. Score match-ing for bridges without time-reversals. arXiv preprint arXiv:2407.15455 , 2024a. URL http://arxiv. org/abs/1712.03807 .Baker, E. L., Yang, G., Severinsen, M. L., Hipsley, C. A., and Sommer, S. Conditioning non-linear and infinite-dimensional diffusion processes. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024b. URL https://openreview.net/ forum?id=FV4an2OuFM .Beskos, A., Papaspiliopoulos, O., Roberts, G. O., and Fearnhead, P. Exact and computationally ef-ficient likelihood-based estimation for discretely observed diffusion processes. Journal of the Royal Statistical Society: Series B (Statistical Method-ology) , 68(3):333–382, 2006. ISSN 1467-9868. doi: 10.1111/j.1467-9868.2006.00552.x. URL 
+
+https://onlinelibrary.wiley.com/doi/ abs/10.1111/j.1467-9868.2006.00552.x .Bierkens, J., Van Der Meulen, F., and Schauer, M. Simu-lation of elliptic and hypo-elliptic conditional diffusions. 
+
+Advances in Applied Probability , 52(1):173–212, 2020. ISSN 0001-8678, 1475-6064. doi: 10.1017/apr.2019.54. Bierkens, J., Grazzi, S., Van Der Meulen, F., and Schauer, M. A piecewise deterministic monte carlo method for diffusion bridges. Statistics and Computing , 31(3):37, 2021. ISSN 0960-3174, 1573-1375. doi: 10.1007/ s11222-021-10008-8. Bradbury, J., Frostig, R., Hawkins, P., Johnson, M. J., Leary, C., Maclaurin, D., Necula, G., Paszke, A., VanderPlas, J., Wanderman-Milne, S., and Zhang, Q. JAX: Composable transformations of Python+NumPy programs, 2018. URL 
+
+http://github.com/jax-ml/jax .Chau, H., Kirkby, J. L., Nguyen, D. H., Nguyen, D., Nguyen, N., and Nguyen, T. An efficient method to simulate diffusion bridges. Statistics and Computing ,34(4):131, 2024. ISSN 0960-3174, 1573-1375. doi: 10.1007/s11222-024-10439-z. Chen, R. T., Rubanova, Y., Bettencourt, J., and Duvenaud, D. K. Neural ordinary differential equations. In Advances in neural information processing systems , volume 31, 2018. Chen, R. T., Behrmann, J., Duvenaud, D. K., and Jacobsen, J.-H. Residual flows for invertible generative modeling. In 
+
+Advances in Neural Information Processing Systems , vol-ume 32, 2019. URL https://openreview.net/ forum?id=HkgS1BBx8r .Chib, S., Pitt, M. K., and Shephard, N. Likelihood Based Inference for Diffusion Driven ¡odels. OFRC Working Papers Series 2004fe17, Oxford Financial Research Cen-tre, 2004. URL https://ideas.repec.org/p/ sbs/wpsefe/2004fe17.html .Clark, J. The simulation of pinned diffusions. In 
+
+29th IEEE Conference on Decision and Control , pp. 1418–1420 vol.3, 1990. doi: 10.1109/CDC.1990. 203845. URL https://ieeexplore.ieee.org/ document/203845/?arnumber=203845 .Corstanje, M., Van der Meulen, F., Schauer, M., and Som-mer, S. Simulating conditioned diffusions on mani-folds. arXiv preprint arXiv:2403.05409 , 2024. URL 
+
+http://arxiv.org/abs/2403.05409 .Cotter, S. L., Roberts, G. O., Stuart, A. M., and White, D. Mcmc methods for functions: Modifying old algorithms to make them faster. Statistical Science , 28(3):424–446, 2013. ISSN 08834237, 21688745. De Bortoli, V., Thornton, J., Heng, J., and Doucet, A. Diffu-sion schr ¨odinger bridge with applications to score-based generative modeling. In Advances in Neural Information Processing Systems , volume 34, pp. 17695–17709, 2021. Delyon, B. and Hu, Y. Simulation of conditioned diffu-sion and application to parameter estimation. Stochastic Processes and their Applications , 116(11):1660–1675, 2006. Ditlevsen, S. and Samson, A. Hypoelliptic diffusions: Filter-ing and inference from complete and partial observations. 
+
+Journal of the Royal Statistical Society Series B: Statisti-cal Methodology , 81(2):361–384, 2019. 10 Neural Guided Diffusion Bridges 
+
+Domingo-Enrich, C., Drozdzal, M., Karrer, B., and Chen, R. T. Q. Adjoint matching: Fine-tuning flow and diffu-sion generative models with memoryless stochastic op-timal control. In The Thirteenth International Confer-ence on Learning Representations , 2025. URL https: //openreview.net/forum?id=xQBRrtQM8u .Golightly, A. and Wilkinson, D. J. Learning and Inference in Computational Systems Biology . MIT Press, 2010. Grong, E., Habermann, K., and Sommer, S. Score match-ing for sub-riemannian bridge sampling. arXiv preprint arXiv:2404.15258 , 2024. URL http://arxiv.org/ abs/2404.15258 .Heng, J., De Bortoli, V., Doucet, A., and Thornton, J. Simulating diffusion bridges with score matching. 
+
+arXiv preprint arXiv:2111.07243 , 2022. URL http: //arxiv.org/abs/2111.07243 .Hyvarinen, A. Estimation of non-normalized statistical models by score matching. Journal of Machine Learning Research , pp. 15, 2005. Jensen, M. H. and Sommer, S. Simulation of conditioned semimartingales on riemannian manifolds. arXiv preprint arXiv:2105.13190 , 2023. URL http://arxiv.org/ abs/2105.13190 .Kidger, P., Foster, J., Li, X., and Lyons, T. J. Neural sdes as infinite-dimensional gans. In International conference on machine learning , pp. 5453–5463. PMLR, 2021. Kingma, D. P. and Ba, J. Adam: A method for stochastic op-timization. arXiv preprint arXiv:1412.6980 , 2017. URL 
+
+http://arxiv.org/abs/1412.6980 .Kingma, D. P. and Welling, M. Auto-encoding variational bayes. arXiv preprint arXiv:1312.6114 , 2022. URL 
+
+http://arxiv.org/abs/1312.6114 .Li, X., Wong, T.-K. L., Chen, R. T., and Duvenaud, D. Scalable gradients for stochastic differential equations. In International Conference on Artificial Intelligence and Statistics , pp. 3870–3882. PMLR, 2020. Lin, M., Chen, R., and Mykland, P. On generating monte carlo samples of continuous diffusion bridges. Journal of the American Statistical Association , 105(490):820–838, 2010. Mider, M., Schauer, M., and van der Meulen, F. Continuous-discrete smoothing of diffusions. Electronic Journal of Statistics , 15(2):4295 – 4342, 2021. doi: 10.1214/ 21-EJS1894. URL https://doi.org/10.1214/ 21-EJS1894 .Øksendal, B. Stochastic Differential Equations: An Intro-duction with Applications . Springer, 6th edition, 2014. ISBN 3540047581. Palmowski, Z. and Rolski, T. A technique for exponential change of measure for markov processes, 2002. Pieper-Sethmacher, T., van der Meulen, F., and van der Vaart, A. On a class of exponential changes of measure for stochastic pdes. Stochastic Processes and their Appli-cations , 185:104630, 2025. Pieschner, S. and Fuchs, C. Bayesian inference for diffusion processes: using higher-order approximations for transi-tion densities. Royal Society Open Science , 7(10):200270, 2020. ISSN 2054-5703. doi: 10.1098/rsos.200270. Rogers, L. C. G. and Williams, D. Diffusions, Markov processes, and martingales: It ˆo calculus , volume 2. Cam-bridge university press, 2000. Schauer, M., van der Meulen, F., and van Zanten, H. Guided proposals for simulating multi-dimensional dif-fusion bridges. Bernoulli , 23(4A), November 2017. ISSN 1350-7265. doi: 10.3150/16-BEJ833. URL 
+
+http://arxiv.org/abs/1311.3606 .Shi, Y., De Bortoli, V., Campbell, A., and Doucet, A. Diffu-sion schr ¨odinger bridge matching. In Advances in Neural Information Processing Systems , volume 36, 2024. Sommer, S., Arnaudon, A., Kuhnel, L., and Joshi, S. Bridge simulation and metric estimation on landmark manifolds. 
+
+arXiv preprint arXiv:1705.10943 , 2017. URL http: //arxiv.org/abs/1705.10943 .Sommer, S., Schauer, M., and Meulen, F. Stochastic flows and shape bridges. In Statistics of Stochastic Differential Equations on Manifolds and Stratified Spaces (hybrid meeting) , number 48 in Oberwolfach Reports, pp. 18–21. Mathematisches Forschungsinstitut Oberwolfach, 2021. doi: 10.4171/OWR/2021/48. Tang, Z., Hang, T., Gu, S., Chen, D., and Guo, B. Sim-plified diffusion schr ¨odinger bridge. arXiv preprint arXiv:2403.14623 , 2024. URL http://arxiv.org/ abs/2403.14623 .Thornton, J., Hutchinson, M., Mathieu, E., De Bor-toli, V., Teh, Y. W., and Doucet, A. Rieman-nian diffusion schr ¨odinger bridge. arXiv preprint arXiv:2207.03024 , 2022. URL http://arxiv.org/ abs/2207.03024 .Tzen, B. and Raginsky, M. Neural stochastic differential equations: Deep latent gaussian models in the diffusion limit. arXiv preprint arXiv:1905.09883 , 2019a. URL 
+
+http://arxiv.org/abs/1905.09883 .11 Neural Guided Diffusion Bridges 
+
+Tzen, B. and Raginsky, M. Theoretical guarantees for sam-pling and inference in generative models with latent diffu-sions. In Conference on Learning Theory , pp. 3084–3114. PMLR, 2019b. van der Meulen, F. and Schauer, M. Bayesian estima-tion of discretely observed multi-dimensional diffusion processes using guided proposals. Electronic Jour-nal of Statistics , 11(1), 2017. ISSN 1935-7524. doi: 10.1214/17-EJS1290. van der Meulen, F. and Schauer, M. Bayesian estimation of incompletely observed diffusions. Stochastics , 90(5): 641–662, 2018. Vincent, P. A connection between score matching and denoising autoencoders. Neural Computation , 23(7): 1661–1674, 2011. ISSN 0899-7667, 1530-888X. doi: 10.1162/NECO a 00142. Wang, J., Zhang, K., Xu, L., and Wang, E. Quantifying the waddington landscape and biological paths for devel-opment and differentiation. Proceedings of the National Academy of Sciences , 108(20):8257–8262, 2011. ISSN 0027-8424, 1091-6490. doi: 10.1073/pnas.1017017108. Whitaker, G. A., Golightly, A., Boys, R. J., and Sherlock, C. Improved bridge constructs for stochastic differen-tial equations. Statistics and Computing , 4(27):885–900, 2016. Yang, G., Baker, E. L., Severinsen, M. L., Hipsley, C. A., and Sommer, S. Infinite-dimensional diffusion bridge simulation via operator learning. In The 28th Interna-tional Conference on Artificial Intelligence and Statistics ,2025. URL https://openreview.net/forum? id=RZryinonfr .Zheng, K., He, G., Chen, J., Bao, F., and Zhu, J. Dif-fusion bridge implicit models. In The Thirteenth In-ternational Conference on Learning Representations ,2025. URL https://openreview.net/forum? id=eghAocvqBk .Zhou, L., Lou, A., Khanna, S., and Ermon, S. De-noising diffusion bridge models. In The Twelfth In-ternational Conference on Learning Representations ,2024. URL https://openreview.net/forum? id=FKksTayvGo .12 Neural Guided Diffusion Bridges 
+
+A. Theoretical Details 
+
+A.1. Preconditioned Crank-Nicolson 
+
+Algorithm 2 is a special case of Algorithm 4.1 of (Mider et al., 2021). 
+
+Algorithm 2 Preconditioned Crank-Nicolson scheme for guided proposals 
+
+1: Input: Discrete time grid T := {tm}m=0 ,1,...,M , tuning parameter η ∈ [0 , 1) , number of required samples K
+
+2: Solve Equation (15) on T , obtain { ˜H(tm)}, {˜r(tm, ·)} using Equations (13) and (14). 
+
+3: Sample w = {wtm } on T .
+
+4: Solve Equation (7) on T with w = {wtm }, obtain y = {ytm }.
+
+5: repeat 
+
+6: Sample new innovations z = {ztm } on T independently. 
+
+7: Set w◦ = ηw + p1 − η2z.
+
+8: Solve Equation (7) on T with z = {ztm }, obtain y◦ = {y◦ 
+
+> tm
+
+}.
+
+9: Compute A = Ψ( y◦)/Ψ( y) with {y◦ 
+
+> tm
+
+} and {ytm } using Equation (11). 
+
+10: Draw U ∼ U (0 , 1) .
+
+11: if U < A then 
+
+12: y ← y◦ and w ← w◦
+
+13: end if 
+
+14: Save y.
+
+15: until Sample counts > K .
+
+A.2. Proof of Theorem 4.3 
+
+Proof. Consider the KL divergence between P• 
+
+> θ
+
+and P⋆:
+
+DKL (P• 
+
+> θ
+
+|| P⋆) = E•
+
+
+
+log 
+
+ dL•
+
+> θ
+
+dL⋆
+
+
+
+(X)
+
+
+
+= E•
+
+
+
+log 
+
+ dL•
+
+> θ
+
+dL◦ · dL◦
+
+dL⋆
+
+
+
+(X)
+
+
+
+= E•
+
+
+
+log 
+
+ dL•
+
+> θ
+
+dL◦ (X)
+
+ 
+
+− E•
+
+
+
+log 
+
+ dL⋆
+
+dL◦ (X)
+
+ 
+
+. (34a) By Girsanov’s theorem, 
+
+E•
+
+
+
+log 
+
+ dL•
+
+> θ
+
+dL◦ (X)
+
+ 
+
+= E•
+
+
+
+log dP•
+
+> θ
+
+dP◦
+
+
+
+(35a) 
+
+= E•
+
+"Z T
+
+> 0
+
+ϑθ (t, X t)d W ◦ 
+
+> t
+
+− 12
+
+Z T
+
+> 0
+
+∥ϑθ (t, X t)∥2dt
+
+#
+
+= E•
+
+"Z T
+
+> 0
+
+ϑθ (t, X t)d W • 
+
+> t
+
++ 12
+
+Z T
+
+> 0
+
+∥ϑθ (t, X t)∥2dt
+
+#
+
+= E•
+
+"
+
+12
+
+Z T
+
+> 0
+
+∥ϑθ (t, X t)∥2dt
+
+#
+
+, (35b) where the stochastic integral vanishes because of the martingale property of the It ˆo integral. The first equality follows from Equation (18). By Equation (8) 
+
+E•
+
+
+
+log 
+
+ dL⋆
+
+dL◦ (X)
+
+ 
+
+= E•
+
+"Z T
+
+> 0
+
+G(t, X t)d t
+
+#
+
++ log ˜h(0 , x 0)
+
+h(0 , x 0) . (36) Substituting Equation (35b) and Equation (36) into Equation (34a) gives 
+
+DKL (P• 
+
+> θ
+
+|| P⋆) = E•
+
+Z T
+
+> 0
+
+ 12 ∥ϑθ (t, X t)∥2 − G(t, X t)
+
+
+
+dt − log ˜h(0 , x 0)
+
+h(0 , x 0) = L(θ) − log ˜h(0 , x 0)
+
+h(0 , x 0) ≥ 0, (37) with L(θ) as defined in Equation (20). 13 Neural Guided Diffusion Bridges 
+
+A.3. SDE Gradients 
+
+We now derive the gradient of Equation (23) with respect to θ, on a fixed Wiener realization w•(n) = {w•(n) 
+
+> tm
+
+}. As discussed, 
+
+x•(n) 
+
+> tm
+
+= ϕθ (w•(n) 
+
+> tm
+
+) is implemented as a numerical SDE solver fθ (w•(n) 
+
+> tm
+
+, t m−1, x •(n) 
+
+> tm−1
+
+), m ≥ 1 that takes the previous step 
+
+(tm−1, x •(n) 
+
+> tm−1
+
+) as additional arguments. As x•(n) 
+
+> tm−1
+
+also depends on θ, the gradient with respect to θ needs to be computed recursively. Specifically, with x•(n) 
+
+> tm
+
+= fθ,m = fθ (w•(n) 
+
+> tm
+
+, t m−1, x •(n) 
+
+> tm−1
+
+)
+
+∇θ
+
+ 12 ∥ϑθ (tm−1, ϕ θ (w•(n) 
+
+> tm−1
+
+)∥22
+
+
+
+= ∇θ
+
+ 12 ∥ϑθ (tm−1, f θ,m −1)∥22
+
+
+
+(38a) 
+
+= [ ∇θ ϑθ (tm−1, f θ,m −1))] T ϑθ (tm−1, f θ,m −1) (38b) 
+
+=
+
+ ∂ϑ θ (tm−1, f θ,m −1)
+
+∂θ + ∂ϑ θ (tm−1, f θ,m −1)
+
+∂f θ,m −1
+
+· ∇ θ fθ,m −1
+
+T
+
+ϑθ (tm−1, f θ,m −1) (38c) 
+
+=
+
+ ∂ϑ θ (tm−1, f θ,m −1)
+
+∂θ + ∂ϑ θ (tm−1, f θ,m −1)
+
+∂f θ,m −1
+
+·
+
+ ∂f θ,m −1
+
+∂θ + ∂f θ,m −1
+
+∂f θ,m −2
+
+· ∇ θ fθ,m −2
+
+ T
+
+ϑθ (tm−1, f θ,m −1) (38d) 
+
+=
+
+ ∂ϑ θ (tm−1, f θ,m −1)
+
+∂θ + ∂ϑ θ (tm−1, f θ,m −1)
+
+∂f θ,m −1
+
+·
+
+ ∂f θ,m −1
+
+∂θ +
+
+> m−2
+
+X
+
+> i=1
+
+
+
+> m−1
+
+Y
+
+> j=i+1
+
+∂f θ,j 
+
+∂f θ,j −1
+
+ ∂f θ,i 
+
+∂θ 
+
+
+
+> T
+
+ϑθ (tm−1, f θ,m −1),
+
+(38e) Similiarly, the gradient of G with respect to θ can also be computed recusively: 
+
+∇θ G(tm−1, ϕ θ (w•(n) 
+
+> tm−1
+
+)) = ∂G (tm−1, f θ,m −1)
+
+∂f θ,m −1
+
+·
+
+ ∂f θ,m −1
+
+∂θ +
+
+> m−2
+
+X
+
+> i=1
+
+
+
+> m−1
+
+Y
+
+> j=i+1
+
+∂f θ,j 
+
+∂f θ,j −1
+
+ ∂f θ,i 
+
+∂θ 
+
+ . (39) The gradient of L(θ) can be approximated by: 
+
+∇θ L(θ) ≈ 1
+
+N
+
+> N
+
+X
+
+> n=1
+> M
+
+X
+
+> m=1
+
+
+
+∇θ
+
+ 12 ∥ϑθ (tm−1, ϕ θ (w•(n) 
+
+> tm−1
+
+)) ∥22
+
+
+
+− ∇ θ G(tm−1, ϕ θ (w•(n) 
+
+> tm−1
+
+)) 
+
+
+
+δt. (40) The realization of fθ depends on the chosen numerical integrator. We choose Euler-Maruyama as the integrator used for all the experiments conducted in Section 5. Under this scheme, fθ is: 
+
+fθ (w•(n) 
+
+> tm
+
+, t m−1, x •(n) 
+
+> tm−1
+
+) = x•(n) 
+
+> tm−1
+
++ ( b + a˜r + σϑ θ )( tm−1, x •(n) 
+
+> tm−1
+
+) + σ(tm−1, x •(n) 
+
+> tm−1
+
+)w•(n) 
+
+> tm
+
+, (41) with w•(n) 
+
+> tm
+
+∼ N (0 , (tm − tm−1)Id). The derivatives can be computed accordingly: 
+
+∂f θ,m 
+
+∂θ = σ(tm−1, x •(n) 
+
+> tm−1
+
+) ∂ϑ θ (tm−1, x •(n) 
+
+> tm−1
+
+)
+
+∂θ (42a) 
+
+∂f θ,m 
+
+∂f θ,m −1
+
+= 1 + ∂(b + a˜r + σϑ θ )
+
+∂x •(n)
+
+> tm−1
+
+(tm−1, x •(n) 
+
+> tm−1
+
+) + ∂σ ∂x •(n)
+
+> tm−1
+
+(tm−1, x •(n) 
+
+> tm−1
+
+)w•(n) 
+
+> tm
+
+. (42b) The automatic differentiation can save all the intermediate Equation (42a) and Equation (42b), which enables to compute 
+
+∇θ L(θ).
+
+B. Experiment Details 
+
+B.1. Code Implementation 
+
+The codebase for reproducing all the experiments conducted in the paper is available in https://github.com/ bookdiver/neuralbridge 
+
+14 Neural Guided Diffusion Bridges 
+
+B.2. Linear Processes Brownian bridges: If dXt = γdt + σdWt, then 
+
+log h(t, x ) = log p(T, v | t, x ) = − 12 log(2 πσ 2(T − t)) − (v − x − γ(T − t)) 2
+
+2σ2(T − t) . (43) If d ˜Xt = σdWt, then log ˜h(t, x ) is obtained by taking γ = 0 in the preceding display. Therefore, in this case we can compute the lower bound on the loss: L(θ) ≥ log ˜h(0 ,x 0)
+
+h(0 ,x 0) = (v−x−γT )2−(v−x)2
+
+2σ2T . Moreover, the optimal map ϑθopt is given by ϑθopt (t, x ) = σ(∂x log h(t, x ) − ∂x log ˜h(t, x )) = − γσ .In the numerical experiment, we took ϵ = 10 −5. The map ϑθ is modeled by a fully connected neural network with 3 hidden layers and 20 hidden dimensions for each layer. The model is trained with 25,000 independently sampled full trajectories of 
+
+X•. The batch size was taken to be N = 50 and the time step size δt = 0 .002 , leading to in total M = 500 time steps. The network was trained using the Adam (Kingma & Ba, 2017) optimizer with learning rate 0.001 .0.0 0.2 0.4 0.6 0.8 1.0                        
+
+> t
+> −2
+> −1012
+> x
+> γ= 1 .0, σ = 1 .0
+> 0.00.20.40.60.81.0
+> t
+> γ= 1 .0, σ = 0 .5
+> 0.00.20.40.60.81.0
+> t
+> γ= 2 .0, σ = 1 .0
+> 0.00.20.40.60.81.0
+> t
+> γ=−2.0, σ = 1 .0
+> 0.00.20.40.60.81.0
+> Abs. error
+
+Figure 2. Evaluations of trained neural networks ϑθ (t, x ) against the optimal maps ϑθopt (t, x ) under different settings of γ, σ , where the background colour intensities indicate the absolute error |ϑθ − ϑθopt |. In each panel, 10 independent samples from the guided proposal are shown in grey to indicate the sampling regions where one expects the error to be smallest. −1.5 −1.0 −0.5 0.0 0.5 1.0 1.5                  
+
+> x
+> 0.00.20.40.60.81.0
+> Density
+> t = 0.20
+> sample (n.b.) sample (t.b.) abs. error
+> −1.5−1.0−0.50.00.51.01.5
+> x
+> t = 0.40
+> sample (n.b.) sample (t.b.) abs. error
+> −1.5−1.0−0.50.00.51.01.5
+> x
+> t = 0.60
+> sample (n.b.) sample (t.b.) abs. error
+> −1.5−1.0−0.50.00.51.01.5
+> x
+> t = 0.80
+> sample (n.b.) sample (t.b.) abs. error
+
+Figure 3. Comparison of marginal distributions at different time slices of the learned neural bridge (n.b.) and analytical true Brownian bridge (t.b.) under the setting γ = 1 .0, σ = 1 .0, conditioned on v = 0 .0. The purple bars show the absolute error (abs. error) of each bin between the learned neural bridge and the histograms obtained by forward sampling from the true bridge process, which are expected to be low when two distributions are close in terms of their shapes. The histograms are made from 50,000 independent trajectory samples. 
+
+Ornstein-Uhlenbeck bridge: When conditioning Equation (26) on v, the conditioned process X⋆ satisfies the SDE 
+
+dX⋆t =
+
+
+
+γ(μ − X⋆t ) + 2γe −γ(T −t)
+
+1 − e−2γ(T −t)
+
+h
+
+(v − μ) − e−γ(T −t)(X⋆t − μ)
+
+i
+
+dt + σdWt, (44) 15 Neural Guided Diffusion Bridges 
+
+which is obtained from the transition density given byEquation (26) is: 
+
+p(T, y | t, x ) = 1
+
+q
+
+2πΣ2
+
+t,T 
+
+exp − (v − mt,T (x)) 2
+
+2Σ 2
+
+t,T 
+
+!
+
+, (45a) 
+
+ms,t (x) = μ + ( x − μ)e−γ(t−s), (45b) 
+
+Σ2
+
+s,t = σ2
+
+2γ
+
+
+
+1 − e−2γ(t−s)
+
+. (45c) Since the auxiliary process is chosen the same as the Brownian case, one can easily show the optimal value of ϑθ (t, x ) to be 
+
+ϑθopt (t, x ) = 2γe −γ(T −t)
+
+σ(1 − e−2γ(T −t))
+
+h
+
+(v − μ) − e−γ(T −t)(x − μ)
+
+i
+
++ (v − x)
+
+σ(T − t) . (46) Therefore, the lower bound on θ 7 → L(θ) is given by 
+
+log ˜h(0 , x 0)
+
+h(0 , x 0) = − 12 log(2 πσ 2(T − t)) − (v − x)2
+
+2σ2(T − t) + 12 log(2 πΣ2
+
+t,T ) + (v − mt,T (x)) 2
+
+2Σ 2
+
+t,T 
+
+. (47) We repeated the same numerical and experimental settings as the previous Brownian example, except for training with 50,000 samples to obtain better results. 0.0 0.2 0.4 0.6 0.8 1.0                           
+
+> t
+> −0.50.00.51.01.5
+> x
+> γ= 1 .7, μ = 1 .0, σ = 0 .3
+> 0.00.20.40.60.81.0
+> t
+> γ= 0 .6, μ = 1 .0, σ = 0 .3
+> 0.00.20.40.60.81.0
+> t
+> γ= 1 .7, μ = 1 .0, σ = 1 .0
+> 0.00.20.40.60.81.0
+> t
+> γ= 1 .7, μ = 0 .0, σ = 0 .3
+> 0.00.20.40.60.81.0
+> Abs. error
+
+Figure 4. Evaluations of trained neural networks ϑθ (t, x ) against the optimal maps ϑθopt (t, x ) under different settings of γ, μ, σ , where the background colour intensities indicate the absolute error |ϑθ − ϑθopt |. In each panel, 10 independent samples from the guided proposal are shown in grey to indicate the sampling regions where one expects the error to be smallest. Except the rightmost setting with 
+
+γ = 1 .7, μ = 0 .0, σ = 0 .3, all the processes are conditioned on v = 1 .0, whereas in the rightmost case, the process is conditioned on 
+
+v = 0 .0.−0.50 −0.25 0 .00 0.25 0.50 0.75 1.00 1.25 1.50                   
+
+> x
+> 0.00.51.01.52.02.53.03.5
+> Density
+> t = 0.20
+> sample (n.b.) sample (t.b.) abs. error
+> −0.50 −0.25 0 .00 0.25 0.50 0.75 1.00 1.25 1.50
+> x
+> t = 0.40
+> sample (n.b.) sample (t.b.) abs. error
+> −0.50 −0.25 0 .00 0.25 0.50 0.75 1.00 1.25 1.50
+> x
+> t = 0.60
+> sample (n.b.) sample (t.b.) abs. error
+> −0.50 −0.25 0 .00 0.25 0.50 0.75 1.00 1.25 1.50
+> x
+> t = 0.80
+> sample (n.b.) sample (t.b.) abs. error
+
+Figure 5. Comparison of marginal distributions at different time slices of the learned neural bridge (n.b.) and analytical true OU bridge (t.b.) under the setting γ = 1 .7, μ = 1 .0, σ = 0 .3, conditioned on v = 1 .0. The purple bars show the absolute error (abs. error) of each bin. The histograms are made from 50,000 independent trajectory samples. 
+
+B.3. Cell Diffusion Process 
+
+For the benchmark tests, we adapt the published guided proposal implementations of the corresponding methods to fit into our test framework with possibly minor modifications. Specifically, the original guided proposal codebase is implemented with 16 Neural Guided Diffusion Bridges 0 1000 2000 3000 4000 5000 
+
+Iterations                 
+
+> 012345
+> Loss
+> γ= 1 .0, σ = 1 .0
+> γ= 1 .0, σ = 0 .5
+> γ= 2 .0, σ = 1 .0
+> γ=−2.0, σ = 1 .0
+> Lopt
+> Lopt (σ= 0 .5)
+> Lopt (γ= 2 .0)
+> Lopt (γ=−2.0)
+
+(a) Brownian bridges 0 1000 2000 3000 4000 5000 
+
+Iterations                    
+
+> −6
+> −4
+> −202
+> Loss
+> γ= 1 .7, μ = 1 .0, σ = 0 .3
+> γ= 0 .6, μ = 1 .0, σ = 0 .3
+> θ= 1 .7, μ = 1 .0, σ = 1 .0
+> θ= 1 .7, μ = 0 .0, σ = 0 .3
+> Lopt
+> Lopt (γ= 0 .6)
+> Lopt (σ= 1 .0)
+> Lopt (μ= 0 .0)
+
+(b) OU bridges 
+
+Figure 6. Loss curves of training Brownian and OU bridges. For Brownian bridges, the SDE parameters are taken as γ = 1 .0, σ = 1 .0,for the OU bridges, the parameters are taken as γ = 1 .7, μ = 1 .0, σ = 0 .3 unless any of them is specified. 
+
+Julia in 1, we rewrite it in JAX (Bradbury et al., 2018); the score matching bridge repository is published in 2. additionally, as also reported by the authors, (Heng et al., 2022) introduces two score-matching-based bridge simulation schemes, reversed and forward simulation, and the forward simulation relies on the reversed simulation, and learning from approximated reversed bridge can magnifies the errors due to progressive accumulation. Therefore, we only compare our method with the reversed bridge earning to avoid error accumulations; the adjoint bridge is implemented in 3.
+
+Normal event: We took ϵ2 = 10 −10 and ϑθ is modeled as a fully-connected network with 3 hidden layers and 32 hidden dimensions per layer, activated by LipSwish. We trained the model for 5,000 gradient descent updating iterations. In each step, we sampled a batch of 100 independent trajectories of X• under the current θ. The numerical sampling time step size is δt = 0 .01 . Therefore, in total M = 400 discrete steps of a single trajectory. The Adam optimizer with learning rate of 
+
+1e − 3 was used for optimization. For the guided proposal, we set η = 0 .98 , and ran one MCMC chain for 10,000 iterations. This resulted in an acceptance percentage of 21 .38% . The initial 5, 000 iterations were considered as burn-in samples. After burn-in, we collected the samples and subsampled them by taking every 133 samples to obtain 30 samples. In the following experiments, if not explicitly stated, all the samples from the guided proposal are similarly obtained from one MCMC chain by subsampling from the outputs. For the score matching and adjoint forward methods, we deployed the given network structures provided in their codebases. As a reference, we sampled from the forward process until we obtained 30 samples satisfying the inequality ∥LX T − v∥ ≤ 0.01 . These samples are shown in grey. 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+
+> t
+> 0.00.51.01.52.0
+> Xt
+> Xt, 1
+> Xt, 2
+> x0
+> v
+
+(a) neural bridge 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+> t
+> 0.00.51.01.52.0
+> Xt
+
+(b) guided proposal 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+> t
+> 0.00.51.01.52.0
+> Xt
+
+(c) score matching 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+> t
+> 0.00.51.01.52.0
+> Xt
+
+(d) adjoint forward 
+
+Figure 7. Visualization of 30 simulated bridge trajectories under normal event conditioning, using various sampling methods. All samples are independently drawn, except those generated by the guided proposal. As a reference, in grey, we added trajectories from the unconditional forward process, with samples that satisfy the condition ∥LX T − v∥ > 0.01 rejected. 
+
+Rare event: The setups for conditioning on rare events of the neural guided bridge are replicated from the previous normal event case, except for the MCMC is running with sightly increased tuning parameter η = 0 .99 and for 20,000 iterations and the first 10,000 iterations is discarded as the burn-in period. The acceptance percentage is 22 .29% . For the score matching, 
+
+> 1
+
+https://juliapackages.com/p/bridge 
+
+> 2
+
+https://github.com/jeremyhengjm/DiffusionBridge 
+
+> 3
+
+https://github.com/libbylbaker/forward_bridge 
+
+17 Neural Guided Diffusion Bridges 
+
+since we only use the reversed bridge, where learning is independent of the event we condition on , we directly deploy the trained score approximation from the previous case. For the adjoint forward, we fix the neural network architecture and training scheme, changing only the conditioned target. As a reference, we sampled the forward process 100 , 000 times. This time however, none of the samples ended near the point we condition on, confirming we are dealing with a rare event. 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+
+> t
+> −0.20.00.20.40.60.81.01.2
+> Xt
+> Xt, 1
+> Xt, 2
+> x0
+> v
+
+(a) neural bridge 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+> t
+> 0.00.20.40.60.81.01.2
+> Xt
+
+(b) guided proposal 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+> t
+> 0.00.20.40.60.81.0
+> Xt
+
+(c) score matching 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+> t
+> −0.20.00.20.40.60.81.01.2
+> Xt
+
+(d) adjoint forward 
+
+Figure 8. Visualization of 30 simulated bridge trajectories under rare event conditioning, using various sampling methods. All samples are independently drawn, except those generated by the guided proposal. Contrary to Figure 7, no reference trajectories were added as extensive forward simulation of the process did not yield any samples satisfying ∥LX t − v∥ < 0.01 .
+
+Multi-modality: All neural network architectures and training settings match those used in previous examples. We set 
+
+δt = 0 .01 and M = 500 . For the guided proposal, a single chain is run for 50 , 000 iterations with η = 0 .9, discarding the first 20 , 000 as burn-in. The acceptance percentage is 26 .81% . As in the rare event case, no valid samples were found from forward simulating 100 , 000 times the (unconditioned) forward process. Figure 10 shows marginal distributions for both unconditioned and conditioned processes, using the guided proposal and the neural bridge. At t = 3 .0 and t = 4 .0, multiple peaks appear in the marginal densities, suggesting multi-modality. This is consistent with the unconditioned sampling, where multiple modes are also visible. However, neither score matching nor the adjoint forward method captures these modes. In contrast, the neural bridge and guided proposal yield similar marginals that accurately reflect the multi-modal nature of the process. 0 1 2 3 4 5
+
+> t
+> −1.0
+> −0.50.00.51.01.5
+> Xt
+> Xt, 1
+> Xt, 2
+> x0
+> v
+
+(a) neural bridge 0 1 2 3 4 5 
+
+> t
+> −1.0
+> −0.50.00.51.01.5
+> Xt
+
+(b) guided proposal 0 1 2 3 4 5 
+
+> t
+> −1.0
+> −0.8
+> −0.6
+> −0.4
+> −0.20.00.20.4
+> Xt
+
+(c) score matching 0 1 2 3 4 5 
+
+> t
+> −1.0
+> −0.50.00.51.01.52.0
+> Xt
+
+(d) adjoint forward 
+
+Figure 9. Visualization of 30 simulated bridge trajectories under multi-modal event conditioning, using various sampling methods. All samples are independently drawn, except those corresponding to the guided proposal. 
+
+B.4. FitzHugh-Nagumo Model Normal event: We set δt = 0 .005 , which leads to M = 400 time steps. We took ϵ2 = 1 e − 8. For the neural guided bridge, 
+
+ϑθ (t, x ) is constructed as a fully connected neural network with 4 hidden layers and 32 hidden dimensions at each layer, activated by LipSwish functions. The training is done for 5,000 gradient descent steps. In each step, we generated N = 100 
+
+independent samples from the current X• for Monte Carlo estimation. The network is optimized by Adam with a learning rate of 1e − 3. For the guided proposal, we set η = 0 as suggested in (Bierkens et al., 2020) and ran one chain for 50 , 000 
+
+iterations with a burn-in of 20 , 000 steps, obtaining 64 .41% acceptance percentage. The reference is obtained by sampling the (unconditional) forward process filtering samples with ∥LX T − v∥ ≤ 0.01 , as v = 1.0 is an event around which the process is likely to reach a small ball, one can expect to easily obtain sufficient samples that meets the filtering condition, it turns out that we only need to sample the forward process for 10 , 000 to obtain 450 vaild samples, and we only show the first 30 in the figure. 18 Neural Guided Diffusion Bridges 0246                        
+
+> Xt, 1 Density t = 1.0
+> sample (unc.) sample (g.p.) sample (n.b.)
+> 0.00.51.01.52.02.5
+> t = 2.0
+> 0.00.51.01.5
+> t = 3.0
+> 0123
+> t = 4.0
+> −1.0−0.50.00.51.01.52.0
+> x
+> 0246
+> Xt, 2 Density
+> −1.0−0.50.00.51.01.52.0
+> x
+> 0.00.51.01.52.0
+> −1.0−0.50.00.51.01.52.0
+> x
+> 0.00.51.01.5
+> −1.0−0.50.00.51.01.52.0
+> x
+> 0.00.51.01.52.02.5
+
+Figure 10. Marginal distributions of X at selected time points for three settings: the unconditioned process (unc.), the neural bridge (n.b.), and the guided proposal sampled with pCN (g.p.). All trajectories start at x0 = −1 −1⊤ and, The neural bridge and the guided proposal are conditioned to reach v = −1 −1⊤ at the terminal time T = 5 . Each histogram is based on 10,000 samples—independent draws for unc. and n.b. and subsampled MCMC draws for g.p. The first and second components of X are displayed in the top and bottom rows, respectively. 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00 
+
+> t
+> −1.0
+> −0.50.00.51.0
+> XtXt, 1
+> Xt, 2
+
+(a) neural bridge 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00  
+
+> t
+> −1.0
+> −0.50.00.51.0
+> Xt
+
+(b) guided proposal 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00  
+
+> t
+> −1.0
+> −0.50.00.51.0
+> Xt
+
+(c) reference 
+
+Figure 11. Visualization of 30 simulated bridge trajectories under normal event conditioning from the learned neural bridge and pCN sampling of the guided proposal. The reference trajectories in (c) are obtained by forward sampling the unconditioned process, keeping only samples that satisfy the condition ∥LX T − v∥ ≤ 0.01 .
+
+Rare event: We duplicate the neural network training setting as before, including the used network structure and training hyperparameters. For the guided proposal we set the pCN-parameter to η = 0 .9 and ran one chain for 50,000 iterations which yielded a Metropolis-Hastings acceptance percentage equal to 22 .46% . The initial 20,000 iterations are considered burnin samples. As a reference, we forward sampled 200 , 000 paths of the unconditioned process. Of those, 35 samples satisfied ∥LX t − v∥ < 0.01 , which is about 0.02% of the samples. As expected, in the “normal event” case, this percentage was higher ( 4.5% ). 19 Neural Guided Diffusion Bridges 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00 
+
+> t
+> −1.0
+> −0.50.00.51.0
+> XtXt, 1
+> Xt, 2
+
+(a) neural bridge 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00  
+
+> t
+> −1.0
+> −0.50.00.51.0
+> Xt
+
+(b) guided proposal 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00  
+
+> t
+> −1.0
+> −0.50.00.51.0
+> Xt
+
+(c) reference 
+
+Figure 12. Visualization of 30 simulated bridge trajectories under rare event conditioning from the learned neural bridge and pCN sampling of the guided proposal. The reference trajectories in (c) are obtained by forward sampling the unconditioned process, and filtered the results by the condition ∥LX T − v∥ ≤ 0.01 .
+
+B.5. Stochastic Landmark Matching −1.0          
+
+> −0.50.00.51.0
+> Linear process
+> −101
+> −1.0
+> −0.50.00.51.0
+> Nonlinear process
+> −101−101−101
+> 0.00.20.40.60.81.0
+> Time  t
+
+Figure 13. Comparison of unconditioned samples from the linear process (Equation (33)) and the nonlinear process (Equation (32)). Top row: 4 independent samples from Equation (33). Bottom row: corresponding samples from Equation (32), each using the same Wiener process realization as in the top row. 
+
+The observation noise variance is set as ϵ2 = 2 e − 3, as we find too small values of ϵ will cause numerical instability. We deploy the neural network architecture suggested in (Heng et al., 2022) to model ϑθ , whose encoding part is a two-layer MLP with 128 hidden units at each layer, and the decoding part is a three-layer MLP with hidden units of 256, 256, and 128 individually. The network is activated by tanh, and trained with 240,000 independent samples from X• with batch size 
+
+N = 8 , optimized by Adam with an initial learning rate of 7.0e − 4 and a cosine decay scheduler. For the guided proposal, we run 4 chain for 5, 000 iterations each and drop the first 1, 000 iterations as the burn-in, with η = 0 .95 and obtain 12 .62% 
+
+acceptance percentage on average over the 4 chains. 20 Neural Guided Diffusion Bridges −0.50.00.51.01.5                              
+
+> Guided proposal
+> vx0
+> xT
+> −0.50.00.51.01.5
+> Neural bridge
+> −2.0−1.5−1.0−0.50.00.51.01.5
+> −0.50.00.51.01.5
+> Guided proposal (w. pCN)
+> −2.0−1.5−1.0−0.50.00.51.01.5−2.0−1.5−1.0−0.50.00.51.01.5−2.0−1.5−1.0−0.50.00.51.01.5
+
+0.00.20.40.60.81.0
+
+> t
+
+Figure 14. 4 realizations of sampling from the guided proposal, the trained neural bridge and the final iteration after updating the guided proposal with 5, 000 pCN-steps. Top row: 4 samples of the guided proposal using 4 independent Wiener process realisations; middle row: 
+
+4 samples from the trained neural bridge using the same Wiener realisations as the top row; Bottom row: the final outputs of 4 independent chains updating the guided propsals using pCN-steps. The chains are initialised with the same Wiener realisations as the top row. 
+
+21
