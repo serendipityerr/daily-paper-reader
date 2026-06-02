@@ -1,0 +1,5361 @@
+Title: Triangular-Reference Schrödinger Bridges for Time Series Generation
+
+URL Source: https://arxiv.org/pdf/2605.27478v1
+
+Published Time: Thu, 28 May 2026 00:10:37 GMT
+
+Number of Pages: 91
+
+Markdown Content:
+# Triangular-Reference Schrödinger Bridges for Time Series Generation 
+
+Gabriele Bocchi ∗
+
+Abstract 
+
+We introduce Triangular-Reference Schrödinger Bridges for Time Series (TR-SBTS ), a conservative extension of the SBTS framework in which the Brownian reference is replaced by an intervalwise frozen, possibly degenerate diffusion reference, triangular across a hierarchy of latent volatility levels. The construction is a single entropy projection on the augmented state space, with the variational constraint imposed jointly across time and the latent levels and unfolded hierarchically by the disintegration of relative entropy. The variational core of SBTS is preserved: the entropy minimiser is the h-transform of the reference, and on each frozen interval the optimal dynamics admit a logarithmic-gradient drift formula on the affine leaves of the active covariance directions, valid even when the frozen covariance is rank-deficient. We establish stability of the frozen approximation and convergence of the corresponding regularised kernel estimators. The construction is realised through a finite-dimensional conditioning map assembled from three complementary reductions of the past—a block PCR summary, a reference-aware Mahalanobis kernel on past increments induced by the runtime frozen covariance cumulants, and a past-window WLS drift regressor under the same reference metric—together with a coupled state–covariance bridge step in which each latent level produces a dynamic reference for the level above, summarised by a covariance descriptor; the construction is evaluated on numerical experiments. 
+
+# 1 Introduction 
+
+The generation of realistic synthetic time series is a central problem in modern data-driven modelling. Sequential data appear in finance, energy, climate, health care, audio and video processing, and many other domains in 
+
+> ∗
+
+Arakne S.r.l., Roma . E-mail: gabriele.bocchi@arakne.it .
+
+1
+
+> arXiv:2605.27478v1 [stat.ML] 26 May 2026
+
+which one wants to reproduce not only static distributions, but also temporal dependence, cross-sectional dependence, and pathwise variability. In finance, synthetic trajectories are used for stress testing, risk measurement, scenario generation, data augmentation, and the assessment of downstream decision rules, including hedging and forecasting procedures. These applications are particularly demanding: a useful generator should reproduce marginal laws, dependence across time, correlation across components, volatility clustering, tail behaviour, and, when relevant, abrupt regime changes. Classical parametric models provide interpretable dynamics, but their cali-bration can be delicate and the resulting synthetic paths are exposed to model misspecification. This has motivated the development of data-driven genera-tive models. General-purpose generative modelling includes likelihood-based models, variational autoencoders, normalising flows, generative adversarial networks, score-based models, diffusion models, and optimal-transport-based approaches; see, among many others, [ 13 , 3, 19 , 17 , 23 , 16 , 4 ]. For time series, additional structure is needed: matching one-time marginals, or even a static joint distribution, is not enough if the sequential and causal structure is lost. This has led to specialised architectures and metrics, including TimeGAN [26 ], QuantGAN [ 24 ], COT-GAN [ 25 ], conditional-loss Euler generators [18 ], signature-based methods [ 5 , 8], and neural-SDE or functional-data approaches [9]. Schrödinger bridge methods provide a particularly natural framework for this problem. The classical Schrödinger bridge problem seeks the probability law on path space which is closest, in relative entropy, to a reference path measure while satisfying prescribed marginal constraints. It can be viewed as an entropic version of optimal transport and, in diffusion settings, it admits a stochastic-control interpretation: the optimal law is obtained by adding a drift to the reference dynamics, with the energy of the control measured by relative entropy. This point of view combines probabilistic structure, variational interpretability, and a constructive generative mechanism. It is also connected to computational approaches based on entropic optimal transport, Sinkhorn-type algorithms, iterative proportional fitting, and more recent Schrödinger-bridge matching methods; see for instance [21, 11, 12, 7, 4, 6, 14]. The Schrödinger Bridge for Time Series (SBTS) framework introduced in [ 15 ] adapts this idea to sequential data. Instead of imposing only two endpoint marginals, SBTS constrains the full joint law of the observations on a fixed time grid. Starting from a Brownian reference, it searches for the path measure closest to the reference law, in relative entropy, whose finite-dimensional distribution at the observation dates matches the empirical time-series law. The minimiser is a controlled diffusion with path-dependent 2drift. This drift can be represented through backward Schrödinger potentials and estimated from data by kernel regression or neural methods. In this way, SBTS directly targets the joint time-series distribution while still producing a continuous-time interpolation between observed dates. Subsequent works have clarified both the empirical strengths and the lim-itations of this approach. The systematic evaluation in [ 1] benchmarks SBTS against state-of-the-art time-series generators and studies its performance through metrics designed to test marginal fidelity, temporal dependence, and statistical robustness. These results support SBTS as a competitive and robust time-series generator, but they also point to practical issues that become important in longer or higher-dimensional settings: kernel bandwidth selection, conditioning dimension, hyperparameter calibration, and the fact that the Brownian reference imposes a fixed quadratic variation. The last point is especially relevant for financial time series, where stochastic volatility, rank-deficient covariance structures, and correlated noise are part of the phenomenon one wants to reproduce rather than secondary modelling details. Two recent developments address these limitations in different directions. The jump-diffusion extension of [ 22 ] replaces the purely continuous Brownian reference by a reference process with a compound Poisson component. The corresponding bridge is formulated on càdlàg path space and learns both a drift and a jump intensity, allowing the generated paths to capture heavy tails, abrupt moves, and regime changes. A different and complementary development is the Schrödinger–Bass Bridge for Time Series (SBBTS) of [ 2]. It extends the Schrödinger–Bass framework from a two-marginal setting to full time-series distributions and optimises jointly over drift and volatility. This gives a powerful framework for learning stochastic volatility and correlation structures that cannot be captured by a Brownian-reference SBTS model. The present work follows a conservative extension of SBTS: the relative-entropy backbone of SBTS is preserved and the reference law is modified. The Brownian reference on the observed process is replaced by an adapted triangular reference on an augmented state 
+
+Z = ( Z0, Z 1, . . . , Z L),
+
+where Z0 denotes the principal time series, such as prices or returns, and the lower components Z1, . . . , Z L represent volatility or covariance descriptors constructed on the coarse observation grid. The resulting model is still an SBTS model in its variational core. Given the joint coarse-grid law 
+
+μ = L(Zt0 , . . . , Z tN ),
+
+3we look for the path law closest in relative entropy to the reference while matching this joint law. The constraint is therefore joint both across time and across the augmented levels. The novelty lies in the reference: on each coarse interval (ti, t i+1 ], its transition kernels are adapted to the common coarse past 
+
+Gi := σ(Zt0 , . . . , Z ti )
+
+and triangular across the levels. After ordering the components from the deepest volatility descriptor to the observed process, each level is generated conditionally on the common past and on the lower-level components already constructed. This triangular structure is not a separation of the target constraint into independent marginal problems. The target remains the joint law of the whole augmented vector. Rather, the chain rule for relative entropy gives a conditional representation of the joint entropy cost. In the simplest two-level notation, 
+
+H(P X,Y | RX,Y ) = H(P Y | RY ) + EP Y
+
+> [
+
+H(P X|Y | RX|Y )].
+
+Thus the augmented bridge can be read, and implemented, in a bottom-up way: one starts from a deepest descriptor for which a stable reference is available, then constructs each higher component conditionally on the common past and on the lower-level environment. The final price bridge is the top component of this single augmented entropy projection. Conditionally on the coarse past and on the lower-level descriptors, the reference dynamics on each interval are frozen Gaussian martingales, possibly with degenerate covariance. Equivalently, the reference is obtained by concatenating Gaussian transition kernels on the affine leaves generated by the active covariance directions. This keeps the model explicit while allowing the reference covariance to encode volatility information learned from high-frequency data or supplied by an auxiliary procedure. In this sense, high-frequency observations are not used to refine the output grid itself; they are used to enrich the coarse-grid state by adding realised covariance and higher-order volatility descriptors. We call the resulting problem the Triangular-Reference Schrödinger Bridge for Time Series, abbreviated TR-SBTS. Under the finite-entropy condition 
+
+μ ≪ μRT , H(μ | μRT ) < ∞,
+
+where μRT is the coarse-grid law induced by the triangular reference, the 4entropy minimiser is the usual h-transform 
+
+dP ⋆
+
+dR = dμ dμ RT
+
+(Zt0 , . . . , Z tN ),
+
+and the value of the problem is H(μ | μRT ). Locally, on each frozen interval, the optimal dynamics are described by backward heat potentials on the corresponding affine diffusive leaf. This yields the degenerate analogue of the classical SBTS heat-drift formula. A second point developed in the paper is the relation between the frozen reference and an underlying continuous-time formulation, in which the latent volatility varies continuously: refining the volatility grid recovers this contin-uous limit, with the approximation error expressed at the level of cumulative covariances on the active diffusive leaf. Consistency along refining grids follows from finite entropy of the constraint with respect to the triangular reference, together with continuity of the latent covariance descriptors. The statistical part of the paper studies how the local conditional objects entering the heat potentials can be estimated from data, using regularised kernel estimators and finite-dimensional causal summaries of the past. We prove rigorous convergence of the resulting estimators for the heat potentials, the drifts, and the induced transition kernels, providing explicit consistency guarantees for the full approximation chain. At the numerical level, the conditioning past is reduced to a finite-dimensional summary via three complementary strategies. The first is block PCR, projecting positions and increments onto the empirical active directions of the observed paths. The second is the reference-aware local Mahalanobis kernel on past increments induced at runtime by the frozen covariance cumulants, a second-moment statistic that compares each historical increment to its runtime counterpart in the reference geometry. The third is a past-window WLS drift regressor under the same reference metric, producing a fixed-dimensional first-order summary of the trend over the past window whose output dimension does not grow with the memory length. Combined with a strong present anchor in normalised coordinates, these reductions yield a three-estimator architecture (present anchor, past-drift regressor, present/near-future volatility descriptor) that has proved stable and reliable in practice. The effective projection dimensions and memory lengths are selected by statistical validation, keeping each reduction data-driven; separate reductions for position-type and increment-type variables provide a more flexible, cylinder-like representation than a single global linear subspace. The construction is then evaluated on numerical experiments (Section 6). 5The paper is organised as follows. Section 2 formulates the SBTS entropy projection at the level of an arbitrary reference law and proves the varia-tional identification of the minimiser. Section 3 specialises this projection to the intervalwise frozen Gaussian reference, derives the local backward representation on possibly degenerate affine leaves and the corresponding logarithmic-gradient drift formula, and records (in Subsection 3.2) the sense in which this reference is itself an approximation of an ideal volatility-informed reference, proves the corresponding cumulant-based stability result, and exposes the joint and hierarchical structure inherent in the construction. Section 4 develops the statistical approximation of the backward potentials and proves convergence of the estimated drifts. Section 5 describes the implementation: finite-dimensional conditioning variables, the three comple-mentary reductions of the past (block PCR, reference-aware Mahalanobis kernel, past-window WLS drift regressor), empirical kernel weights, the covariance-descriptor database, and the coupled state–covariance generation pipeline. Section 6 reports the numerical experiments used to evaluate the construction. Appendix A contains the detailed proof of the statistical ap-proximation theorem. Appendix B describes the predictive scoring procedure used for validation. 
+
+# 2 Reference-based SBTS entropy projection 
+
+We first isolate the basic variational block used in the sequel: the entropy minimisation on path space under a finite-dimensional constraint at the observation times, with respect to an arbitrary reference law. The result is purely variational and requires almost no structure of the reference. The only standing assumption is that the constraint has finite relative entropy with respect to the reference grid law. Specific instantiations of this block, in particular the triangular intervalwise frozen Gaussian reference that supports the hierarchical construction described in the introduction and that is used to extract explicit drift formulas in the remainder of the paper, are obtained by specialising the choice of reference. Let 
+
+0 = t0 < t 1 < · · · < t N = T, Ω := C([0 , T ]; Rd),
+
+and let X = ( Xt)0≤t≤T be the canonical process on Ω, with canonical filtration F = ( Ft)0≤t≤T . We denote by 
+
+Π : Ω → (Rd)N +1 , Π( ω) := (Xt0 (ω), . . . , X tN (ω))
+
+6the observation map at the coarse times. Let R ∈ P(Ω) be an arbitrary reference probability law on path space, and denote by 
+
+μRT := R ◦ Π−1
+
+its joint law on the coarse grid. Let μ ∈ P(( Rd)N +1 ) be a target law on the same grid, and assume 
+
+μ ≪ μRT , H(μ | μRT ) < ∞. (1) We refer to the entropy minimisation problem 
+
+V (μ) := inf 
+
+> {
+
+H(P | R) : P ∈ P(Ω) , P ◦ Π−1 = μ
+
+> }
+
+(2) as the reference-based SBTS entropy projection associated with the reference 
+
+R and the constraint μ. The following theorem identifies its value and unique minimiser in closed form, under no structural assumption on R beyond (1). 
+
+Theorem 1 (Variational identification of the entropy projection) . Under assumption (1) , set 
+
+G := dμ dμ RT
+
+.
+
+Then the following statements hold. (i) The value of problem (2) is 
+
+V (μ) = H(μ | μRT ).
+
+(ii) There exists a unique minimiser P ∗ ∈ P(Ω) , given by the h-transform 
+
+dP ∗
+
+dR = G(Π) , P ∗ ◦ Π−1 = μ. 
+
+(iii) The density process of P ∗ with respect to R is the positive R-martingale 
+
+Mt := ER[G(Π) | F t] , 0 ≤ t ≤ T, 
+
+so that MT = dP ∗/dR and P ∗ = MT R.Proof. Set 
+
+G := dμ dμ RT
+
+, P ∗ := G(Π) R. 
+
+7Since ER[G(Π)] = 1 , the measure P ∗ is well defined. For every bounded measurable φ : ( Rd)N +1 → R,
+
+EP ∗ [φ(Π)] = ER[G(Π) φ(Π)] = 
+
+∫ 
+
+> (Rd)N+1
+
+φ(x) μ(dx),
+
+hence P ∗ ◦ Π−1 = μ, so P ∗ is feasible. Moreover, 
+
+H(P ∗ | R) = ER[G(Π) log G(Π)] = H(μ | μRT ),
+
+so 
+
+V (μ) ≤ H(μ | μRT ).
+
+Now let P be any feasible probability measure. If H(P | R) = ∞, there is nothing to prove. Assume then that H(P | R) < ∞, and write 
+
+L := dP dR .
+
+Since P ◦ Π−1 = μ, one has 
+
+EP [log G(Π)] = 
+
+∫ 
+
+> (Rd)N+1
+
+log G(x) μ(dx) = H(μ | μRT ),
+
+and 
+
+EP [log L] = H(P | R).
+
+Finally, 
+
+1 = ER[G(Π)] = EP
+
+[ G(Π) 
+
+L
+
+]
+
+= EP
+
+[exp (log G(Π) − log L)] .
+
+By Jensen’s inequality, 
+
+1 ≥ exp (EP
+
+[log G(Π) − log L]) = exp 
+
+(
+
+H(μ | μRT ) − H(P | R)
+
+)
+
+,
+
+and therefore H(P | R) ≥ H(μ | μRT ). This proves V (μ) = H(μ | μRT ).If equality holds, then equality holds in Jensen’s inequality. Since the exponential function is strictly convex, there exists a constant c ∈ R such that 
+
+log G(Π) − log L = c P -a.s. Taking expectation under P , and using the equality of the two entropies, yields c = 0 . Hence L = G(Π) P -a.s. and P = P ∗, proving uniqueness. The martingale representation in (iii) is immediate from the definition Mt =
+
+ER[G(Π) | F t].8Remark 2 (Controlled-diffusion form under Léonard’s condition (U )). The-orem 1 requires no regularity of R beyond a measurable structure on path space; the optimal law is identified abstractly as an h-transform. When the reference additionally satisfies the uniqueness condition (U ) of Léonard [ 20 ], the optimal law P ∗ admits an explicit semimartingale description: it is a controlled diffusion with respect to the predictable bracket of R, and there exists an adapted process β∗ defined P ∗-a.s. such that 
+
+P ∗ ∈ M P (̂B∗, A ),̂ B∗ 
+
+> t
+
+:= 
+
+> ∫
+> [0 ,t ]
+
+A(ds ) β∗ 
+
+> s
+
+,
+
+where A denotes the predictable R-bracket of the canonical process. Moreover the relative entropy splits as 
+
+H(P ∗ | R) = H(P ∗ 
+
+> 0
+
+| R0) + 12 EP ∗ 
+
+> [∫
+> [0 ,T ]
+
+β∗ 
+
+> t
+
+· A(dt ) β∗
+
+> t
+> ]
+
+,
+
+where P ∗ 
+
+> 0
+
+:= P ∗ ◦ X−10 and R0 := R ◦ X−10 . This follows from Theorems 2.1 and 2.3 of [ 20 ] applied to the pair (P ∗, R ) with zero reference drift. We use this representation only from Section 3 onward, to extract the explicit local drift on each frozen interval. 
+
+Remark 3 (Triangular references satisfy condition (U )). The hierarchical, triangular reference described in the introduction and deployed in the rest of the paper falls within the class covered by Remark 2. On each coarse interval the reference is Gaussian conditional on the coarse past and on the latent volatility level, and the latent level is itself, recursively, the output of a reference whose conditional density depends only on its own lower-level environment. As long as the maps that translate latent levels into intervalwise covariances are deterministic, the joint reference density factorises into a finite product of explicit conditional Gaussians. The associated stochastic integrals are then finite and explicitly computable, and condition (U ) of [ 20 ]is satisfied. The explicit drift identification of Section 3 is built on this representation. 
+
+# 3 Exact intervalwise dynamics and drift formula 
+
+Theorem 1 identifies the minimiser abstractly as an h-transform of the reference law. From this point onward we work with the specific instantiation alluded to in Remark 3: a reference that is intervalwise frozen Gaussian along the coarse grid, possibly with degenerate covariances. We collect the corresponding setup here. 9Intervalwise frozen Gaussian reference. Let m0 ∈ P(Rd), and for each i = 0 , . . . , N − 1, let 
+
+σi : ( Rd)i+1 → Rd×d
+
+be a Borel map. For xi = ( x0, x 1, . . . , x i) ∈ (Rd)i+1 , set 
+
+ai(xi) := σi(xi)σi(xi)⊤ ∈ Sd
+
+> +
+
+.
+
+We consider the reference law R ∈ P(Ω) under which X0 ∼ m0 and, for each i = 0 , . . . , N − 1, conditionally on (X0, X t1 , . . . , X ti ) the process on the interval (ti, t i+1 ] evolves as 
+
+dX t = σi(X0, X t1 , . . . , X ti ) dW Rt , t ∈ (ti, t i+1 ],
+
+for some Brownian motion W R. Equivalently, X is an R-martingale with predictable bracket 
+
+[X, X ]( dt ) = A(dt ), A(dt ) = ai(X0, X t1 , . . . , X ti ) dt on (ti, t i+1 ].
+
+The reference R is explicitly obtained by concatenating the Gaussian transi-tion kernels associated with these frozen intervalwise diffusions. In particular, 
+
+R satisfies condition (U ) of Léonard [ 20 ], so that Remark 2 applies and the optimal law P ∗ of Theorem 1 admits an adapted drift correction β∗ with respect to the predictable bracket A. We assume throughout this section that the target law μ ∈ P(( Rd)N +1 ) has first marginal m0 and satisfies the finite-entropy condition (1) . The remainder of this section localises the description of β∗ on a single frozen interval and extracts a closed-form drift formula whose logarithmic-gradient structure is read off from the corresponding backward heat potential. 
+
+3.1 Intervalwise backward representation on frozen diffusive leaves 
+
+We now turn to the second step of the exact backbone, namely the backward intervalwise structure. Remark 2 only guarantees the existence of an intrinsic drift correction for the optimal law under condition (U ),without identifying it explicitly. The purpose of the next lemma is to extract this correction in closed form on a single frozen interval, under a simplified reference law with fixed diffusion coefficient. Before stating the result, we introduce the intrinsic geometry associated with a frozen degenerate diffusion. 10 Let A ∈ Sd
+
+> +
+
+, let 
+
+r := rank( A), λ1, . . . , λ r > 0, q1, . . . , q r ∈ Rd
+
+be the strictly positive eigenvalues of A and associated orthonormal eigen-vectors, and set 
+
+EA := Span {q1, . . . , q r}.
+
+For every x ∈ Rd, we define the affine diffusive leaf through x by 
+
+LxA := x + EA.
+
+This is the affine subspace on which a diffusion with covariance matrix A,started from x, evolves. We denote by ℓxA the canonical Lebesgue measure on LxA, defined as the push-forward of the Lebesgue measure on Rr under the map 
+
+Ξx : Rr → L xA, Ξx(ξ) := x +
+
+> r
+
+∑
+
+> i=1
+
+ξiqi.
+
+Equivalently, for every nonnegative Borel function φ on LxA,
+
+∫
+
+> LxA
+
+φ(z) dℓ xA(z) = 
+
+∫
+
+> Rr
+
+φ
+
+(
+
+x +
+
+> r
+
+∑
+
+> i=1
+
+ξiqi
+
+)
+
+dξ. 
+
+Since A is invertible on EA, we denote by 
+
+A−1 
+
+> EA
+
+: EA → EA
+
+the inverse of the restriction of A to EA. Explicitly, 
+
+A−1 
+
+> EA
+
+v =
+
+> r
+
+∑
+
+> i=1
+
+λ−1 
+
+> i
+
+⟨v, q i⟩qi, v ∈ EA.
+
+For S ≤ t < T and y, z ∈ L xA, we define the intrinsic heat kernel associated with A by 
+
+pA(t, y ; T, z ) := 1(2 π(T − t)) r/ 2 ∏ri=1 λ1/2
+
+> i
+
+× exp 
+
+(
+
+− 12( T − t)
+
+〈A−1 
+
+> EA
+
+(z − y), z − y〉)
+
+.
+
+11 Equivalently, 
+
+pA(t, y ; T, z ) = 1(2 π(T − t)) r/ 2
+
+> r
+
+∏
+
+> i=1
+
+λ−1/2 
+
+> i
+
+exp 
+
+(
+
+− 12( T − t)
+
+> r
+
+∑
+
+> i=1
+
+⟨z − y, q i⟩2
+
+λi
+
+)
+
+.
+
+Given a nonnegative Borel function g : LxA → [0 , ∞], we define its backward heat propagation by 
+
+(P At,T g)( y) := 
+
+∫
+
+> LxA
+
+pA(t, y ; T, z ) g(z) dℓ xA(z), (t, y ) ∈ [S, T ) × L xA,
+
+whenever the integral is finite. We say that a nonnegative Borel function g : LxA → [0 , ∞] is (A, S, T, x )-admissible if 
+
+(P At,T g)( y) < ∞ ∀(t, y ) ∈ [S, T ) × L xA. (3) We also denote by Mloc + (LxA) the cone of positive Radon measures on LxA,that is, positive locally finite Borel measures on LxA. Whenever convenient, such measures are identified with Borel measures on Rd supported on LxA,by extension by zero outside LxA.
+
+Lemma 4 (Controlled diffusion induced by a terminal martingale density on one frozen interval) . Let 0 ≤ S < T , let x ∈ Rd, and let 
+
+(Ω , G, (Gt)t∈[S,T ], Q)
+
+support a d-dimensional Brownian motion W . Let σ ∈ Rd×d, set 
+
+A := σσ ⊤ ∈ Sd
+
+> +
+
+, Xt := x + σ(Wt − WS ), t ∈ [S, T ].
+
+Let r := rank (A) ≥ 1, and let q1, . . . , q r ∈ Rd be orthonormal eigenvectors of 
+
+A associated with its strictly positive eigenvalues λ1, . . . , λ r > 0.Let 
+
+f : LxA → [0 , ∞]
+
+be a Borel measurable function, identified throughout with its extension by zero outside LxA. Assume that 
+
+EQ[f (XT )] = 1 ,
+
+and that f is (A, S, T, x )-admissible. Define the martingale probability Qf on (Ω , GT ) by 
+
+dQf
+
+dQ := f (XT ),
+
+12 and define 
+
+Ht := EQ[f (XT ) | G t], t ∈ [S, T ].
+
+Then there exists a unique Borel function 
+
+h : [ S, T ) × L xA → [0 , ∞]
+
+such that, for every t ∈ [S, T ),
+
+Ht = h(t, X t) Q-a.s. More precisely, 
+
+h(t, y ) = ( P At,T f )( y) = 
+
+∫
+
+> LxA
+
+pA(t, y ; T, z ) f (z) dℓ xA(z), (t, y ) ∈ (S, T )×L xA.
+
+Moreover, the following hold. (i) The function h is C1 in time on (S, T ), and C∞ along the diffusive directions q1, . . . , q r on (S, T ) × L xA. It satisfies 
+
+∂th(t, y ) + 12
+
+> r
+
+∑
+
+> i=1
+
+λi D2 
+
+> qiqi
+
+h(t, y ) = 0 , (t, y ) ∈ (S, T ) × L xA.
+
+Furthermore, the map 
+
+[S, T ] ∋ t 7 −→ μt ∈ M loc + (LxA),
+
+defined by 
+
+μt := h(t, ·) ℓxA for t ∈ [S, T ), μT := f (·) ℓxA,
+
+is continuous. Equivalently, the terminal condition is attained as 
+
+h(T, ·) ℓxA = f (·) ℓxA in Mloc + (LxA).
+
+Finally, 
+
+h(t, y ) > 0 ∀(t, y ) ∈ (S, T ) × L xA.
+
+(ii) There exists a d-dimensional Qf -Brownian motion W f such that 
+
+dX t = bft dt + σ dW ft , t ∈ [S, T ),
+
+where 
+
+bft =
+
+> r
+
+∑
+
+> i=1
+
+λi Dqi log h(t, X t) qi, dt ⊗ Qf -a.e. 
+
+13 Proof. Let Q = ( Qr, Q 0) be an orthogonal matrix whose first r columns are 
+
+q1, . . . , q r, so that 
+
+Q⊤AQ =
+
+(
+
+Λr 00 0
+
+)
+
+, Λr := diag( λ1, . . . , λ r).
+
+Let 
+
+η0 := Q⊤ 
+
+> 0
+
+x ∈ Rd−r,
+
+so that 
+
+LxA = {Qrξ + Q0η0 : ξ ∈ Rr}.
+
+Since 
+
+Q⊤ 
+
+> 0
+
+AQ 0 = 0 ,
+
+we have Q⊤ 
+
+> 0
+
+σ = 0 . Hence, for every t ∈ [S, T ],
+
+Q⊤ 
+
+> 0
+
+Xt = Q⊤ 
+
+> 0
+
+x + Q⊤ 
+
+> 0
+
+σ(Wt − WS ) = η0,
+
+so that 
+
+Xt ∈ L xA Q-a.s. for every t ∈ [S, T ]. In particular, since f is supported on LxA, the random variable f (XT ) is well defined. Define 
+
+h(t, y ) := EQ
+
+[f (y + σ(WT − Wt))] , (t, y ) ∈ [S, T ) × L xA.
+
+Since y ∈ L xA and σ(WT − Wt) ∈ EA, the point y + σ(WT − Wt) belongs to 
+
+LxA Q-a.s. By (A, S, T, x )-admissibility of f ,
+
+h(t, y ) = 
+
+∫
+
+> LxA
+
+pA(t, y ; T, z ) f (z) dℓ xA(z) < ∞ ∀(t, y ) ∈ [S, T ) × L xA.
+
+Since 
+
+XT = Xt + σ(WT − Wt),
+
+and WT − Wt is independent of Gt, we obtain for every t ∈ [S, T ),
+
++∞ > H t = EQ[f (XT ) | G t] = EQ
+
+[f (Xt + σ(WT − Wt)) | G t
+
+] = h(t, X t),
+
+which gives the required representation. We now study the regularity of h. For 
+
+y = Qrξ + Q0η0 ∈ L xA,
+
+14 define 
+
+U (t, ξ ) := h(t, Q rξ + Q0η0), (t, ξ ) ∈ [S, T ) × Rr.
+
+Then 
+
+U (t, ξ ) = EQ
+
+[f (Qrξ + Q0η0 + σ(WT − Wt))] .
+
+Since only the Qr-coordinates are diffusive, U is the classical nondegenerate heat semigroup in Rr applied to the terminal datum 
+
+ξ 7 −→ f (Qrξ + Q0η0).
+
+Therefore, 
+
+U ∈ C1,∞(( S, T ) × Rr),
+
+and U is the unique classical solution on [S, T ) × Rr of 
+
+∂tU (t, ξ ) + 12
+
+> r
+
+∑
+
+> i=1
+
+λi ∂ξiξi U (t, ξ ) = 0 , (t, ξ ) ∈ [S, T ) × Rr,
+
+whose associated measure-valued path 
+
+νt := U (t, ·) dξ, t ∈ [S, T ),
+
+extends continuously to t = T in Mloc + (Rr) with terminal value 
+
+νT = f (Qr · +Q0η0) dξ. 
+
+Translating back to the affine leaf LxA, we obtain that h is C1 in time on 
+
+(S, T ), C∞ along the diffusive directions q1, . . . , q r, and satisfies 
+
+∂th(t, y ) + 12
+
+> r
+
+∑
+
+> i=1
+
+λi D2 
+
+> qiqi
+
+h(t, y ) = 0 , (t, y ) ∈ [S, T ) × L xA.
+
+Now define, for t ∈ [S, T ),
+
+μt := h(t, ·) ℓxA, μT := f (·) ℓxA.
+
+Since ℓxA is the push-forward of the Lebesgue measure on Rr under the affine map 
+
+Ξx(ξ) := Qrξ + Q0η0,
+
+we have 
+
+μt = (Ξ x)#νt, t ∈ [S, T ].
+
+Hence, 
+
+t 7 −→ μt
+
+15 belongs to C([ S, T ]; Mloc + (LxA)) , and this is precisely the terminal condition 
+
+h(T, ·) ℓxA = f (·) ℓxA in Mloc + (LxA).
+
+Uniqueness of h within the class stated in the lemma follows from the uniqueness of U for the corresponding nondegenerate backward heat problem on Rr.Moreover, for every t ∈ [S, T ),
+
+Qf (Ht = 0) = EQ
+
+[
+
+f (XT )1{Ht=0 }
+
+]
+
+= EQ
+
+[
+
+Ht1{Ht=0 }
+
+]
+
+= 0 .
+
+Therefore, ∫ TS
+
+Qf (Ht = 0) dt = 0 ,
+
+and since Ht = h(t, X t), this yields 
+
+h(t, X t) > 0 dt ⊗ Qf -a.s. Moreover, since pA(t, y ; T, z ) > 0 for every t < T and every y, z ∈ L xA, and since ∫
+
+> LxA
+
+f (z) pA(S, x ; T, z ) dℓ xA(z) = 1 ,
+
+the terminal datum is not identically zero. Hence 
+
+h(t, y ) > 0 ∀(t, y ) ∈ (S, T ) × L xA.
+
+This proves (i). We now prove (ii). Set 
+
+Zt := Q⊤ 
+
+> r
+
+Xt ∈ Rr, t ∈ [S, T ].
+
+Since Q⊤ 
+
+> 0
+
+Xt = η0, we have 
+
+Xt = QrZt + Q0η0 for all t ∈ [S, T ].
+
+Next, define the deterministic matrix 
+
+R := Λ −1/2 
+
+> r
+
+Q⊤ 
+
+> r
+
+σ ∈ Rr×d.
+
+Since 
+
+RR ⊤ = Λ −1/2 
+
+> r
+
+Q⊤ 
+
+> r
+
+σσ ⊤QrΛ−1/2 
+
+> r
+
+= Λ −1/2 
+
+> r
+
+Q⊤ 
+
+> r
+
+AQ rΛ−1/2 
+
+> r
+
+= Ir,
+
+16 the process ˜Wt := R(Wt − WS ), t ∈ [S, T ],
+
+is an r-dimensional Brownian motion under Q. Moreover, 
+
+dZ t = Q⊤ 
+
+> r
+
+dX t = Q⊤ 
+
+> r
+
+σ dW t = Λ 1/2 
+
+> r
+
+d˜Wt.
+
+By the representation already proved, 
+
+Ht = h(t, X t) = U (t, Z t), t ∈ [S, T ].
+
+Since U ∈ C1,2, we may apply the classical Itô formula to U (t, Z t) under Q,obtaining 
+
+dU (t, Z t) = 
+
+> r
+
+∑
+
+> i=1
+
+√λi ∂ξi U (t, Z t) d˜W it .
+
+By Girsanov’s theorem in Rr, there exists an r-dimensional Qf -Brownian motion ˜W f such that 
+
+dZ t =
+
+> r
+
+∑
+
+> i=1
+
+λi ∂ξi log U (t, Z t) ei dt + Λ 1/2 
+
+> r
+
+d˜W ft .
+
+Since 
+
+Xt = QrZt + Q0η0
+
+and 
+
+∂ξi log U (t, Z t) = Dqi log h(t, X t),
+
+this already identifies the intrinsic drift correction along the diffusive direc-tions as r∑
+
+> i=1
+
+λi Dqi log h(t, X t) qi.
+
+Multiplying by Qr, we obtain 
+
+dX t =
+
+> r
+
+∑
+
+> i=1
+
+λi Dqi log h(t, X t) qi dt + QrΛ1/2 
+
+> r
+
+d˜W ft .
+
+We note that, since rank( σ) = rank( σ⊤) = r, there exists 
+
+¯Q0 ∈ Rd×(d−r)
+
+whose columns form an orthonormal basis of ker( σ). In particular, 
+
+¯Q⊤ 
+
+> 0
+
+¯Q0 = Id−r, σ ¯Q0 = 0 .
+
+17 Moreover, 
+
+QrΛ1/2 
+
+> r
+
+= σR ⊤, R ¯Q0 = 0 .
+
+Possibly after enlarging the filtered probability space, choose a (d − r)-dimensional Qf -Brownian motion Bf , independent of ˜W f . Since the rows of R are orthonormal and the columns of ¯Q0 form an orthonormal basis of 
+
+ker( σ), we have 
+
+R⊤R + ¯Q0 ¯Q⊤ 
+
+> 0
+
+= Id.
+
+Therefore the process 
+
+W ft := R⊤ ˜W ft + ¯Q0Bft
+
+is a d-dimensional Qf -Brownian motion. Finally, 
+
+σ dW ft = σR ⊤ d˜W ft + σ ¯Q0 dB ft = QrΛ1/2 
+
+> r
+
+d˜W ft ,
+
+and hence 
+
+dX t =
+
+> r
+
+∑
+
+> i=1
+
+λi Dqi log h(t, X t) qi dt + σ dW ft .
+
+This is the claimed controlled-diffusion representation. We now pass from the global variational identification to the local inter-valwise dynamics of the minimiser. The key point is that, once the coarse past is frozen, the relevant terminal object is the conditional law of Xti+1 ,and the local backward potential is the backward propagation of its density with respect to the one-step transition of the reference law. 
+
+Proposition 5 (Local intervalwise representation of the minimiser) . Adopt the setup of Section 3, and let μ satisfy the finite-entropy condition (1) . Fix 
+
+i ∈ { 0, . . . , N − 1}, Xi := ( X0, X t1 , . . . , X ti ), xi := ( x0, x 1, . . . , x i).
+
+Let 
+
+η∗ 
+
+> i
+
+(· | xi) := P ∗(Xti+1 ∈ · | Xi = xi
+
+)
+
+be the conditional law of the next coarse position under the minimiser, and let 
+
+kRi (· | xi) := R(Xti+1 ∈ · | Xi = xi
+
+)
+
+be the corresponding one-step conditional law under the reference measure. Choosing regular conditional probabilities consistently under P ∗ = G(Π) R,we have 
+
+η∗ 
+
+> i
+
+(· | xi) ≪ kRi (· | xi)
+
+18 for P ∗ ◦ X−1 
+
+> i
+
+-a.e. xi. Hence, define 
+
+fi(z; xi) := dη ∗ 
+
+> i
+
+(· | xi)
+
+dk Ri (· | xi) (z).
+
+Then, for P ∗ ◦ X−1 
+
+> i
+
+-a.e. xi, the following hold. (a) The function fi(·; xi), viewed as a Borel function on the affine diffusive leaf 
+
+Lxi 
+
+> i
+
+:= Lxi
+
+> Ai(xi)
+
+, Ai(xi) := σi(xi)σi(xi)⊤,
+
+and extended by zero outside Lxi 
+
+> i
+
+, is (Ai(xi), t i, t i+1 , x i)-admissible in the sense of (3) .(b) Under the conditional law 
+
+P ∗,xi := P ∗( · | Xi = xi),
+
+there exists a d-dimensional Brownian motion W ∗,i such that, on 
+
+[ti, t i+1 ),
+
+dX t = b∗ 
+
+> i
+
+(t, X t; xi) dt + σi(xi) dW ∗,i t ,
+
+where 
+
+b∗ 
+
+> i
+
+(t, x ; xi) = 
+
+> ri
+
+∑
+
+> j=1
+
+λi,j (xi) Dqi,j (xi) log Hi(t, x ; xi) qi,j (xi),dt ⊗ P ∗,xi -a.e. Here 
+
+λi, 1(xi), . . . , λ i,r i (xi) > 0, qi, 1(xi), . . . , q i,r i (xi),
+
+denote the strictly positive eigenvalues and associated orthonormal eigenvectors of Ai(xi), and 
+
+Hi(·, ·; xi) : [ ti, t i+1 ) × L xi 
+
+> i
+
+→ [0 , ∞]
+
+is the unique function given by Lemma 4, namely the unique backward heat potential associated with the frozen interval [ti, t i+1 ], the frozen diffusion matrix σi(xi), and the terminal tilt fi(·; xi). In particular, 
+
+∂tHi(t, x ; xi) + 12
+
+> ri
+
+∑
+
+> j=1
+
+λi,j (xi) D2  
+
+> qi,j (xi)qi,j (xi)
+
+Hi(t, x ; xi) = 0 
+
+19 for (t, x ) ∈ [ti, t i+1 ) × L xi 
+
+> i
+
+, and 
+
+Hi(ti+1 , ·; xi) ℓxi 
+
+> i
+
+= fi(·; xi) ℓxi 
+
+> i
+
+in Mloc + (Lxi 
+
+> i
+
+),
+
+where ℓxi 
+
+> i
+
+denotes the canonical Lebesgue measure on Lxi 
+
+> i
+
+. Moreover, 
+
+Hi(t, x ; xi) > 0 ∀(t, x ) ∈ (ti, t i+1 ) × L xi 
+
+> i
+
+.
+
+Proof. Fix xi in a full P ∗ ◦ X−1 
+
+> i
+
+-measure set, and consider the conditional reference law 
+
+Rxi := R( · | Xi = xi).
+
+By construction of the reference law, under Rxi one has on [ti, t i+1 ]
+
+dX t = σi(xi) dW Rt , Xti = xi.
+
+In particular, Rxi -a.s. the process X evolves on the affine diffusive leaf 
+
+Lxi 
+
+> i
+
+= Lxi
+
+> Ai(xi)
+
+.
+
+Let 
+
+G := dμ dμ RT
+
+.
+
+Since P ∗ = G(Π) R, for every bounded Fti+1 -measurable random variable F ,Bayes’ formula yields 
+
+EP ∗,xi [F ] = ER[F G (Π) | Xi = xi]
+
+ER[G(Π) | Xi = xi] . (4) Using the tower property, we can rewrite this as 
+
+EP ∗,xi [F ] = ERxi
+
+[
+
+F ER
+
+[G(Π) | Xi = xi, Fti+1 
+
+]
+
+ER[G(Π) | Xi = xi]
+
+]
+
+.
+
+Hence, by the intervalwise Markov property of the reference law R, there exists a Borel function 
+
+˜fi(·; xi) : Lxi 
+
+> i
+
+→ [0 , ∞]
+
+such that, for every bounded Fti+1 -measurable F ,
+
+EP ∗,xi [F ] = ERxi
+
+[
+
+F ˜fi(Xti+1 ; xi)
+
+]
+
+. (5) 20 We now identify ˜fi with the Radon–Nikodym derivative fi. Testing (5) with F = ϕ(Xti+1 ), ϕ ∈ Cb(Rd), gives 
+
+∫
+
+> Lxii
+
+ϕ(z) η∗ 
+
+> i
+
+(dz | xi) = 
+
+∫
+
+> Lxii
+
+ϕ(z) ˜fi(z; xi) kRi (dz | xi).
+
+By uniqueness of the Radon–Nikodym derivative, we obtain 
+
+˜fi(·; xi) = fi(·; xi) kRi (· | xi)-a.e. Therefore, (5) becomes 
+
+EP ∗,xi [F ] = ERxi
+
+[F f i(Xti+1 ; xi)]
+
+for every bounded Fti+1 -measurable F . This shows that P ∗,xi is induced from Rxi by the terminal martingale density 
+
+fi(Xti+1 ; xi).
+
+We next verify the (Ai(xi), t i, t i+1 , x i)-admissibility of fi(·; xi). Let ℓxi
+
+> i
+
+denote the canonical Lebesgue measure on Lxi 
+
+> i
+
+, and let 
+
+pi(t, y ; ti+1 , z | xi)
+
+be the intrinsic heat kernel on Lxi 
+
+> i
+
+associated with the frozen covariance matrix Ai(xi). Then 
+
+kRi (dz | xi) = pi(ti, x i; ti+1 , z | xi) ℓxi 
+
+> i
+
+(dz ).
+
+Fix t ∈ (ti, t i+1 ) and y ∈ L xi 
+
+> i
+
+. Then 
+
+∫
+
+> Lxii
+
+pi(t, y ; ti+1 , z | xi) fi(z; xi) dℓ xi 
+
+> i
+
+(z)=
+
+∫
+
+> Lxii
+
+pi(t, y ; ti+1 , z | xi)
+
+pi(ti, x i; ti+1 , z | xi) η∗ 
+
+> i
+
+(dz | xi).
+
+Now, both kernels act on the same affine leaf and are associated with the same frozen matrix Ai(xi). Writing them in intrinsic coordinates on Lxi 
+
+> i
+
+, we obtain 
+
+pi(t, y ; ti+1 , z | xi)
+
+pi(ti, x i; ti+1 , z | xi) =
+
+( ti+1 − ti
+
+ti+1 − t
+
+)ri/2
+
+exp 
+
+(
+
+− ∥z − y∥2
+
+> i, xi
+
+2( ti+1 − t) + ∥z − xi∥2
+
+> i, xi
+
+2( ti+1 − ti)
+
+)
+
+,
+
+where 
+
+∥v∥2 
+
+> i, xi
+
+:= 〈A−1 
+
+> i,E
+
+(xi)v, v 〉
+
+21 for v ∈ EAi(xi). Expanding the exponent yields a quadratic function of z,whose quadratic part is 
+
+− 12
+
+( 1
+
+ti+1 − t − 1
+
+ti+1 − ti
+
+)
+
+∥z∥2 
+
+> i, xi
+
+,
+
+and this coefficient is strictly negative since t ∈ (ti, t i+1 ). Hence, after completing the square, there exist mi,t,y, xi ∈ L xi 
+
+> i
+
+and Ci,t,y, xi ∈ (0 , ∞) such that 
+
+pi(t, y ; ti+1 , z | xi)
+
+pi(ti, x i; ti+1 , z | xi) = Ci,t,y, xi
+
+× exp 
+
+(
+
+− 12
+
+( 1
+
+ti+1 − t − 1
+
+ti+1 − ti
+
+)
+
+∥z − mi,t,y, xi ∥2
+
+> i, xi
+
+)
+
+.
+
+In particular, this ratio is bounded in z ∈ L xi 
+
+> i
+
+. Since η∗ 
+
+> i
+
+(· | xi) is a probability measure, it follows that 
+
+∫
+
+> Lxii
+
+pi(t, y ; ti+1 , z | xi) fi(z; xi) dℓ xi 
+
+> i
+
+(z) < ∞.
+
+Moreover, at t = ti, the same integral equals 
+
+ERxi
+
+[ fi(Xti+1 ; xi)] =
+
+∫
+
+> Lxii
+
+fi(z; xi) kRi (dz | xi) = 
+
+∫
+
+> Lxii
+
+1 η∗ 
+
+> i
+
+(dz | xi) = 1 .
+
+Therefore fi(·; xi) is (Ai(xi), t i, t i+1 , x i)-admissible. We are thus exactly in the setting of Lemma 4, with 
+
+S = ti, x = xi, σ = σi(xi), f = fi(·; xi).
+
+Applying that lemma yields the existence of a unique backward heat potential 
+
+Hi(·, ·; xi)
+
+on (ti, t i+1 ) × L xi 
+
+> i
+
+, with terminal datum 
+
+fi(·; xi) ℓxi 
+
+> i
+
+,
+
+and the controlled-diffusion representation 
+
+dX t =
+
+> ri
+
+∑
+
+> j=1
+
+λi,j (xi) Dqi,j (xi) log Hi(t, X t; xi) qi,j (xi) dt + σi(xi) dW ∗,i t ,t ∈ (ti, t i+1 ),
+
+under P ∗,xi , for some d-dimensional Brownian motion W ∗,i .This is precisely the claimed representation. 22 Remark 6 (Boundary semantics at t = ti). The potential Hi(·, ·; xi) and the drift b∗ 
+
+> i
+
+(·, ·; xi) are the analytic objects attached to the Doob h-transform of the frozen reference conditional on the joint observation Xi = xi; the underlying SDE on [ti, t i+1 ] is initialised at the single point Xti = xi. Accordingly, only the values of Hi and b∗ 
+
+> i
+
+on the open cylinder (ti, t i+1 ) × L xi 
+
+> i
+
+are intrinsic to the construction. At the left endpoint t = ti one uses solely the diagonal limits 
+
+Hi(ti, x i; xi) := lim 
+
+> t↓ti
+
+Hi(t, x i; xi) = 1 , b∗ 
+
+> i
+
+(ti, x i; xi) := lim 
+
+> t↓ti
+
+b∗ 
+
+> i
+
+(t, x i; xi),
+
+each taken at the single conditioning point. The first limit is the normalisation of the bridge, and the second is the starting drift of the controlled diffusion. The same convention applies to the regularised and the empirical potentials introduced in Section 4. 
+
+We now identify the exact terminal datum which has to be estimated from data. Since the minimiser P ∗ has grid law μ, the relevant conditional law at time ti+1 is simply the conditional law induced by μ itself. Therefore, the terminal density entering the local backward problem from Proposition 5 is completely determined by μ.
+
+Corollary 7 (Identification of the exact terminal datum under μ). Adopt the setup of Section 3, and let μ satisfy the finite-entropy condition (1) . Fix 
+
+i ∈ { 0, . . . , N − 1}, Xi := ( Xt0 , . . . , X ti ), xi := ( x0, x 1, . . . , x i).
+
+Let 
+
+η∗ 
+
+> i
+
+(· | xi) := P ∗(Xti+1 ∈ · | Xi = xi
+
+)
+
+and 
+
+ημi (· | xi) := μ(Xti+1 ∈ · | Xi = xi
+
+) .
+
+Then, for μi-a.e. xi,
+
+η∗ 
+
+> i
+
+(· | xi) = ημi (· | xi),
+
+where μi := μ ◦ X−1 
+
+> i
+
+.Consequently, for μi-a.e. xi, the terminal density from Proposition 5 is given by 
+
+fi(z; xi) = dη μi (· | xi)
+
+dk Ri (· | xi) (z),
+
+where kRi (· | xi) denotes the one-step conditional law of the reference process. In particular, the local backward potential Hi(·, ·; xi) is the backward heat propagation of this terminal datum fi(·; xi) under the frozen reference semigroup associated with xi.
+
+23 Proof. Since 
+
+P ∗ ◦ (Xt0 , . . . , X tN )−1 = μ, 
+
+the finite-dimensional distributions of 
+
+(Xt0 , . . . , X tN )
+
+under P ∗ coincide with those under μ. In particular, for every bounded measurable φ : Rd → R,
+
+EP ∗
+
+> [
+
+φ(Xti+1 ) | Xi 
+
+> ]
+
+= Eμ
+
+> [
+
+φ(Xti+1 ) | Xi 
+
+> ]
+
+P ∗-a.s. Hence 
+
+η∗ 
+
+> i
+
+(· | xi) = ημi (· | xi)
+
+for μi-a.e. xi.By Proposition 5, 
+
+fi(z; xi) = dη ∗ 
+
+> i
+
+(· | xi)
+
+dk Ri (· | xi) (z).
+
+Replacing η∗ 
+
+> i
+
+by ημi yields the claim. The last statement is just the definition of Hi(·, ·; xi) from Proposition 5. 
+
+3.2 Volatility-informed references and intervalwise freezing 
+
+Section 2 formulated the entropy projection at the level of an arbitrary reference, and Section 3 specialised it to the intervalwise frozen Gaussian reference of Remark 3. We now record the sense in which the latter is itself an approximation of a more ideal, volatility-informed reference, and we control the resulting approximation error. The ideal object is the entropy projection associated with the observed coarse-grid law μ and with an ideal reference Ra built from the (generally unknown) volatility structure of the data, 
+
+P a,⋆ ∈ arg min 
+
+> {
+
+H(P | Ra) : P ◦ Π−1 = μ
+
+> }
+
+,
+
+in the sense of Theorem 1. The class admitted for Ra is structurally constrained. On each coarse interval (ti, t i+1 ], the covariance of Ra is allowed to depend on the coarse past and on a latent volatility environment evolving inside the interval, and is in particular allowed to be stochastic; but it is required to be state-independent in the canonical process, in the sense that, conditionally on the coarse past 24 and on the latent environment, the dynamics of Ra on the interval is an additive Gaussian martingale. This conditional Gaussianity is the structural property that makes the entropy projection decompose interval by interval via the disintegration of relative entropy, that gives the conditional bridges in closed form, and that places Ra in the class covered by Remark 2. The ideal reference Ra is still too rich to be used directly: its covari-ance varies continuously inside each coarse interval. The implementable construction replaces this continuously varying covariance by an intervalwise frozen, or more generally piecewise-frozen, approximation along the coarse grid. The relevant approximation error is then not an error on instantaneous volatilities, but an error on the cumulative covariance of the reference. The remainder of this subsection makes this precise on a single coarse interval, identifies a normalised error functional supported on the active diffusive leaf, proves stability of the corresponding endpoint bridges, and exposes the joint and hierarchical structure of the single TR-SBTS entropy projection that the construction realises on the augmented state space. 
+
+Ideal conditional reference on one coarse interval. Fix a coarse interval [S, T ], with 
+
+∆ := T − S. 
+
+Let h denote the coarse past available at time S, and let Y be a latent volatility environment. Conditionally on (h, Y ), the ideal reference on [S, T ]
+
+is assumed to be the additive Gaussian martingale 
+
+dZ t = σ(t, h, Y ) dW t, S ≤ t ≤ T, 
+
+with covariance matrix 
+
+at(h, Y ) := σ(t, h, Y )σ(t, h, Y )⊤ ∈ Sd
+
+> +
+
+.
+
+The coefficient may be random, degenerate, and path-dependent through the coarse past and the latent environment. The essential structural assumption is that, conditionally on (h, Y ), it does not depend on the current state Zt
+
+inside the interval. Thus, once the environment is fixed, the reference bridge between two endpoints is Gaussian. Define the covariance cumulant 
+
+Γt(h, Y ) :=  
+
+> ∫tS
+
+ar(h, Y ) dr, S ≤ t ≤ T, 
+
+and write 
+
+CS,T (h, Y ) := Γ T (h, Y ).
+
+25 The terminal affine leaf through x is 
+
+x + Ran CS,T (h, Y ).
+
+The one-piece frozen approximation uses the constant covariance 
+
+¯aS,T (h, Y ) := 1∆ CS,T (h, Y ),
+
+whose cumulant is 
+
+¯Γt(h, Y ) = t − S
+
+∆ CS,T (h, Y ).
+
+This is the linear interpolation of the true cumulant between 0 and CS,T (h, Y ).More generally, let 
+
+P = {S = s0 < s 1 < · · · < s M = T }
+
+be a refinement of the coarse interval. The piecewise-frozen approximation uses the cumulant ΓP defined by 
+
+ΓP 
+
+> sk
+
+(h, Y ) = Γ sk (h, Y ), k = 0 , . . . , M, 
+
+and by linear interpolation on each subinterval [sk, s k+1 ]. Equivalently, on 
+
+[sk, s k+1 ] it uses the frozen covariance 
+
+¯ak(h, Y ) := 1
+
+sk+1 − sk
+
+(Γsk+1 (h, Y ) − Γsk (h, Y )) .
+
+The algorithm considered in this work corresponds to the coarsest case 
+
+M = 1 , but the same principle allows finer frozen approximations whenever finer volatility information is available. 
+
+Endpoint entropy projection on the interval. Fix the environment 
+
+(h, Y ). Let πh,Y be a probability law on endpoint pairs (x, z ) such that 
+
+z − x ∈ Ran CS,T (h, Y ) πh,Y -a.s. Assume that πh,Y has finite entropy with respect to the endpoint law of the ideal Gaussian reference. The intervalwise ideal entropy projection is then 
+
+P h,Y,⋆ =
+
+∫
+
+Rh,Y,x,z πh,Y (dx dz ),
+
+where Rh,Y,x,z is the endpoint bridge of the ideal reference from x at time S
+
+to z at time T .26 The piecewise-frozen reference shares the same terminal covariance 
+
+CS,T (h, Y ), hence the same endpoint Gaussian scale and the same terminal affine leaf. Its entropy projection with the same endpoint law is 
+
+P h,Y, P,⋆ =
+
+∫
+
+Rh,Y, P,x,z πh,Y (dx dz ),
+
+where Rh,Y, P,x,z is the endpoint bridge associated with the piecewise-frozen cumulant ΓP (h, Y ).Thus the approximation problem reduces to comparing the two endpoint Gaussian bridges 
+
+Rh,Y,x,z and Rh,Y, P,x,z .
+
+Bridge comparison through the covariance cumulant. For fixed 
+
+(h, Y, x, z ), the ideal bridge has mean 
+
+mt(h, Y ; x, z ) = x + Γ t(h, Y )CS,T (h, Y )+(z − x),
+
+where C+ 
+
+> S,T
+
+denotes the Moore–Penrose inverse on the active leaf. The piecewise-frozen bridge has mean 
+
+mP 
+
+> t
+
+(h, Y ; x, z ) = x + Γ P 
+
+> t
+
+(h, Y )CS,T (h, Y )+(z − x).
+
+Therefore 
+
+mt − mP 
+
+> t
+
+=
+
+(
+
+Γt − ΓP
+
+> t
+
+)
+
+C+ 
+
+> S,T
+
+(z − x).
+
+Define the intrinsic endpoint norm 
+
+rS,T (h, Y ; x, z ) := 
+
+∣∣∣CS,T (h, Y )+/2(z − x)
+
+∣∣∣ ,
+
+and the normalised cumulant interpolation error 
+
+ηP (h, Y ) := sup 
+
+> S≤t≤T
+
+∥∥∥(
+
+Γt(h, Y ) − ΓP 
+
+> t
+
+(h, Y )
+
+)
+
+CS,T (h, Y )+/2∥∥∥ .
+
+Then 
+
+sup 
+
+> S≤t≤T
+
+|mt − mP 
+
+> t
+
+| ≤ ηP (h, Y ) rS,T (h, Y ; x, z ).
+
+The covariance kernels of the two Gaussian bridges are 
+
+Ks,t (h, Y ) = Γ s∧t(h, Y ) − Γs(h, Y )CS,T (h, Y )+Γt(h, Y ),
+
+and 
+
+KP
+
+> s,t
+
+(h, Y ) = Γ P
+
+> s∧t
+
+(h, Y ) − ΓP 
+
+> s
+
+(h, Y )CS,T (h, Y )+ΓP 
+
+> t
+
+(h, Y ).
+
+27 Hence the covariance kernels are controlled by the same cumulant interpola-tion error. In particular, on every set where 
+
+rS,T (h, Y ; x, z ) ≤ R and ηP (h, Y ) ≤ δ, 
+
+the ideal bridge and the piecewise-frozen bridge are close in weak topology on C([ S, T ]; Rd), with a modulus depending on R, on the dimension, and on the local covariance scale, and vanishing as δ ↓ 0.
+
+Proposition 8 (Stability of piecewise-frozen endpoint bridges) . Fix a coarse interval [S, T ]. Assume that, conditionally on the environment (h, Y ), the ideal reference is the additive Gaussian reference described above. Let Pn
+
+be a sequence of refinements of [S, T ], and let ΓPn be the corresponding piecewise-linear cumulants. Assume that 
+
+ηPn (h, Y ) −→ 0 in probability ,
+
+and that the intrinsic endpoint norms 
+
+rS,T (h, Y ; x, z ) = 
+
+> ∣∣∣
+
+CS,T (h, Y )+/2(z − x)
+
+> ∣∣∣
+
+are tight under the endpoint laws πh,Y . Then 
+
+P h,Y, Pn,⋆ =⇒ P h,Y,⋆ 
+
+in probability, in the weak topology of probability measures on C([ S, T ]; Rd).Proof. For fixed (h, Y, x, z ), both laws are Gaussian measures on path space. Their means are controlled by the estimate 
+
+sup 
+
+> S≤t≤T
+
+|mt − mPn 
+
+> t
+
+| ≤ ηPn (h, Y ) rS,T (h, Y ; x, z ).
+
+The covariance kernels are continuous functions of the cumulant Γ, the ap-proximating cumulant ΓPn , and the terminal pseudo-inverse C+ 
+
+> S,T
+
+. Therefore, on every localised set where the intrinsic endpoint norm is bounded and 
+
+ηPn (h, Y ) is small, the means and covariance kernels of the two Gaussian bridges are close uniformly. Continuity of Gaussian laws with respect to their mean and covariance kernels gives convergence in weak topology on 
+
+C([ S, T ]; Rd).The tightness of the intrinsic endpoint norms allows us to restrict to such localised sets with arbitrarily high probability. Since ηPn (h, Y ) → 0 in probability, the localised convergence implies the stated convergence after integration with respect to πh,Y .28 Why the hypotheses are natural. The condition 
+
+ηPn (h, Y ) → 0
+
+is a continuity requirement on the covariance cumulant. It follows, for instance, if Y is a continuous path-valued random variable, the coarse history is tight, and the map 
+
+(t, h, Y ) 7 −→ at(h, Y )
+
+is continuous on compact sets of histories and latent paths. Indeed, on high-probability compact sets, t 7 → at(h, Y ) is uniformly continuous, and therefore the cumulant 
+
+Γt(h, Y ) =  
+
+> ∫tS
+
+ar(h, Y ) dr 
+
+is uniformly approximated by its piecewise-linear interpolation on refining subgrids. The tightness of the intrinsic endpoint norm is the endpoint form of the finite-entropy assumption. If the endpoint law πh,Y has finite entropy with respect to the Gaussian endpoint law induced by CS,T (h, Y ), then the entropy inequality applied to the Gaussian quadratic form yields tightness of 
+
+> ∣∣∣
+
+CS,T (h, Y )+/2(z − x) 
+
+> ∣∣∣
+
+.
+
+Thus the endpoint displacement is not concentrated in directions that are too expensive in the intrinsic geometry of the diffusive leaf. 
+
+Interpretation. The quality of the approximation is governed by the error between the covariance cumulant of the ideal reference and the cumulant actually used by the approximating reference: 
+
+sup 
+
+> S≤t≤T
+> ∥∥∥
+
+Γt(h, Y ) − ΓP 
+
+> t
+
+(h, Y ) 
+
+> ∥∥∥
+
+,
+
+more precisely by its normalised version on the active leaf. The one-piece frozen covariance 
+
+¯aS,T (h, Y ) = 1
+
+T − S 
+
+> ∫TS
+
+ar(h, Y ) dr 
+
+is the coarsest approximation in this class. It preserves the total covariance on the interval: 
+
+(T − S)¯ aS,T (h, Y ) = CS,T (h, Y ).
+
+29 Therefore it preserves the endpoint Gaussian scale and the terminal diffusive leaf. If finer information on the volatility environment is available inside the coarse interval, one may refine the approximation by using a piecewise-frozen reference on a finer subgrid. This does not change the nature of the Schrödinger projection: it only replaces the one-piece linear approximation of the covariance cumulant by a finer piecewise-linear approximation. Consequently, the method can be read as follows. We start from an ideal reference whose covariance may be stochastic and path-dependent through the coarse past and through a latent volatility environment. The reference is not optimised inside the variational problem; it is the volatility-informed prior relative to which the entropy projection is computed. The numerical algorithm then replaces its unknown continuously varying covariance cumu-lant by a gridwise frozen approximation. Under continuity of the volatility environment and finite entropy of the endpoint constraints, this frozen ap-proximation converges to the ideal endpoint bridge as the volatility grid is refined. 
+
+Disintegration and the triangular hierarchy. The conditional Gaus-sianity of Ra inside each coarse interval is exactly what permits the entropy projection to be unfolded one level at a time. By the disintegration of relative entropy, 
+
+H(P X,Y ∣∣ RX,Y ) = H(P Y ∣∣ RY ) + EP Y
+
+> [
+
+H(P X|Y ∣∣ RX|Y )] ,
+
+the joint problem in (X, Y ) decomposes into an inner TR-SBTS problem in X at fixed Y —the problem already solved in Section 3—and an outer minimisation in the law of Y . The latent environment enters the inner reference only through its trajectory, and the regularity requirements imposed on it (continuity of t 7 → at(h, Y ) and finite entropy of the endpoint law) coincide with those imposed on the principal process. The outer problem can therefore be cast, in turn, as a TR-SBTS at a higher level of conditioning, with its own conditional reference. Iterating yields a triangular sequence of conditioning levels, in which the conditioning past widens as one ascends; the construction terminates whenever a stable reference is available at the current level. This is the precise sense in which the present framework is a 
+
+triangular-reference extension of SBTS. 
+
+Joint and hierarchical reading of the construction. The construction is a single TR-SBTS entropy projection on the augmented state space, but 30 its triangular structure makes it natural to read it from two complementary angles inherent in the same formulation. As a joint problem, the variational constraint is imposed simultaneously across time and across the latent levels: the augmented coarse-grid law of 
+
+> ˜
+
+Xt := (Xt, θ (Γ t)) ∈ Rd × Sd
+
+is fixed, and the conditional reference on each interval depends on the joint past ( ˜Xt0 , . . . , ˜Xti
+
+> )
+
+; the reference is itself stochastic above the bottom level, generating the corresponding intervalwise covariance descriptors θ(Γ t) con-ditionally on this joint history, which allows arbitrary cross-dependence between price and volatility paths. Each latent level produces a dynamic reference for the level above; this reference is summarised, in the implemen-tation, by a covariance descriptor taking values in the symmetric PSD cone, with any factorisation of the generated covariance entering only at runtime, for simulation, density evaluation, and local geometric normalisation. The aim of the construction is to build a dynamic, informed triangular reference under which the entropy projection is well-posed, rather than to track the data-generating volatility process exactly: the latter is in general infeasible, as the Heston case of Section 6.2 illustrates, since the volatility itself is driven by a CIR process and admits no exact finite-rank description. As a hierarchical problem, once the joint constraint is enforced, the localised intervalwise subproblems unfold bottom-up via the disintegration of entropy described above: each level is solved conditionally on the trajectory of the level below. Both readings refer to the same entropy projection, the same minimiser, the same value, and the same reference. The analysis of Section 3 and of the present section applies to it unchanged, the only structural in-gredient used being state-independence of the reference inside each coarse interval. The concrete choice of the cumulant descriptor θ employed in the implementation, and its stability properties, are recorded in Section 5.2; the generated covariance descriptor is the operational summary of the reference attached to the upper level, factorised only at runtime. 
+
+# 4 Statistical approximation and main convergence theorem 
+
+For each frozen interval [ti, t i+1 ], the exact local drift is determined by the backward potential Hi(·, ·; xi) attached to the conditional next-step law under μ. The purpose of this section is to isolate the implementable approximation problem in the same order in which it appears in computation: 31 exact regression object, analytic regularisation, Gaussian estimator, statistical assumptions, and the final convergence statement. The detailed proof chain is postponed to Appendix A. 
+
+4.1 The exact regression object 
+
+Fix i and xi. We keep the notation of Proposition 5: fi(·; xi) is the exact terminal tilt, Hi is its frozen backward propagation, and b∗ 
+
+> i
+
+is the corresponding logarithmic-gradient drift. The purpose of this section is to approximate Hi and its directional derivatives from samples of the discrete law μ.
+
+4.2 Spectral regularisation by coherent Gaussian kernel ratios 
+
+Throughout this section the spectral floor ε is a single regularisation parameter used coherently in four roles: as the floor of the backend diffusion geometry Aεi , as the floor of the Mahalanobis regression geometry of Sec-tion 4.3, as the floor of the full-rank transition density pεi that enters both the numerator and the denominator of the Doob kernel ratio, and as the mul-tiplier of the regularised drift Aεi ∇ log Hεi . The same Aεi is used everywhere, so that the artificial transverse Gaussian volume and determinant factors cancel between numerator and denominator on the active leaf; all estimates are stated on compact subsets of the open intervalwise cylinder, i.e. after a strictly positive backward propagation time τ > 0 on t ≤ ti+1 − τ . The nat-ural topology is the intrinsic diffusion geometry induced by Ai: the relevant gradient quantities are the Dirichlet form ∣∣Aε, 1/2 
+
+> i
+
+∇Hεi 
+
+> ∣∣2
+
+and the logarithmic drift Aεi ∇ log Hεi , and the relevant norms are the diffusion-adapted intrinsic norms induced by the reference geometry rather than the ambient Euclidean 
+
+L2 norms. Fix i ∈ { 0, . . . , N − 1} and a conditioning point xi, and set 
+
+∆i := ti+1 − ti, Ai := Ai(xi) = σi(xi)σi(xi)⊤, Lxi 
+
+> i
+
+:= Lxi 
+
+> Ai
+
+.
+
+Let pi(t, x ; ti+1 , z | xi) denote the rank-deficient leafwise backward heat kernel of Section 3, and let fi(·; xi) be the exact terminal tilt of Proposition 5. Set also 
+
+ri := rank Ai, ki := d − ri,
+
+for the rank and co-rank of Ai at the conditioning point. For ε > 0, define the spectral floor of Ai by 
+
+Aεi := QΛεQ⊤, Λε := diag (max( λ1, ε ), . . . , max( λd, ε )), (6) 32 where Ai = QΛQ⊤ is any spectral decomposition with Λ = diag (λ1, . . . , λ d)
+
+and λj ≥ 0. The matrix Aεi does not depend on the choice of spectral decomposition. By construction Aεi ⪰ εI d is strictly positive definite, agrees with Ai on the eigendirections where λj ≥ ε, and replaces the kernel of Ai by isotropic diffusion of variance ε; equivalently, (Aεi )−1 is the spectrally-floored stabilisation of the Moore–Penrose pseudo-inverse on the active leaf. The corresponding regularised backward heat kernel is the full-rank Gaussian density on Rd,
+
+pεi (t, x ; ti+1 , z | xi) := exp 
+
+(
+
+− 12( ti+1 −t)
+
+〈(Aεi )−1(z − x), z − x〉)
+
+(2 π(ti+1 − t)) d/ 2 (det Aεi )1/2 , (7) well defined and strictly positive on Rd × Rd for every t < t i+1 , and smooth in (t, x ) on (ti, t i+1 ) × Rd. The heat problem associated with pεi is uniformly elliptic, in contrast to the degenerate problem associated with pi. Define the transverse normalisation factor 
+
+γεi (t; xi) := (2π(ti+1 − t)ε)ki/2, (8) which compensates the extra volume that pεi acquires in the kernel directions of Ai.The regularised backward potential is defined directly by the coherently regularised Doob kernel ratio: the same spectrally floored covariance Aεi
+
+enters both the numerator and the denominator of the ratio. For ti < t < t i+1 
+
+and x ∈ Rd, set 
+
+Hεi (t, x ; xi) := 
+
+∫
+
+> Rd
+
+pεi (t, x ; ti+1 , z | xi)
+
+pεi (ti, x i; ti+1 , z | xi) ημi (dz | xi), (9) equivalently, under the conditional law ημi ,
+
+Hεi (t, x ; xi) = Eμ
+
+[ pεi (t, x ; ti+1 , X ti+1 | xi)
+
+pεi (ti, x i; ti+1 , X ti+1 | xi)
+
+∣∣∣∣∣ Xi = xi
+
+]
+
+. (10) Both transition densities are the same full-rank Gaussian pεi ; in particular the artificial ε-dependent normalisation factor (2 π(ti+1 − t)) −d/ 2( det Aεi )−1/2
+
+cancels between numerator and denominator wherever it is constant in z,and the ratio collapses to a Gaussian-type function of z.The exact degenerate potential is recovered as the leafwise ratio of the original transition densities of Ai:
+
+Hi(t, x ; xi) = 
+
+∫
+
+> Lxii
+
+pi(t, x ; ti+1 , z | xi)
+
+pi(ti, x i; ti+1 , z | xi) ημi (dz | xi), x ∈ L xi 
+
+> i
+
+, t i < t < t i+1 ,
+
+(11) 33 where pi is the degenerate Gaussian leafwise heat kernel of Ai on Lxi 
+
+> i
+
+, written with the Moore–Penrose inverse of Ai on the active eigenspace. 
+
+Finiteness of Hεi via the α < β gap. Set 
+
+α := ti+1 − t, β := ti+1 − ti, 0 < α < β. 
+
+The exponent in the ratio pεi (t, x ; ti+1 , z )/p εi (ti, x i; ti+1 , z ) of (9) reads 
+
+− 12α ∥z − x∥2(Aεi )−1 + 12β ∥z − xi∥2(Aεi )−1 .
+
+Since α < β , the quadratic part in z is strictly negative definite for every 
+
+ε > 0; completing the square in z realises the ratio as a bounded Gaussian-type function of z, so the integral against the probability measure ημi (· | xi)
+
+is finite and Hεi is smooth in (t, x ) on (ti, t i+1 ) × Rd. On bounded x-sets and on {t ≤ ti+1 − τ } for any τ > 0 the Gaussian-ratio domination is uniform, with constants depending on τ , the bounded set, and the operator norm of 
+
+Ai+εI ; the same bound, applied to the polynomial-in-z factors produced by differentiating the kernel ratio in x, supplies uniform-on-compact control of every spatial derivative of Hεi .
+
+Analytic limit ε ↓ 0: collapse to the active leaf. Decompose x and z
+
+into active and transverse coordinates relative to Ai, x = xL +x⊥, z = zL +z⊥,in the eigenbasis of Ai. Since ημi (· | xi) is supported on Lxi 
+
+> i
+
+, one has z⊥ = xi, ⊥
+
+ημi -a.s. For x ∈ L xi 
+
+> i
+
+, the transverse component of z − x vanishes under ημi and the ε-dependent transverse parts of ∥z − x∥2(Aεi )−1 and ∥z − xi∥2(Aεi )−1 are zero. The ε-dependent determinant factors (det Aεi )−1/2 cancel between numerator and denominator of the ratio, and the integrand collapses to the leafwise ratio of pi by pi. In fact, for every ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) the matched spectral floor leaves the active eigenvalues of Ai unchanged and the coherent kernel ratio on the active leaf reduces to the unfloored leafwise ratio, so that on the open intervalwise cylinder the regularised potential agrees identically with the exact one: 
+
+Hεi (t, x ; xi) = Hi(t, x ; xi), (t, x ) ∈ (ti, t i+1 ) × L xi 
+
+> i
+
+, ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) ,
+
+(12) a trivial monotone convergence in ε which becomes constant below the active eigenvalue threshold. The Gaussian-ratio bound of the previous paragraph 34 dominates the integrand on {t ≤ ti+1 − τ } at every fixed ε, and dominated convergence yields the leafwise recovery 
+
+Hεi (t, x ; xi) −→ Hi(t, x ; xi), x ∈ L xi 
+
+> i
+
+, t i < t < t i+1 , (13) locally uniformly on compact subsets of (ti, t i+1 ) × L xi 
+
+> i
+
+.For x /∈ L xi 
+
+> i
+
+, the transverse component x⊥ − xi, ⊥ is non-zero. The numerator of the kernel ratio carries the transverse penalty 
+
+exp 
+
+(
+
+− |x⊥ − xi, ⊥|2
+
+2ε(ti+1 − t)
+
+)
+
+,
+
+while the denominator has no corresponding transverse displacement, since 
+
+z⊥ = xi, ⊥ under ημi . The ratio therefore decays exponentially in 1/ε , and 
+
+Hεi (t, x ; xi) −→ 0, x / ∈ L xi 
+
+> i
+
+, t i < t < t i+1 . (14) Combining the two regimes yields the global pointwise collapse to the affine leaf, 
+
+Hεi (t, x ; xi) −→ Hi(t, x ; xi) 1Lxii
+
+(x), ti < t < t i+1 , x ∈ Rd, (15) in the intrinsic diffusion-adapted topology induced by Ai. Differentiating the kernel ratio in x inserts polynomial-in-z factors against the same dominated Gaussian-type integrand, and the same dominated-convergence argument extends (13) to the active directional derivatives on every compact K ⋐
+
+(ti, t i+1 ) × L xi 
+
+> i
+
+.
+
+Drift convergence. The regularised drift is 
+
+bεi (t, x ; xi) := Aεi ∇x log Hεi (t, x ; xi),
+
+the intrinsic logarithmic-gradient drift attached to the coherent kernel-ratio potential. Strict positivity of Hi on (ti, t i+1 ) × L xi 
+
+> i
+
+, uniform-on-compact control of Hεi and of its active derivatives, and the deterministic bound 
+
+max (λi,j , ε ) ≤ ∥ Ai∥ + ε on the eigenpair coefficients together yield the convergence of the intrinsic gradients and of the regularised drift, 
+
+Aεi ∇x log Hεi (t, x ; xi) −→ Ai ∇x log Hi(t, x ; xi) = b∗ 
+
+> i
+
+(t, x ; xi), (16) on every compact K ⋐ (ti, t i+1 ) × L xi 
+
+> i
+
+, and in the intrinsic Maha-lanobis/Dirichlet geometry of Ai. The transverse components of the gradient 35 are multiplied by Aεi and absorbed by the global collapse of Hεi to the leaf, so the limiting dynamics live on Lxi 
+
+> i
+
+; the natural quantities are the intrinsic energetic ones 
+
+Aε, 1/2 
+
+> i
+
+∇Hεi , Aεi ∇ log Hεi , ∣∣Aε, 1/2 
+
+> i
+
+∇ log Hεi
+
+> ∣∣2
+
+,
+
+not the naked Euclidean gradient. The left endpoint t = ti is excluded from the generic domain on purpose: 
+
+Hεi and Hi are the potentials of a Doob h-transform whose initial condition is concentrated at the single point Xti = xi, so only the boundary value 
+
+Hεi (ti, x i; xi) := lim 
+
+> t↓ti
+
+Hεi (t, x i; xi) = 1 (17) is meaningful at t = ti, and coincides with the analogous boundary value of 
+
+Hi. Equation (17) follows directly from the identity (12) on the leaf, together with the Doob normalisation Hi(t, x i; xi) → 1 as t ↓ ti. The same convention applies to the regularised drift extracted from Hεi (see Remark 9 below): the boundary value 
+
+bεi (ti, x i; xi) := lim 
+
+> t↓ti
+
+Aεi ∇x log Hεi (t, x i; xi) (18) is well defined at the single conditioning point and used in the inner integrator of Section 5 as the starting drift of the bridge. The limit exists by the same dominated-convergence argument that yields the leafwise recovery (13) :writing the drift as the kernel-ratio average of (19) , the integrand contains the displacement z−xi multiplied by the coherent Gaussian ratio Φεi (t, x i, z ; xi) = 
+
+pεi (t, x i; ti+1 , z )/p εi (ti, x i; ti+1 , z ). The ratio is uniformly bounded as t ↓ ti,and the displacement projects z − xi onto the active leaf, so that the relevant first moment is finite under the Mahalanobis metric of Aεi . Finiteness of this first moment follows from the finite-entropy hypothesis (1) : ημi (· | xi) has finite relative entropy with respect to the Gaussian leafwise reference, hence finite first Aεi -Mahalanobis moment by the Donsker–Varadhan variational characterisation. Dominated convergence under the integral sign then gives the boundary value (18) , with the analogous expression for b∗ 
+
+> i
+
+(ti, x i; xi) on the leaf following by (12). 
+
+Remark 9 (Coherent kernel ratio and intrinsic geometry) . The reason the spectral floor is harmless in the analytic limit is that it is applied coherently to both transition densities in the Doob kernel ratio of (9) . The artificial transverse Gaussian volume and determinant factors therefore cancel on the active leaf, while off the leaf the numerator retains an exponentially small 
+
+36 transverse penalty and the potential collapses to zero. Differentiating the log-ratio in x yields 
+
+∇x log pεi (t, x ; ti+1 , z | xi)
+
+pεi (ti, x i; ti+1 , z | xi) = 1
+
+ti+1 − t (Aεi )−1(z − x),
+
+so the regularised drift reads 
+
+Aεi ∇x log Hεi (t, x ; xi) = 1
+
+ti+1 − t
+
+∫
+
+> Rd
+
+(z − x) pεi (t, x ; ti+1 , z | xi)
+
+pεi (ti, x i; ti+1 , z | xi) ημi (dz | xi)
+
+∫
+
+> Rd
+
+pεi (t, x ; ti+1 , z | xi)
+
+pεi (ti, x i; ti+1 , z | xi) ημi (dz | xi)
+
+.
+
+(19) 
+
+Placing Aεi in front of ∇x log Hεi cancels the inverse covariance produced by the gradient; the displacement z − x enters the numerator unmodified, and the role of ε is confined to the coherent kernel ratio, where the matched floor in numerator and denominator cancels the transverse volume and leaves only the on-leaf Gaussian part visible in the ε ↓ 0 limit. The natural quantities are the intrinsic energetic ones Aε, 1/2 
+
+> i
+
+∇Hεi , Aεi ∇ log Hεi , and the intrinsic Dirichlet energy ∣∣Aε, 1/2 
+
+> i
+
+∇ log Hεi
+
+∣∣2; in the limit the dynamics is supported on the leaf and controlled by the diffusion-adapted Mahalanobis/Dirichlet geometry induced by Ai, not by the ambient Euclidean gradient. The same runtime covariance geometry Aεi simultaneously determines: the bridge transition density pεi (numerator and denominator of the coherent kernel ratio); the intrinsic diffusion geometry of the regularised backward potential; the Mahalanobis regression metric of the conditioning kernel; the logarithmic drift multiplier Aεi ∇ log Hεi ; and the runtime Gaussian simulation geometry used by the inner Euler–Maruyama integrator. The coherence of the construction is that one ε-regularised covariance carries every regularised object of the framework. 
+
+4.3 Statistical estimator 
+
+Let 
+
+(X(m) 
+
+> i
+
+, ∆X(m)
+
+> i+1
+
+), ∆X(m) 
+
+> i+1
+
+:= X(m) 
+
+> ti+1
+
+− X(m) 
+
+> ti
+
+, m = 1 , . . . , M, 
+
+be i.i.d. samples with law induced by μ—we take as response the realised next-interval increment rather than the next-interval position, which is the natural object for a reference whose intervalwise transition law, conditional on Xi = xi, is Gaussian on increments—and write 
+
+qi := dim( Xi) = ( i + 1) d. 
+
+37 We represent the conditioning past through its anchor-plus-increment chart 
+
+Ui := (Xti , ∆Xi, ∆Xi−1, . . . , ∆X1
+
+), ∆Xk := Xtk − Xtk−1 , (20) which is in bijection with Xi via Xtk = Xti − ∑ij=k+1 ∆Xj . The anchor is the present state and the increments are listed in reverse temporal order from the most recent; this places the most predictively relevant coordinate first and is the natural ordering for the kernel regressor on any stochastic process. Each increment ∆Xk is the displacement on the active leaf of the frozen reference associated with the past up to time tk−1; its natural local scale is therefore the spectrally floored covariance cumulant 
+
+Cεk(uk−1) := ( tk − tk−1) Aεk(uk−1),
+
+evaluated at the runtime query history uk−1 = ( xk−1, ∆xk−1, . . . , ∆x1).The reference-aware Gaussian Nadaraya–Watson kernel on the condition-ing past is the product 
+
+Kh
+
+(ui; u(m)
+
+> i
+
+) := Γ Eucl 
+
+> h
+
+(xi − x(m)
+
+> i
+
+) i∏
+
+> k=1
+
+ΓCεk (uk−1)
+
+> h
+
+(∆xk − ∆x(m)
+
+> k
+
+), (21) where ΓEucl  
+
+> h
+
+is the standard d-dimensional isotropic Gaussian kernel of band-width h and ΓCh is the anisotropic Gaussian kernel under metric C,
+
+ΓCh (u) := (2 πh 2)−d/ 2 (det C)−1/2 exp 
+
+(
+
+− 12h2 u⊤C−1u
+
+)
+
+, u ∈ Rd.
+
+The metrics Cεk(uk−1) are determined entirely by the runtime query history ui;historical samples u(m) 
+
+> i
+
+enter only through their increments and do not carry their own metric inside the kernel. The corresponding Nadaraya–Watson weights are 
+
+ωM, G 
+
+> i,m
+
+(ui) := KhM (ui; U(m) 
+
+> i
+
+)
+
+∑Mn=1 KhM (ui; U(n) 
+
+> i
+
+) . (22) The empirical regularised backward potential is obtained by replacing the conditional expectation in (10) with the Nadaraya–Watson average of the same coherent kernel-ratio integrand. Adding and subtracting the starting point of the historical increment turns the position-to-position displacement 
+
+X(m) 
+
+> ti+1
+
+− x inside the Gaussian transition density into the increment difference 38 ∆X(m) 
+
+> i+1
+
+− (x − xi), and the same coherently regularised covariance Aεi appears in numerator and denominator of the Doob kernel ratio: ̂
+
+Hε,M, G 
+
+> i
+
+(t, x ; ui) := 
+
+> M
+
+∑
+
+> m=1
+
+ωM, G 
+
+> i,m
+
+(ui) pεi (t, x ; ti+1 , x i + ∆ X(m) 
+
+> i+1
+
+| ui)
+
+pεi
+
+(ti, X (m) 
+
+> ti
+
+; ti+1 , X (m) 
+
+> ti
+
++ ∆ X(m) 
+
+> i+1
+
+| U(m)
+
+> i
+
+) .
+
+(23) This is the Nadaraya–Watson estimator of the coherently regularised kernel-ratio response 
+
+Φεi (t, x, z ; xi) := pεi (t, x ; ti+1 , z | xi)
+
+pεi (ti, x i; ti+1 , z | xi)
+
+evaluated at z = X(m) 
+
+> ti
+
++ ∆ X(m) 
+
+> i+1
+
+, with the same spectrally floored covariance 
+
+Aεi in numerator and denominator. The matched floor cancels the artificial transverse volume between numerator and denominator on the active leaf and the Gaussian-ratio α < β gap of Section 4.2 dominates the integrand uni-formly on bounded sets after positive backward time; the same matched-floor structure controls the empirical estimator on the relevant high-probability sample cloud in the diagonal extraction sense, with constants depending polynomially on ε and absorbed by the diagonal sequence (εn, M n, h n) of Theorem 11. Because pεi is bounded, continuous, and smooth in (t, x ) on 
+
+(ti, t i+1 ) × Rd, the same is true of the empirical potential on the open interval-wise cylinder. The boundary value at the left endpoint follows the convention of (17) : only the single-point evaluation ̂ Hε,M, G 
+
+> i
+
+(ti, x i; ui) is used, as the diagonal limit t ↓ ti at the conditioning point. The approximate drift is computed by substituting ̂ Hε,M, G 
+
+> i
+
+for Hi in the drift formula of Proposition 5, on the open domain (ti, t i+1 ) × Rd; the corresponding starting drift used by the inner integrator at t = ti is again a single-point diagonal limit at (ti, x i).
+
+Remark 10 (Reference-aware Gaussian kernels and the disintegration of the conditioning past) . The Nadaraya–Watson estimator approximates the conditional expectation Eμ[ · | Ui = ui] by a local ratio 
+
+∑ 
+
+> m
+
+Kh(ui; U(m) 
+
+> i
+
+) ϕ(∆ X(m) 
+
+> i+1
+
+)
+
+∑ 
+
+> m
+
+Kh(ui; U(m) 
+
+> i
+
+) ,
+
+where the response is the realised next-interval increment ∆X(m) 
+
+> i+1
+
+; the denom-inator is a kernel estimator of the local density of Ui at ui and the numerator is a density-weighted local average of the response. The natural factorisation of this local density follows the forward causal disintegration of the law of Ui
+
+39 into its initial state and successive conditional increments, 
+
+μUi (dui) = π0(dx 0)
+
+> i∏
+> k=1
+
+πk
+
+> (
+
+d∆xk 
+
+> ∣∣
+
+x0, ∆x1, . . . , ∆xk−1
+
+> )
+
+,
+
+read here in the present-anchored chart of (20) through the bijection x0 =
+
+xi − ∑ij=1 ∆xj , so any product kernel on the conditioning past is implicitly estimating each factor on its own neighbourhood system. A standard product Gaussian kernel uses Euclidean balls (equivalently Euclidean Gaussian level sets) for all factors. In TR-SBTS each conditional increment law πk(· | x0, ∆x1, . . . , ∆xk−1) is generated and evaluated, along the active leaf, within the local Schrödinger projection associated with the frozen reference, whose covariance cumulant Cεk defines the natural local Mahalanobis geometry on that leaf. Once an increment becomes part of the conditioning past, it is natural to compare it with historical increments in the same reference geometry. The reference-aware kernel Kh of (21) does exactly this: each Euclidean Gaussian factor on the increment ∆xk is replaced by a Mahalanobis Gaussian factor with metric Cεk(uk−1) determined by the runtime query history. The anchor xi is compared on the Euclidean geometry, since no reference is attached to it. The variational target—the law μ, the reference-based SBTS entropy projection of Section 2, and the conditional expectation being estimated—is unchanged; the kernel chart is the only object that changes, through the local metric used to read the density of Ui. Conditionally on the run-time reference, the matrices Cεk(uk−1) are deterministic, symmetric positive definite, and spectrally floored, so the deformed Gaussian factors are or-dinary anisotropic Gaussians under the fixed linear change of coordinates 
+
+∆xk 7 → Cεk(uk−1)−1/2∆xk. Their norms are uniformly equivalent to Eu-clidean norms on the active conditioning space, and the determinant factors 
+
+( det Cεk)±1/2 are controlled above and below by the eigenvalue bounds inherited from the spectral floor and from the continuity of Ak( · ) on the regular set. The classical Nadaraya–Watson arguments of Appendix A therefore yield the consistency theorem of Section 4.5 unchanged, after conditioning on the runtime reference and applying the corresponding linear changes of variables. The reference-aware kernel is expected to improve finite-sample behaviour on geometric grounds: its mass is concentrated along ellipsoids aligned with the directions that the reference itself regards as typical or informative for the current path and time interval. 
+
+Appendix A introduces compactly supported regression kernels as an auxiliary proof device and then transfers the result to the Gaussian regression 40 kernels used here; conditionally on the runtime reference, the change from the Euclidean kernel to the reference-aware kernel Kh amounts to the fixed linear coordinate change described in Remark 10, and the proof goes through unchanged. 
+
+4.4 Statistical assumptions 
+
+Throughout the statistical approximation step we assume: (S1) the marginal law of Xi admits a density 
+
+πi : Rqi → [0 , ∞)
+
+which is continuous and strictly positive on a compact neighbourhood 
+
+Ci ⊂ (Rd)i+1 of the conditioning points under consideration; (S2) for every yi ∈ Ci, the conditional law of the next-interval increment 
+
+ημi (· | yi) := μ(∆Xi+1 ∈ · | Xi = yi
+
+> )
+
+is well defined, and the map 
+
+Ci ∋ yi 7 −→ ημi (· | yi) ∈ P (Rd)
+
+is weakly continuous; (S3) the sample (X(m) 
+
+> i
+
+, ∆X(m) 
+
+> i+1
+> )Mm=1
+
+is i.i.d. with law induced by μ;(S4) the Gaussian bandwidth satisfies 
+
+hM ↓ 0, M h qi 
+
+> M
+
+→ ∞ ;
+
+(S5) whenever almost sure convergence is desired, the stronger condition 
+
+M h qi
+
+> M
+
+log M −→ ∞ 
+
+holds. 41 4.5 Main statistical convergence theorem 
+
+The following theorem combines two distinct convergence steps into a single end-to-end statement: fixed-ε statistical convergence of the empirical Gaussian estimator ̂ Hε,M, G 
+
+> i
+
+to the coherent kernel-ratio potential Hεi , followed by deterministic ε ↓ 0 geometric convergence Hεi → Hi1Lxii
+
+to the exact leafwise potential. A diagonal sequence of regularisation and bandwidth parameters drives the approximate drifts to the exact leafwise drift uni-formly on compacts of the open intervalwise cylinder, and the corresponding empirical transition kernels to the exact bridge kernel. The statement is formulated at a fixed level and on a fixed coarse interval, conditionally on the lower-level triangular environment that determines the frozen covariance. In the triangular construction this environment is not external: it is itself one component of the augmented entropy projection. At fixed ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) the regularised covariance Aεi is uniformly elliptic, full-rank, and det Aεi ≥ εd; the finite-ε statistical estimator is therefore well defined and uniformly controlled regardless of the rank of the unfloored 
+
+Ai, and the proof only uses operator-norm continuity of Ai( · ) together with the sample-conditioned tightness made precise by Proposition 20 in Appendix A.4. The unfloored rank enters only in the subsequent ε ↓ 0 limit, in which the active leaf and the intrinsic leafwise geometry are recovered through Proposition 14. 
+
+Theorem 11 (Main statistical convergence) . Adopt the setup of Section 3 and assumptions (S1) –(S4) . Fix i ∈ { 0, . . . , N − 1} and a conditioning point 
+
+xi in the full μi-measure set where Corollary 7 and Proposition 5 hold and where yi 7 → Ai(yi) is operator-norm continuous at xi; the unfloored rank 
+
+ri(yi) = rank Ai(yi) is allowed to vary on the conditioning neighbourhood. Fix a compact set K ⋐ (ti, t i+1 ) × L xi 
+
+> i
+
+strictly inside the open intervalwise cylinder, i.e. K is contained in the backward stratum {t ≤ ti+1 − τ } for some 
+
+τ > 0; all estimates below are stated on this backward stratum, where the 
+
+α < β gap of the coherent kernel ratio of Section 4.2 is uniformly positive. The regularised estimator approximates the coherent regularised kernel-ratio potential Hεi of (9) at fixed ε > 0; the exact leafwise potential Hi is recovered by the deterministic analytic limit ε ↓ 0 of Proposition 14. Then there exist sequences 
+
+εn ↓ 0, Mn → ∞ ,
+
+and Gaussian bandwidths hMn admissible in the sense of (S4) , such that the following hold. Write ̂ H(n) 
+
+> i
+
+for the empirical regularised backward potential with parameters (εn, M n, h Mn ).
+
+42 (i) Drift convergence. The approximate drift 
+
+b(n) 
+
+> i
+
+(t, x ; xi) := Aεn 
+
+> i
+
+(xi) ∇x log ̂ H(n) 
+
+> i
+
+(t, x ; xi)
+
+satisfies 
+
+sup 
+
+> (t,x )∈K
+> ∣∣
+
+b(n) 
+
+> i
+
+(t, x ; xi) − b∗ 
+
+> i
+
+(t, x ; xi)∣∣ −→ 0 in probability, where b∗ 
+
+> i
+
+is the exact drift of Proposition 5. The same convergence in probability holds at the single boundary point (ti, x i) for the diagonal limit lim t↓ti b(n) 
+
+> i
+
+(t, x i; xi).(ii) Transition-kernel convergence. Let K∗ 
+
+> i
+
+(t, xi; ·) be the transi-tion kernel of the exact conditional bridge of Proposition 5, and let ̂
+
+K(n) 
+
+> i
+
+(t, xi; ·) be the time-t marginal of the empirical sample-conditioned bridge mixture ̂ K(n) 
+
+> i
+
+defined in Appendix A.6 (equation (51) ). Then, for every t ∈ [ti, t i+1 ] and every bounded continuous φ : Rd → R,
+
+> ∫
+> Rd
+
+φ(y)̂ K(n) 
+
+> i
+
+(t, xi; dy ) −→ 
+
+> ∫
+> Rd
+
+φ(y) K∗ 
+
+> i
+
+(t, xi; dy ) in probability. 
+
+Remark 12 (Finite-ε statistical estimator versus ε ↓ 0 geometric limit) .
+
+The theorem combines two steps with different geometric content. At fixed 
+
+ε > 0 the floored covariance Aεi = Q diag ( max (λj , ε )) Q⊤ satisfies Aεi ⪰ εI 
+
+and det Aεi ≥ εd, so the regularised Gaussian kernels are full-rank and uniformly elliptic. No rank-stability assumption is required for the fixed-
+
+ε statistical step: the regularised geometry is uniformly elliptic at every fixed ε > 0, and the unfloored rank rank Ai(yi) is allowed to vary freely on the conditioning neighbourhood. Determinant and inverse-covariance constants may depend polynomially on ε through det (Aεi )−1/2 ≲ ε−d/ 2 and 
+
+∥(Aεi )−1∥ ≲ ε−1, but this is harmless: for every ε > 0 one first chooses M
+
+large enough and the Nadaraya–Watson bandwidth hM small enough so that the fixed-ε statistical approximation error is sufficiently small, and the final convergence follows by selecting a diagonal sequence εn ↓ 0, Mn → ∞ , hn ↓ 0
+
+along which the polynomial ε-blowups are absorbed by the corresponding statistical decay. Bandwidth shrinkage improves localisation, but the proof still uses the standard Nadaraya–Watson admissibility conditions hM → 0,
+
+M h qi 
+
+> M
+
+→ ∞ ; the key point is that the polynomial ε-blowups are absorbable by choosing the diagonal extraction sufficiently slowly. The unfloored rank and the active leaf Lxi 
+
+> i
+
+enter only in the deterministic geometric limit ε ↓ 0, where the coherent kernel ratio collapses globally to Hi1Lxii
+
+by Proposition 14. 
+
+43 Remark 13 (Almost-sure variant for the compact auxiliary scheme) . The Gaussian-kernel result is in probability. The passage from the compactly sup-ported auxiliary scheme to the full Gaussian scheme uses the high-probability intrinsic localisation of Proposition 20. For the compactly supported auxil-iary estimator ̂ Hε,M,K i on its own—and, more generally, under a stronger summable form of the intrinsic localisation estimate—the same compact-uniform convergence statements hold almost surely under the stronger band-width condition M h qi 
+
+> M
+
+/ log M → ∞ .
+
+The proof, postponed to Appendix A, is organised in two stages. At fixed 
+
+ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) , the statistical step ̂ Hε,M i → Hεi and the convergence of its active directional derivatives are established directly on compact cylinders 
+
+K ⋐ (ti, t i+1 ) × L xi 
+
+> i
+
+: a local Gaussian domination lemma supplies equibound-edness and equicontinuity of the Nadaraya–Watson integrand on K, Ascoli– Arzelà upgrades pointwise consistency to uniform convergence on K, and the same argument applied to the differentiated kernel yields uniform convergence of the active derivatives. Positivity of Hεi on K then transfers this to the heat drift. For the transition kernels, the sample-conditioned bridge mixture ̂
+
+KMi = ∑ 
+
+> m
+
+ωMi,m RX(m)    
+
+> i,X (m)
+> ti,X (m)
+> ti+∆ X(m)
+> i+1
+> i
+
+is shown to converge weakly to the target-conditioned mixture K∗ 
+
+> i
+
+= ∫ Rxi,x i,x i+δi ημi (dδ | xi) by direct Nadaraya– Watson consistency applied to the bridge response (yi, δ ) 7 → ∫ Φ dR yi,y i,y i+δi ;the sample-conditioned reference and the target-conditioned reference coin-cide asymptotically on the localised weighted sample cloud, by continuity of the frozen Gaussian bridge in its conditioning and endpoints. The ε ↓ 0 limit is handled separately by the global collapse to the affine leaf Hεi → Hi1Lxii
+
+of Proposition 14, with locally uniform convergence on compact subsets of 
+
+(ti, t i+1 ) × L xi 
+
+> i
+
+after positive backward propagation time τ > 0; a diagonal extraction in (εn, M n, h Mn ) closes the chain. We can now turn from the limiting approximation statement to the finite-dimensional conditioning, precomputation, and runtime choices used in the implementation. 
+
+# 5 Computational architecture 
+
+The preceding sections identify the exact local object: once the coarse history xi = ( x0, . . . , x i) is fixed, the intervalwise dynamics are determined by the backward propagation of the conditional law of the next-interval increment ∆Xi+1 , translated to start from the runtime state xi (Proposi-tion 5, Proposition 7), and a finite-dimensional descriptor of the intervalwise 44 covariance is itself an output of the joint TR-SBTS construction (Section 3.2). This section describes a sample-based, finite-dimensional realisation. Three operational ingredients are introduced: a finite-dimensional conditioning map, obtained from the complementary reductions of the conditioning past (block PCR, reference-aware Mahalanobis kernel on past increments, past-window WLS drift regressor) detailed in Section 5.1; a stable database of intervalwise covariance descriptors; and a coupled bridge step that produces the next state and the next covariance descriptor jointly. 
+
+5.1 Complementary reductions of the conditioning past 
+
+The exact intervalwise conditioning variable is the entire past xi, whose dimension grows linearly with time. Like the original SBTS framework, TR-SBTS is therefore exposed to the curse of dimensionality on the memory used by the kernel regression. We present here three complementary reductions of the conditioning past, each targeting a different statistical facet of the history; they may be used in isolation when one of them suffices or, more usefully, combined into a three-estimator architecture ( present anchor , past-drift regressor , present volatility ) that we have found stable and reliable in practice and that is described at the end of this subsection. 
+
+(a) Block principal component regression as a global summary. The PCR variant follows the original SBTS recipe. We reduce the conditioning to a fixed-dimensional summary obtained from a training set, retaining the current state and a finite block of recent increments, 
+
+xi, (∆ xi−pi+1 , . . . , ∆xi), ∆xk := xk+1 − xk, pi ≤ pmax .
+
+Each piece is mapped through its own PCR projection, ΠX : Rd → EX on the state and Π∆ : Rd → E∆ on the increments, yielding the conditioning coordinate 
+
+ci(x0: i) := (ΠX xi, Π∆∆xi−pi+1 , . . . , Π∆∆xi 
+
+> )
+
+∈ EX × Epi 
+
+> ∆
+
+. (24) PCR is understood throughout in the flexible block sense, ranging from a joint PCR on the concatenated past to a purely componentwise variance normalisation (block PCR with one-dimensional blocks), with intermediate block PCRs in between; in each case the truncation is governed by an explained-variance threshold selected through statistical validation, so that the data determine the dimension at which the downstream regression is well conditioned. A single set of principal directions is used for the entire 45 runtime regime, which makes PCR a global second-order summary of the joint distribution of positions and increments on the training set. 
+
+(b) Reference-aware Mahalanobis comparison on past increments. 
+
+The reference-aware kernel Kh of (21) admits a natural local spectral read-ing. For each increment ∆xk the spectrally floored covariance cumulant 
+
+Cεk(uk−1) = QkΛkQ⊤ 
+
+> k
+
+with Λk = diag ( max (λk, 1, ε ), . . . , max (λk,d , ε )) induces the Mahalanobis metric (Cεk)−1 = Qk diag (1/ max (λk,ℓ , ε ))Q⊤ 
+
+> k
+
+, and the kernel weight on each past increment is the squared (Cεk)−1-distance between the runtime increment and the sample increment. This is, by construction, a 
+
+second-moment statistic of past increments under the runtime regularised reference geometry : it compares the realised increment against each historical sample increment, over the past window, in the quadratic form induced by the regularised reference covariance. In the basis Qk, the quadratic form ∆x⊤ 
+
+> k
+
+Cεk(uk−1)−1∆xk of the Maha-lanobis Gaussian factor reads as a weighted sum of squared coordinates with effective inverse scales 1/ max (λk,ℓ , ε ). The directions of the leaf are therefore ordered for conditioning purposes by decreasing effective inverse Mahalanobis scale , equivalently by increasing regularised eigenvalue of the ref-erence covariance: small max (λk,ℓ , ε ) correspond to directions of low runtime reference diffusion, in which observed deviations are not easily explainable by reference noise and are therefore the most discriminative for conditioning; large max (λk,ℓ , ε ) correspond to directions of high runtime reference diffusion, in which observed deviations are expected at the reference scale and carry comparatively less conditioning information. The truncation level rk ≤ d can be chosen either by a threshold on the effective inverse Mahalanobis scale or by a fixed number of retained directions; the spectral floor ε ensures that all directions below the flooring threshold share the common effective scale 1/ε 
+
+and are not artificially ordered according to their raw, possibly near-zero pre-floored eigenvalues. Being a pure second-moment statistic of the past increments, the reference-aware Mahalanobis kernel is not informative by itself about the location of the next state: it must be combined with a first-order anchor or drift summary that locates the runtime trajectory in the configuration space. The runtime reference is dynamic, however, and this unlocks a more specific first-order estimator described next. 
+
+(c) Past-window WLS drift regressor under the reference metric. 
+
+The third reduction is a weighted least-squares regressor of the drift on the 46 past window. Given a memory length L ≤ i, fit 
+
+∆xk ≈ μk(θi), k = i − L + 1 , . . . , i, 
+
+where μk is a low-dimensional parametric drift model (e.g. a linear function of a small set of past features, a locally-constant drift, or a smooth low-order polynomial in time), and θi ∈ Rq is the regression parameter of fixed dimension q independent of L and of the horizon H. The weighting matrix in the least-squares loss is the reference-induced Mahalanobis metric 
+
+(Cεk(uk−1)) −1: innovations ∆xk − μk(θi) are penalised by the same quadratic form that the dynamic reference assigns to one-step departures from the leafwise mean, so that ̂
+
+θi := argmin 
+
+> θ∈Rq
+> i∑
+> k=i−L+1
+> ∥∥
+
+∆xk − μk(θ)∥∥2(Cεk (uk−1)) −1 , (25) and the conditioning coordinate is ̂ θi itself, optionally augmented by the residual variance summary on the same window. The output ̂ θi ∈ Rq has fixed dimension q regardless of L; enlarging L only sharpens the regressor and never widens the conditioning vector. In particular, the WLS estimator does not suffer the curse of dimensionality in L—increasing the memory length improves the stability of ̂ θi rather than degrading it—while a longer 
+
+L may be tuned to capture a slowly evolving drift, and a shorter L to track faster drift changes. The choice L is itself a hyperparameter selected on the predictive energy score of Appendix B. The WLS drift regressor under the reference Mahalanobis weighting has, in our experience, proved a stable and reliable estimator of the conditional drift in this setting: the dynamic reference provides exactly the right inno-vation weighting, and the fixed-dimensional output dimension q makes the downstream Nadaraya–Watson regression on ̂ θi well conditioned even when the underlying memory length L is long. 
+
+A three-estimator architecture. The three reductions (a)–(c) target three distinct statistical facets of the conditioning past and are most usefully combined into a three-estimator architecture: (i) a present anchor , the runtime current state xi written in normalised coordinates (the active eigenbasis of the runtime reference, with the spectrally floored eigenvalues setting the per-direction scales), which carries the first-order location information; 47 (ii) a past-drift regressor ̂ θi from (25) , which encodes the first-order tempo-ral trend over the past window using the reference metric and produces a fixed-dimensional summary robust to the memory length L;(iii) a present/near-future volatility estimator , the covariance descriptor Σi
+
+of Section 5.2 that the runtime reference attaches to the current and next interval, carrying the second-order geometric information through the dynamic reference. The reference-aware Mahalanobis kernel of (b) enters the Nadaraya–Watson denominator as the conditioning kernel; the kernel geometry is exactly the second-moment statistic on past increments under (iii), so each estimator in the triple is dedicated to a single statistical facet and the three facets together provide all the information that the conditioning past supplies to the intervalwise regression. The PCR option (a) remains available as a global alternative or as an additional block within (i)–(ii). Conditionally on the runtime reference, the restricted Mahalanobis metric of (b) is still spectrally bounded above and below, by the same floor ε
+
+and by continuity of Ak on the regular set, so the convergence analysis of Section 4.5 continues to apply by the same conditional linear-change-of-coordinates argument as in Remark 10; the argument rests on this regularised, nondegenerate covariance geometry. The runtime local spectral analogue is the default implementation; the PCR variant remains available as a global alternative when an offline projection is preferred, and the past-window WLS drift regressor is the preferred first-order summary of the past when the dynamic reference is available. 
+
+Logweights and terminal surrogate. Given the chosen scheme, each admissible historical candidate j ∈ J i receives a Gaussian logweight. In the PCR variant, 
+
+ℓi,j := − 12 ∥ΠX xi − ΠX xhist  
+
+> j
+
+∥2ΛX − 12
+
+> pi∑
+> q=1
+
+∥Π∆∆xi−pi+q − Π∆∆xhist  
+
+> j,q
+
+∥2Λ∆,q , (26) with bandwidth matrices ΛX , Λ∆,q . In the reference-aware variant, the bandwidth matrices on increments are replaced by the (possibly spectrally truncated) inverse covariance cumulants Cεk(uk−1)−1 of Section 4.3, evaluated at the runtime query history; the anchor term retains its isotropic Euclidean form. In either case, the terminal mixture weights are obtained by the stable softmax 
+
+wi,j := exp( ℓi,j − Li) 
+
+> ∑
+> m∈J i
+
+exp( ℓi,m − Li) , Li := max 
+
+> m∈J i
+
+ℓi,m , (27) 48 Algorithm 1 Single-component TR-SBTS generation 
+
+Require: fitted component model, initial state X0, horizon H 
+
+> 1:
+
+for m = 0 , . . . , H − 2 do  
+
+> 2:
+
+cm ← conditioning summary of X0: m: present anchor xm in nor-malised coordinates, past-drift summary ̂ θm from (25) , and/or block-PCR coordinate (24) , depending on which reductions of Section 5.1 are active  
+
+> 3:
+
+ℓm, · ← Gaussian logweights (PCR variant (26) , reference-aware ana-logue, or WLS-summary analogue) under the reference-aware Maha-lanobis geometry on past increments  
+
+> 4:
+
+wm, · ← softmax( ℓm, ·) via (27) 
+
+> 5:
+
+̂ νm ← ∑ 
+
+> j
+
+wm,j ηm,j  
+
+> 6:
+
+for r = 0 , . . . , n in − 1 do  
+
+> 7:
+
+bm,r ← Aεm∇x log Hm(τr, X (r) 
+
+> m
+
+;̂ νm) 
+
+> 8:
+
+X(r+1)  
+
+> m
+
+← X(r) 
+
+> m
+
++ bm,r ∆τr + σm
+
+√∆τr ξm,r  
+
+> 9:
+
+end for  
+
+> 10:
+
+Xm+1 ← X(nin ) 
+
+> m
+> 11:
+
+register Xm+1 − Xm in the increment history  
+
+> 12:
+
+end for  
+
+> 13:
+
+return (X0, . . . , X H−1)
+
+defining the empirical terminal surrogate ̂
+
+νi := ∑
+
+> j∈J i
+
+wi,j ηi,j , ηi,j := δ∆X(j)
+
+> i+1
+
+, (28) a finite mixture of Dirac atoms on the realised next-interval increments of the historical candidates. The terminal surrogate evaluates the coherent regularised kernel ratio Φεi of (9) between the runtime bridge point and each candidate next endpoint xi +∆ X(j)
+
+> i+1
+
+; the practical logweights compute the log of this ratio in stable form. Numerical stability comes from using the same 
+
+Aεi in numerator and denominator of the ratio: the matched floor cancels the artificial transverse volume between the two Gaussian densities on the active leaf, while off the leaf the numerator retains an exponentially small transverse penalty that produces the leafwise collapse. The intrinsic logarithmic-gradient drift of Proposition 5 is then read off the backward heat potential evaluated against ̂ νi on the active diffusive leaf, and the inner dynamics on (tm, t m+1 ]
+
+are obtained by integrating it through Euler–Maruyama steps with the frozen intervalwise coefficient. 49 5.2 Covariance-descriptor database 
+
+The intervalwise covariances admitted by the framework are positive semidefinite and possibly rank-deficient. At each coarse step i the framework attaches an intervalwise covariance descriptor Σi ∈ Sd
+
+> +
+
+—either estimated from data or supplied exogenously, for instance a daily realised covariance computed from intraday increments—which summarises the triangular refer-ence attached to the upper level by its second-order geometry on the interval. The latent kernels of Section 5.4 regress directly on the resulting PSD-valued trajectory (or on its cumulative counterpart), in the symmetric ambient space. The covariance trajectory is represented in the flat ambient vector space of symmetric matrices Sd, in which the regression is linear. We write the re-gression row as the half-vectorisation of the symmetric covariance descriptor, 
+
+γi := vech(Σ i) ∈ Rd(d+1) /2. (29) The choice of encoding is a numerical parametrisation that affects only the ambient regression coordinates and does not change the object on which the regression is performed: the covariance descriptor Σi is the operational summary of the triangular reference attached to the upper level on the i-th interval, and is treated as such throughout Section 5.4. 
+
+PSD projection and runtime factorisation. In the implementation, each latent level is summarised by a covariance or cumulative covariance de-scriptor, and secondary and deeper kernels regress directly on these symmetric descriptors, represented in the flat ambient vector space of symmetric matri-ces. Since the regression step is performed in this linear space, a generated descriptor may fail to be exactly positive semidefinite, and is projected back onto the cone Sd 
+
+> +
+
+before it is used as a covariance. Operationally this is done spectrally: writing the eigendecomposition Σgen  
+
+> i
+
+= Qi diag (λi, 1, . . . , λ i,d )Q⊤ 
+
+> i
+
+,the PSD projection 
+
+Σi := Qi diag (λ+
+
+> i, 1
+
+, . . . , λ +
+
+> i,d
+> )
+
+Q⊤ 
+
+> i
+
+, λ+ := max( λ, 0) , (30) removes negative eigenvalues; equivalently, Σi is the projection of Σgen  
+
+> i
+
+onto 
+
+Sd 
+
+> +
+
+in Frobenius norm. When a diffusion factor is needed for simulation, the canonical symmetric square root of the projected covariance is used, 
+
+Fi := Σ 1/2 
+
+> i
+
+∈ Sd, FiF ⊤ 
+
+> i
+
+= Σ i, (31) 50 the unique positive semidefinite symmetric matrix whose square is Σi. The map Σ 7 → Σ1/2 is continuous on the closed cone Sd 
+
+> +
+
+and well defined on rank-deficient matrices, so the chosen factorisation is continuous and numerically stable. When the same generated covariance enters the reference backend, the transition-density evaluations of Section 4.2, or the reference-aware Maha-lanobis kernel geometry of Sections 4.3 and 5.1, the projected covariance is instead spectrally floored with the backend regularisation parameter ε,
+
+Σεi := Qi diag (max( λ+
+
+> i, 1
+
+, ε ), . . . , max( λ+
+
+> i,d
+
+, ε ))Q⊤ 
+
+> i
+
+, (32) which satisfies Σεi ≥ εI and det Σεi ≥ εd. The floored covariance is the regularised geometry used in inverses and Mahalanobis distances. The PSD projection enforces covariance admissibility, and the ε-floor provides the non-degenerate regularised geometry used for inverses and Mahalanobis distances. Both operations are runtime numerical steps ap-plied after covariance generation. The covariance descriptor summarises the triangular reference attached to the upper level; the square root and the floored covariance are derived runtime objects, used for Gaussian simulation, density evaluation, local Mahalanobis normalisation, bridge interpolation, and numerical integration. 
+
+5.3 Coupling through logweights 
+
+The state and covariance components are coupled at the level of their em-pirical terminal mixtures, by mixing the corresponding Gaussian logweights before the softmax of (27) is taken. Let ℓXm,j and ℓFm,j be the logweights produced by the two components for the historical candidate j; the example adopted in the implementation is 
+
+¯ℓXm,j := (1 − ρX )ℓXm,j + ρX ℓFm,j , (33) 
+
+¯ℓFm,j := (1 − ρY )ℓFm,j + ρY
+
+> (
+
+(1 − α)ℓXm,j + αℓ X, 0 
+
+> m,j
+
+(Xm)), (34) with parameters ρX , ρ Y , α ∈ [0 , 1] . The state component uses ¯ℓXm, ·, the covariance component uses ¯ℓFm, ·, and both are normalised through the same softmax. The parameter ρX tunes how much external covariance information is mixed into the state component, while ρY controls the analogous external (primary / present-state) share injected into the covariance component, with 
+
+(1 − ρY ) weighting the covariance-component self-history. The parameter α
+
+splits the external state contribution to the covariance component between 51 the running history and the present-step anchor ℓX, 0 
+
+> m,j
+
+(Xm). No new estimator is introduced; the coupling only changes which historical terminal atoms are emphasised by each component. 
+
+5.4 Joint TR-SBTS generation 
+
+The full TR-SBTS generator instantiates Algorithm 1 jointly on the augmented process (Xt, Σt) of Section 3.2. At each coarse step, the covariance component produces the next covariance descriptor Σm+1 ∈ Sd 
+
+> +
+
+from the joint past (X0: m, Σ0: m) through its own bridge step applied to the covariance-descriptor sequence on Sd; this bridge step is realised concretely on the symmetric-square-root parametrisation (γt) of Section 5.2, and the descriptor 
+
+Σm+1 thereby produced is read as the operational summary of the triangular reference attached to the upper level on the next coarse interval. The intervalwise covariance driving the state bridge step on [tm, t m+1 ] is then 
+
+Σm+1 , factorised at runtime as Fm+1 F ⊤ 
+
+> m+1
+
+= Σ m+1 with Fm+1 = mat (γm+1 )
+
+solely for the operational purposes listed in Section 5.2. The state bridge step produces Xm+1 from the same joint past via the coupled logweights of Section 5.3, and the next coarse boundary is reached. The single-component case is recovered when the covariance component reduces to a fixed externally-supplied descriptor. 
+
+5.5 Hyperparameter selection 
+
+The free parameters of the model are selected through a hierarchical validation ladder built around the predictive energy score of Appendix B. The predictive horizon K is progressively lengthened from one phase to the next, so that each phase tests generation capacity over a longer time scale than the preceding one. The kernel parameters of the covariance component (Gaussian bandwidth, memory length, PCR explained-variance threshold) are selected first, by maximising the basic predictive energy score on the covariance trajectory 
+
+(Σ i)i—numerically represented through the symmetric-square-root sequence 
+
+(γi)i—in isolation. This establishes a reliable covariance-descriptor generator before any coupling is introduced. The kernel parameters of the state component are then selected analo-gously, using the basic predictive energy score on the state path (Xi)i at a longer predictive horizon, with the covariance-component configuration treated as fixed. The spectral floor ε of the heat-potential backward propaga-tion is fixed small enough to leave the kernel-regression behaviour dominant 52 and is validated jointly with the state-component kernel at this phase. Finally, the coupling parameters ρX , ρ Y , α are selected jointly, using the enriched coupled score of Appendix B at the longest predictive horizon used in the validation suite. The score is enriched both in features (combining positions with packed squared increments) and in time, so the joint state– covariance generator is tested for feature richness and for long-time fidelity simultaneously. 
+
+# 6 Numerical experiments 
+
+We test TR-SBTS along two complementary axes. The first (Section 6.1) probes the dimensional robustness of the kernel-PCR conditioning: a diffusion whose true dynamics live on a low-dimensional subspace is embedded in increasingly high ambient dimension, and we ask whether a PCR-truncated TR-SBTS keeps tracking the true subspace once the ambient dimension is much larger than the intrinsic one. The second (deferred to Section 6.2) probes the stochastic-volatility case: synthetic paths from a calibrated Heston model are used as ground truth, TR-SBTS is fitted on them, and the per-parameter Heston QMLE distribution recovered from the synthetic paths is compared with the QMLE distribution recovered from the real paths. 
+
+6.1 Low-rank dimensional stress 
+
+We embed a non-trivial two-dimensional motion in an ambient space of growing dimension and ask whether the SBTS estimator continues to recover its predictive distribution as the codimension grows. The informative motion is a Hopf oscillation on (X1, X 2) — a stable limit cycle of unit radius with non-linear (cubic) drift, dominantly tangential, so that every cycle phase has a different conditional mean and a globally smoothed kernel cannot match the ground truth. The remaining d − 2 coordinates are an independent fast Ornstein–Uhlenbeck process whose contribution to the conditional law of any future state is, in the asymptotic limit λ⊥ → ∞ , a pure isotropic Brownian increment over the macro step. The trajectory is generated by an exact transition kernel on a trading-day grid ( dt = 1 /250 , 20 calendar years per run); we sweep d ∈ { 4, 8, 16 , 32 , 64 , 128 , 256 , 512 } with three seeds per dimension and keep the training-set size fixed at M = 4500 , so as d grows the ratio M/d collapses from 1125 to 8.8. The signal subspace is taken canonical, 
+
+span (e1, e 2); under any random orthonormal loading the same conclusions hold up to a fixed rotation, but the canonical choice lets the test scoring be performed on the first two coordinates without a data-driven projection. 53 The kernel weights are the quartic compact-support kernel of [ 15 ] (eq. 4.2), 
+
+Kh(u) = (1 − ∥ u∥2/h 2) 1{∥ u∥≤ h}, used as a multiplicative factor at every past time point. This is the architectural choice that exposes the conditioning effect: a Gaussian softmax cancels noise-axis contributions in its own nor-malisation and masks the curse of dimensionality on this DGP, while a hard support cutoff lets the perpendicular squared-distance accumulate freely and push every candidate outside the support as d grows. We compare two vari-ants: classic_no_pcr , which conditions the kernel on the full d-dimensional state, and classic_pcr , which conditions it on the validated PCA-truncated state — and the validated truncation lands on k = 2 at every d, since the position covariance has a clean step at rank 2 by construction. Hyperparam-eters are validated per dimension on a held-out validation block; the test metric is the one-step predictive multivariate energy score on the test block, sliced to the first two ambient coordinates and normalised by √q so that values are directly comparable across d. With the chosen DGP parameters the score is bounded below by the Bayes-optimal floor ˜ES ⋆ ≈ 0.040 (the entropy of the one-step Brownian transition on the signal subspace) and above by the predict-the-marginal-mean floor of order 0.7; reporting both the absolute score and its excess over the Bayes-optimal floor isolates the curse-of-dimensionality contribution to the predictive error. 4 8 16 32 64 128 256 512 
+
+5 · 10 −2
+
+0.1
+
+0.15 
+
+ambient dimension d
+
+> ˜ES d
+
+Bayes-optimal floor 
+
+classic_no_pcr 
+
+classic_pcr 
+
+Figure 1: Predictive energy score on the canonical signal subspace as a function of the ambient dimension d. The PCR variant stays within 2× the Bayes-optimal floor at every d; the no-PCR baseline degrades from ≈ 1.7×
+
+the floor at d = 4 to ≈ 3.2× at d = 512 . Error bars are one standard deviation across three independent seeds. 54 Figure 1 summarises the experiment. The PCR variant is essentially flat in d: its excess over the Bayes-optimal floor stays in a narrow [0 .013 , 0.039] 
+
+band across two orders of magnitude in the codimension. The no-PCR baseline degrades monotonically; its excess over the same floor grows by roughly a factor of three from d = 4 to d = 512 , with the PCR/no-PCR ratio on the excess climbing to ≈ 4 at the intermediate dimensions and stabilising around 2.5 at the largest. The two variants coincide at d = 4 , where there are no perpendicular axes to exploit, and diverge as soon as the codimension is comparable to the signal dimension. This is the regime the construction is designed to absorb: a kernel that is contracted on the data manifold by PCR keeps contact with the data at every ambient dimension, while a kernel that sees the full ambient state loses contact as the noise dimension grows. 
+
+6.2 Heston parameter recovery 
+
+The second experiment runs the three-layer TR-SBTS pipeline end-to-end on a canonical stochastic-volatility model. Let (St, V t) solve the standard Heston system 
+
+dS t = μ S t dt + √Vt St dW St ,dV t = κ (θ − Vt) dt + ξ √Vt dW Vt , d⟨W S , W V ⟩t = ρ dt, (35) with parameters (κ, θ, ξ, ρ ) drawn per path from a fixed prior and an horizon of T = 252 coarse increments at ∆t = 1 /T . The observable state is ζt := ( log St, V t). The experiment is a stress test on how informative a TR-SBTS reference constructed purely from data — without any parametric Heston assumption inside the model — can be made, when the data is the diffusion of ζt itself. 
+
+Three layers and what they encode 
+
+The pipeline is the three-layer TR-SBTS construction of Section 5.4, instantiated with the following causal interpretation of the layers: 
+
+Primary ( X-layer). State Xt ≡ ζt ∈ R2 — the observable log-price/variance pair. This is the only level whose generated output the user consumes. 
+
+Secondary ( Y -layer). State Yt ∈ R3, the packed lower triangle of the 
+
+cumulative average of the outer products of past coarse increments of 
+
+ζt,
+
+Mt = 1
+
+t ∆t
+
+> t∑
+> i=1
+
+∆ζi (∆ ζi)⊤,
+
+55 packed in lower-triangular form. Mt is a fully causal, parameter-free running estimate of the path’s average covariance rate; the secondary models its time evolution. 
+
+Tertiary ( Z-layer). State Zt is a hybrid-frame parametrisation of the path’s average covariance ribbon: a finite-dimensional vector whose first component is the dominant principal direction of the path’s cumu-lative covariance estimator (after normalisation by its X-variance), and whose remaining components are the normalisations of the second and first principal components of that same estimator. The tertiary thus encodes the geometry of where the diffusion lives — the path-specific ribbon in Sym +2 along which the cumulative covariance accumulates — independently of the magnitude controlled by Vt.The reference at each level is produced by a deterministic backward map 
+
+from the state of the level immediately below, applied at every closed-loop step. The map at the upper edge (tertiary → secondary) sends a hybrid-frame point back into the cone of symmetric PSD matrices, picking out the rank-one covariance ribbon parametrised by that point; the map at the lower edge (secondary → primary) is the unpacking of the 3-vector into a 2 × 2
+
+symmetric matrix used as the primary’s runtime diffusion covariance. Both maps are closed-form and state-independent inside each coarse interval, in line with the intervalwise-frozen reference structure of Section 3. 
+
+Data-driven references 
+
+The most delicate aspect of the experiment is the choice of references the upper layers expose to the lower ones. Each is read off the data without ever invoking a parametric form of the Heston diffusion: 
+
+• The secondary’s training stream is the cumulative-average packed covariance Mt of ζt defined above. No smoothing kernel, no half-life, no tuning: the running mean of the squared increments is the most parsimonious causal estimator of where the increments are diffusing on average up to time t.
+
+• The tertiary’s training stream is the hybrid-frame parametrisation of the path’s terminal cumulative covariance MT , obtained by a principal-component analysis on ζ and a backward-map reduction into the ribbon coordinates that the secondary will consume as reference. Both streams are computed per path on the training pool only, and each layer is then fitted by the kernel-regression estimator of Section 4.3 against 56 its own stream as if it were the ground truth. No information about the Heston law enters the model. 
+
+Implementation 
+
+The model implementing this pipeline is a three-layer TR-SBTS as described in Section 5, run on Ntrain training paths and validated on a held-out pool of Nval paths. The closed-loop generation warm-starts on the path’s real history of length H = 64 and then evolves the joint (Z, Y, X )
+
+state by the joint TR-SBTS generator for the remaining T − H coarse steps. The secondary and tertiary bandwidths, history lengths, and integration controls are selected by a predictive-energy validation on the same pool. 
+
+Results 
+
+We evaluate the closed-loop synthetic paths through the same per-path Heston-like estimators of (κ, θ, ξ, ρ ) that one would apply to the real series, and report their cross-path distributions on the held-out pool. Figure 2 shows, for the selected configuration, the four parameter densities on the synthetic trajectories overlaid on the densities obtained on the held-out real trajectories and on those produced by the SBTS-Classic baseline of [ 1], which fits a single kernel-regression layer against a frozen, state-independent Brownian reference. The classical baseline recovers the mean-reversion level 
+
+θ and the long-run drift, but the variance-of-variance ξ and the leverage ρ
+
+collapse onto the empirical priors of those parameters, as the frozen Brownian reference carries no information about the path-specific diffusion direction. The TR-SBTS pipeline, by contrast, replaces that frozen reference with the variable, intervalwise reference produced by the tertiary → secondary backward map, and as a consequence recovers also the geometry-defining pair 
+
+(ξ, ρ ) distributionally; the long-run level θ is recovered within the empirical finite-sample fluctuation of the per-path estimator; the mean-reversion rate 
+
+κ is the least informative channel at this horizon and bandwidth, consistent with its weak identifiability from a fixed-length single trajectory. Allowing the reference to vary along the path is what unlocks recovery of the diffusion structure that an isochronous Brownian reference cannot see. 
+
+# 7 Conclusion and outlook 
+
+We have developed TR-SBTS , a conservative extension of the Schrödinger Bridge for Time Series framework in which the Brownian prior is replaced by 57 Figure 2: Heston parameter recovery on closed-loop synthetic trajectories. Real held-out paths, TR-SBTS synthetic paths under the selected configu-ration, and SBTS-Classic baseline. SBTS-Classic recovers θ but collapses 
+
+(ξ, ρ ) onto the empirical priors. TR-SBTS additionally recovers the geometry pair (ξ, ρ ) distributionally; the mean-reversion rate κ is the least identifiable channel at this horizon. a triangular, intervalwise frozen, and possibly degenerate diffusion reference. The exact entropy-minimisation problem on path space remains the same in spirit: one searches for the path law closest to a reference measure while matching the observed joint law on the coarse time grid. The novelty lies in the choice of reference, which now incorporates an intervalwise volatility structure depending on the coarse past and on a latent volatility environment, but state-independent inside each coarse interval. Iterating this construction over the latent environment yields a triangular hierarchy of conditioning levels, in which each level is itself a TR-SBTS conditional on a higher-level volatility signal. The construction preserves the transparency of the original SBTS frame-work. The minimiser is identified explicitly as an h-transform of the reference law, and locally, on each frozen interval, the optimal dynamics are described by backward heat potentials on the affine leaves generated by the active co-58 variance directions, yielding a logarithmic-gradient drift formula that remains meaningful when the frozen covariance is degenerate or has variable rank. Beyond the local drift, the paper records a structural stability result on the freezing approximation itself: the discrepancy between the ideal volatility-informed reference and its intervalwise frozen approximation is controlled by a cumulant interpolation error, and the construction itself is a single entropy projection on the augmented state space, with the variational constraint imposed jointly across time and the latent levels and unfolded hierarchically by the disintegration of entropy, allowing arbitrary cross-dependence between price and volatility paths (Proposition 8). On the statistical side, the condi-tional regression object that must be estimated is isolated and convergence of regularised kernel estimators is established for the corresponding heat potentials, heat drifts, and conditional transition kernels. The accompanying implementation realises this construction on finite samples through a finite-dimensional conditioning map—either PCR-based or reference-aware, the latter inducing a runtime local Mahalanobis geometry on the conditioning increments through the frozen covariance cumulants themselves—together with a coupled state–covariance bridge step in which each latent level pro-duces a dynamic reference for the level above, summarised by a covariance descriptor; the symmetric square-root factorisation enters only at runtime for simulation, density evaluation, and local geometric normalisation. Several directions remain open. 
+
+Jumps. The present formulation is continuous-path. A natural extension combines the intervalwise frozen diffusion reference with a jump component, in the spirit of Schrödinger bridges with jumps. This would let the model treat stochastic volatility and discontinuous path behaviour within a single framework, and is empirically relevant for financial and energy time series where abrupt moves, heavy tails, and regime switches are central. 
+
+Conditional generation. The explicit Brownian noise injected at each inner step, together with the path-dependent bridge mechanism, makes the framework structurally suited to conditional generation under pathwise events—barrier- or drawdown-type constraints, scenario reconstruction on rare-event subsets, and more generally the simulation of trajectories subject to path-dependent conditions. We intend to pursue this direction in future work. 59 Neural estimators. The kernel-based estimator used here is interpretable but exposed to bandwidth sensitivity and to the curse of dimensionality. A controlled introduction of neural components into the bridge mechanism, preserving the analytic stability guarantees and the transparency of the path-space construction, is a natural direction of investigation. 
+
+Multi-resolution data. The cumulant stability result of Section 3.2 is itself a multi-resolution statement: refining the volatility grid inside each coarse interval recovers the continuous volatility limit (Proposition 8). The same principle extends to settings in which the volatility process is observed or updated at a finer rate than the state, and more generally to interacting processes with non-identical observation grids, where each component con-tributes information when it is observed while the latent continuous-time interpolation keeps the joint dynamics coherent. 
+
+# Acknowledgements 
+
+The author thanks Arakne S.r.l. for providing the working environment in which this research was carried out and for the original suggestion to look into the SBTS framework. The author also thanks Jacopo Stortini for sustained collaboration on the volatility-related components of the construction throughout its development, and for serving as a critical interlocutor whose questions led to several methodological refinements. The author is particularly indebted to Professor Alessio Porretta, whose analytical training and sustained guidance underpin the approach taken here. The choice to handle the local conditional dynamics through a backward heat-equation regularisation, rather than via direct drift estimation, traces back to his methodological influence, as does the introduction to the surrounding literature on mean-field Schrödinger bridges and finite-entropy Girsanov theory. Finally, the author thanks Professor Lidia Aceto for several stimulating exchanges that proved decisive in reorienting the numerical approach in a non-trivial direction, and for the perspective that her expertise in numerical analysis brought to bear on the ill-conditioned aspects of the problem. 60 A Technical proof of the statistical approximation theorem 
+
+This appendix contains the proof of the statistical approximation The-orem 11. The argument is split into three layers. First, we replace the degenerate leafwise heat kernel by its spectrally floored full-rank extension. Second, we prove consistency for compactly supported regression kernels. Third, we transfer the result to the Gaussian kernels used in the implemen-tation by a truncation argument. 
+
+A.1 Spectral regularisation of the leafwise backward kernel 
+
+Proposition 14 (Spectral regularisation of the leafwise backward kernel) .
+
+Adopt the setup of Section 3, let μ satisfy the finite-entropy condition (1) ,and fix i ∈ { 0, . . . , N − 1}. Let 
+
+qi, 1(xi), . . . , q i,r i (xi)
+
+be orthonormal eigenvectors of Ai(xi) associated with its strictly positive eigenvalues λi, 1(xi), . . . , λ i,r i (xi), and write 
+
+λmin ,+ 
+
+> i
+
+(xi) := min 
+
+> 1≤j≤ri
+
+λi,j (xi) > 0
+
+for the smallest strictly positive eigenvalue of Ai(xi) (the bare λmin  
+
+> i
+
+is am-biguous when Ai is rank-deficient, so we use the active-spectrum mini-mum throughout). Then, for μi-a.e. xi, the following hold for every ε ∈
+
+(0 , λ min ,+ 
+
+> i
+
+(xi)) .(i) Smoothness. The kernel pεi (·, ·; ti+1 , · | xi) defined in (7) is a smooth, strictly positive function on [ti, t i+1 ) × Rd × Rd; the regularised potential 
+
+Hεi (·, ·; xi) defined in (9) is smooth in x on Rd and continuous in t on 
+
+[ti, t i+1 ).(ii) Global collapse to the affine leaf. The coherent kernel ratio of (9) converges pointwise on the open intervalwise cylinder to the leafwise ratio of pi by pi, times the indicator of the leaf: 
+
+Hεi (t, x ; xi) −→ Hi(t, x ; xi) 1Lxii
+
+(x), ti < t < t i+1 , x ∈ Rd. (36) 
+
+The convergence is locally uniform on bounded x-sets and on {t ≤ ti+1 −
+
+τ } for every τ > 0. On the leaf the ε-dependent transverse Gaussian 
+
+61 volume and determinant factors cancel between the matched numerator and denominator of the kernel ratio; off the leaf the numerator retains the exponentially small transverse penalty exp (−d⊥(x)2/(2 ε(ti+1 − t))) ,while the denominator has no transverse displacement, and the ratio decays exponentially in 1/ε . Differentiating the kernel ratio in x inserts polynomial-in-z factors against the same dominated Gaussian-type integrand, and the same dominated-convergence argument extends (36) 
+
+to every active directional derivative on every compact K ⋐ (ti, t i+1 ) ×Lxi 
+
+> i
+
+(see (37) ). 
+
+sup 
+
+> (t,x )∈K
+
+∣∣Dqi,j (xi)Hεi (t, x ; xi)−Dqi,j (xi)Hi(t, x ; xi)∣∣ −→ 0, j = 1 , . . . , d. 
+
+(37) 
+
+In intrinsic Mahalanobis/Dirichlet norms induced by Ai, the relevant energetic quantities Aε, 1/2 
+
+> i
+
+∇Hεi , Aεi ∇ log Hεi , and ∣∣Aε, 1/2 
+
+> i
+
+∇ log Hεi
+
+∣∣2 con-verge to the corresponding leafwise quantities of Ai; the regularised drift converges to the exact leafwise drift, 
+
+Aεi (xi) ∇x log Hεi (t, x ; xi) −→ Ai(xi) ∇x log Hi(t, x ; xi) = b∗ 
+
+> i
+
+(t, x ; xi),
+
+(t, x ) ∈ K ⋐ (ti, t i+1 ) × L xi 
+
+> i
+
+. (38) 
+
+(iii) Off-leaf decay. For every compact set K ⋐ [ti, t i+1 ) × Rd with 
+
+K ∩ ([ ti, t i+1 ) × L xi 
+
+> i
+
+) = ∅,
+
+sup 
+
+> (t,x )∈K
+
+∣∣Hεi (t, x ; xi)∣∣ −→ 0 as ε ↓ 0.
+
+Proof. Fix xi in a full μi-measure set for which Corollary 7 and Proposition 5 hold. Write A := Ai(xi), r := ri, k := d − r, and L := Lxi 
+
+> i
+
+. Let P and P ⊥
+
+denote the orthogonal projections onto Ran A and ker A, respectively, and define 
+
+Πx := xi + P (x − xi), d⊥(x) := |P ⊥(x − xi)|.
+
+Choose a spectral decomposition 
+
+A = Q diag( λ1, . . . , λ r, 0, . . . , 0) Q⊤, λj > 0.
+
+For ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) , the spectral floor leaves the active eigenvalues un-changed and replaces only the kernel directions by ε. Hence, for every 
+
+z ∈ L,
+
+〈(Aε)−1(z − x), z − x〉 = 〈A+(z − Πx), z − Πx〉 + d⊥(x)2
+
+ε .
+
+62 Moreover, 
+
+det Aε = (det ′A)εk.
+
+Combining the exponential and normalisation factors gives the exact factori-sation 
+
+γεi (t; xi)pεi (t, x ; ti+1 , z | xi) = exp 
+
+(
+
+− d⊥(x)2
+
+2( ti+1 − t)ε
+
+)
+
+pi(t, Πx; ti+1 , z | xi).
+
+(39) Integrating against fi(z; xi)dℓ xi 
+
+> i
+
+(z) yields 
+
+Hεi (t, x ; xi) = exp 
+
+(
+
+− d⊥(x)2
+
+2( ti+1 − t)ε
+
+)
+
+Hi(t, Πx; xi). (40) The smoothness statement follows from (40) : Hi is smooth along the active directions for positive backward time, while the transverse Gaussian factor is smooth in the kernel directions. The kernel ratio of (9) reads, after completing the square in z and writing 
+
+α := ti+1 − t, β := ti+1 − ti (so that 0 < α < β ), 
+
+pεi (t, x ; ti+1 , z )
+
+pεi (ti, x i; ti+1 , z ) =
+
+( βα
+
+)d/ 2
+
+exp 
+
+(
+
+− 12
+
+( 1 
+
+> α
+
+− 1
+
+> β
+
+) ∥z − mt,x ∥2(Aεi )−1 + Rεt,x 
+
+)
+
+, (41) where mt,x := ( 1 
+
+> α
+
+− 1
+
+> β
+
+)−1( 1 
+
+> α
+
+x − 1 
+
+> β
+
+xi) and Rεt,x collects the remaining z-independent terms. Since α < β and (Aεi )−1 ⪰ (∥Ai∥ + ε)−1I, the quadratic form in z is strictly negative definite uniformly on {t ≤ ti+1 − τ } and on bounded x-sets, so the ratio is dominated by a Gaussian-type bound 
+
+pεi (t, x ; ti+1 , z )
+
+pεi (ti, x i; ti+1 , z ) ≤ Cτ,B exp 
+
+(
+
+−cτ,B ∥z − mt,x ∥2(Aεi )−1
+
+)
+
+,
+
+with constants independent of small ε on the active eigenspace. This proves smoothness of Hεi on (ti, t i+1 ) × Rd and supplies the dominated integrand for all subsequent convergence arguments. For x ∈ L, x − xi ∈ Ran Ai, so for every z ∈ L the quadratic form 
+
+∥z − x∥2(Aεi )−1 reduces to the active quadratic form ∥z − x∥2
+
+> A+
+> i
+
+, independent of ε for ε < λ min ,+ 
+
+> i
+
+(xi), and the determinant factors (det Aεi )−1/2 cancel between numerator and denominator of (9) . The integrand collapses to the leafwise ratio pi(t, x ; ti+1 , z )/p i(ti, x i; ti+1 , z ) and the Gaussian-ratio domina-tion supplies dominated convergence: 
+
+Hεi (t, x ; xi) −→ Hi(t, x ; xi), x ∈ L, 
+
+63 locally uniformly on compact subsets of (ti, t i+1 )×L. For x / ∈ L, decomposing 
+
+x = Π x + P ⊥(x − xi) and using z ∈ L under ημi , the numerator carries the transverse penalty exp (−d⊥(x)2/(2 ε(ti+1 −t))) absent in the denominator; the ratio decays exponentially in 1/ε , and Hεi (t, x ; xi) → 0 locally uniformly on compact subsets of {x / ∈ L}, with rate of order exp (−cd ⊥(x)2/ε ). Combining the two regimes gives the global pointwise collapse (36). For the active directional derivatives, differentiating the kernel ratio of (9) in x along an eigenvector qi,j produces a polynomial-in-(z − x) factor times the same dominated integrand of (41) . Dominated convergence under the same Gaussian-ratio bound yields the uniform-on-compact convergence (37) for every j = 1 , . . . , d .For the drift, strict positivity of Hi on (ti, t i+1 ) × L and the uniform-on-compact convergence of Hεi and of its active directional derivatives give 
+
+Aεi ∇x log Hεi → Ai∇x log Hi on compact subsets of (ti, t i+1 ) × L; the bound-edness max (λi,j , ε ) ≤ ∥ Ai∥ + ε absorbs the eigenvalue weights uniformly in 
+
+ε, and the kernel-direction contributions are multiplied by Aεi and absorbed by the off-leaf collapse of Hεi . This establishes (38). Finally, let K ⋐ [ti, t i+1 ) × Rd be compact and disjoint from [ti, t i+1 ) × L.Then there exists ρ > 0 such that d⊥(x) ≥ ρ on K. Since K is compact in 
+
+[ti, t i+1 ) × Rd, the projected set 
+
+{(t, Πx) : ( t, x ) ∈ K}
+
+is compact in [ti, t i+1 ) × L. Hence Hi is bounded on this projected set. From (40), 
+
+sup 
+
+> (t,x )∈K
+
+|Hεi (t, x ; xi)| ≤ CK exp 
+
+> (
+
+− ρ2
+
+2∆ iε
+
+> )
+
+−→ 0,
+
+where ∆i = ti+1 − ti. This proves the off-leaf decay. 
+
+A.2 Compact-kernel estimator and local Gaussian domina-tion 
+
+We now introduce the auxiliary regression scheme used in the proof. This scheme is not yet the Gaussian one used in the implementation. It is a compactly supported Nadaraya–Watson scheme with M -dependent kernel profiles. The support may expand in the rescaled variable, but the effective conditioning neighbourhood shrinks because hM RM → 0. This form is needed later to compare with truncated Gaussian weights. Fix i ∈ { 0, . . . , N − 1} and a conditioning point xi = ( x0, . . . , x i) in the full μi-measure regular set where Corollary 7 and Proposition 5 hold and 64 where the eigenstructure of Ai is locally continuous. Write 
+
+Xi := ( Xt0 , . . . , X ti ), qi := dim( Xi) = ( i + 1) d. 
+
+Let 
+
+(X(m) 
+
+> i
+
+, ∆X(m)
+
+> i+1
+
+), ∆X(m) 
+
+> i+1
+
+:= X(m) 
+
+> ti+1
+
+− X(m) 
+
+> ti
+
+, m = 1 , . . . , M, 
+
+be i.i.d. samples with law induced by μ, with the realised next-interval increment as response. Let KM : Rqi → [0 , ∞) be a sequence of continuous regression profiles. We assume 
+
+∫
+
+> Rqi
+
+KM (u) du = 1 , supp KM ⊂ B(0 , R M ), RM ↑ ∞ ,
+
+together with a radial integrable envelope: there exists a bounded measurable 
+
+K : [0 , ∞) → [0 , ∞) such that 
+
+0 ≤ KM (u) ≤ K(|u|2) for all u ∈ Rqi , M, 
+
+∫
+
+> Rqi
+
+K(|u|2) du < ∞.
+
+Let hM ↓ 0 be a bandwidth sequence with 
+
+hM RM −→ 0.
+
+Define the rescaled kernels and Nadaraya–Watson weights 
+
+KM,h M (u) := h−qi 
+
+> M
+
+KM (u/h M ), ωM,K i,m (xi) := KM,h M (xi − X(m) 
+
+> i
+
+)
+
+∑Mn=1 KM,h M (xi − X(n) 
+
+> i
+
+) .
+
+For a generic conditioning vector yi = ( y0, . . . , y i) with last component 
+
+yi, set 
+
+qi(δ | yi) := pi(ti, y i; ti+1 , y i + δ | yi),
+
+the one-step leafwise transition density of the frozen reference associated with yi, expressed as a density on the realised next-interval increment δ ∈ Rd;it is strictly positive on the leafwise displacement set Lyi 
+
+> i
+
+− yi and almost surely ∆X(m) 
+
+> i+1
+
+∈ L X(m) 
+
+> i
+> i
+
+− X(m) 
+
+> ti
+
+. The compact-kernel empirical regularised backward potential is defined by ̂
+
+Hε,M,K i (t, x ; xi) := 
+
+> M
+
+∑
+
+> m=1
+
+ωM,K i,m (xi) Φ εi
+
+(t, x, X (m) 
+
+> ti
+
++ ∆ X(m) 
+
+> i+1
+
+; xi
+
+), (42) 65 where 
+
+Φεi (t, x, z ; xi) := pεi (t, x ; ti+1 , z | xi)
+
+pεi (ti, x i; ti+1 , z | xi)
+
+is the coherently regularised kernel-ratio response of (9) , with the same spec-trally floored covariance Aεi in numerator and denominator. The estimator (42) is the Nadaraya–Watson estimator of the conditional expectation 
+
+Hεi (t, x ; xi) = Eμ
+
+> [
+
+Φεi
+
+> (
+
+t, x, X ti+1 ; xi 
+
+> ) ∣ ∣
+
+Xi = xi 
+
+> ]
+
+, (43) which is (10) written under μ.
+
+Statistical assumptions for the compact-kernel argument. Through-out the remainder of this subsection we assume: (S1) the marginal law of Xi admits a density πi : Rqi → [0 , ∞) continuous and strictly positive on a compact neighbourhood Ci of the conditioning points under consideration; (S2) for every yi ∈ Ci the conditional law of the next-interval increment 
+
+ημi (· | yi) := μ(∆ Xi+1 ∈ · | Xi = yi) is well defined and the map 
+
+yi 7 → ημi (· | yi) is weakly continuous on Ci;(S3) the regression kernels KM satisfy the properties stated above; (S4) the bandwidth and support conditions RM ↑ ∞ , hM RM → 0, M h qi 
+
+> M
+
+→∞ hold; (S5) for almost-sure statements, the stronger bandwidth condition 
+
+M h qi 
+
+> M
+
+/ log M → ∞ 
+
+holds. We also assume that Ai( · ) is operator-norm continuous at xi. For every fixed ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) , the regularised covariance Aεi (yi) satisfies Aεi ≥
+
+εI and det Aεi ≥ εd for every yi in the conditioning neighbourhood; the finite-ε Gaussian estimators of this appendix are therefore well defined and uniformly nondegenerate. Constant local rank and continuity of the active eigenstructure of Ai enter only in the ε ↓ 0 geometric step (Proposition 14), where they identify the intrinsic active leaf Lxi 
+
+> i
+
+and the limiting leafwise transition density pi.The next lemma is the core technical estimate of the appendix: it controls the integrand pointwise on compact internal cylinders, and compact-uniform convergence follows by Ascoli–Arzelà. 66 Lemma 15 (Gaussian-ratio domination on compact cylinders) . Fix ε ∈
+
+(0 , λ min ,+ 
+
+> i
+
+(xi)) and 
+
+J ⋐ (ti, t i+1 ), B ⋐ Lxi 
+
+> i
+
+.
+
+Write α := ti+1 − t, β := ti+1 − ti, so that 0 < α ≤ β − τ+ on J. There exist a compact neighbourhood C ⋐ Ci of xi and constants c = c(J, B, xi) > 0,
+
+CJ,B = CJ,B, xi < ∞ such that, for every t ∈ J, x ∈ B, yi ∈ C and every 
+
+z ∈ Rd, the coherent Gaussian kernel ratio Φεi (t, x, z ; yi) of (9) satisfies the Gaussian-ratio bound 
+
+Φεi (t, x, z ; yi) = pεi (t, x ; ti+1 , z | yi)
+
+pεi (ti, y i; ti+1 , z | yi) ≤ CJ,B exp (−c ∥z − mt,x,y i ∥2(Aεi )−1
+
+),
+
+(44) 
+
+where mt,x,y i is the centre obtained by completing the square in z. At fixed 
+
+ε > 0 the constants are bounded; their dependence on ε is polynomial through 
+
+∥(Aεi )−1∥ ≲ ε−1 on the transverse eigenspace and absorbed by the diagonal ex-traction of Theorem 11, with the transverse collapse handled separately by the matched-floor cancellation between the numerator and the denominator of the ratio. The same domination holds for every directional derivative Dqi,j (xi)Φεi
+
+in x, j = 1 , . . . , d , with an additional polynomial-in-(z − x) prefactor absorbed by possibly decreasing c and increasing CJ,B ; indeed P (|u|)e−c|u|2
+
+≤ C′e−c′|u|2
+
+for any polynomial P and any 0 < c ′ < c .Proof. We work on J × B, so α = ti+1 − t ≥ τ+ > 0 and α ≤ β − τ− for some τ−, τ + with τ− + τ+ < β ; also x ∈ B lies in a compact subset of Lxi 
+
+> i
+
+,so d⊥(x) = 0 and |x − xi| is bounded. The two full-rank Gaussian densities entering 
+
+Φεi (t, x, z ; yi) = pεi (t, x ; ti+1 , z | yi)
+
+pεi (ti, y i; ti+1 , z | yi)
+
+share the same covariance Aεi (yi) and the same ε-dependent normalisation factor (2 π)−d/ 2( det Aεi )−1/2; these factors are z-independent and cancel be-tween numerator and denominator exactly up to the ratio (α/β )−d/ 2 coming from the explicit times α = ti+1 − t and β = ti+1 − ti. The remaining exponent in z is 
+
+− 12α ∥z − x∥2(Aεi )−1 + 12β ∥z − yi∥2(Aεi )−1 ,
+
+which is a strictly negative-definite quadratic form in z since α < β ; com-pleting the square produces the Gaussian-ratio bound 
+
+Φεi (t, x, z ; yi) ≤ ( βα
+
+)d/ 2 exp (− 12
+
+( 1 
+
+> α
+
+− 1
+
+> β
+
+)∥z − mt,x,y i ∥2(Aεi )−1 + Rεt,x,y i
+
+),
+
+67 with centre mt,x,y i and residual Rεt,x,y i given by completing the square. On 
+
+J × B and on a sufficiently small compact C ⋐ Ci of xi, the residual is uniformly bounded by continuity of (yi, t, x ) 7 → mt,x,y i and of Ai(yi), and  
+
+> 1
+> α
+
+− 1 
+
+> β
+
+is bounded below by τ−/(β(β − τ−)) > 0; the ε-floor enters only through (Aεi )−1 ⪰ (∥Ai∥ + ε)−1I, so the quadratic decay rate c restricted to the active eigenspace is bounded below by a positive constant independent of ε for ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) , while the transverse 1/ε -coefficient adds only additional decay. This proves (44) with c := 12 ( 1 
+
+> α
+
+− 1 
+
+> β
+
+) and a finite constant absorbing (β/α )d/ 2, exp( R) and continuity prefactors. For the directional derivative Dqi,j (xi) in x, differentiating log Φεi yields the polynomial factor (α)−1(Aεi )−1(z − x) along qi,j ; the chain rule inserts polynomial-in-(z − x) factors against the same dominated Gaussian-ratio integrand, polynomially bounded in |z| + |x − xi|. By possibly decreasing c
+
+and increasing CJ,B , the polynomial prefactor is absorbed into the Gaussian envelope, and the same exponential domination (44) holds for the derivative. 
+
+Lemma 16 (Asymptotic nondegeneracy of the regression denominator) .
+
+Assume (S1) , (S3) , (S4) . Then 
+
+1
+
+M
+
+> M
+
+∑
+
+> m=1
+
+KM,h M (xi − X(m) 
+
+> i
+
+) −→ πi(xi)
+
+in probability; under (S5) , almost surely. In particular, since πi(xi) > 0,
+
+∑Mm=1 KM,h M (xi −X(m) 
+
+> i
+
+) ≥ M (πi(xi)−η) eventually for every η ∈ (0 , π i(xi)) ,in the same stochastic mode. Proof. The bias term is 
+
+∫
+
+> Rqi
+
+KM (u) πi(xi − hM u) du −→ πi(xi),
+
+by continuity of πi, ∫ KM = 1 , and dominated convergence against K using 
+
+hM RM → 0. The variance is bounded by ∥K∥∞h−qi 
+
+> M
+
+, so 
+
+Var 
+
+( 1
+
+> M
+
+∑
+
+> m
+
+KM,h M (xi − X(m) 
+
+> i
+
+)
+
+)
+
+= O(1/(M h qi 
+
+> M
+
+)) −→ 0.
+
+The almost-sure version follows from exponential inequalities for bounded empirical processes under (S5) and Borel–Cantelli. 68 A.3 Pointwise and compact-uniform consistency 
+
+We now combine standard pointwise Nadaraya–Watson consistency with the Gaussian domination of Lemma 15 to obtain uniform convergence on every compact subset of the open intervalwise cylinder. 
+
+Proposition 17 (Pointwise consistency) . Assume (S1) –(S4) and fix ε ∈
+
+(0 , λ min ,+ 
+
+> i
+
+(xi)) . For every fixed (t, x ) ∈ (ti, t i+1 ) × L xi 
+
+> i
+
+,̂
+
+Hε,M,K i (t, x ; xi) −→ Hεi (t, x ; xi)
+
+in probability as M → ∞ . Under (S5) , the convergence is almost sure. The same conclusion holds for the directional derivative Dqi,j (xi)̂ Hε,M,K i ,
+
+j = 1 , . . . , d , towards Dqi,j (xi)Hεi , along every eigenvector of Ai(xi).Proof. Write the empirical potential as a Nadaraya–Watson estimator of the conditional expectation (43). For fixed (t, x ) and ε the response 
+
+yi 7 −→ Φεt,x (yi) := Eμ
+
+[Φεi
+
+(t, x, X ti+1 ; xi
+
+) ∣ ∣ Xi = yi
+
+]
+
+is continuous at yi = xi, since by (S2) the conditional law ημi (· | yi) depends weakly continuously on yi, and the Gaussian-ratio response Φεi is dominated by Lemma 15 via the α < β gap of the coherent kernel ratio. The denominator is asymptotically nondegenerate by Lemma 16. Standard Nadaraya–Watson consistency for compactly supported regression kernels under (S3) –(S4) (cf. [ 10 ]) yields ̂ Hε,M,K i (t, x ; xi) → Hεi (t, x ; xi) in probability, and almost surely under (S5) . Differentiating Φεi in x along any eigenvector qi,j (xi), j = 1 , . . . , d ,inserts a polynomial-in-(z − x) factor against the same dominated Gaussian-ratio integrand of Lemma 15. The same Nadaraya–Watson argument applies to give pointwise convergence of Dqi,j (xi)̂ Hε,M,K i for every j = 1 , . . . , d .
+
+Proposition 18 (Compact-uniform consistency) . Assume (S1) –(S4) and fix 
+
+ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) . For every compact 
+
+K = J × B ⋐ (ti, t i+1 ) × L xi 
+
+> i
+
+,
+
+sup 
+
+> (t,x )∈K
+
+∣∣̂ Hε,M,K i (t, x ; xi) − Hεi (t, x ; xi)∣∣ −→ 0 in probability. Under (S5) , the convergence is almost sure. The same uniform conver-gence holds for every directional derivative Dqi,j (xi), j = 1 , . . . , d , along the eigenvectors of Ai(xi), both active and kernel directions included. 
+
+69 Proof. By Lemma 15, the integrand defining ̂ Hε,M,K i (t, x ; xi) is, on the event where every sample with nonzero NW-weight satisfies X(m) 
+
+> i
+
+∈ C, bounded by 
+
+CJ,B e−c|∆X(m) 
+
+> i+1 |2
+
+uniformly for (t, x ) ∈ K. Combined with the denominator lower bound of Lemma 16, this yields a uniform bound 
+
+sup 
+
+> (t,x )∈K
+
+∣∣̂ Hε,M,K i (t, x ; xi)∣∣ ≤ ˜CJ,B 
+
+in the relevant stochastic mode, for all sufficiently large M . The same bound holds for the exact Hεi .For equicontinuity in (t, x ) ∈ K, the explicit Gaussian form of pεi shows that, for any (t, x ), (t′, x ′) ∈ J × B,
+
+∣∣pεi (t, x ; ti+1 , x i + δ | xi) − pεi (t′, x ′; ti+1 , x i + δ | xi)∣∣
+
+≤ LJ,B (|t − t′| + |x − x′|) e −c′|δ|2
+
+,
+
+for constants LJ,B , c ′ > 0 uniform on J × B and δ ∈ Rd with yi + δ ∈ L yi 
+
+> i
+
+,
+
+yi ∈ C. The same domination (44) thus controls the difference, and summing against the NW weights gives 
+
+∣∣̂ Hε,M,K i (t, x ; xi) −̂ Hε,M,K i (t′, x ′; xi)∣∣ ≤ ˜LJ,B (|t − t′| + |x − x′|)
+
+in the same stochastic mode, for all large M . The exact Hεi satisfies the same Lipschitz estimate on K.The family {(t, x ) 7 →̂ Hε,M,K i (t, x ; xi)}M is therefore eventually equi-bounded and equi-Lipschitz on the compact metric space K. Ascoli–Arzelà applied to subsequences identifies the only possible limit, by Proposition 17, with Hεi , and the whole sequence converges uniformly on K in the stated stochastic mode. For the active derivatives Dqi,j (xi), the same argument applies: the differentiated kernel Dqi,j (xi)pεi (t, x ; ti+1 , ν | xi) acquires a polynomial-in-
+
+(ν − x) factor against the Gaussian, which is dominated by (44) , and a Lipschitz estimate on (t, x ) ∈ K follows from joint smoothness of the Gaussian density. Compact-uniform convergence on K then follows by the same Ascoli– Arzelà argument applied to the derivative estimator. 
+
+A.4 Gaussian-kernel transfer 
+
+Gaussian weights are the computationally natural choice, but their un-bounded support slightly obscures the local nature of the regression argument. We compare them with normalised Gaussian truncations whose truncation radius grows to infinity while hM RM → 0 keeps the effective conditioning region local around xi.70 Reduction to the isotropic Gaussian chart. The Gaussian regression kernel used in the implementation is the reference-aware product kernel 
+
+Kh of (21) ; the analysis below is carried out in an equivalent isotropic Gaussian chart, obtained by a fixed conditional linear change of coordinates. Conditionally on the runtime reference, define the linear map 
+
+Tui : Rqi → Rqi ,
+
+(xi, ∆xi, . . . , ∆x1) 7 −→ (xi, C εi (ui−1)−1/2∆xi, . . . , C ε 
+
+> 1
+
+(u0)−1/2∆x1
+
+> )
+
+,
+
+and write ˜ui := Tui ui, ˜U(m) 
+
+> i
+
+:= Tui U(m) 
+
+> i
+
+(the same query-determined trans-formation is applied to every sample). In the transformed chart, the reference-aware kernel becomes the isotropic Gaussian 
+
+Kh(ui; u(m) 
+
+> i
+
+) = J(ui) Γ h
+
+> (˜
+
+ui − ˜u(m)
+
+> i
+> )
+
+, J(ui) := 
+
+> i∏
+> k=1
+> (
+
+det Cεk(uk−1))−1/2,
+
+where Γh is the standard isotropic Gaussian regression kernel on Rqi of bandwidth h. The query-dependent Jacobian J(ui) is independent of the sample index m and therefore cancels exactly in the Nadaraya–Watson ratio (22) ; the weights ωM, G 
+
+> i,m
+
+(ui) coincide with the classical isotropic Gaussian NW weights computed on the transformed sample { ˜U(m) 
+
+> i
+
+}Mm=1 at the query point 
+
+> ˜
+
+ui.By the spectral floor, the eigenvalues of each Cεk(uk−1) are bounded from below by ε (tk − tk−1) and from above by continuity of Ak on the regular set. The transformation Tui is therefore uniformly nondegenerate: its singular values are bounded above and below by deterministic constants depending only on the runtime reference and on the regular environment. The induced norms are uniformly equivalent to the Euclidean norm on Rqi ,and the Jacobian factor J(ui) is bounded above and below. It is therefore enough to prove the convergence statements of this appendix in the isotropic Gaussian chart, treating ˜ui as the conditioning vector and 
+
+Γh as the regression kernel; all subsequent arguments apply unchanged at fixed ε > 0, with the metric-comparison constants depending only on the eigenvalue bounds inherited from the spectral floor ( ≥ ε from below) and on the operator-norm bounds on Ak( · ) on the conditioning neighbourhood (from above), and not on rank stability of the unfloored Ak. In what follows we keep the notation xi, X(m) 
+
+> i
+
+for the conditioning variable, with the understanding that, when the reference-aware kernel is used, the Γh below denotes the isotropic Gaussian kernel on the transformed chart ˜ui.71 Let 
+
+Γ( u) := (2 π)−qi/2e−| u|2/2, Γ(R)(u) := Γ( u)1{| u|≤ R}
+
+ZR
+
+, ZR := 
+
+∫
+
+> |v|≤ R
+
+Γ( v) dv. 
+
+The scaled truncated Gaussian kernel is Γh,R (u) := h−qi Γ(R)(u/h ) and the genuine Gaussian regression kernel is Γh(u) := h−qi Γ( u/h ). The truncation 
+
+Γ(RM ) satisfies the compact-kernel assumptions (S3) with RM the truncation radius and K the radial Gaussian envelope. Let ωM,R M 
+
+> i,m
+
+(xi) and ωM, G 
+
+> i,m
+
+(xi) be the Nadaraya–Watson weights built from ΓhM ,R M and ΓhM , respectively, and let ̂ Hε,M,R M 
+
+> i
+
+and ̂ Hε,M, G 
+
+> i
+
+be the corresponding empirical potentials. 
+
+Lemma 19 (Nondegeneracy of the Gaussian regression denominator) . As-sume (S1) , hM ↓ 0, M h qi 
+
+> M
+
+→ ∞ . Then M −1 ∑Mm=1 ΓhM (xi − X(m) 
+
+> i
+
+) → πi(xi)
+
+in probability, and almost surely under (S5) .Proof. For the lower bound, fix η ∈ (0 , π i(xi)) and choose R with ZRπi(xi) ≥
+
+πi(xi) − η/ 2. The inequality Γ( u) ≥ ZRΓ(R)(u) gives DGM (xi) ≥ ZRD(R) 
+
+> M
+
+(xi),and Lemma 16 applied to the fixed compactly supported kernel Γ(R) yields the lower bound. The matching upper bound follows from the standard Parzen–Rosenblatt estimate for the Gaussian kernel under the bandwidth conditions. For each conditioning vector yi and each endpoint δ ∈ Rd, define the sample-specific covariance cumulant 
+
+Ci(yi) := ( ti+1 − ti)Ai(yi),
+
+the intrinsic increment norm 
+
+ri(yi, δ ) := ∣∣Ci(yi)+/2δ∣∣, (45) and the active volume factor 
+
+vi(yi) := det( Ci(yi)+)1/2, (46) where Ci(yi)+ denotes the restriction of Ci(yi) to its active range, equivalently the product of its strictly positive eigenvalues, Ci(yi)+/2 is the principal symmetric square root of the Moore–Penrose pseudo-inverse of Ci(yi), and 
+
+yi denotes the last component of yi. On the active leaf of yi, the reciprocal of the leafwise transition density of the frozen reference factorises as 
+
+qi(δ | yi)−1 = (2 π)ri/2 vi(yi) exp 
+
+( 12 ri(yi, δ )2)
+
+, (47) 72 which separates the exponential cost 12 r2 
+
+> i
+
+from the active volume vi. Both factors must be localised in high probability to transfer the compact/trun-cated consistency to the full Gaussian estimator. The first is controlled by entropy disintegration of the endpoint conditional entropy; the second is inherited from the lower-level triangular reference descriptor that generates the current frozen covariance. Under the coherent kernel-ratio formulation of (9) , the reciprocal density appearing in these arguments is the regularised one, pεi (ti, x i; ti+1 , z | xi)−1, with the same spectral floor ε used in the back-end geometry and the Mahalanobis regression metric; finite intrinsic entropy under pεi coincides with finite intrinsic entropy under pi on the active leaf for every admissible ε, so that on the high-probability stratum where the original entropy is finite the spectral floor is asymptotically inactive and the Gaussian tail estimates that follow apply at every fixed ε > 0, with constants whose polynomial dependence on ε is absorbed in the diagonal extraction of Theorem 11. 
+
+Proposition 20 (High-probability intrinsic localisation for Gaussian weights) .
+
+Assume (S1) –(S4) and the finite-entropy hypothesis (1) . Fix ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) 
+
+and a compact K ⋐ (ti, t i+1 ) × L xi 
+
+> i
+
+. For every ρ > 0 there exist constants 
+
+R, D < ∞ and M0 such that, defining the two-parameter localised sample set 
+
+IM (R, D ) := 
+
+{
+
+m ≤ M : |X(m) 
+
+> i
+
+− xi| ≤ hM RM ,ri(X(m) 
+
+> i
+
+, ∆X(m) 
+
+> i+1
+
+) ≤ R, v i(X(m) 
+
+> i
+
+) ≤ D
+
+}
+
+,
+
+the Gaussian-weighted response and its active directional derivatives are asymptotically supported on IM (R, D ):
+
+sup 
+
+> (t,x )∈K
+
+∣∣∣∣∣∑ 
+
+> m / ∈I M(R,D )
+
+ωM, G 
+
+> i,m
+
+(xi) Ψ εi (t, x ; X(m) 
+
+> i
+
+, ∆X(m) 
+
+> i+1
+
+)
+
+∣∣∣∣∣ ≤ ρ (48) 
+
+with probability at least 1 − ρ, uniformly for M ≥ M0, where 
+
+Ψεi (t, x ; yi, δ ) := γεi (t; xi) pεi (t, x ; ti+1 , x i + δ | xi)
+
+qi(δ | yi) .
+
+The same bound holds with Ψεi replaced by its directional derivative Dqi,j (xi)Ψεi ,
+
+j = 1 , . . . , d , along every eigenvector of Ai(xi).Proof. The decomposition (47) reduces the control of q−1 
+
+> i
+
+to the two factors 
+
+ri and vi, which we localise separately. 73 Intrinsic endpoint tail via entropy disintegration. By the chain rule for relative entropy applied to the disintegration of μ along the past Xi,
+
+H(μ | μRT ) = H(μi | μRi ) + 
+
+> ∫
+
+H
+
+> (
+
+ημi (· | yi) 
+
+> ∣∣∣
+
+kRi (· | yi)
+
+> )
+
+μi(dyi), (49) where kRi (· | yi) is the one-step leafwise transition density of the frozen reference associated with yi. Finite entropy (1) implies that yi 7 → H(ημi (· | 
+
+yi) | kRi (· | yi)) is μi-integrable. By Markov’s inequality, for every ρ > 0
+
+there exists Lρ < ∞ with 
+
+Eρ := 
+
+> {
+
+yi : H(ημi (· | yi) | kRi (· | yi)) ≤ Lρ
+
+> }
+
+, μi(Eρ) ≥ 1 − ρ. 
+
+On the regular stratum, under the intrinsic-norm parametrisation δ 7 →
+
+Ci(yi)+/2δ of the increment, the frozen reference increment law kRi (· | yi) is a standard ri-dimensional Gaussian and ri(yi, ∆Xi+1 ) satisfies the Gaussian tail kRi (ri > R | yi) ≤ Cri e−R2/(2 ri) uniformly for yi ∈ Ci. The Donsker– Varadhan/Gibbs form of the entropy inequality transfers this tail to the target conditional law: 
+
+sup 
+
+> yi∈Eρ
+
+ημi
+
+> (
+
+{δ : ri(yi, δ ) > R } | yi 
+
+> )
+
+≤ Lρ + log 2 
+
+R2/(2 ri) − log Cri
+
+−−−−→ 
+
+> R→∞
+
+0. (50) 
+
+Active volume control from the lower-level triangular descriptor. In the triangular construction, the frozen covariance Ai(yi), and therefore Ci(yi)
+
+and vi(yi), are measurable functions of the lower-level reference descriptor generated by the triangular hierarchy. Since the augmented law has finite entropy with respect to the triangular reference, entropy disintegration at the lower level gives, for every ρ > 0, a high-probability set of triangular environments on which this descriptor is bounded. On the regular stratum, where the local rank is constant and the active eigenvalues vary continuously, 
+
+vi is a continuous function of the descriptor on the high-probability set; consequently there exists D = D(ρ) < ∞ such that 
+
+Fρ(D) := {yi : vi(yi) ≤ D} satisfies μi
+
+> (
+
+Fρ(D)) ≥ 1 − ρ. 
+
+High-probability regular environment. We first restrict to the high-probability regular environment Eρ ∩ Fρ(D). On this event, the conditional endpoint entropy is bounded by Lρ and the active volume descriptor satisfies 
+
+vi ≤ D; the local continuity assumptions of the regular set will be used only later, inside the effective conditioning neighbourhood. 74 Decomposition of the complement. The intrinsic endpoint cost and the active volume must be controlled before the Gaussian-weight kill, because outside the effective conditioning neighbourhood the response is otherwise unbounded. Accordingly, we write IM (R, D )c = BM (R)∪V M (D)∪A M (R, D )
+
+with 
+
+BM (R) := {m : ri(X(m) 
+
+> i
+
+, ∆X(m) 
+
+> i+1
+
+) > R },
+
+VM (D) := {m : vi(X(m) 
+
+> i
+
+) > D },
+
+AM (R, D ) := {m : |X(m) 
+
+> i
+
+− xi| > h M RM ,ri(X(m) 
+
+> i
+
+, ∆X(m) 
+
+> i+1
+
+) ≤ R, v i(X(m) 
+
+> i
+
+) ≤ D}.
+
+Intrinsic endpoint tail. On the high-probability set Eρ, the entropy-tail transfer (50) gives ημi ({ri > R } | yi) ≤ ρ2 for R large enough. Markov’s inequality on the empirical fraction of samples in BM (R), conditionally on 
+
+X(m) 
+
+> i
+
+∈ Eρ, gives μ(M −1#BM (R) > ρ | · ) ≤ ρ for R = R(ρ, L ρ) large enough. The total Gaussian-weighted contribution of BM (R) is therefore bounded by 
+
+ρ with high probability, regardless of the conditioning distance. 
+
+Active volume tail. On the high-probability set Fρ(D), vi(yi) ≤ D by definition. Markov’s inequality on #VM (D) controls the empirical fraction of samples violating this bound by ρ for D = D(ρ) large enough; the corresponding Gaussian-weighted contribution is bounded by ρ with high probability. 
+
+Effective conditioning neighbourhood, with ri and vi already localised. On 
+
+AM (R, D ), both ri ≤ R and vi ≤ D hold, so by (47) 
+
+qi(∆ X(m) 
+
+> i+1
+
+| X(m) 
+
+> i
+
+)−1 ≤ (2 π)ri/2 D e R2/2,
+
+and the response is therefore uniformly bounded. The Gaussian regression weight then kills the contribution of AM (R, D ): by Lemma 19 and the Gaussian tail for |u| > h M RM ,
+
+ωM, G 
+
+> i,m
+
+≤ e−R2  
+
+> M/2
+
+∥ΓhM ∥∞
+
+M π i(xi)/2
+
+for large M , and the factor e−R2  
+
+> M/2
+
+→ 0 kills the contribution of AM (R, D )
+
+deterministically on the denominator-nondegeneracy event, since the response is now bounded. 
+
+Localised response bound on IM (R, D ). On IM (R, D ) the same uniform bound for q−1 
+
+> i
+
+holds, and Lemma 15 gives a uniform deterministic bound on the response and on its active derivatives, up to polynomial factors absorbed by possibly decreasing the Gaussian exponent constant and increasing the 75 multiplicative constant. The contribution of IM (R, D ) to the estimator is therefore controlled by the compact/truncated analysis. Combining the three tail estimates on BM (R), VM (D), AM (R, D ) and choosing R, D and M0 large enough makes (48) hold with probability at least 1 − ρ. The active-derivative case is identical: differentiating Ψεi along 
+
+qi,j (xi) adds a polynomial-in-(ν − x) factor absorbed as above. 
+
+Remark 21 (Sample-reference compatibility) . Localisation (48) is the sta-tistical counterpart of the intrinsic endpoint tightness used in Section 3.2: sample-reference compatibility in the intrinsic geometry of the frozen refer-ence. The relevant quantity is the endpoint displacement measured in the geometry of the sample-conditioned covariance cumulant, together with the corresponding active volume. Entropy disintegration (49) gives integrability of the conditional endpoint entropy and hence, by Markov’s inequality, bound-edness of the entropy on μi-conditioning sets of arbitrarily large probability; on those sets, the entropy inequality transfers the intrinsic Gaussian endpoint tails of the frozen reference to the target conditional endpoint law. 
+
+Proposition 22 (Compact-uniform consistency of the Gaussian estima-tor) . Assume (S1) –(S4) and the finite-entropy hypothesis (1) , and fix ε ∈
+
+(0 , λ min ,+ 
+
+> i
+
+(xi)) . Let RM ↑ ∞ with hM RM → 0. For every compact K ⋐
+
+(ti, t i+1 ) × L xi 
+
+> i
+
+,
+
+sup 
+
+> (t,x )∈K
+> ∣∣̂
+
+Hε,M, G 
+
+> i
+
+(t, x ; xi) − Hεi (t, x ; xi)∣∣ −→ 0 in probability. The same uniform convergence in probability holds for every directional derivative Dqi,j (xi), j = 1 , . . . , d , along every eigenvector of Ai(xi). For the compactly supported auxiliary estimator ̂ Hε,M,R M 
+
+> i
+
+on its own, the convergence is almost sure under (S5) .Proof. Apply Proposition 18 to the truncated profile KM := Γ (RM ) (which satisfies the compact-kernel assumptions with envelope K(s) ∝ Γ( √s)) to obtain ̂ Hε,M,R M 
+
+> i
+
+→ Hεi uniformly on K, in probability under (S4) and almost surely under (S5) .The passage from the truncated estimator to the full Gaussian estimator uses the high-probability intrinsic localisation of Proposition 20: on the localised sample set IM (R, D ), both the intrinsic endpoint cost ri and the active volume vi are bounded, so the response Ψεi is uniformly controlled, and the support of the Gaussian weights agrees with that of the truncated 76 weights. A direct computation gives 
+
+> M
+
+∑
+
+> m=1
+
+∣∣ωM,R M 
+
+> i,m
+
+(xi) − ωM, G 
+
+> i,m
+
+(xi)∣∣ = 2TM
+
+SM
+
+,
+
+where 
+
+SM := ∑
+
+> m
+
+ΓhM (xi − X(m) 
+
+> i
+
+),TM := ∑
+
+> m
+
+ΓhM (xi − X(m) 
+
+> i
+
+)1{| X(m)   
+
+> i−xi|>R MhM}
+
+.
+
+By Lemma 19, SM /M → πi(xi) > 0; by the kernel law of large numbers applied to the Gaussian tail profile and RM → ∞ , TM /M → 0. Hence 
+
+∑ 
+
+> m
+
+|ωM,R M 
+
+> i,m
+
+− ωM, G 
+
+> i,m
+
+| → 0 in the same stochastic mode. By Lemma 15, the integrand defining the empirical potential is bounded on K by a constant times e−c|δ|2
+
+and is, in particular, bounded uniformly over δ = ∆ X(m) 
+
+> i+1
+
+on the event of the lemma. The ℓ1-bound on the weight differences therefore implies 
+
+sup 
+
+> (t,x )∈K
+
+∣∣̂ Hε,M,R M 
+
+> i
+
+(t, x ; xi) −̂ Hε,M, G 
+
+> i
+
+(t, x ; xi)∣∣ ≤ CJ,B 
+
+2TM
+
+SM
+
+→ 0.
+
+Combining this with the compact-uniform consistency of the truncated estimator yields the claim. The active-derivative case is identical: the differentiated integrand is still Gaussian-dominated by Lemma 15. 
+
+A.5 Compact-uniform drift convergence 
+
+Compact-uniform convergence of ̂ Hε,M, G 
+
+> i
+
+and of its active directional derivatives transfers to compact-uniform convergence of the heat drift. 
+
+Proposition 23 (Compact-uniform drift convergence) . Assume (S1) –(S4) 
+
+and the finite-entropy hypothesis (1) , and fix ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) . For every compact K ⋐ (ti, t i+1 ) × L xi 
+
+> i
+
+,
+
+sup 
+
+> (t,x )∈K
+
+∣∣Aεi (xi)∇x log ̂ Hε,M, G 
+
+> i
+
+(t, x ; xi)
+
+− Aεi (xi)∇x log Hεi (t, x ; xi)∣∣ −→ 0 in probability. For the compactly supported auxiliary estimator, the same conclusion holds almost surely under (S5) .
+
+77 Proof. Since Hεi is continuous and strictly positive on the compact K, there exists δK > 0 with inf K Hεi ≥ δK . By Proposition 22, ̂ Hε,M, G 
+
+> i
+
+→ Hεi
+
+uniformly on K in the stated stochastic mode, so for all sufficiently large M ,
+
+inf K̂ Hε,M, G 
+
+> i
+
+≥ δK /2.The natural metric for the convergence is the one induced by Aεi (xi): the regularised drift is the flux of a heat equation that diffuses with covariance Aεi ,and the Aεi -norm |v|2 
+
+> Aεi
+
+:= ⟨v, (Aεi )−1v⟩ is the dual norm of the gradient under 
+
+Aεi . We control the difference of the two drifts in the Euclidean norm; the equivalence ε |v|2 ≤ | Aεi v|2 ≤ (∥Ai∥ + ε)2|v|2 and the upper Euclidean bound suffice for compact-uniform convergence at fixed ε, and the kernel-direction blow-up of ∇x log Hεi off the leaf is bypassed because we work on the leaf compact K.Decompose, for each eigendirection j ∈ { 1, . . . , d } of Ai(xi),
+
+Dqi,j log ̂ H − Dqi,j log Hεi = Dqi,j ̂ H − Dqi,j Hεî
+
+H + Dqi,j Hεi
+
+( 1̂
+
+H − 1
+
+Hεi
+
+)
+
+,
+
+where ̂ H := ̂ Hε,M, G 
+
+> i
+
+. On the event where ̂ H ≥ δK /2,
+
+∣∣∣ 1̂ 
+
+> H
+
+− 1
+
+> Hεi
+
+∣∣∣ ≤ 2
+
+δ2
+
+> K
+
+∣∣̂ H − Hεi
+
+∣∣,
+
+and |Dqi,j Hεi | is bounded uniformly on K by smoothness of the regularised potential on the open intervalwise cylinder—for kernel directions this bound is in fact 0 on the leaf by (37) , but the Euclidean upper bound suffices. Combining these bounds with the compact-uniform convergence of ̂ H and of 
+
+Dqi,j ̂ H from Proposition 22 yields 
+
+sup 
+
+> K
+
+∣∣Dqi,j log ̂ H − Dqi,j log Hεi
+
+∣∣ −→ 0
+
+in the same stochastic mode. The regularised drift admits the spectral-floor eigenpair expansion 
+
+Aεi (xi)∇x log H =
+
+> d
+
+∑
+
+> j=1
+
+max( λi,j (xi), ε ) Dqi,j (xi) log H q i,j (xi),
+
+so summing over all eigenpairs, with deterministically bounded coefficients 
+
+max (λi,j , ε ) ≤ ∥ Ai(xi)∥ + ε, gives the claim. The bounded coefficients absorb the eigenvalue weights uniformly in the diagonal extraction, so the kernel-direction contributions ε D qi,j log ̂ H are controlled by the consistency of ̂
+
+H → Hεi without invoking pointwise convergence of derivatives in the ε ↓ 0
+
+limit, where Dqi,j log Hεi need not have a well-defined pointwise limit off the leaf. 78 By Proposition 14, the regularised drift converges to the exact leafwise drift on the backward stratum {t ≤ ti+1 −τ }∩ K via the analytic convergence of the coherent kernel ratio of (9) , which collapses globally to Hi1Lxii
+
+on 
+
+Rd and converges locally uniformly to Hi on the leaf, together with the corresponding active-derivative convergence (37) . The active-direction limit 
+
+max (λi,j , ε ) ↓ λi,j recovers b∗ 
+
+> i
+
+on the active eigenspace, while the kernel-direction contributions ε D qi,j log Hεi are absorbed by the intrinsic Dirichlet energy bound on the regularised potential and vanish in the limit, without any pointwise hypothesis on the kernel-direction derivative off the leaf. Hence Proposition 23 delivers the compact-uniform drift convergence claimed in part (i) of Theorem 11 at every fixed ε ∈ (0 , λ min ,+ 
+
+> i
+
+(xi)) ; a diagonal extrac-tion in (εn, M n, h Mn ) gives the same statement with the regularised drift 
+
+Aεn 
+
+> i
+
+∇x log ̂ H(n) 
+
+> i
+
+converging to the exact drift b∗ 
+
+> i
+
+= Ai∇x log Hi.
+
+A.6 Transition-kernel convergence via endpoint laws 
+
+For the transition-kernel statement of part (ii) of Theorem 11, weak convergence of the empirical conditional endpoint law is proved directly via Nadaraya–Watson consistency and transferred to the induced intervalwise kernel by continuity of the frozen Gaussian bridge. Let ̂
+
+ηMi (· | xi) := 
+
+> M
+
+∑
+
+> m=1
+
+ωM, G 
+
+> i,m
+
+(xi) δ∆X(m)
+
+> i+1
+
+be the weighted empirical law of the next-interval increment induced by the Gaussian Nadaraya–Watson weights. 
+
+Proposition 24 (Weak convergence of the empirical endpoint law) . Assume 
+
+(S1) –(S4) . For every bounded continuous ϕ : Rd → R,
+
+∫
+
+> Rd
+
+ϕ(δ)̂ ηMi (dδ | xi) −→ 
+
+∫
+
+> Rd
+
+ϕ(δ) ημi (dδ | xi) in probability. Hence ̂ ηMi (· | xi) ⇒ ημi (· | xi) weakly on Rd, in probability. For compactly supported auxiliary weights, the same conclusion holds almost surely under 
+
+(S5) .Proof. For ϕ ∈ Cb(Rd), ∑ 
+
+> m
+
+ωM, G 
+
+> i,m
+
+(xi)ϕ(∆ X(m) 
+
+> i+1
+
+) is the Nadaraya–Watson estimator of the conditional expectation Eμ[ϕ(∆ Xi+1 ) | Xi = xi]. The regression function yi 7 → Eμ[ϕ(∆ Xi+1 ) | Xi = yi] is continuous on Ci
+
+by (S2) and boundedness of ϕ. The Gaussian regression denominator is asymptotically nondegenerate by Lemma 19. Standard Nadaraya–Watson 79 consistency for Gaussian kernels under (S4) (and the almost-sure version under (S5) ) yields the claimed convergence. Since this holds for every bounded continuous ϕ,̂ ηMi ⇒ ημi weakly. For each conditioning vector yi ∈ Ci and each endpoint z ∈ L yi 
+
+> i
+
+, let 
+
+Ryi,y i,z i denote the law on path space C([ ti, t i+1 ]; Rd) of the frozen Gaussian bridge associated with Ai(yi), from yi at time ti to z at time ti+1 . The map (yi, z ) 7 → Ryi,y i,z i is continuous on the compatible endpoint set {(yi, z ) : 
+
+yi ∈ Ci, z ∈ L yi 
+
+> i
+
+}, by joint continuity of the frozen Gaussian bridge in its conditioning, initial endpoint, and terminal endpoint. The empirical path kernel induced by the Gaussian Nadaraya–Watson weights is the sample-conditioned bridge mixture ̂
+
+KMi (· | xi) := 
+
+> M
+
+∑
+
+> m=1
+
+ωM, G 
+
+> i,m
+
+(xi) RX(m)    
+
+> i,X (m)
+> ti,X (m)
+> ti+∆ X(m)
+> i+1
+> i
+
+, (51) and the target intervalwise path kernel is 
+
+K∗ 
+
+> i
+
+(· | xi) := 
+
+∫
+
+> Rd
+
+Rxi,x i,x i+δi (·) ημi (dδ | xi),
+
+the integration ranging over the realised next-interval increment δ so that 
+
+xi + δ ∈ L xi 
+
+> i
+
+ημi -a.s. The intervalwise transition kernel ̂ KMi (t, xi; ·) at any intermediate time t ∈ [ti, t i+1 ] is the time-t marginal of ̂ KMi , and similarly for K∗ 
+
+> i
+
+.
+
+Lemma 25 (Continuity of the bridge-mixture operator) . Fix xi ∈ Ci and let ηn be a sequence of probability measures on Rd, supported on Lxi 
+
+> i
+
+− xi up to vanishing transverse displacement, with ηn ⇒ η∞ weakly. Then 
+
+∫
+
+> Rd
+
+Rxi,x i,x i+δi (·) ηn(dδ ) = ⇒
+
+∫
+
+> Rd
+
+Rxi,x i,x i+δi (·) η∞(dδ )
+
+weakly on C([ ti, t i+1 ]; Rd). The bridge-mixture operator η 7 → ∫ Rxi,x i,x i+δi η(dδ )
+
+is continuous with respect to weak convergence of endpoint laws, because the frozen Gaussian bridge (yi, δ ) 7 → Ryi,y i,y i+δi depends weakly continuously on its endpoint by joint continuity of the frozen transition densities on the regular set. Proof. For every Φ ∈ Cb(C([ ti, t i+1 ]; Rd)) the scalar response δ 7 → ΨΦ(xi, δ ) = 
+
+∫ Φ dR xi,x i,x i+δi is bounded by ∥Φ∥∞ and continuous in δ by joint weak con-tinuity of the frozen bridge in its endpoint; therefore ∫ ΨΦ(xi, δ ) ηn(dδ ) →∫ ΨΦ(xi, δ ) η∞(dδ ), which is weak convergence of the bridge mixtures. 80 Lemma 26 (Local equivalence of sample-conditioned and target-conditioned reference factors) . Let Φ ∈ Cb(C([ ti, t i+1 ]; Rd)) . The scalar response 
+
+ΨΦ(yi, δ ) := 
+
+∫
+
+Φ( ω) Ryi,y i,y i+δi (dω ),
+
+(yi, δ ) ∈ { (yi, δ ) : yi ∈ Ci, y i + δ ∈ L yi 
+
+> i
+
+},
+
+is bounded by ∥Φ∥∞ and jointly continuous on the compatible increment set. Consequently the regression function yi 7 → Eμ[Ψ Φ(yi, ∆Xi+1 ) | Xi = yi] is continuous at xi, and on the weighted sample cloud X(m) 
+
+> i
+
+→ xi one has 
+
+ΨΦ(X(m) 
+
+> i
+
+, ∆X(m) 
+
+> i+1
+
+) − ΨΦ(xi, ∆X(m) 
+
+> i+1
+
+) −→ 0
+
+uniformly over samples with nonzero compact-kernel weight; the sample-conditioned reference attached to X(m) 
+
+> i
+
+is therefore asymptotically equivalent to the target-conditioned one attached to xi, in the weighted Nadaraya–Watson average. Proof. Boundedness by ∥Φ∥∞ follows because each frozen bridge is a proba-bility law. Joint continuity of ΨΦ is the continuity of the integral of a bounded continuous functional against a weakly continuous family of probability laws: the frozen Gaussian bridge Ryi,y i,z i depends weakly continuously on (yi, z )
+
+by the continuity of Ai and of the frozen transition densities on the regular set. By Lemma 16 and the support condition supp KM,h M ⊂ B(0 , h M RM )
+
+with hM RM → 0, every sample with nonzero compact-kernel weight eventu-ally satisfies |X(m) 
+
+> i
+
+− xi| ≤ hM RM → 0. On this localised sample cloud, joint continuity of ΨΦ gives ΨΦ(X(m) 
+
+> i
+
+, ·) − ΨΦ(xi, ·) → 0 uniformly. The continuity of the regression function at xi follows from (S2) and dominated convergence in the boundedness of ΨΦ.
+
+Proposition 27 (Weak convergence of transition kernels) . Assume (S1) –(S4) .For every bounded continuous functional Φ : C([ ti, t i+1 ]; Rd) → R,
+
+∫
+
+Φ d̂KMi (· | xi) −→ 
+
+∫
+
+Φ dK∗ 
+
+> i
+
+(· | xi) in probability. In particular, for every intermediate time t ∈ [ti, t i+1 ] and every bounded continuous φ : Rd → R,
+
+∫
+
+> Rd
+
+φ(y)̂ KMi (t, xi; dy ) −→ 
+
+∫
+
+> Rd
+
+φ(y) K∗ 
+
+> i
+
+(t, xi; dy ) in probability. For compactly supported auxiliary weights, the same conclusion holds almost surely under (S5) .
+
+81 Proof. Let Φ ∈ Cb(C([ ti, t i+1 ]; Rd)) and consider the scalar response ΨΦ of Lemma 26. By definition of the sample-conditioned path kernel (51), 
+
+∫
+
+Φ d̂KMi (· | xi) = 
+
+> M
+
+∑
+
+> m=1
+
+ωM, G 
+
+> i,m
+
+(xi) Ψ Φ(X(m) 
+
+> i
+
+, ∆X(m) 
+
+> i+1
+
+).
+
+This is the Nadaraya–Watson estimator of the conditional expectation 
+
+Eμ[Ψ Φ(Xi, ∆Xi+1 ) | Xi = xi]. By Lemma 26, the regression function is continuous at xi and ΨΦ is bounded; by Lemma 19, the Gaussian regression denominator is asymptotically nondegenerate. Standard Nadaraya–Watson consistency for Gaussian kernels under (S4) , and almost surely under (S5) ,yields 
+
+> M
+
+∑
+
+> m=1
+
+ωM, G 
+
+> i,m
+
+(xi) Ψ Φ(X(m) 
+
+> i
+
+, ∆X(m) 
+
+> i+1
+
+) −→ Eμ
+
+[ΨΦ(Xi, ∆Xi+1 ) ∣∣ Xi = xi
+
+].
+
+By continuity of ΨΦ in its first argument at xi and weak continuity of 
+
+ημi (· | yi) on Ci, the right-hand side equals 
+
+∫
+
+> Rd
+
+ΨΦ(xi, δ ) ημi (dδ | xi) = 
+
+∫
+
+> Rd
+
+(∫ 
+
+Φ( ω) Rxi,x i,x i+δi (dω )
+
+)
+
+ημi (dδ | xi)=
+
+∫
+
+Φ dK∗ 
+
+> i
+
+.
+
+This proves the asserted weak convergence ̂ KMi ⇒ K ∗ 
+
+> i
+
+. The marginal statement at intermediate time t is the special case Φ( ω) := φ(ωt), with 
+
+φ ∈ Cb(Rd).
+
+A.7 Proof of the main statistical convergence theorem 
+
+Proof of Theorem 11. Fix i ∈ { 0, . . . , N − 1}, the conditioning point xi, and a compact K ⋐ (ti, t i+1 ) × L xi 
+
+> i
+
+. We construct the diagonal sequence by a Cantor extraction in (εn, M n, h Mn ).
+
+Step 1 (Spectral regularisation: analytical convergence in ε). By Propo-sition 14, the coherent kernel-ratio potential satisfies the global collapse to the affine leaf Hεi (t, x ; xi) → Hi(t, x ; xi)1Lxii
+
+(x) pointwise on Rd for every 
+
+ti < t < t i+1 , with locally uniform convergence on bounded x-sets and on 
+
+{t ≤ ti+1 − τ }, τ > 0. The same Gaussian-ratio domination, applied to the polynomial-in-z factors produced by differentiating the kernel ratio in x, sup-plies uniform-on-compact convergence of every active directional derivative; strict positivity of Hi on the open leafwise cylinder and the boundedness 82 max (λi,j , ε ) ≤ ∥ Ai∥ + ε of the eigenpair coefficients then yield the drift convergence Aεi ∇x log Hεi → Ai∇x log Hi = b∗ 
+
+> i
+
+on every K ⋐ (ti, t i+1 ) × L xi
+
+> i
+
+in the intrinsic Mahalanobis/Dirichlet geometry of Ai; the limiting dynamics is supported on the leaf and the transverse components are absorbed by the off-leaf collapse of Hεi . Pick any sequence εn ↓ 0, e.g. εn := λmin ,+ 
+
+> i
+
+(xi)/(2 n);the diagonal extraction in ε does not invoke pointwise convergence of kernel-direction derivatives off the leaf, only the intrinsic energy convergence above. 
+
+Step 2 (Statistical step at fixed εn). Apply Proposition 22 to εn and the compact K: there exists Mn → ∞ and hMn ↓ 0 satisfying the admissible bandwidth conditions, with 
+
+sup 
+
+> (t,x )∈K
+
+(∣ ∣̂ Hεn,M n,G 
+
+> i
+
+− Hεn
+
+> i
+
+∣∣ +
+
+> d
+
+∑
+
+> j=1
+
+∣∣Dqi,j ̂ Hεn,M n,G 
+
+> i
+
+− Dqi,j Hεn
+
+> i
+
+∣∣)(t, x ; xi) ≤ 1
+
+n
+
+in the relevant stochastic mode (in probability under (S4) , almost surely under (S5) ). 
+
+Step 3 (Drift convergence, part (i)). The drift convergence factors as a statistical approximation step at fixed ε followed by a deterministic analytical step in ε ↓ 0, both stated on the leaf compact K after the positive backward propagation time τ > 0:
+
+Aεi ∇x log ̂ HεiM →∞ , ε fixed 
+
+−−−−−−−−−→ Aεi ∇x log Hεiε↓0
+
+−−→ Ai∇x log Hi. (52) The first arrow is the statistical step. Combine Step 2 with Proposition 23 at fixed ε = εn: positivity of Hεn 
+
+> i
+
+on the compact K, uniform convergence of ̂
+
+H(n) 
+
+> i
+
+:= ̂ Hεn,M n,G 
+
+> i
+
+and of its directional derivatives along every eigenvector of Ai on K, and the deterministic bound max (λi,j , ε n) ≤ ∥ Ai(xi)∥ + εn on the eigenpair coefficients together give 
+
+sup 
+
+> (t,x )∈K
+
+∣∣Aεn 
+
+> i
+
+(xi)∇x log ̂ H(n) 
+
+> i
+
+(t, x ; xi) − Aεn 
+
+> i
+
+(xi)∇x log Hεn 
+
+> i
+
+(t, x ; xi)∣∣ −→ 0
+
+in the stated stochastic mode. The second arrow is the analytical step, i.e. the deterministic convergence of the regularised drift to the exact drift under the coherent kernel-ratio formulation (9) : by Proposition 14, Aεn 
+
+> i
+
+∇x log Hεn 
+
+> i
+
+→ b∗
+
+> i
+
+on K as εn ↓ 0, driven by the global collapse Hεn 
+
+> i
+
+→ Hi1Lxii
+
+of the kernel ratio, the locally uniform convergence Hεn 
+
+> i
+
+→ Hi on the leaf and on {t ≤ ti+1 − τ },and the uniform-on-compact convergence of the active directional derivatives obtained from the same Gaussian-ratio domination after polynomial-in-z
+
+differentiation; strict positivity of Hi on the open leafwise cylinder and the deterministic bound max (λi,j , ε n) ≤ ∥ Ai∥ + εn absorb the eigenvalue weights 83 uniformly in the diagonal extraction, in the intrinsic Mahalanobis/Dirichlet geometry of Ai and without recourse to ambient Euclidean Sobolev arguments. Composing the two arrows gives 
+
+sup 
+
+> (t,x )∈K
+
+∣∣Aεn 
+
+> i
+
+(xi)∇x log ̂ H(n) 
+
+> i
+
+(t, x ; xi) − b∗ 
+
+> i
+
+(t, x ; xi)∣∣ −→ 0
+
+in the stated stochastic mode. The convergence is a single limit in the coherent kernel-ratio potential, after positive backward time τ > 0, rather than a diagonal limit involving two unrelated regularisations. The single-point boundary value at (ti, x i) is obtained by the diagonal limit lim t↓ti along the regularised dynamics, using the boundary value (17) and continuity of the drift up to the closed cylinder boundary at the apex. 
+
+Step 4 (Transition-kernel convergence, part (ii)). Apply Proposition 27 together with Lemma 26 at fixed εn, using the Gaussian weights ωMn,G 
+
+> i,m
+
+of Step 2 and the sample-conditioned bridge mixture (51) . For every t ∈ [ti, t i+1 ]
+
+and every φ ∈ Cb(Rd),
+
+∫
+
+> Rd
+
+φ(y)̂ K(n) 
+
+> i
+
+(t, xi; dy ) −→ 
+
+∫
+
+> Rd
+
+φ(y) K∗ 
+
+> i
+
+(t, xi; dy )
+
+in probability. This is exactly the asserted weak convergence of transition kernels. 
+
+Remark 28 (Uniformity with respect to the conditioning point) . If xi ranges in a compact set C ⊂ Ci where πi is bounded away from 0 and where the eigenstructure of Ai varies continuously, the Gaussian-domination constants of Lemma 15 can be chosen uniformly in xi ∈ C, and the same diagonal triple (εn, M n, h Mn ) delivers the conclusions of Theorem 11 uniformly on C.
+
+Remark 29 (Reference-weighted Hilbert structure) . The natural global Hilbert structure on the leaf is not the unweighted space L2(Lxi 
+
+> i
+
+, dℓ xi 
+
+> i
+
+), but the reference-weighted space 
+
+L2(kRi,t (· | xi)), kRi,t (dx | xi) := pi(ti, x i; t, x | xi) dℓ xi 
+
+> i
+
+(x).
+
+If the terminal tilt satisfies fi(·; xi) ∈ L2(kRi,t i+1 (· | xi)) , then the backward reference semigroup is contractive, 
+
+∥∥P Rt,t i+1 fi
+
+∥∥L2(kRi,t ) ≤ ∥∥fi
+
+∥∥L2(kRi,t i+1 ),
+
+and on compact subintervals of (ti, t i+1 ) Gaussian smoothing gives corre-sponding active-gradient estimates in the same reference-weighted spaces. The main consistency theorem above does not rely on this stronger global integrability assumption: it uses only compact convergence for the heat drift and weak convergence of the induced transition kernels. 
+
+84 B Predictive energy validation score 
+
+This appendix describes the predictive validation score used to select and compare model configurations. The score is designed to test the conditional predictive law generated by the model. The model is first given a real past trajectory as memory; it then generates several possible future continuations, which are compared with the realised future of the validation path. Let 
+
+Z1, . . . , Z n ∈ Rq
+
+be the validation path in the coordinates used by the model. In the white-only case one may simply take Zi = Xi. In a joint state-volatility model, Zi
+
+may instead denote the same-grid joint state, for instance 
+
+Zi = ( Xi, Y i),
+
+where Yi is the volatility-factor state. The definition below is independent of this choice. Fix a memory length pmem ≥ 1, a predictive horizon K ≥ 1, a number 
+
+L ≥ 1 of Monte Carlo predictive continuations, and a validation stride s ≥ 1.For every admissible validation index i, define the real memory block 
+
+Hi := ( Zi−pmem +1 , . . . , Z i) ∈ (Rq)pmem ,
+
+and the realised future block 
+
+Zi+1: i+K := ( Zi+1 , . . . , Z i+K ) ∈ (Rq)K .
+
+We identify the future block with its time-major vectorisation 
+
+zobs  
+
+> i
+
+:= vec time (Zi+1 , . . . , Z i+K ) ∈ RKq .
+
+Conditionally on the real memory Hi, the fitted generative model produces 
+
+L independent predictive continuations ̂
+
+Z(ℓ) 
+
+> i, 1: K
+
+= (̂ Z(ℓ) 
+
+> i, 1
+
+, . . . , ̂ Z(ℓ)
+
+> i,K
+
+), ℓ = 1 , . . . , L. 
+
+For K > 1, the continuation is generated autoregressively. After each generated step, the model memory is shifted and the generated value is inserted as the newest state. Equivalently, setting ̂
+
+H(ℓ) 
+
+> i, 0
+
+:= Hi,
+
+85 one samples recursively ̂
+
+Z(ℓ) 
+
+> i,r
+
+∼̂ Pθ
+
+(· | ̂ H(ℓ)
+
+> i,r −1
+
+), r = 1 , . . . , K, 
+
+and then updates ̂
+
+H(ℓ) 
+
+> i,r
+
+= shift (̂ H(ℓ)
+
+> i,r −1
+
+,̂ Z(ℓ)
+
+> i,r
+
+).
+
+We again use the time-major vectorisation ̂
+
+z(ℓ) 
+
+> i
+
+:= vec time 
+
+(̂ Z(ℓ) 
+
+> i, 1
+
+, . . . , ̂ Z(ℓ)
+
+> i,K
+
+) ∈ RKq .
+
+Energy score and aggregation 
+
+The per-window score is the multivariate energy score ̂
+
+ES i := 1
+
+L
+
+> L
+
+∑
+
+> ℓ=1
+
+∥∥̂ z(ℓ) 
+
+> i
+
+− zobs 
+
+> i
+
+∥∥ − 12L2
+
+> L
+
+∑
+
+> ℓ=1
+> L
+
+∑
+
+> ℓ′=1
+
+∥∥̂ z(ℓ) 
+
+> i
+
+−̂ z(ℓ′)
+
+> i
+
+∥∥, (53) and the global score is the empirical mean over admissible validation win-dows I:̂
+
+ES := 1
+
+|I| 
+
+∑
+
+> i∈I
+
+̂
+
+ES i. (54) 
+
+Enriched score for coupled (X, Y ) validation 
+
+For coupled validation we use the same global score template applied to features that combine positions with a packed squared-increment descriptor. Let K ≥ 1 be the predictive horizon as above and let ∆⊗2 
+
+> r
+
+X ∈ Rd2 
+
+> X
+
+denote the time-r packed squared-increment block, i.e. the vectorisation of ∆Xr∆X⊤ 
+
+> r
+
+.Define a per-step feature 
+
+ϕr(X) := 
+
+( Xr
+
+[∆⊗2X]
+
+> r
+
+)
+
+∈ RdX +dinc ,X , dinc ,X := d2 
+
+> X
+
+,
+
+with an analogous definition for Y . Stack-rescale by component standard deviations 
+
+ϕr(X) := 
+
+( (σpos 
+
+√dX )−1 Xr
+
+(σinc 
+
+√dinc )−1 [∆⊗2X]
+
+> r
+
+)
+
+∈ RdX +dinc ,
+
+where σpos and σinc are the root-mean-square standard deviations of, re-spectively, the position components and the packed squared-increment com-ponents over the training set. The coupled enriched comparison vector is 
+
+˜zi := vec time 
+
+([ϕr(X), ϕ r(Y )]
+
+> r=1 ,...,K
+
+)
+
+∈ RK(dX +dinc ,X +dY +dinc ,Y ),
+
+86 and the enriched global score ̂ ES enriched is obtained by substituting ˜zi and 
+
+> ˜̂
+
+z(ℓ) 
+
+> i
+
+for zobs  
+
+> i
+
+and ̂ z(ℓ) 
+
+> i
+
+in (53)–(54). 
+
+Entropic reference selection and validation 
+
+The construction of Sections 3.2 and 5.4 requires, at each latent level, a reference family under which the data-generating law has finite relative entropy on every coarse interval. We use a single finite-sample surrogate of that condition in two roles: selecting a reference family for a given latent level, and validating the closed-loop emission of the level. 
+
+Per-step empirical Gaussian negative log-likelihood. Fix a coarse step [t, t +∆ t] and consider, at the relevant latent level, a candidate zero-mean Gaussian reference for the level’s state increment ∆ζt ∈ Rd,
+
+RΣ,∆t(dζ ) = N(0, Σ ∆ t)(dζ ), Σ ∈ Sym + 
+
+> d
+
+,
+
+with density rΣ,∆t: the entropic surrogate is evaluated against the local-martingale part of the reference, whose drift is identically zero. Given an observed increment ∆ζobs  
+
+> p,t
+
+on a training path p, the per-step Gaussian negative log-likelihood under RΣ,∆t is 
+
+S(p) 
+
+> t
+
+(Σ) := − log rΣ,∆t
+
+> (
+
+∆ζobs 
+
+> p,t
+> )
+
+= 12 log det (Σ ∆ t) + 12
+
+> (
+
+∆ζobs 
+
+> p,t
+> )⊤(
+
+Σ ∆ t)−1∆ζobs  
+
+> p,t
+
++ d 
+
+> 2
+
+log(2 π). (55) The first Σ-dependent term in (55) is the log-volume of the reference; the second is the squared Mahalanobis norm of the observed increment in the metric induced by Σ. The Σ-independent additive constant d 
+
+> 2
+
+log (2 π) cancels in any comparison between candidates evaluated on the same ∆ζobs  
+
+> p,t
+
+.When the candidate family produces rank-deficient covariances by con-struction (for instance a directional rank-one parametrisation), (55) is evalu-ated on the spectrally floored covariance Σ(f ),ε t of (32) , so the inverse exists and the perpendicular component of ∆ζobs  
+
+> p,t
+
+enters as the leaf-aware penalty  
+
+> 12
+
+∥∆ζobs ,⊥ 
+
+> p,t
+
+∥2/(ε∆t) discussed in Section 5.2. Comparison across families with different ranks accordingly uses the same ε-floor on all candidates. 
+
+Selecting a reference family for a latent level. Let {Σ(f ) 
+
+> t
+
+}f be a finite family of candidate frozen reference trajectories indexed by a hyperparameter 87 f (smoothing length, history window, rank constraint, parametric form). For each training path p, aggregate (55) along the path’s step set Tp:
+
+Sp
+
+> (
+
+Σ(f )) := 1
+
+|T p|
+
+> ∑
+> t∈T p
+
+S(p)
+
+> t
+> (
+
+Σ(f ),ε t
+
+> )
+
+.
+
+The selection rule is the cross-path qα-quantile of these path-wise scores, ̂
+
+f := arg min 
+
+> f
+
+qα
+
+> ({
+
+Sp
+
+> (
+
+Σ(f ))} 
+
+> p
+> )
+
+, α ∈ (0 , 1) , (56) typically with α = 0 .9. The quantile suppresses tail paths on which any candidate would be a poor description and orders families by how well their reference explains the bulk of the observed increments; no closed-loop generation is required at this stage. 
+
+Forward entropic validation of a generated latent level. For a held-out validation path p, let Σgen  
+
+> p,t
+
+∈ Sym + 
+
+> d
+
+denote the closed-loop generation of the level on p, PSD-projected and spectrally floored at the common ε via (30) –(32) . The per-path entropic-adherence score is the same NLL aggregate as for selection, applied now to the closed-loop generated reference, 
+
+Sval 
+
+> p
+> (
+
+Σgen ) := 1
+
+|T p|
+
+> ∑
+> t∈T p
+
+S(p)
+
+> t
+> (
+
+Σgen ,ε p,t 
+
+> )
+
+, (57) the empirical Gaussian negative log-likelihood of the observed increment under the level’s own generated reference, averaged over the validation step set. The cross-path scalar score is the qα-quantile of {S val  
+
+> p
+
+}p, with the same 
+
+α and the same ε-floor used at selection. The two scores (56) – (57) share a single objective: the empirical entropy of the data-generating law under the level’s Gaussian model. Selection applies it to candidate frozen references, validation applies it to the closed-loop generated reference on held-out paths, and no intermediate proxy enters between the two stages. 
+
+Hardware and software environment 
+
+The numerical experiments of Section 6 were performed on a laptop with the following characteristics: Intel(R) Core(TM) i7-8565U CPU at 1.80 GHz (turbo up to 1.99 GHz), 4 physical cores and 8 logical processors, 16 GB of RAM, and an integrated Intel UHD Graphics 620 GPU (no discrete acceler-ator), running Microsoft Windows 11 Pro (build 10.0.26200). All algorithms 88 were implemented in Julia (version 1.12.3). The core TR-SBTS solver depends only on the Julia standard library; the elementary aggregations used at run time come from the Statistics 1.11.1 standard module. The synthetic test datasets of Section 6 are generated using DifferentialEquations.jl 7.17.0, 
+
+Distributions.jl 0.25.123 and StatsBase.jl 0.34.9; the Heston parameter-recovery experiment additionally uses Optim.jl 1.13.3 for the calibration step. All figures in the paper are produced with Plots.jl 1.41.4. The TR-SBTS solver runs on the CPU only; no GPU acceleration is used. 
+
+# References 
+
+[1] Alexandre Alouadi, Baptiste Barreau, Laurent Carlier, and Huyên Pham. Robust time series generation via schrödinger bridge: a comprehensive evaluation. In Proceedings of the 6th ACM International Conference on AI in Finance , pages 906–914, 2025. [2] Alexandre Alouadi, Grégoire Loeper, Célian Marsala, Othmane Mazhar, and Huyên Pham. SBBTS: A unified schrödinger-bass framework for synthetic financial time series, 2026. [3] Martin Arjovsky, Soumith Chintala, and Léon Bottou. Wasserstein generative adversarial networks. In Proceedings of the 34th International Conference on Machine Learning , volume 70, pages 214–223, 2017. [4] Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet. Diffusion schrödinger bridge with applications to score-based generative modeling, 2021. [5] Hans Bühler, Blanka Horvath, Terry Lyons, Imanol Perez Arribas, and Ben Wood. A data-driven market simulator for small data environments, 2020. [6] Andrew Campbell, Valentin De Bortoli, Arnaud Doucet, and Yuyang Shi. Diffusion schrödinger bridge matching. In Advances in Neural Information Processing Systems , pages 62183–62223, 2023. [7] Yongxin Chen, Tryphon T. Georgiou, and Michele Pavon. Stochastic control liaisons: Richard sinkhorn meets gaspard monge on a schrödinger bridge. SIAM Review , 63(2):249–313, 2021. [8] Ilya Chevyrev and Andrey Kormilitzin. A Primer on the Signature Method in Machine Learning , pages 3–64. Springer Nature Switzerland, 2026. 89 [9] Vedant Choudhary, Sebastian Jaimungal, and Maxime Bergeron. FuN-Vol: A multi-asset implied volatility market simulator using functional principal components and neural SDEs, 2023. [10] Wenquan Cui and Meng Wei. Strong consistency of kernel regression estimate. Open Journal of Statistics , 3:179–182, 2013. [11] Marco Cuturi. Sinkhorn distances: lightspeed computation of optimal transport. In Proceedings of the 27th International Conference on Neural Information Processing Systems , pages 2292–2300, 2013. [12] Paolo Da Pra. A stochastic control approach to reciprocal diffusion processes. Applied Mathematics and Optimization , 23(1):313–329, 1991. [13] Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, and Aaron Courville. Generative adversarial networks. Advances in Neural Information Processing Systems , 3, 2014. [14] Nikita Gushchin, Sergei Kholkin, Evgeny Burnaev, and Alexander Korotin. Light and optimal schrödinger bridge matching. In Proceedings of the 41st International Conference on Machine Learning , volume 235, pages 17100–17122, 2024. [15] Mohamed Hamdouche, Pierre Henry-Labordere, and Huyên Pham. Gen-erative modeling for time series via schrödinger bridge. arXiv , 2023. [16] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion proba-bilistic models, 2020. [17] Danilo Jimenez Rezende and Shakir Mohamed. Variational inference with normalizing flows. In Proceedings of the 32nd International Con-ference on Machine Learning , pages 1530–1538, 2015. [18] Patrick Kidger, James Foster, Xuechen Li, Harald Oberhauser, and Terry Lyons. Neural SDEs as infinite-dimensional GANs. In Proceedings of the 38th International Conference on Machine Learning , volume 38, pages 5453–5463, 2021. [19] Diederik P Kingma and Max Welling. Auto-encoding variational bayes, 2013. [20] Christian Léonard. Girsanov theory under a finite entropy condition. 
+
+Lecture Notes in Mathematics – Springer-Verlag , 2046, 2011. 90 [21] Christian Léonard. A survey of the schrödinger problem and some of its connections with optimal transport, 2013. [22] Stefano De Marco, Huyên Pham, and Davide Zanni. Schrödinger bridges with jumps for time series generation, 2026. [23] Yang Song, Jascha Sohl-Dickstein, Diederik Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations, 2020. [24] Magnus Wiese, Robert Knobloch, Ralf Korn, and Peter Kretschmer. Quant GANs: deep generation of financial time series. Quantitative Finance , 20:1–22, 2020. [25] Tianlin Xu, Li Wenliang, Michael Munn, and Beatrice Acciaio. COT-GAN: Generating sequential data via causal optimal transport, 2020. [26] Jinsung Yoon, Daniel Jarrett, and Mihaela Schaar. Time-series genera-tive adversarial networks. In Advances in Neural Information Processing Systems , 2019. 91

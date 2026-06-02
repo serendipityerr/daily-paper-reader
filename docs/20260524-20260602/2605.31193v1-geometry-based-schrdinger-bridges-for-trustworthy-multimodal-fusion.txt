@@ -1,0 +1,1422 @@
+Title: Geometry-based Schrödinger Bridges for Trustworthy Multimodal Fusion
+
+URL Source: https://arxiv.org/pdf/2605.31193v1
+
+Published Time: Mon, 01 Jun 2026 01:24:28 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+Jiayu Xiong 1 2 Jing Wang * 1 2 Qi Zhang * 3 Wanlong Wang 1 2 Jun Xue 4
+
+Abstract 
+
+Real-world multimodal systems must be robust against low-quality data, such as sensor noise, incomplete multimodal data and conflicting in-puts. However, existing trustworthy fusion meth-ods rely on the model’s own prediction confi-dence to judge data quality. This creates a cir-cular dependency: when a model is confident but wrong, these methods fail to detect the error. To break this loop, we propose Geometry-based Mul-timodal Fusion (GMF). Instead of relying on pre-dictions, we evaluate reliability by measuring how much transport correction the input needs in la-tent space. We implement Diffusion Schr ¨odinger Bridge transport with Rectified Flow, where the squared initial velocity gives an efficient learned correction score. Valid data has low squared ve-locity magnitude, while noisy, incomplete data or conflicting data requires stronger transport cor-rection. This geometry-based reliability signal acts as an independent judge, effectively flag-ging unreliable inputs even when the classifier is fooled. Extensive experiments demonstrate that GMF significantly improves robustness against severe sensor noise and semantic conflicts com-pared to confidence-based baselines. 
+
+1. Introduction 
+
+Our perception of the world relies on multiple senses. Sim-ilarly, modern AI systems integrate diverse data, such as sensors in autonomous driving or medical scans in diagno-sis (Baltru ˇsaitis et al., 2019). However, real-world data is rarely perfect. Systems frequently encounter low-quality 
+
+> ∗
+
+Corresponding authors. 
+
+> 1
+
+Department of Computer Science and Techonology, Huaqiao University 2Xiamen Key Laboratory of Computer Vision and Pat-tern Recognition, Huaqiao University 3Tongji University 4School of Cyber Science and Engineering, Wuhan University. Corre-spondence to: Jing Wang <wroaring@hqu.edu.cn >, Qi Zhang 
+
+<zhangqi cs@tongji.edu.cn >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+inputs, including sensor noise or offline (incomplete data that some modalities are missing), and semantic conflicts (where different modalities contradict each other) (Ma et al., 2022). Under these conditions, standard fusion methods that simply mix features often fail (Wang et al., 2020). If one modality is low-quality, it spreads errors to the joint repre-sentation. To solve this, dynamic fusion has emerged as a robust alternative. By processing each input independently first, this strategy aims to isolate bad data and prevent it from ruining the final decision (Zhang et al., 2024). The success of dynamic fusion depends entirely on one question: how do we accurately measure the quality of a modality? This challenge has established the field of Trustworthy Multimodal Fusion (Han et al., 2022). The goal is to design mechanisms that can automatically detect and down-weight unreliable data. Existing state-of-the-art methods, such as entropy-based quality-aware (Zhang et al., 2023) and uncertainty estimation (Han et al., 2022), rely on statistical reliability. They operate on a essential assumption: if a model is unsure about its prediction (e.g., the output probability is flat), the input data is likely low-quality. These methods calculate confidence scores from the classifier’s output and use them to determine the fusion weights. However, relying on the model’s own output creates a dan-gerous circular dependency. The system uses the prediction to check if the prediction itself is reliable. This approach fails critically when the data quality is very low. Deep neural networks are known to be overconfident (Guo et al., 2017). A model often makes a wrong prediction but with very high confidence (Ovadia et al., 2019). Because the statistical method only looks at the confidence score, it cannot distin-guish between a correct prediction and a confident error. As a result, the fusion mechanism fails to reject the corrupted modality, leading to system failure. To break this dependency, we propose a Geometry-based Multimodal Fusion (GMF). Instead of asking the classifier “are you confident? ”, we use a reliability signal computed from latent geometry rather than classifier logits. Consider clean and valid data as samples that follow a learned latent transport pattern. To implement this perspective, transport energy is estimated by the squared initial velocity, and used to measure how much correction an input needs. We em-ploy Diffusion Schr ¨odinger Bridge transport with Rectified 1
+
+> arXiv:2605.31193v1 [cs.LG] 29 May 2026
+
+Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion OOD Sample                  
+
+> Statistical Boundary (Latent Space)
+> Class A (Manifold)
+> Class B (Manifold)
+> 1.0 0.5 0.0 0.5 1.0 1.5 2.0 2.5
+> Latent Feature Coordinate
+> Predictive Confidence  P(y|z)
+> High Confidence
+> (Peaked)
+> Confidence Profile (Slice x=0.5)
+> Class A Class B
+> 99%
+> 1%
+> Original Prediction
+> High Transport Cost
+> (Long Path)
+> Geometric Flow (Manifold branches)
+> Class A
+> Class B
+> OOD Sample
+> 1.0 0.5 0.0 0.5 1.0 1.5 2.0 2.5
+> Distance from Manifold Center
+> High Energy
+> (Reject)
+> Transport Energy Profile
+> Class A Class B
+> 50% 50%
+> Regulated Prediction
+
+(a) Intra-modal Analysis Modality A         
+
+> (Ambiguous)
+> Latent Space A (Input)
+> Modality B
+> (Ambiguous)
+> Bridge Transport
+> AB
+> Perfect Alignment!
+> inter 0
+> Latent Space B (Geometric Alignment)
+> Manifold (Class 0)
+> Manifold (Class 1)
+> Ambiguous Input
+> Bridge / Consensus
+> Mod A Mod B
+> 0.55 0.60
+> Step 1: Statistical Confidence
+> (Both are Low/Unsure)
+> Mod A Mod B
+> High
+> Cost High
+> Cost
+> Step 2: Intra-Modal Energy
+> (Both Far -> High Cost)
+> Baseline
+> Fusion
+> Geometric
+> Fusion (Ours)
+> 0.57
+> (Fail)
+> 0.95
+> (Success!)
+> Interaction Gate
+> High int
+> Step 3: Final Decision
+> (Consensus Gate Active)
+
+(b) Inter-modal Analysis 
+
+Figure 1. Overview of the proposed Geometry-based Multimodal Fusion (GMF). (a) Intra-modal Analysis : We utilize Rectified Flow to estimate how much correction an input needs in latent space. Noisy inputs or outliers require higher transport energy (squared velocity magnitude), serving as a geometric indicator of unreliability. (b) Inter-modal Analysis : Semantic conflicts are detected by measuring the high cross-modal transport costs between mismatched modalities, ensuring that conflicting information does not corrupt the joint decision. 
+
+Flow (Liu et al.), which creates a straight path for this move-ment. The logic is simple: valid data needs little correction; noisy or conflicting data needs high correction. As shown in Fig. 1, this energy acts as an independent judge. It ac-curately identifies sensor noise (Intra-modal) and semantic conflicts (Inter-modal), even when the classifier is foolishly confident. Our contributions are: • Identify the “circular dependency” flaw in confidence-based fusion and propose a geometric paradigm that evaluates reliability using latent transport costs. • Integrate Diffusion Schr ¨odinger Bridge transport with Rectified Flow to create an efficient velocity-based metric. This quantifies modality quality using squared initial velocity, decoupled from the decision boundary. • Derive the fusion mechanism as the global minimizer of a geometric energy objective, providing a condi-tional geometric guarantee for robustness against sen-sor noise and semantic conflicts. Extensive experiments on four benchmarks demonstrate that GMF significantly outperforms statistical baselines, effectively filtering out corrupted modalities in scenarios involving severe sensor noise and semantic conflicts. 
+
+2. Related Work 
+
+Trustworthy Multimodal Learning. Trustworthy multi-modal learning has evolved from static fusion strategies to dynamic, evidence-based paradigms designed to mitigate the impact of unimodal noise (Han et al., 2022; Baltru ˇsaitis et al., 2019). Prominent approaches like QMF (Zhang et al., 2023) and the recent PDF (Cao et al., 2024) utilize evi-dential theory or predictive entropy to adaptively reweight modalities based on sample-level quality. To address se-mantic discrepancies, recent advancements (e.g., AISTATS 2025 (Bezirganyan et al., 2025)) have further introduced conflict-aware mechanisms that discount belief masses when modalities disagree. However, these methods fundamentally rely on the calibration of the classifier’s statistical output, assuming that low predictive entropy correlates with high data quality (Ma et al., 2022), an assumption that holds in mild noise regimes but often falters under severe corruption. 
+
+Uncertainty Quantification in Deep Learning. Uncer-tainty quantification serves as the backbone for dynamic fusion, with deterministic methods like Evidential Deep Learning (EDL) (Sensoy et al., 2018) and Energy-based Models (Liu et al., 2020) being preferred for their compu-tational efficiency over Bayesian ensembles. Despite their popularity, standard evidential regression and entropy-based metrics are widely recognized to suffer from the ”overcon-fidence” problem (Guo et al., 2017), where deep models assign high confidence scores to out-of-distribution or ad-versarial samples. Consequently, relying solely on these introspective statistical measures can lead to failure modes in safety-critical scenarios where the model is confident yet erroneous (Kendall & Gal, 2017), prompting the need for external verification mechanisms. 
+
+Generative Geometry and Optimal Transport. Beyond statistical metrics, generative models and Optimal Transport 2Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+Table 1. Notation used in GMF. Symbol Meaning 
+
+x(m), z(m) Input, latent feature 
+
+E(m) Encoder 
+
+v(m) 
+
+> θ
+
+Intra-modal velocity field 
+
+v(a→b)Φ Cross-modal velocity field 
+
+Pprior (Psrc ) Reference prior distribution 
+
+E(m) 
+
+> intra
+
+Intra-modal transport cost 
+
+E(a→b) 
+
+> inter
+
+Inter-modal transport cost 
+
+β(m) 
+
+> comp
+
+Modal competition score 
+
+γ(m) 
+
+> int
+
+, ˜γ(m) 
+
+> int
+
+Integration gate, stabilized gate 
+
+ρ, ζ Conflict coefficient, exponent 
+
+ϵγ , θr Gate floor, conflict threshold 
+
+λgeo , λreg Geometric, regularization weights 
+
+w(m), α Modal weight, evidence vector 
+
+τ , κ, λ Temperature params, gate scale 
+
+(OT) have emerged as powerful tools for characterizing the geometric structure of data manifolds. Rectified Flows (Liu et al.) and Diffusion Schr ¨odinger Bridges (DSB) (De Bor-toli et al., 2021) are increasingly utilized not just for genera-tion, but for anomaly detection by measuring reconstruction likelihoods or transport trajectory lengths (Pinaya et al., 2022). Similarly, Wasserstein distance estimations have been applied in domain adaptation to quantify distribution shifts (Courty et al., 2016). These works demonstrate that geometric transport costs can serve as proxies for data relia-bility, offering a measure of deviation that is independent of the classification decision boundary. 
+
+3. Methodology 
+
+We propose Geometry-based Multimodal Fusion (GMF) to assess reliability via latent transport geometry. Using Rectified Flow, we estimate the transport correction required by each sample and use these geometric costs to determine fusion weights. 
+
+3.1. Problem Formulation and Overview Problem. We consider a multimodal classification task on a dataset D = {({x(m) 
+
+> i
+
+}Mm=1 , y i)}Ni=1 with N samples. Each sample contains M heterogeneous modalities and a label 
+
+yi ∈ RK . Each modality is mapped to a latent space Rd via an encoder z(m) = E(m)(x(m)).
+
+Fusion Goal. For each modality, a classifier W (m)cls pre-dicts logits ˆy(m). Our goal is to learn a dynamic weight generator w(m)(z) that aggregates predictions via ˆy =P 
+
+> m
+
+w(m) ˆy(m).
+
+Geometric Perspective. Existing methods derive weights from logits ˆy(m), creating a circular dependency. We instead generate weights directly from latent features z(m). This preserves intrinsic geometric information that is typically lost during the projection to class scores. 
+
+3.2. Preliminaries: Diffusion Schr¨ odinger Bridge 
+
+Latent representations z(m) allow us to evaluate data quality via geometry. We employ the Diffusion Schr ¨odinger Bridge (DSB) to model transport between a source distribution Psrc 
+
+and a target distribution Pdst , avoiding the fixed Markov chains of standard diffusion. DSB optimizes the velocity field {vt} via 
+
+min vt
+
+R 10 Ezt∼P t
+
+∥vt(zt)∥2 dt, s.t. ∂tPt + ∇ · (Ptvt) = 0 ,
+
+(1) to minimize the kinetic energy, where t ∈ [0 , 1] , P0 =
+
+Psrc , P1 = Pdst . Solving Eq. (1) via iterative integration is too slow for real-time inference. We use Rectified Flow (RF) to linearize the transport trajectory, approximating the total cost through a single-step regression instead of integration. We parameterize the flow with a time-dependent vector field 
+
+vθ (z, t ) and define a linear interpolation for t ∼ U [0 , 1] :
+
+zt = (1 − t)z0 + tz 1, z0 ∼ P src , z1 ∼ P dst .
+
+The network is optimized to regress the constant velocity field driving this linear path by minimizing the flow match-ing objective 
+
+LRF (θ) = Et,z 0,z 1
+
+h
+
+vθ (zt, t ) − (z1 − z0) 2i
+
+. (2) 
+
+Key Insight. The rectified velocity field vθ transports a source point toward a target distribution. The squared initial velocity ∥vθ (z, 0) ∥2 measures the transport cost from z (the source, at t = 0 ) toward the target. Clean latent features cluster on the data manifold, so their transport cost reflects the cluster-to-target distance. Noisy or OOD inputs deviate from this manifold and incur higher transport energy. Since 
+
+vθ (z, 0) is evaluated at the observed feature z, which is the source of the flow, inference is in-distribution with training. 
+
+3.3. Trustworthy Weight Generation 
+
+We bridge geometric manifold learning and evidential classification. Each modality yields evidence e(m) =
+
+Softplus (z(m)W (m)cls ). We modulate this evidence using scalar weights w(m) derived from transport dynamics. 
+
+Intra-Modal Transport Cost. First, we assess the intrinsic quality of z(m) by measuring the transport cost toward a class-agnostic reference distribution P ∗ prior . The rectified flow transports z(m) toward P ∗ prior , the target of this intra-modal flow. Clean samples near the data manifold require minimal correction, while noisy or OOD samples incur higher transport energy. Using v(m) 
+
+> θ
+
+, we define the intra-modal transport energy as a learned one-step correction 3Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+score: 
+
+E(m) 
+
+> intra
+
+= v(m) 
+
+> θ
+
+(z(m), 0) 22. (3) The field v(m) 
+
+> θ
+
+is calibrated on clean latent transport paths. We assume that larger squared velocity magnitude indicates larger deviation from the clean latent manifold. Under this assumption, low-quality inputs such as noisy samples trigger stronger learned transport correction. This makes E(m) 
+
+> intra
+
+ageometric detector for sensor failure and outliers. 
+
+Inter-Modal Transport Cost. Second, we evaluate seman-tic consistency by transporting modality a to the manifold of modality b. We implement the cross-modal mapping via the direction-specific cross-modal velocity field v(a→b)Φ . Each direction a → b has its own velocity field, and inference starts from the source feature z(a). Thus the source point enters through the initial state rather than through an addi-tional explicit conditioning input. We define the induced one-step map as: 
+
+Φa→b(z) := z + v(a→b)Φ (z, 0) .
+
+The projected source feature and inter-modal cost are: 
+
+ˆz(a→b) = Φ a→b(z(a)), E(a→b) 
+
+> inter
+
+= Φa→b(z(a))−z(b) 22.
+
+(4) A large discrepancy E(a→b) 
+
+> inter
+
+indicates that the source a can-not be geometrically aligned with observation b. This high cross-modal transport cost explicitly reveals a semantic con-flict between the modalities. 
+
+Geometric Competition and Interaction. We synthesize these geometric costs into the final weight w(m) through a competition-interaction mechanism. 
+
+(1) Competition: We prioritize modalities with high intrin-sic stability using a Boltzmann distribution over transport energy, yielding a base score β(m)
+
+> comp
+
+:
+
+β(m) 
+
+> comp
+
+= e−E (m) 
+
+> intra /τ
+
+PMk=1 e−E (k)  
+
+> intra /τ
+
+. (5) 
+
+(2) Interaction: We gate this score according to the geomet-ric support that modality m receives from stable neighbors. The interaction gate γ(m) 
+
+> int
+
+aggregates cross-modal consensus from reliable modalities: 
+
+γ(m) 
+
+> int
+
+= λ X 
+
+> k̸=m
+
+r(k) exp − E(k→m)
+
+> inter
+
+κ
+
+!
+
+, (6) where r(k) = σ(θr − E (k)
+
+> intra
+
+). Here κ > 0 controls the sensitivity of the interaction gate to cross-modal transport cost. For numerical stability, we use the stabilized gate 
+
+˜γ(m) 
+
+> int
+
+= γ(m) 
+
+> int
+
++ ϵγ , where ϵγ > 0 is a small numerical floor. The final fusion weights and global Dirichlet parameters are computed as: 
+
+w(m) = β(m) 
+
+> comp
+
+˜γ(m)
+
+> int
+
+P 
+
+> j
+
+β(j) 
+
+> comp
+
+˜γ(j)
+
+> int
+
+, α =
+
+> M
+
+X
+
+> m=1
+
+w(m)e(m) + 1. (7) 
+
+3.4. Optimization via Unified Objective 
+
+We train the geometric branch and the evidential decision branch in a unified framework with separated gradient paths. Unlike multi-stage approaches, this strategy keeps the geometry-derived reliability signals aligned with the de-cision branch while preventing each loss from updating un-related modules. The total objective comprises a geometric transport loss, an evidential task loss, and a conflict-aware regularization term. 
+
+Geometric Transport Loss. To instantiate the reliability metrics, we optimize both the intra-modal and inter-modal transport dynamics using flow matching objectives. We formulate the unified geometric objective via 
+
+Lgeo =
+
+> M
+
+X
+
+> m=1
+
+L(m) 
+
+> intra
+
++ X
+
+> a̸=b
+
+L(a→b) 
+
+> inter
+
+. (8) For the intra-modal term, we adopt the Rectified Flow objec-tive defined in (2) to simplify the transport cost estimation: 
+
+L(m) 
+
+> intra
+
+= LRF (θ(m)), (9) where θ(m) denotes the parameters of the intra-modal veloc-ity network. This term regresses the velocity field toward the straight trajectory that transports a latent feature to the reference distribution. For the inter-modal term, we align geometric structures by solving a direction-specific bound-ary value problem between modalities. We minimize the flow matching error via 
+
+L(a→b) 
+
+> inter
+
+= Et,z (a),z (b)
+
+h
+
+v(a→b)Φ (zt, t ) − (z(b) − z(a)) 22
+
+i
+
+,
+
+(10) where v(a→b)Φ is the modality-pair-specific cross-modal ve-locity network parameterized by Φ. Each direction a → b
+
+has its own velocity field, and the source point enters through the initial state on the interpolation path rather than through an additional explicit conditioning input. Here we define the interpolation path zt = (1 −t)z(a) +tz (b) sampled at time t ∼ U [0 , 1] . Minimizing this objective encourages the velocity field to capture the transport correction needed to align distinct semantic manifolds. 
+
+Evidential Task Loss. We optimize classification perfor-mance using the fused Dirichlet parameters α derived from the geometric weights. Following the evidential learning 4Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+paradigm, we minimize the expected Bayes risk via 
+
+Ltask =
+
+> N
+
+X
+
+> i=1
+
+ LeCE (αi, y i) + λKL KL  Dir( αi) ∥ Dir( 1) ,
+
+(11) where LeCE is the expected cross-entropy loss and Dir( 1)
+
+represents the uniform Dirichlet distribution. This term pe-nalizes evidential overconfidence when geometric support is absent. It forces the predictive distribution toward a neutral state if the aggregated evidence is insufficient. 
+
+Conflict-Aware Regularization. We introduce a regular-ization term to mitigate semantic conflicts where modalities are confident but geometrically disjoint. We define a global consistency coefficient ρ as a lightweight summary of inter-modal geometric deviation: 
+
+ρ = 1
+
+M (M − 1) 
+
+X
+
+> a̸=b
+
+exp − E(a→b)inter 
+
+κ
+
+!
+
+. (12) 
+
+E(a→b)inter is the pairwise endpoint residual used by the fu-sion gate, while ρ is a lightweight global summary used only by the auxiliary regularizer. They play different roles: Einter controls sample-level cross-modal weighting, whereas ρ controls the strength of uniformity regulariza-tion when global cross-modal deviation is large. When ρ
+
+approaches zero, it indicates significant manifold deviation across modalities. In this case, the regularization forces the predictive distribution toward uniformity via 
+
+Lreg = (1 − ρ)ζ KL  Dir( α) ∥ Dir( 1), (13) where ζ ≥ 1 is a sensitivity hyperparameter. The total training objective is the weighted sum 
+
+Ltotal = Ltask + λgeo Lgeo + λreg Lreg , (14) where λgeo and λreg control the strength of geometric con-straints. In training, this objective is implemented with the separated gradient paths summarized in Algorithm 1. 
+
+4. Theoretical Framework 
+
+We establish conditional theoretical results for the proposed framework. We first define the geometric regularity of the latent space. We then prove the optimality of our fusion mechanism. Finally, we derive safety bounds for scenarios involving semantic conflicts. 
+
+4.1. Geometric Structure of Latent Representations 
+
+We formalize the manifold hypothesis utilized in Sec.3, char-acterize the latent space through two regularity conditions. 
+
+Assumption 4.1 (Latent Space Regularity) . Let z(m) ∼
+
+P (·| y = k) denote a latent representation from modality m
+
+Algorithm 1 Training Procedure of GMF 
+
+1: Input: D, {E(m)}Mm=1 , Pprior 
+
+2: Init: {v(m) 
+
+> θ
+
+}Mm=1 , {v(a→b)Φ }a̸=b, heads 
+
+3: for each mini-batch ({x(m) 
+
+> i
+
+}Mm=1 , y i)Bi=1 ∼ D do 
+
+4: for each modality m do 
+
+5: z(m) 
+
+> i
+
+← E(m)(x(m) 
+
+> i
+
+), ¯z(m) 
+
+> i
+
+← sg( z(m) 
+
+> i
+
+)
+
+6: t ∼ U [0 , 1] , z(m)0,i ∼ P prior , z(m) 
+
+> t,i
+
+= (1 −
+
+t)¯ z(m) 
+
+> i
+
++ tz (m)0,i 
+
+7: L(m) 
+
+> intra
+
+by Eq. (9); E(m) 
+
+> intra
+
+by Eq. (3) 
+
+8: end for 
+
+9: for each pair a̸ = b do 
+
+10: t ∼ U [0 , 1] , z(a,b ) 
+
+> t,i
+
+= (1 − t)¯ z(a) 
+
+> i
+
++ t¯z(b)
+
+> i
+
+11: L(a→b) 
+
+> inter
+
+by Eq. (10); E(a→b) 
+
+> inter
+
+by Eq. (4) 
+
+12: end for 
+
+13: {vθ , v Φ} ← opt geo (Lgeo )
+
+14: w(m) by Eqs. (5)–(7) with sg( Eintra ), sg( Einter )
+
+15: αi by Eq. (7); Ltask by Eq. (11) 
+
+16: ρ by Eq. (12); Lreg (sg( ρ), α) by Eq. (13) 
+
+17: {E, heads } ← opt task (Ltask + λreg Lreg )
+
+18: end for 
+
+19: Output: GMF parameters and class k. We assume there exist modality-specific class manifolds {M (m) 
+
+> k
+
+}Kk=1 such that: (i) Concentration : With high probability, 
+
+dist( z(m), M(m) 
+
+> k
+
+) ≤ ϵ for some ϵ > 0. This reflects the local invariance of well-trained features. (ii) Metric Separability : Distinct structures are separated by a margin δ > 2ϵ: for any modality m and any i̸ = j,
+
+inf u∈M (m) 
+
+> i,v ∈M (m)
+> j
+
+∥u − v∥2 ≥ δ.
+
+Remark 4.2 . Condition (i) is standard in representation learning and emerges from contrastive objectives (Radford et al., 2021). Condition (ii) ensures that “uncertainty balls” 
+
+B(M(m) 
+
+> k
+
+, ϵ ) around each class manifold are disjoint. Under this regularity, any confident misclassification—where z(m)
+
+lies near M(m) 
+
+> k
+
+for k̸ = y—is at least (δ − ϵ)-away from the correct manifold M(m) 
+
+> y
+
+, providing a detectable geometric signal independent of prediction confidence. 
+
+4.2. Optimal Fusion via Geometric Reliability 
+
+We analyze the fusion weights as the solution to a con-strained optimization problem. We first define the scalar objective function for each modality. 
+
+Definition 4.3 (Effective Geometric Cost) . We utilize the intra-modal transport cost E(m)intra from Eq. (3) and the sta-bilized interaction gate ˜γ(m)int from Eq. (7) . We define the 5Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+effective geometric cost C(m) ∈ R as: 
+
+C(m) := E(m)intra − τ ln ˜ γ(m)int , (15) where τ > 0 is the temperature parameter and ˜γ(m)int =
+
+γ(m)int + ϵγ . Here C(m) is a calibrated effective cost rather than a literal conserved physical energy. The temperature τ
+
+maps the log-gate term into the same cost scale as E(m)intra .This cost synthesizes intrinsic quality and extrinsic support into a single scalar. We now state the optimality theorem. Let ∆M −1 = {w ∈ RM 
+
+> ≥0
+
+: P 
+
+> m
+
+w(m) = 1 } denote the probability simplex, and let H(w) = − P 
+
+> m
+
+w(m) ln w(m)
+
+be the Shannon entropy. 
+
+Theorem 4.4 (Optimality of Fusion Weights) . For a fixed sample and fixed geometric costs C(1) , . . . , C(M ), the entropy-regularized minimization problem: 
+
+min  
+
+> w∈∆M−1
+> M
+
+X
+
+> m=1
+
+w(m)C(m) − τ H (w), (16) 
+
+admits a unique minimizer w∗, given by the Gibbs distribu-tion: 
+
+w∗(m) = exp   − C (m)/τ PMj=1 exp   − C (j)/τ  . (17) The proof is provided in the Appendix. For fixed geometric costs, this result justifies Eq. (7) as the entropy-regularized minimizer over the fusion weights. 
+
+4.3. Robustness under Semantic Conflicts 
+
+We analyze the system behavior when modalities contradict each other. We consider a case where Modality A is correct, but Modality B confidently predicts a wrong class. The following result is conditional on local cross-modal consis-tency. In practice, Eq. (10) learns the direction-specific map from matched multimodal pairs, and the empirical separa-tion in Fig. 2(b) supports this behavior. 
+
+Theorem 4.5 (Geometric Barrier Principle) . Assume As-sumption 4.1 and suppose that the cross-modal map 
+
+Φn→B is ξ-semantically consistent with ξ ≤ ϵ, i.e., 
+
+dist(Φ n→B (u), M(B) 
+
+> y
+
+) ≤ ξ for any u ∈ B (M(n) 
+
+> y
+
+, ϵ ). If 
+
+z(n) encodes class y and z(B) encodes a conflicting class 
+
+k̸ = y, then 
+
+E(n→B)inter = ∥Φn→B (z(n)) − z(B)∥22 ≥ (δ − 2ϵ)2. (18) Under latent separability and local cross-modal consistency, this result shows that semantic conflicts induce a high geo-metric cost, exponentially suppressing the interaction gate and unnormalized contribution of the incorrect modality (Corollary 4.6). In the two-modality case, the reliable neigh-bor n can be A. The formal proof is detailed in Appendix D. 
+
+Corollary 4.6 (Exponential Suppression of Conflicting Modalities) . Under the conditions of Theorem 4.5, the inter-modal interaction gate for the conflicting modality B satis-fies the following bound. Let D = ( δ − 2ϵ)2. If modality B
+
+conflicts with all active reliable neighbors, then 
+
+γ(B)int ≤ λ(M − 1) exp 
+
+
+
+− Dκ
+
+
+
+. (19) 
+
+Consequently, the stabilized gate satisfies ˜γ(B)int ≤ λ(M −
+
+1) exp( −D/κ ) + ϵγ .
+
+Here, an active reliable neighbor means a modality included in the interaction sum whose feature satisfies the reliabil-ity and semantic-consistency assumptions of Theorem 4.5. The soft gate r(n) measures its reliability strength, with 
+
+0 ≤ r(n) ≤ 1. Consequently, the unnormalized contribution of B is exponentially suppressed up to the numerical floor, reducing its normalized weight when the denominator con-tains reliable non-conflicting evidence with non-vanishing contribution. Proof is provided in Appendix D.4. Corollary 4.6 gives a qualitative exponential suppression trend. (δ − 2ϵ)2 acts as a geometric barrier. Even if the con-flicting modality B has low intra-modal cost (i.e., overcon-fidence), weak cross-modal consensus drives the stabilized gate toward the numerical floor, suppressing its unnormal-ized contribution and increasing the rejection tendency. 
+
+5. Experiments 
+
+We evaluate the proposed Geometry-based Multimodal Fu-sion (GMF) framework across four diverse benchmarks. 
+
+Sec. 5.1 details the experimental setup and implementation. 
+
+Sec. 5.2 verifies robustness against sensor noise and of-fline. Sec. 5.3 tests safety under semantic conflicts. Sec. 5.4 
+
+examines risk stratification in medical diagnosis. Finally, 
+
+Sec. 5.5 provides ablation studies and efficiency analysis. Implementation are detailed in Appendix B. 
+
+5.1. Experimental Setup Evaluation Protocols. We design protocols to dissociate predictive confidence from data validity. This allows us to strictly test the “circular dependency” hypothesis. Standard accuracy often fails to reveal when a model is “right for the wrong reasons.” Therefore, we implement three stress tests: (1) Sensor Corruption : We inject Gaussian noise to trigger classifier overconfidence. We verify if transport energy identifies these manifold deviations. (2) Semantic Conflict :We mismatch modalities to create contradictory inputs. This assesses the ability to prioritize safety over blind belief. (3) 
+
+Incomplete Multimodal Data : We randomly drop input modalities. We assess if GMF identifies null signals as high-cost outliers to reweight the remaining reliable sources. 6Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+Table 2. Overview of baselines. We lists methods by venue/year, and fusion type (FL: Feature-level, DL: Decision-level). 
+
+Method Venue / Year Type 
+
+Concat - FL Late Fusion - DL MMTM (Joze et al., 2020) CVPR 2020 FL TMC (Han et al., 2022) NeurIPS 2021 DL QMF (Zhang et al., 2023) ICML 2023 DL MLA (Zhang et al., 2024) CVPR 2024 FL/Tr. PDF (Cao et al., 2024) ICML 2024 DL DBF (Bezirganyan et al., 2025) AISTATS 2025 DL UAW-EEF (Guo et al., 2025a) ICASSP 2025 DL GOMFuNet (Guo et al., 2025b) Mathematics 2025 FL 
+
+GMF (Ours) Proposed DL 
+
+Datasets. We employ four benchmarks covering di-verse modalities: NYU Depth V2 (RGB-D) tests fusion across heterogeneous geometric structures (Silberman et al., 2012). UPMC FOOD-101 (Image-Text) evaluates robust-ness against real-world web noise (Wang et al., 2015). 
+
+MVSA-Single (Image-Text) provides a testbed for seman-tic sentiment conflicts (Niu et al., 2016). Pneumoni-aMNIST (X-ray/Report) serves as a high-stakes medical benchmark (Yang et al., 2023). 
+
+Baselines. We compare GMF against the baselines sum-marized in Tab. 2. These baselines cover both feature-level and decision-level fusion strategies to provide a thorough evaluation of reliability assessment. 
+
+5.2. Challenge I: Robustness against Sensor Corruption Hypothesis. Statistical fusion methods rely on classifier confidence to detect errors. This creates a circular depen-dency because deep classifiers often assign high confidence to noisy inputs. We hypothesize that GMF breaks this depen-dency by using geometric transport energy. This geometry-based reliability signal should increase with noise intensity regardless of the internal state of the classifier. 
+
+Protocol. We simulate failure by injecting Gaussian noise into the image modality of NYU Depth V2 and UPMC Food-101 datasets. We use standard deviations σ ∈ 1.0, 2.0.We evaluate classification accuracy and the ability of the model to distinguish reliable data from corrupted samples. Tab. 3 shows that GMF remains competitive on clean data while exhibiting stronger resilience as noise increases. The advantage is most visible in the severe corruption setting, where confidence-based baselines degrade more sharply. Error bars are reported in Appendix C. GMF also generalizes to incomplete data scenarios. When a modality is dropped, the input deviates from the clean latent data distribution ( Pdst ), causing the velocity network vθ to output vectors with high squared velocity magnitude. The observed increase in transport energy directly signals struc-
+
+Table 3. Classification accuracy (%) under diverse low-quality scenarios. We report performance on clean data, two levels of Gaussian noise (added to images), and incomplete data input (Inco, 50% text/depth features masked) cases. GMF exhibits superior robustness across all corruptions by identifying high transport energy for both noisy and incomplete inputs. The best in each column is in bold . Second-best results are underlined.                                                                                                  
+
+> Method NYU Depth V2 (RGB-D) UPMC Food-101 (Img-Text) Clean Noise ( σ)Inco Clean Noise ( σ)Inco 1.0 2.0 1.0 2.0 Concat 68.5 42.1 28.4 35.8 89.4 45.3 30.2 41.2 Late Fusion 69.1 51.9 38.6 48.2 90.7 58.0 41.5 62.1 MMTM (Joze et al., 2020) 70.2 53.8 40.5 50.8 91.2 59.4 43.1 64.8 TMC (Han et al., 2022) 71.0 53.3 41.2 52.1 91.5 56.7 39.5 68.2 QMF (Zhang et al., 2023) 71.2 55.6 45.8 56.4 92.9 62.2 48.6 78.5 MLA (Zhang et al., 2024) 72.1 50.8 35.4 42.1 93.6 55.4 38.9 64.2 PDF (Cao et al., 2024) 72.5 57.1 47.5 58.2 93.4 64.5 51.2 80.6 DBF (Bezirganyan et al., 2025) 72.3 58.0 49.1 60.3 93.2 65.1 52.4 81.3 UAW-EEF (Guo et al., 2025a) 71.8 58.4 50.2 61.5 92.8 66.4 53.1 82.4 GOMFuNet (Guo et al., 2025b) 70.5 54.1 42.6 51.9 91.6 60.2 44.5 66.1
+> GMF (Ours) 71.9 61.4 55.2 64.8 93.1 69.8 58.7 85.4
+
+tural failure, which helps GMF down-weight incomplete or corrupted inputs. 
+
+Decoupling Reliability from Confidence. We analyze the reliability diagrams in Figure 2(a) to verify the resolution of the circular dependency. Statistical baselines exhibit a clear calibration gap under severe noise: their predicted con-fidence remains high even as accuracy drops. This confirms that internal uncertainty estimates collapse under corruption. In contrast, the GMF curve tracks the ideal diagonal more closely. The reliability diagram evaluates the calibration of the final fused prediction rather than the transport en-ergy alone, and the smaller calibration gap indicates that geometry-guided weighting helps the evidential classifier avoid overconfident predictions under severe corruption. 
+
+5.3. Challenge II: Safety under Semantic Conflict 
+
+Safety-critical systems must distinguish between valid data and semantic conflicts. We validate the ability of GMF to break the circular dependency using a Confident Conflict protocol. This tests if the model can detect when confident modalities contradict each other. 
+
+Conflict Protocol. We construct a Conflict Subset on MVSA-Single by shuffling image-text pairs. This forces a semantic mismatch while preserving the quality of modal-ities. A trustworthy model should output high predictive entropy for these samples. We define the Safe Rejection Rate as the percentage of conflict samples where the predic-tive entropy of the model exceeds a threshold. Tab. 4 highlights the gap between statistical introspection and geometric validation. Evidential methods like QMF and PDF fail to reject conflicts reliably. They simply average two confident but contradictory distributions. This results in blind confidence despite the semantic mismatch. Re-cent approaches like UAW-EEF and DBF explicitly model disagreement logic. However, they still operate within the 7Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 0.0 0.2 0.4 0.6 0.8 1.0         
+
+> Predictive Confidence
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Observed Accuracy
+> (a) Calibration under Noise ( = 2.0 )
+> Ideal
+> QMF (ICML'23)
+> PDF (ICML'24)
+> UAW (ICASSP'25)
+> DBF (AISTATS'25)
+> GMF (Ours)
+> 0510 15
+> Inter-modal Transport Cost ( Einter )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Fusion Weight ( w)
+> (b) Geometric Barrier
+> Rejection Zone
+> Theory: eE/
+> Matched
+> Conflict
+> Low Risk Ambiguous High Risk
+> Risk-Level
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Error Rate (%)
+> High selectivity
+> (c) Risk Stratification
+> QMF
+> PDF
+> UAW
+> DBF
+> GMF (Ours)
+> κ
+
+Figure 2. Quantitative analysis of the GMF framework. Left: Reliability diagrams show that GMF maintains superior calibration under noise, while baselines exhibit significant overconfidence. Middle: The exponential trend of fusion weights relative to inter-modal cost validates the Geometric Barrier Principle for conflict detection, up to a constant scale. Right: GMF effectively concentrates model errors within high-energy samples, enabling reliable risk stratification for safety-critical tasks. 
+
+Table 4. Safety evaluation under Semantic Conflict on MVSA-Single. We compare the ability to correctly reject mismatched pairs. The table reports Safe Rejection Rate, Average Entropy on conflicts, and Conflict Detection Rate (CDR) via AUROC.                         
+
+> Method Rejection Rate ↑Avg Entropy ↑CDR (AUROC) ↑
+> TMC (Han et al., 2022) 15.2% 0.45 54.3 QMF (Zhang et al., 2023) 18.5% 0.52 56.8 PDF (Cao et al., 2024) 21.3% 0.58 60.1 UAW-EEF (Guo et al., 2025a) 26.8% 0.72 64.5 DBF (Bezirganyan et al., 2025) 35.2% 0.94 71.2
+> GMF (Ours) 76.8% 1.85 89.4
+
+Table 5. Reliability assessment on PneumoniaMNIST. We report the Pearson correlation ( r) and the Expected Calibration Error (ECE). GMF provides the most truthful reliability estimates by grounding diagnostic ambiguity in latent transport geometry.                   
+
+> Method Acc (%) Correlation ( r)ECE ( ↓)
+> QMF (Zhang et al., 2023) 87.2 0.42 0.154 PDF (Cao et al., 2024) 88.5 0.55 0.112 UAW-EEF (Guo et al., 2025a) 88.8 0.58 0.105 DBF (Bezirganyan et al., 2025) 89.1 0.61 0.095
+> GMF (Ours) 91.2 0.78 0.068
+
+prediction space. These methods rely on belief masses de-rived from the classifier outputs. Consequently, they lack an external signal to contradict the internal certainty of the classifier when both inputs are OOD. 
+
+Geometric Barrier Verification. GMF achieves a superior rejection rate because it assesses reliability via manifold geometry. Figure 2(b) provides direct confirmation of the Geometric Barrier Principle (Theorem 4.5). We observe a clean separation between the clusters: • Safe Zone ( Einter < 5): Matched pairs (green dots) concentrate here, retaining high fusion weights. • Rejection Zone ( Einter > 9): Conflict pairs (red crosses) are pushed into this high-cost region. Crucially, the fusion weights follow an exponential trend with respect to Einter , up to normalization and constant fac-tors. Equivalently, the gate follows the trend e−Einter /κ be-fore fusion normalization. The strong monotonic relation-ship between inter-modal cost and fusion weight confirms that the geometric barrier acts as a cross-modal reliabil-ity gate, exponentially suppressing modalities that violate semantic consistency. 
+
+5.4. Challenge III: Safety under Diagnostic Ambiguity Hypothesis. Medical diagnosis presents a distinct challenge. Diagnostic ambiguity arises from genuine edge cases rather than synthetic noise. A pneumonia scan with early infil-trates may trigger high classifier confidence due to spurious correlations. We hypothesize that statistical methods fail to distinguish these confident errors from easy samples. Trans-port energy will reflect this ambiguity as a high transport correction in latent space. This allows the system to iden-tify samples that lie near decision boundaries despite high predictive confidence. We evaluate reliability alignment on PneumoniaMNIST us-ing Pearson correlation between the reliability score and predictive correctness. The results in Tab. 5 show that GMF significantly outperforms PDF and DBF. This gap indicates that transport energy identifies geometrically marginal cases that statistical calibration misses. Standard methods rely on output entropy. Classifiers often overfit to ambiguous biological features and produce peaked distributions for hard samples. GMF avoids this circular dependency by measuring the learned transport correction in latent space. This transport-energy estimate naturally spikes for atypical presentations. We validate the clinical utility through risk stratification shown in Figure 2(c). We partition the test set into low, ambiguous, and high-risk tiers based on transport energy quantiles. An ideal system should concentrate all errors in 8Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+the high-risk tier. Figure 2(c) reveals that statistical base-lines (e.g., QMF, PDF) produce a relatively flat error profile, failing to discriminate truly hard samples. In contrast, GMF achieves high selectivity: • Low Risk Tier: GMF assigns easier samples to this group, supporting safer automation. • High Risk Tier: GMF concentrates difficult samples and most model errors in this group. This separation confirms that our geometric auditing acts as an effective safety valve. Clinically, this enables a triage protocol: automatically approve low-cost scans while de-ferring the high-cost subset to radiologists, capturing most potential AI errors. 
+
+5.5. Ablation Study and Efficiency Analysis 
+
+We isolate the contributions of the GMF through component replacement. This analysis examines the independence of reliability metrics and computational efficiency, then verify the rectified-transport assumption of trajectory linearity. 
+
+Geometric vs Statistical Reliability. We evaluate the in-dependence of our reliability metric to address the circular dependency. We replace intra-modal transport energy with standard predictive entropy in Tab. 6. This change increases the mutual information between reliability scores and pre-dictive confidence. We estimate mutual information using the Kraskov-St ¨ogbauer-Grassberger estimator. The low mutual informa-tion for GMF indicates that transport energy is decoupled from classifier outputs. This allows the system to detect noise even when the classifier is overconfident. We also replace flow-based inter-modal cost with linear cosine sim-ilarity. The resulting drop in conflict detection confirms that semantic conflicts manifest as non-linear geometric distortions. 
+
+Efficiency and Trajectory Linearity. Our framework uti-lizes Rectified Flow to linearize transport paths. We com-pare our one-step velocity prediction against multi-step ODE integration in Tab. 9. The negligible difference in accu-racy supports using squared initial velocity as the transport-energy estimate. The measured path deviation is small, confirming that learned trajectories are effectively straight. GMF avoids the heavy computational burden of iterative generative models, while maintaining latency parity with lightweight baselines such as PDF and DBF. This ensures the framework is suitable for real-time deployment. 
+
+Prior Distribution Sensitivity. GMF uses a class-agnostic prior as a reference frame for rectified transport. To test sensitivity to this design, we retrained GMF with three pri-ors while keeping all other settings fixed: isotropic Gaus-sian N (0 , I ), anisotropic Gaussian N (0 , Σ) using empirical 
+
+Table 6. Component replacement study. Gap denotes the per-formance improvement of GMF over statistical baselines. Low mutual information (MI) confirms that transport energy is decou-pled from confidence.                       
+
+> Component and Metric Statistical Baseline Geometric (Ours) Gap 1. Reliability Metric Predictive Entropy Transport Energy Accuracy ( σ= 2 .0)36.8% 55.2% +18.4% MI with Confidence 0.67 (Coupled) 0.08 (Decoupled) -0.59 2. Conflict Metric Cosine Similarity Cross-Modal Flow Conflict AUROC 72.4 89.4 +17.0 3. Fusion Logic Naive Averaging Energy Competition Safe Rejection 64.1% 76.8% +12.7%
+
+Table 7. Sensitivity of GMF to the reference prior distribution.                        
+
+> Prior NYU Clean NYU Noise σ= 2 .0Food-101 Clean Food-101 Noise σ= 2 .0
+> N(0 , I )71.9 55.2 93.1 58.7
+> N(0 ,Σ) 71.7 54.9 92.8 58.4 Laplace 71.6 54.8 92.9 58.3
+
+Table 8. Sample-level energy ranking consistency across priors. 
+
+Prior Spearman w.r.t. N (0 , I ) Kendall w.r.t. N (0 , I )
+
+N (0 , Σ) 0.97 0.94 Laplace 0.96 0.93 
+
+Table 9. Efficiency and linearity verification. We compare infer-ence latency against recent state-of-the-art methods. The compar-ison between GMF integration steps validates the straight-path assumption.                      
+
+> Method Type Latency Acc (Clean) MLA (Zhang et al., 2024) Optimization 156ms 72.1% PDF (Cao et al., 2024) Evidential 14ms 72.5% DBF (Bezirganyan et al., 2025) Belief Function 16ms 72.3% UAW-EEF (Guo et al., 2025a) Evidential 15ms 71.8% GMF (16-Step Integ.) ODE Solver 142ms 72.2% GMF (1-Step Pred.) Velocity Proxy 18ms 71.9%
+
+global feature statistics, and a Laplace distribution. The downstream accuracy and sample-level energy rankings are stable across different priors. Therefore, GMF does not rely on a carefully tuned prior; the main effect comes from the learned transport structure. 
+
+6. Conclusion 
+
+Trustworthy multimodal fusion must move beyond self-referential statistical metrics to ensure safe decision-making. We demonstrate that reliability is more effectively assessed as an extrinsic geometric property rather than an internal prediction outcome. This shift to transport dynamics allows systems to identify corrupted modalities that deceive stan-dard uncertainty quantification. Our findings suggest that manifold geometry provides a robust foundation for assess-ing semantic consistency. We provide a detailed discussion of the computational limitations and future directions of this geometric approach in the Appendix A. 9Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+Acknowledgments 
+
+This work is supported by the National Science and Technol-ogy Major Project of China (No. 2025ZD0219200), the Na-tional Natural Science Foundation of China (No. 62406225), and partly supported by Shanghai Science and Technology Committee under Grant No. 24511103900. 
+
+Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+References 
+
+Baltru ˇsaitis, T., Ahuja, C., and Morency, L.-P. Multimodal machine learning: A survey and taxonomy. IEEE trans-actions on pattern analysis and machine intelligence , 41 (2):423–443, 2019. Bezirganyan, G., Sellami, S., Berti-Equille, L., and Fournier, S. Multimodal learning with uncertainty quantification based on discounted belief fusion. In International Con-ference on Artificial Intelligence and Statistics , pp. 3142– 3150. PMLR, 2025. Brahma, P. P., Wu, D., and She, Y. Why deep learning works: A manifold disentanglement perspective. IEEE transactions on neural networks and learning systems , 27 (10):1997–2008, 2015. Cao, B., Xia, Y., Ding, Y., Zhang, C., and Hu, Q. Predictive dynamic fusion. In International Conference on Machine Learning , pp. 5608–5628. PMLR, 2024. Courty, N., Flamary, R., Tuia, D., and Rakotomamonjy, A. Optimal transport for domain adaptation. IEEE transac-tions on pattern analysis and machine intelligence , 39(9): 1853–1865, 2016. De Bortoli, V., Thornton, J., Heng, J., and Doucet, A. Diffu-sion schr ¨odinger bridge with applications to score-based generative modeling. Advances in neural information processing systems , 34:17695–17709, 2021. Guo, C., Pleiss, G., Sun, Y., and Weinberger, K. Q. On calibration of modern neural networks. In International conference on machine learning , pp. 1321–1330. PMLR, 2017. Guo, J., Cheng, Y., He, W., Zhang, Y., Feng, R., and Zhang, X. Uncertainty-aware dynamic fusion for multimodal clinical prediction tasks. In ICASSP 2025-2025 IEEE In-ternational Conference on Acoustics, Speech and Signal Processing (ICASSP) , pp. 1–5. IEEE, 2025a. Guo, Y. et al. Gomfunet: A geometric orthogonal multi-modal fusion network for enhanced prediction reliability. 
+
+Mathematics , 13(11):1791, 2025b. Han, Z., Zhang, C., Fu, H., and Zhou, J. T. Trusted multi-view classification with dynamic evidential fusion. IEEE transactions on pattern analysis and machine intelligence ,45(2):2551–2566, 2022. Joze, H. R. V., Shaban, A., Iuzzolino, M. L., and Koishida, K. Mmtm: Multimodal transfer module for cnn fusion. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 13289–13299, 2020. Kendall, A. and Gal, Y. What uncertainties do we need in bayesian deep learning for computer vision? Advances in neural information processing systems , 30, 2017. Lee, K., Lee, K., Lee, H., and Shin, J. A simple unified framework for detecting out-of-distribution samples and adversarial attacks. Advances in neural information pro-cessing systems , 31, 2018. Liu, W., Wang, X., Owens, J., and Li, Y. Energy-based out-of-distribution detection. Advances in neural information processing systems , 33:21464–21475, 2020. Liu, X., Gong, C., et al. Flow straight and fast: Learning to generate and transfer data with rectified flow. In The Eleventh International Conference on Learning Repre-sentations .Ma, M., Ren, J., Zhao, L., Testuggine, D., and Peng, X. Are multimodal transformers robust to missing modality? In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 18177–18186, 2022. Monti, F., Boscaini, D., Masci, J., Rodola, E., Svoboda, J., and Bronstein, M. M. Geometric deep learning on graphs and manifolds using mixture model cnns. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 5115–5124, 2017. Niu, T., Zhu, S., Pang, L., and El Saddik, A. Sentiment analysis on multi-view social data. In International con-ference on multimedia modeling , pp. 15–27. Springer, 2016. Ovadia, Y., Fertig, E., Ren, J., Nado, Z., Sculley, D., Nowozin, S., Dillon, J., Lakshminarayanan, B., and Snoek, J. Can you trust your model’s uncertainty? evalu-ating predictive uncertainty under dataset shift. Advances in neural information processing systems , 32, 2019. Pinaya, W. H., Graham, M. S., Gray, R., Da Costa, P. F., Tudosiu, P.-D., Wright, P., Mah, Y. H., MacKinnon, A. D., Teo, J. T., Jager, R., et al. Fast unsupervised brain anomaly detection and segmentation with diffusion 10 Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+models. In International Conference on Medical Image Computing and Computer-Assisted Intervention , pp. 705– 714. Springer, 2022. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., Krueger, G., and Sutskever, I. Learning transferable visual models from natural language supervision. In 
+
+International Conference on Machine Learning (ICML) ,pp. 8748–8763, 2021. Sensoy, M., Kaplan, L., and Kandemir, M. Evidential deep learning to quantify classification uncertainty. Advances in neural information processing systems , 31, 2018. Shi, Y., De Bortoli, V., Campbell, A., and Doucet, A. Dif-fusion schr ¨odinger bridge matching. Advances in neural information processing systems , 36:62183–62223, 2023. Silberman, N., Hoiem, D., Kohli, P., and Fergus, R. Indoor segmentation and support inference from rgbd images. In 
+
+European conference on computer vision , pp. 746–760. Springer, 2012. Wang, W., Tran, D., and Feiszli, M. What makes training multi-modal classification networks hard? In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 12695–12705, 2020. Wang, X., Kumar, D., Thome, N., Cord, M., and Precioso, F. Recipe recognition with large multimodal food dataset. In 2015 IEEE International Conference on Multimedia & Expo Workshops (ICMEW) , pp. 1–6. IEEE, 2015. Yang, J., Shi, R., Wei, D., Liu, Z., Zhao, L., Ke, B., Pfister, H., and Ni, B. Medmnist v2-a large-scale lightweight benchmark for 2d and 3d biomedical image classification. 
+
+Scientific Data , 10(1):41, 2023. Zhang, Q., Wu, H., Zhang, C., Hu, Q., Fu, H., Zhou, J. T., and Peng, X. Provable dynamic fusion for low-quality multimodal data. In International conference on machine learning , pp. 41753–41769. PMLR, 2023. Zhang, X., Yoon, J., Bansal, M., and Yao, H. Multimodal representation learning by alternating unimodal adapta-tion. In Proceedings of the IEEE/CVF conference on com-puter vision and pattern recognition , pp. 27456–27466, 2024. 11 Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+A. Limitations 
+
+Our framework operates strictly on the latent representations produced by upstream encoders (Brahma et al., 2015; Monti et al., 2017; Lee et al., 2018). We do not reinitialize the feature extraction process itself. Consequently, the validity of our geometric reliability relies on Assumption 4.1. We assume that the feature extractors map semantically distinct inputs to metric-separable manifolds. If the encoder suffers from mode collapse or fails to disentangle class features, the geometric transport costs may become uninformative. In such cases, GMF outputs a uniform distribution due to the lack of distinct geometric guidance. While this behavior prevents overconfident errors, our method cannot recover semantic information that is lost during the initial feature extraction stage. Unlike some statistical fusion approaches that are parameter-free, GMF introduces a lightweight velocity network for transport cost estimation. This adds a minor computational step during inference. However, this overhead is negligible in practice. Modern GPU architectures process the small velocity network (1 step) in parallel with high efficiency. The total inference time remains dominated by the CPU-GPU latency. Therefore, the relative latency increase from our geometric auditing step is insignificant for real-time applications. 
+
+B. Implementation Details 
+
+Remark on the DSB–RF connection. GMF instantiates the Diffusion Schr ¨odinger Bridge (DSB) via a single-shot Rectified Flow (RF) training procedure without iterative proportional fitting (IPF). This design is supported by the theoretical finding of Liu et al. that a single flow-matching training already produces a valid SB approximation, with reflow serving only to further straighten the trajectory. The approach is also consistent with the diffusion Schr ¨odinger bridge matching framework of Shi et al. (2023), which similarly adopts single-pass matching to bypass IPF iteration. In our setting, this single-shot strategy preserves the geometric reliability signal while maintaining the low inference latency required for real-time multimodal deployment. 
+
+Extractor. Following the experimental protocols established in QMF (Zhang et al., 2023), we utilize pre-trained encoders to extract latent representations for each modality. Specifically, we employ ResNet-50/152 for visual modalities and BERT/RoBERTa for textual modalities, depending on the dataset. The extracted features are mapped to a unified latent dimension via a single linear layer before fusion. 
+
+Velocity Networks. To estimate transport costs efficiently, we parameterize the vector fields with lightweight architectures. Both intra-modal and inter-modal flows perform diffusion in a shared latent space Rd. For any modality m, we first project its latent feature z(m) ∈ Rdm into Rd using a linear projection W (m) 
+
+> proj
+
+∈ Rdm×d. The velocity network then operates in Rd
+
+with a two-layer MLP: Linear → SiLU → Linear, producing a velocity (noise direction) in Rd.For cross-modal transport v(a→b)Φ , we follow the same rule. We project the source feature z(a) ∈ Rda into the shared space 
+
+Rd via W (a) 
+
+> proj
+
+∈ Rda×d, and apply the same two-layer MLP in Rd. This removes the need to match da and db inside the velocity network, since diffusion always happens in Rd.This unified design keeps the parameter footprint small. As summarized in Tab. 10, each velocity network uses only three weight matrices: one projection matrix and two MLP matrices. We avoid heavy attention blocks and deep recurrent backbones, so the transport-cost auditing adds negligible overhead.                                              
+
+> Table 10. Structural specifications of the proposed velocity networks. Both intra-modal and inter-modal flows first project features into a shared diffusion space Rd, then apply a lightweight two-layer MLP. ( d: shared diffusion dim, dm: intra-modal dim, da: source dim, σ:SiLU). () ∗denotes the cyclic structure of the diffusion.
+> Module Mapping Architecture Flow Weight Matrices Dimensions
+> Intra-Modal ( v(m)
+> θ)z(m)→Noise in RdProj (m)→(Linear σ
+> −→Linear )∗3W(m)
+> proj ∈Rdm×d;W1,2∈Rd×d
+> Inter-Modal ( v(a→b)Φ)z(a)→z(b)Proj (a)→(Linear σ
+> −→Linear )∗3W(a)
+> proj ∈Rda×d;W1,2∈Rd×d
+
+This unified design keeps the parameter footprint small. Taking Food-101 as an example (Input: 2048d/768d, Shared: 512d), the total parameter count is only ≈ 4.98M. The initialization projection accounts for ≈ 2.88M parameters, while the four velocity bridges (two intra, two inter) add ≈ 2.10M parameters. Computationally, the unified dimension mapping cost is negligible: ≈ 0.01 GFLOPs per step. Even with 16-step integration during training, the total geometric overhead is merely 12 Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+≈ 0.16 GFLOPs, and for single-step inference, it remains ≈ 0.01 GFLOPs. We avoid heavy attention blocks and deep recurrent backbones, so the transport-cost auditing adds negligible overhead. Crucially, feature extractors are pre-trained when constructing the latent representations used by GMF. The geometric loss 
+
+Lgeo updates only the geometric branch, namely the intra-modal and cross-modal velocity fields; it does not update the classifier/evidential heads or the feature extractors. Conversely, the classification loss Ltask updates only the evidential decision branch and does not update the geometric branch. The conflict-aware regularizer uses geometry-derived quantities as detached reliability signals for the decision branch unless explicitly stated otherwise. Thus, GMF is trained as a unified framework with separated gradient paths, rather than as a fully entangled end-to-end system in which every loss backpropagates through all modules. 
+
+Hyperparameters and Optimization. We use the Adam optimizer for all experiments. The initial learning rate is set to 
+
+5 × 10 −5 for the fusion classifier and the velocity networks. We employ a cosine annealing scheduler (at first 20% epochs) for learning rate decay. We apply a weight decay of 1 × 10 −4 and stochastic depth of 0.4 to prevent overfitting. The key hyperparameters unique to our GMF framework are summarized in Tab. 11.  
+
+> Table 11. Hyperparameter settings for the proposed GMF framework.
+
+Parameter τ κ θr λ ζ λgeo λreg 
+
+Value 1.0 1.0 0.5 0.1 2 1.0 0.5 
+
+Training Setup All models are implemented in PyTorch and trained on NVIDIA RTX 4090 GPU. For the Rectified Flow matching, we sample the time step t ∼ U [0 , 1] uniformly. The batch size is set to 64 for NYU Depth V2 and 128 for other datasets. We train the models for 20 epochs. 
+
+Codes. Given the availability of robust and comprehensive implementations for certain baselines (e.g., QMF (Zhang et al., 2023)), we have refrained from redundant reimplementation. We provide only the code developed specifically for our reproduction, and direct readers to the official repositories associated with the cited works for the remaining components. This approach serves to honor the original contributors’ efforts while strictly adhering to ICML anonymity protocols, which preclude the inclusion of potentially deanonymizing links in the supplementary material. 
+
+B.1. Efficiency and Scaling Analysis 
+
+Since each modality is projected into a fixed-dimensional latent space, the dependence on original feature dimensionality is mainly linear through the projection layers. The inter-modal part scales quadratically with the number of modalities because pairwise cross-modal transport blocks are computed. These blocks are independent and can be computed in parallel. In practice, the absolute overhead remains modest.                                                                    
+
+> Table 12. Scaling of GMF transport blocks with the number of modalities. Modalities Intra Blocks Inter Blocks Params FLOPs Mean Time (ms) 3369,714,688 2,483,159,040 1.3275 4412 17,065,472 4,362,207,232 2.2043 5520 26,516,480 6,778,126,336 3.3422
+> Table 13. Full-pipeline latency and memory on RTX 4090 with ResNet-152 and BERT-base feature extractors kept on GPU. Pipeline Batch Steps Mean (ms) Peak Alloc Mean (MiB) Peak Reserv Mean (MiB) GMF 1114.7566 802.44 854.00 GMF 116 24.2284 802.44 854.00 MLA 1116.9957 809.44 984.00 QMF 1113.6565 819.46 880.00 GMF 256 1355.0958 3382.42 4802.00 GMF 256 16 360.3813 3382.42 4804.00 MLA 256 1356.1937 3382.42 4804.00 QMF 256 1353.4991 3382.42 4804.00
+
+13 Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+The 1-step GMF pipeline is comparable to QMF and faster than MLA at batch size 1. At batch size 256, the difference among GMF, MLA, and QMF is small because the feature extractor dominates the runtime. The 16-step GMF variant only adds marginal overhead at large batch size in this setup, supporting the practicality of the rectified one-step design. Concat      
+
+> Late Fusion
+> MMTM
+> TMC
+> QMF
+> MLA
+> PDF
+> DBF
+> UAW-EEF
+> GOMFuNet
+> GMF (Ours)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Accuracy (%)
+> NYU Depth V2
+> Concat
+> Late Fusion
+> MMTM
+> TMC
+> QMF
+> MLA
+> PDF
+> DBF
+> UAW-EEF
+> GOMFuNet
+> GMF (Ours)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Accuracy (%)
+> UPMC Food-101
+> Clean Noise ( =1.0) Noise ( =2.0) Incomplete
+
+Figure 3. Statistical Significance and Robustness Analysis. Comparative classification accuracy (%) on NYU Depth V2 and UPMC Food-101 datasets under clean, noisy ( σ ∈ { 1.0, 2.0}), and incomplete modalities. Standard deviations are reported via error bars across 3 independent runs. GMF (Ours) consistently achieves superior performance with low variance, particularly in high-noise regimes (red bars), validating the stability of the proposed geometric transport metric. 
+
+C. Error Bar 
+
+To further validate the statistical significance of our results, we report the mean accuracy and standard deviation across three independent runs (Seeds: 0, 12, 123) in Figure 3. As illustrated, GMF demonstrates superior stability compared to leading baselines like PDF and UAW-EEF. Notably, under severe corruption ( σ = 2 .0), GMF not only maintains the highest accuracy but also exhibits narrow error margins. This confirms that the performance gains are statistically significant and attributable to the geometric reliability metric, rather than random initialization variance. 
+
+D. Theoretical Proofs and Derivations 
+
+This appendix provides complete proofs for all theoretical results in Section 4. 
+
+D.1. Preliminaries and Notation 
+
+Let the latent space be the Euclidean space Rd equipped with the ℓ2 norm ∥ · ∥ 2.
+
+Notation for distances and neighborhoods. For a set S ⊂ Rd and radius r > 0, we define: 
+
+dist( x, S) := inf  
+
+> s∈S
+
+∥x − s∥2, (20) 
+
+B(S, r ) := {x ∈ Rd : dist( x, S) ≤ r}. (21) Here, dist( x, S) is the distance from point x to the set S, and B(S, r ) is the r-neighborhood of S, also known as the 
+
+Minkowski sum S ⊕ B (0 , r ).
+
+Restatement of Assumption 4.1. For completeness, we restate the latent space regularity assumption from the main text. 
+
+Assumption D.1 (Latent Space Regularity) . Let z(m) ∼ P (· | y = k) denote a latent representation from modality m
+
+conditioned on class k ∈ { 1, . . . , K }. For each modality, there exist class-specific geometric structures {M (m) 
+
+> k
+
+}Kk=1 ⊂ Rd
+
+satisfying the following two properties: (i) Concentration. With high probability (at least 1 − β for small β > 0), samples lie within an ϵ-neighborhood of their class structure: 
+
+P  z(m) ∈ B (M(m) 
+
+> k
+
+, ϵ ) ≥ 1 − β. 
+
+14 Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+(ii) Metric Separability. Distinct class structures are separated by a margin δ > 2ϵ:
+
+∀m, ∀i̸ = j, inf  
+
+> u∈M (m)
+> i, v ∈M (m)
+> j
+
+∥u − v∥2 ≥ δ. 
+
+Interpretation. Condition (i) states that well-trained encoders produce representations that concentrate near class-specific geometric structures. The parameter ϵ captures intra-class variability (noise, augmentation, etc.). Condition (ii) ensures that these structures are well-separated, with the constraint δ > 2ϵ guaranteeing that the ϵ-neighborhoods B(M(m) 
+
+> i
+
+, ϵ ) and 
+
+B(M(m) 
+
+> j
+
+, ϵ ) are disjoint for i̸ = j.
+
+D.2. Proof of Theorem 4.4 (Optimality of Fusion Weights) Statement. We seek to minimize the entropy-regularized geometric cost over the probability simplex ∆M −1:
+
+min  
+
+> w∈∆M−1
+
+J (w) := 
+
+> M
+
+X
+
+> m=1
+
+w(m)C(m) − τ H (w), (22) where ∆M −1 := {w ∈ RM : PMm=1 w(m) = 1 , w (m) ≥ 0 ∀m} is the (M − 1) -dimensional probability simplex, and 
+
+H(w) := − PMm=1 w(m) ln w(m) is the Shannon entropy with the standard convention 0 ln 0 = 0 .
+
+Proof. The objective J (w) is strictly convex on ∆M −1 because the negative entropy −H(w) = P 
+
+> m
+
+w(m) ln w(m) is strictly convex (its Hessian is diag (1 /w (1) , . . . , 1/w (M )), which is positive definite for w(m) > 0). The feasible region 
+
+∆M −1 is a compact convex set. By the extreme value theorem, a global minimizer exists. Strict convexity guarantees uniqueness. The entropy barrier yields an interior stationary point for τ > 0; the KKT solution below has strictly positive weights. Thus, at the optimum, the non-negativity constraints are inactive and we enforce only the equality constraint PMm=1 w(m) = 1 .We form the Lagrangian: 
+
+L(w, λ ) := 
+
+> M
+
+X
+
+> m=1
+
+w(m)C(m) + τ
+
+> M
+
+X
+
+> m=1
+
+w(m) ln w(m) + λ
+
+> M
+
+X
+
+> m=1
+
+w(m) − 1
+
+!
+
+, (23) where λ ∈ R is the Lagrange multiplier. Taking the partial derivative with respect to w(m) and setting it to zero (KKT stationarity condition): 
+
+∂L
+
+∂w (m) = C(m) + τ (ln w(m) + 1) + λ = 0 . (24) Solving for ln w(m):
+
+τ ln w(m) = −C (m) − τ − λ =⇒ ln w(m) = − C(m)
+
+τ − λ + ττ .
+
+Exponentiating both sides: 
+
+w(m) = exp 
+
+
+
+− C(m)
+
+τ
+
+
+
+· exp 
+
+
+
+− λ + ττ
+
+| {z }
+
+> =: Z−1
+
+, (25) where Z := exp   λ+ττ
+
+ is a constant independent of m. Imposing the constraint PMm=1 w(m) = 1 :
+
+> M
+
+X
+
+> m=1
+
+ 1
+
+Z exp 
+
+
+
+− C(m)
+
+τ
+
+ 
+
+= 1 =⇒ Z =
+
+> M
+
+X
+
+> j=1
+
+exp 
+
+
+
+− C(j)
+
+τ
+
+
+
+.
+
+15 Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+Substituting Z back into Eq. (25) yields the optimal weights: 
+
+w∗(m) =exp 
+
+
+
+− C(m)
+
+> τ
+
+PMj=1 exp 
+
+
+
+− C(j)
+
+> τ
+
+ . (26) This is the unique global minimizer of (22). 
+
+D.3. Proof of Theorem 4.5 (Geometric Barrier Principle) Statement. We establish a lower bound on the cross-modal transport cost when modalities encode conflicting classes. 
+
+Setup and assumptions. Consider the following scenario: (i) Source modality n. Encodes the ground-truth class y with representation z(n) ∈ B (M(n) 
+
+> y
+
+, ϵ ).(ii) Target modality B. Encodes a conflicting class k̸ = y with representation z(B) ∈ B (M(B) 
+
+> k
+
+, ϵ ).(iii) Cross-modal mapping Φn→B . Here Φn→B (z) := z + v(n→B)Φ (z, 0) is the one-step map induced by the learned cross-modal velocity field. We assume this mapping is ξ-semantically consistent with ξ ≤ ϵ. Formally, for any point 
+
+u ∈ B (M(n) 
+
+> y
+
+, ϵ ),
+
+dist  Φn→B (u), M(B)
+
+> y
+
+ ≤ ξ. (27) This means the mapping preserves class identity: points near the class-y structure in modality n are mapped near the class-y structure in modality B, with at most ξ distortion. 
+
+Proof. Let ˜z := Φ n→B (z(n)) denote the mapped representation. By assumption (i), z(n) ∈ B (M(n) 
+
+> y
+
+, ϵ ). Applying the semantic consistency property (27), we have: 
+
+dist  ˜z, M(B)
+
+> y
+
+ ≤ ξ. 
+
+This implies there exists a point py ∈ M (B) 
+
+> y
+
+such that: 
+
+∥˜z − py ∥2 ≤ ξ. (28) By assumption (ii), z(B) ∈ B (M(B) 
+
+> k
+
+, ϵ ). Thus, there exists a point pk ∈ M (B) 
+
+> k
+
+such that: 
+
+∥z(B) − pk∥2 ≤ ϵ. (29) We aim to lower-bound ∥˜z − z(B)∥2. By the triangle inequality: 
+
+∥˜z − z(B)∥2 + ∥˜z − py ∥2 + ∥z(B) − pk∥2 ≥ ∥ py − pk∥2. (30) Rearranging terms: 
+
+∥˜z − z(B)∥2 ≥ ∥ py − pk∥2 − ∥ ˜z − py ∥2 − ∥ z(B) − pk∥2.
+
+By Assumption 4.1(ii) (Metric Separability), since k̸ = y:
+
+∥pk − py ∥2 ≥ δ. (31) Combining Eqs. (28), (29), and (31): 
+
+∥˜z − z(B)∥2 ≥ δ − ξ − ϵ. 
+
+16 Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+Since we assume ξ ≤ ϵ:
+
+∥˜z − z(B)∥2 ≥ δ − 2ϵ. (32) The cross-modal transport cost is defined using the induced one-step map: 
+
+E(n→B)inter := ∥Φn→B (z(n)) − z(B)∥22 = ∥˜z − z(B)∥22.
+
+Squaring both sides of (32): 
+
+E(n→B)inter ≥ (δ − 2ϵ)2. (33) By Assumption 4.1(ii), δ > 2ϵ, so (δ − 2ϵ)2 > 0. This establishes a strict positive lower bound on the transport cost. 
+
+Remark on the semantic consistency assumption. The ξ-semantic consistency property (27) is an idealized local regularity assumption. In GMF, the direction-specific map is learned from matched multimodal pairs by Eq. (10) , which encourages compatible representations to align locally. This empirical objective motivates the assumption, but the pointwise condition remains stronger than the training loss itself. 
+
+D.4. Proof of Corollary 
+
+Proof. Let D = ( δ − 2ϵ)2. We prove the same bound as Corollary 4.6: 
+
+γ(B)int ≤ λ(M − 1) exp 
+
+
+
+− Dκ
+
+
+
+.
+
+We then account for the numerical floor in the stabilized gate and derive the corresponding suppression of the unnormalized contribution. By Eq. (6), the interaction gate for modality B is 
+
+γ(B)int = λ X
+
+> n̸=B
+
+r(n) exp − E(n→B)inter 
+
+κ
+
+!
+
+, r(n) = σ(θr − E (n)intra ). (34) For every active reliable neighbor n of B, Theorem 4.5 gives 
+
+E(n→B)inter ≥ D. 
+
+Thus, 
+
+exp − E(n→B)inter 
+
+κ
+
+!
+
+≤ exp 
+
+
+
+− Dκ
+
+
+
+.
+
+Since 0 ≤ r(n) ≤ 1,
+
+γ(B)int = λ X
+
+> n̸=B
+
+r(n) exp − E(n→B)inter 
+
+κ
+
+!
+
+≤ λ(M − 1) exp 
+
+
+
+− Dκ
+
+
+
+. (35) Since ˜γ(B)int = γ(B)int + ϵγ ,
+
+˜γ(B)int ≤ λ(M − 1) exp 
+
+
+
+− Dκ
+
+
+
++ ϵγ . (36) Define the unnormalized contribution 
+
+sB = exp − E(B)intra 
+
+τ
+
+!
+
+˜γ(B)int .
+
+17 Geometry-based Schr¨ odinger Bridges for Trustworthy Multimodal Fusion 
+
+Since E(B)intra ≥ 0, we have exp( −E (B)intra /τ ) ≤ 1. Therefore, 
+
+sB ≤ ˜γ(B)int ≤ λ(M − 1) exp 
+
+
+
+− Dκ
+
+
+
++ ϵγ , (37) which proves exponential suppression of the unnormalized contribution up to the numerical floor. Finally, assume that the denominator contains reliable non-conflicting evidence with total unnormalized contribution at least 
+
+c0 > 0, i.e., X 
+
+> j̸=B
+
+sj ≥ c0.
+
+Then 
+
+w∗(B) = sB
+
+sB + P  
+
+> j̸=B
+
+sj
+
+≤ sB
+
+c0
+
+≤ λ(M − 1) 
+
+c0
+
+exp 
+
+
+
+− Dκ
+
+
+
++ ϵγ
+
+c0
+
+.
+
+18

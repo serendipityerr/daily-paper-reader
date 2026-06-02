@@ -1,0 +1,802 @@
+Title: Resolving Endpoint Underfitting in Diffusion Bridges via Noise Alignment
+
+URL Source: https://arxiv.org/pdf/2605.28962v1
+
+Published Time: Fri, 29 May 2026 00:12:37 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Resolving Endpoint Underfitting in Diffusion Bridges via Noise Alignment 
+
+## Yurong Gao 1† Zicheng Zhang 2† Congying Han 1* Tiande Guo 1 Xinmin Qiu 1
+
+> 1
+
+University of Chinese Academy of Sciences 2JD.com 
+
+> †
+
+Equal contribution. 
+
+## Abstract 
+
+Diffusion bridge models offer a powerful framework for connecting two data distributions, such as in image restora-tion and translation. Many existing methods learn this bridge by mimicking the score-matching formulation of standard diffusion models. In this work, we find that this way leads to an anomalous underfitting phenomenon near the target endpoint, as the process approaches the target distribution ( t → 0). This underfitting, characterized by significant drift in the predicted variance and direction, re-sults from an excessively large discrepancy in noise lev-els between the network’s input and its regression target. To resolve this issue, we propose the Noise-Aligned Diffu-sion Bridge (NADB). Our approach reformulates the dif-fusion bridge by first employing a mean network to pro-vide a cleaner conditional target, and then introducing a novel, noise-aligned mapping relationship. This new for-mulation resolves the noise mismatch and corrects the un-derfitting near the target endpoint. Experimental validation across multiple image restoration and image translation tasks demonstrates the effectiveness of our approach. Code is available at https://github.com/gyr02/NADB .
+
+## 1. Introduction 
+
+Image restoration [4, 6, 12, 19, 29] has recently seen a paradigm shift dominated by generative models [16, 18, 20, 36, 37]. Among these, diffusion models [16, 18, 37] have emerged as the state-of-the-art framework, typically oper-ating by learning a score function to reverse a stochastic noising process. In the context of restoration, this reverse process is conditionally guided by the low-quality input im-age [18, 37]. However, this standard formulation is arguably circuitous, as it often requires mapping a low-quality input all the way to pure noise before reconstructing the target. A fundamentally different and more natural perspective is of-fered by diffusion bridge models [3, 5, 21, 35]. Rather than treating distributions in isolation, diffusion bridges learn   
+
+> *Corresponding author Input NADB Reference
+> Debluring JPEG -restoration Super -resolution Image  translation
+
+Figure 1. Sampled results from our proposed Noise-Aligned Dif-fusion Bridge (NADB) for restoring various degraded images. 
+
+a direct stochastic trajectory from the low-quality distri-bution to the high-quality one. This approach avoids the destructive-reconstructive cycle and offers a more princi-pled formulation for mapping between the degraded and clean image manifolds, aligning perfectly with the core ob-jective of restoration. Within this domain, I2SB [21] is a pioneering method that operationalizes the bridge concept by mimicking the standard diffusion framework. It learns the score function of the bridge process, enabling the network to predict the tar-get distribution, and its sampler iteratively refines the low-quality image, akin to a standard denoising process. This mimicry, however, raises a critical question: is the standard diffusion training scheme optimal for diffusion bridge mod-
+
+> arXiv:2605.28962v1 [cs.CV] 27 May 2026
+
+els? Our analysis of the I2SB network’s output across the entire time horizon reveals a significant flaw: an anomalous underfitting phenomenon that emerges near the t → 0 end-point (referred to as target endpoint ), as evidenced in Fig. 3. This underfitting manifests as a severe distortion in the pre-dicted variance and erroneous directional predictions. This mismatch suggests an inherent flaw in the modeling formu-lation at this critical endpoint, directly leading to the net-work’s inability to achieve an adequate fit in this region. We identify the root cause of this failure as a funda-mental mismatch in the noise scheduling trends between the input and the target. As shown in Fig. 2, the noise amplitude of the network input follows a bridge-like pro-file, whereas the noise amplitude of the training objective is strictly monotonic. This irreconcilable trend inconsistency is precisely what creates the ill-conditioned learning task, as it forces the network to map a nearly deterministic input to a highly stochastic target at the target endpoint. Conse-quently, this creates a critical paradox: at the final refine-ment stages, when the model should be adding high-fidelity details to converge to the target manifold, its inherent flaw prohibits it from capping the achievable restoration quality. To mitigate the endpoint underfitting, we analyze this is-sue via the stochastic interpolant and decouple it into mag-nitude and direction failures. We then propose an improved paradigm called Noise-Aligned Diffusion Bridge (NADB), which introduces two key innovations to solve them. First, to resolve the magnitude failure, we reformulate the bridge interpolant, creating a new well-posed learning scheme. Second, to correct the erroneous direction errors, we em-ploy a mean network in a preliminary step. This network constructs the bridge between two distributions that are in closer proximity and alleviating the learning burden on the restoration network. We validate NADB on a range of chal-lenging image restoration tasks; see Fig. 1. Extensive ex-periments demonstrate that our paradigm significantly out-performs pioneering diffusion bridge models. Notably, our approach achieves superior perceptual quality and recon-struction fidelity, proving the efficacy of our solution. Our contributions include: • We identify and analyze a critical endpoint underfitting in existing diffusion bridge models, tracing its root cause to a fundamental noise level mismatch, which manifests as a dual failure in prediction magnitude and direction. • We propose a Noise-Aligned Diffusion Bridge (NADB) that resolves this endpoint underfitting issue. NADB in-troduces a novel magnitude-aligned stochastic interpolant and a mean network to correct the directional error. • We provide extensive experimental validation on Ima-geNet, demonstrating that our method of resolving these dual errors translates to state-of-the-art performance, sig-nificantly outperforming existing diffusion bridge models in both perceptual quality and fidelity. I2SB NADB         
+
+> Noise  variance
+> Figure 2. Left : Noise level mismatch in I2SB’s training objec-tive defined in Eq. (3). The network input Xtexhibits a bridge-like noise profile, while the training objective Xt−X0
+> σtis mono-tonically decreasing. This creates a severe learning challenge as
+> t→0, forcing the network to map a deterministic input to a highly stochastic target. Right : Magnitude aligned noise level in NADB.
+
+## 2. Related work 
+
+Image Restoration aims to recover high-quality images from degraded observations. Its dominant paradigm has evolved from optimizing simple distortion metrics to gen-erating high-fidelity, perceptually-rich results. This pro-gression is marked by three main stages. First, Con-volutional Neural Networks (CNNs) trained with pixel-level losses [9, 10] excelled on distortion metrics (e.g., PSNR) but produced over-smoothed results, as noted by the perception-distortion trade-off [2, 13]. Subsequently, Gen-erative Adversarial Networks (GANs) [20, 36] improved realism using adversarial losses to generate finer textures, but often at the cost of hallucinated artifacts not faithful to the ground truth. Furthermore, their training instability and limited capacity to fully capture the data distribution, often leading to mode collapse, paved the way for more stable and powerful generative frameworks. 
+
+Denoising Diffusion Models are currently the state-of-the-art generative models, achieving superior fidelity and perceptual quality. For restoration tasks, they are typically applied by conditioning the reverse process [18, 37] or fo-cusing on the posterior mean [26]. General research on diffusion models has rapidly advanced the field, including new perspectives on SDE [17, 34], optimized noise sched-ules [17, 25, 27], faster samplers [24, 32, 40], and improved guidance [8, 15]. 
+
+Diffusion Bridge Model is an alternative to standard con-ditional diffusion framework [3, 5], which learns a direct stochastic trajectory from the degraded to the clean distribu-tion [31]. Its research approach mainly involves modeling the diffusion bridge model as SDE, and then introducing a generative model to fit the score function in the stochastic differential equation [3, 14, 21, 23, 32, 38, 41]. Some of them construct bridge models using the h-transform from the diffusion process [23, 41], some completely imitate the forward and backward sampling processes of the diffusion process [21], and some focus on the corresponding acceler-ation algorithms [32, 38]. 
+
+Discussion. We observe that research on diffusion bridge is largely imitating the improvement paths of standard diffu-sion models. However, as we identified in §1, methods that directly imitate the diffusion process, such as I2SB [21], inherit fundamental flaws, namely the anomalous underfit-ting at the target endpoint. Instead of adopting the standard score-matching approach, we construct our bridge from the more flexible perspective of Stochastic Interpolants [1], which enables us to redesign the mapping and resolve this critical endpoint failure. 
+
+## 3. Preliminaries 
+
+In this section, we introduce several key concepts and nota-tions. We begin with the general definition of a stochastic interpolant, which provides a framework for connecting two distributions using continuous-time processes. 
+
+Definition 1 (Stochastic Interpolant) . Let (X0, X 1) be a paired sample from a joint distribution (ρ0, ρ 1), the stochas-tic interpolant {Xt}t∈[0 ,1] is defined as: 
+
+Xt = αtX0 + βtX1 + γtZ, (1) 
+
+where Z ∼ N (0 , I ), αt +βt = 1 , with boundary conditions 
+
+(α0, β 0, γ 0) = (1 , 0, 0) and (α1, β 1, γ 1) = (0 , 1, 0) .
+
+In context of image restoration tasks, X0 represents the high-quality image, and X1 is its corresponding degraded version. The variable Xt thus traverses a stochastic path connecting the two image manifolds. I2SB [21] is a specific instance of stochastic interpolant built for diffusion bridge. 
+
+Definition 2 (Diffusion Schrödinger Bridge) . Using a spe-cific set of coefficients for Eq. (1), I2SB [21] derives a path for the tractable Schrödinger Bridge: 
+
+Xt = ¯σ2
+
+> t
+
+¯σ2 
+
+> t
+
++ σ2
+
+> t
+
+X0 + σ2
+
+> t
+
+¯σ2 
+
+> t
+
++ σ2
+
+> t
+
+X1
+
+| {z }
+
+> Mean term
+
++
+
+s
+
+σ2 
+
+> t
+
+¯σ2
+
+> t
+
+¯σ2 
+
+> t
+
++ σ2
+
+> t
+
+Z
+
+| {z }
+
+> Stochastic term
+
+, (2) 
+
+where σ2 
+
+> t
+
+= R t 
+
+> 0
+
+βτ dτ and ¯σ2 
+
+> t
+
+= R 1 
+
+> t
+
+βτ dτ . As shown in Fig. 4, the network ϵ(Xt, t ; θ) is trained by mimicking the standard diffusion objective, which for this specific path simplifies to the following regression loss: 
+
+LI2SB = Et,X 0,X 1,Z 
+
+"
+
+ϵ(Xt, t ; θ) − Xt − X0
+
+σt
+
+> 2
+
+#
+
+. (3) 
+
+During inference, I2SB estimates Xt in reverse from t = 1 
+
+to t = 0 , analogous to standard diffusion samplers. (a) Magnitude Comparison (b) Direction Comparison (a) Magnitude comparison (b) Direction comparison 
+
+> Variance
+> Cosine Similarity
+
+Figure 3. Empirical analysis of I2SB’s endpoint underfitting. The noise mismatch shown in Fig. 2 causes the training to fail as t → 0
+
+in both magnitude (variance collapse) and direction (cosine simi-larity drop), confirming a severe underfitting phenomenon. 
+
+The coupling of this specific interpolant path in Eq. (2) and final training objective in Eq. (3) is the crucial point for our analysis. The training objective is forced to approxi-mate pure gauss noise as t → 0, precisely when the inter-polant Xt is converging to the clean data X0. As we will investigate, this formulation is suboptimal for building dif-fusion Bridge and leads to the underfitting phenomena. 
+
+## 4. Methodology 
+
+4.1. Noise Level Mismatch in Diffusion Bridge 
+
+As shown in Fig. 2, we first show that there exists an issue of noise level mismatch in diffusion bridge models, which causes underfitting problem at the target endpoint in Fig. 3. To analyze this mismatch, we expand the training objective based on the definition in Eq. (2): 
+
+Xt − X0
+
+σt
+
+= σt
+
+¯σ2 
+
+> t
+
++ σ2
+
+> t
+
+(X1 − X0)
+
+| {z }
+
+> Mean term
+
++ ¯σt
+
+p¯σ2 
+
+> t
+
++ σ2
+
+> t
+
+Z
+
+| {z }
+
+> Stochastic term
+
+. (4) While the stochastic term is analogous to the standard diffu-sion objective of predicting pure noise, the mean term repre-sents a fundamental departure by introducing a determinis-tic signal component that the original diffusion framework lacks. We now clearly compare the terms of the network input Eq. (2) and the network target Eq. (4). 
+
+Noise Level Mismatch As illustrated in Fig. 2, a signifi-cant discrepancy exists at the target endpoint ( t → 0): For the network input ( Xt), its noise coefficient approaches 0 as t → 0, making the input become nearly deterministic 
+
+X0. For the training target, its noise coefficient approaches 1 as t → 0. The target becomes highly stochastic Z. This mismatch imposes an ill-conditioned task on the network: it predicts random noise from a clean and deterministic input. 
+
+Quantitative Metrics To quantify the network’s failure on this ill-conditioned task, we assess the difference be-tween the network’s prediction and the ground truth target along two dimensions: 𝑋 ଴ 𝑋 ଵ        
+
+> Restoration
+> Network 𝜖 ఏ(X ௧, 𝑡)
+> Diffusion
+> Interpolant 𝑋 ௧
+> Training
+> Target
+> 𝑥 ௧− 𝑥 ଴
+> 𝜎 ௧
+> MSE Loss
+> Restoration
+> Network 𝜖 ఏ(X ௧, 𝑡)
+> Training
+> Target
+> 𝑥 ௧− 𝑥 ଴
+> 𝑡 ఈ
+> MSE Loss
+> 𝑋 ଴𝑋 ଵ
+> NADB
+> Interpolant 𝑋 ௧
+> Mean
+> Network
+> Noise Alignment
+> Baseline
+> 𝑋 ଴𝑋 ଵ
+
+Figure 4. Left : The training pipeline of I2SB. It uses score match-ing to train the network. Right : The training pipeline of our pro-posed NADB. The process involves two key components: (1) A frozen Mean Network pre-processes the degraded image X1 to es-timate the posterior mean E[X0|X1], which replaces the original 
+
+X1 as a proxy endpoint to construct the new stochastic interpolant 
+
+Xt. (2) The Restoration Network ϵθ is then trained to predict our proposed magnitude-aligned target Xt−X0 
+
+> tα
+
+from this new Xt.
+
+• Magnitude: We compare the Variance between the two. This measures whether the network predicts the correct amplitude of stochasticity. • Direction: We compute the Cosine Similarity between the two. This measures whether the direction of the pre-diction is pointing in the correct direction. 
+
+Endpoint Underfitting We show the empirical results for I2SB [21] on image restoration tasks in Fig. 3, using a ran-domly selected ImageNet sample as an example. These plots clearly demonstrate that as t → 0, the network’s pre-diction fails on both dimensions: The predicted variance sharply collapses, failing to match the high variance of the target. The cosine similarity also precipitously drops, in-dicating that the prediction is pointing in an erroneous di-rection. We term this dual failure Endpoint Underfitting. This flaw is critical because it occurs during the final, most crucial refinement stages of generation, directly limiting the achievable restoration quality. This ill-conditioned mapping relationship poses a sig-nificant challenge to the network’s fitting capacity in this boundary region. Therefore, improving the network’s fitting capability near the target endpoint by redesigning the map-ping relationship is imperative. We address this by propos-ing a means network and a noise correspondence strategy. Our experiments verify that the mean network effectively enhances the output directional accuracy near the target endpoint, while the noise correspondence method success-fully resolves the variance discrepancy issue. 
+
+4.2. Magnitude-Aligned Diffusion Bridge 
+
+To solve the endpoint underfitting, we redesign the stochas-tic interpolant path and training objective to be “magnitude-aligned” . That is, the noise magnitude of the network’s input and its training objective should be coupled, ideally both vanishing at the endpoints. We explicitly design a new interpolant and a target to resolve this magnitude mismatch. 
+
+Definition 3 (Magnitude-Aligned Stochastic Interpolant) .
+
+Let α ∈ (0 , 1) and k be a finite constant. We define the magnitude-aligned stochastic interpolant Xt connect-ing the target X0 ∼ ρ0 and the degraded X1 ∼ ρ1 as: 
+
+Xt := (1 − tα)X0 + tαX1 + kt (1 − t)Z. (5) 
+
+We define the corresponding magnitude-aligned training objective Yt as the scaled displacement, which decomposes as: 
+
+Yt := Xt − X0
+
+tα = ( X1 − X0) + kt 1−α(1 − t)Z. (6) 
+
+The training objective is to predict this target: 
+
+Lbase = Et,X 0,X 1,Z 
+
+h
+
+∥ϵ(Xt, t ; θ) − Yt∥2i
+
+. (7) This construction is specifically chosen to satisfy our endpoint alignment constraints, which we formalize in the following proposition. 
+
+Proposition 1 (Endpoint Noise Alignment) . Let the inter-polant Xt and the target Yt be defined as in Def. 3. Let 
+
+γX (t) = kt (1 − t) be the noise coefficient of the input Xt,and γY (t) = kt 1−α(1 − t) be the noise coefficient of the target Yt from Eq. (6). Given α ∈ (0 , 1) , both noise coeffi-cients vanish at the endpoints t = 0 and t = 1 :
+
+lim  
+
+> t→0
+
+γX (t) = 0 and lim  
+
+> t→1
+
+γX (t) = 0 , (8) 
+
+lim  
+
+> t→0
+
+γY (t) = 0 and lim  
+
+> t→1
+
+γY (t) = 0 . (9) 
+
+Proof. The proof follows from a direct evaluation of the polynomial terms γX (t) and γY (t), given that α ∈ (0 , 1) .This new formulation successfully resolves the noise magnitude mismatch. As visualized in Fig. 2 according to Prop. 1, the noise terms in the network’s input Xt and its tar-get Yt remain within the same order of magnitude through-out the entire interval. 
+
+4.3. Mean Network for Direction Alignment 
+
+While Prop. 1 solves the magnitude mismatch, the tar-get Yt in Eq. (6) retains a deterministic displacement term 
+
+(X1 − X0), which is fundamentally different from the pure noise target of standard diffusion models. A large distribu-tional gap between the degraded X1 and clean X0 makes this term difficult to regress, which can lead to directional errors. We introduce a Mean Network to map the degraded 
+
+X1 to a cleaner, intermediate representation ˆX0, which is significantly closer to the target X0. We then construct our diffusion bridge between X0 and this new, closer endpoint 
+
+ˆX0.
+
+Definition 4 (Mean Network) . Given the joint distribution of the paired data (X0, X 1) ∼ (ρ0, ρ 1), we define a mean network M (·; ϕ) trained to approximate the posterior mean 
+
+E[X0|X1]. The network’s output is defined as: 
+
+ˆX0 = M (X1; ϕ). (10) 
+
+The parameters ϕ are optimized by minimizing the mean squared error (MSE) objective: 
+
+LMSE (ϕ) = E(X0,X 1)
+
+h
+
+∥M (X1; ϕ) − X0∥2i
+
+. (11) This loss guides Mϕ(X1) to converge to the posterior mean E[X0|X1], which we denote as ˆX0 (forming distribu-tion ˆρ0). While this ˆX0 may be an over-smoothed represen-tation [2], its role is twofold: First, it corrects the directional 
+
+error by simplifying the regression task from predicting the complex displacement (X1 −X0) to the simpler ( ˆX0 −X0).Second, it provides a cleaner bridge endpoint ˆρ0 that is sig-nificantly closer to the target ρ0 than the original ρ1. Our core strategy is to construct the bridge between this closer pair (ρ0, ˆρ0). The following theorem provides the theoreti-cal justification for this proximity benefit. 
+
+Theorem 2. Let ρ0 be the target distribution, ρ1 the de-graded distribution, and ˆρ0 be the output distribution of the mean network Mϕ optimized via Eq. (11). The mean network reduces the distributional gap in the Wasserstein-2 sense: 
+
+W2(ρ0, ˆρ0) ≤ W2(ρ0, ρ 1). (12) The proof for Theorem 2 is provided in Supplementary Materials. Our experimental results confirm this theoretical motivation: establishing the diffusion bridge between distri-butions with a smaller initial divergence directly translates into more stable and accurate fitting. 
+
+4.4. Final NADB Formulation 
+
+With both components established, we define the full Noise-Aligned Diffusion Bridge (as shown in Fig. 4), which first computes the posterior mean ˆX0 = M (X1; ϕ), then builds magnitude-aligned bridge between the target X0 and this cleaner endpoint ˆX0. The final NADB stochastic inter-polant is: 
+
+Xt := (1 − tα)X0 + tα ˆX0 + kt (1 − t)Z. (13) 
+
+Algorithm 1 NADB Training 
+
+Input: Paired data distributions (ρ0, ρ 1), pre-trained mean network Mϕ 
+
+> 1:
+
+repeat  
+
+> 2:
+
+t ∼ U ([0 , 1]) , X0 ∼ ρ0, X1 ∼ ρ1 
+
+> 3:
+
+ˆX0 = Mϕ(X1) ▷ Get cleaner endpoint via Eq. (10)  
+
+> 4:
+
+Xt ∼ q(Xt|X0, ˆX0) ▷ Sample via Eq. (13)  
+
+> 5:
+
+Take gradient descent step on ϵ(Xt, t ; θ) using 
+
+LNADB in Eq. (14)  
+
+> 6:
+
+until converges 
+
+Algorithm 2 NADB Generation 
+
+Input: Degraded input X1 ∼ ρ1, time threshold d, steps N 
+
+> 1:
+
+ˆX0 = Mϕ(X1) ▷ Compute clean endpoint once  
+
+> 2:
+
+for n = N to 1 do  
+
+> 3:
+
+Predict Xϵ 
+
+> 0
+
+using ϵ(Xt, t ; θ) 
+
+> 4:
+
+if tn < d then  
+
+> 5:
+
+Sample from Xn−1 ∼ p(Xn−1 | Xϵ
+
+> 0
+
+, ˆX0, X n) 
+
+> 6:
+
+else  
+
+> 7:
+
+Sample from Xn−1 ∼ p(Xn−1 | Xϵ
+
+> 0
+
+, X n) 
+
+> 8:
+
+end if  
+
+> 9:
+
+end for  
+
+> 10:
+
+return X0
+
+The network ϵ(Xt, t ; θ) is then trained to predict the corre-sponding target Yt = ( ˆX0 − X0) + kt 1−α(1 − t)Z using the final objective: 
+
+LNADB = Et,X 0,X 1,Z 
+
+"
+
+ϵ(Xt, t ; θ) − Xt − X0
+
+tα
+
+> 2
+
+#
+
+. (14) This training process is summarized in Algorithm 1. 
+
+Sampling The corresponding reverse sampling procedure is derived in detail in Supplementary Materials. A key prop-erty is that the reverse process naturally splits into two dis-tinct stages at a time threshold d ≈ 1−α 
+
+> 2−α
+
+. This split is neces-sary to maintain a non-positive variance term near the t → 0
+
+endpoint. This approach provides flexibility, enabling a sep-arate, endpoint-conditioned transition for t ∈ [0 , d ]. The full generation process is summarized in Algorithm 2. 
+
+## 5. Experiments 
+
+5.1. Implementation Details 
+
+Network Architecture and Training. Our framework consists of two networks with identical U-Net [28] archi-tectures: the main Restoration Network ϵ(Xt, t ; θ) and the Mean Network M (X1; ϕ). Most of our implementation and hyperparameters follow I2SB [21] for a fair compar-ison. Specifically, we initialize the two U-Nets using the Table 1. Comparison with I2SB on numerous image restoration tasks.                                                                                                                                 
+
+> Method JPEG Restoration 4×Super-Resolution Deblurring
+> QF NFE FID ↓PSNR ↑SSIM ↑LPIPS ↓Filter NFE FID ↓PSNR ↑SSIM ↑LPIPS ↓Kernel NFE FID ↓PSNR ↑SSIM ↑LPIPS ↓
+> I2SB 510 8.0 24.50 0.69 0.30 Pool 10 7.3 24.86 0.70 0.27 Uniform 10 10.3 24.19 0.65 0.32 NADB 6.9 24.45 0.69 0.30 5.3 24.75 0.71 0.23 4.8 27.70 0.81 0.18 I2SB 100 4.7 23.60 0.65 0.31 100 4.1 23.57 0.65 0.26 100 5.0 22.47 0.58 0.32 NADB 4.3 23.63 0.65 0.30 3.7 23.63 0.67 0.22 3.4 27.39 0.80 0.17 I2SB 10 10 6.1 26.27 0.76 0.24 Bicubic 10 8.1 25.07 0.70 0.27 Gaussian 10 7.4 25.42 0.71 0.27 NADB 5.7 26.55 0.77 0.23 6.8 25.39 0.73 0.24 4.2 30.03 0.87 0.15 I2SB 100 3.6 25.34 0.72 0.24 100 4.1 23.74 0.65 0.27 100 3.9 23.98 0.66 0.27 NADB 3.5 25.81 0.74 0.23 4.1 24.46 0.70 0.22 3.1 30.34 0.88 0.13 Corrupt I2SB I2SB w. Mean NADB NADB w/o Mean Reference
+
+Figure 5. Ablation comparison on the JPEG-5 restoration task. We compare I2SB, I2SB augmented with our Mean Network (“w. Mean”), NADB without the Mean Network (“w/o Mean”), and the proposed NADB. 
+
+publicly available ADM checkpoint [8] (pre-trained on Ima-geNet 256 ×256). The Mean Network Mϕ is first trained in-dependently on each task until its MSE loss converges, and the time-step input to Mϕ is held constant with zero. Both networks are trained using Adam optimizer with a learning rate of 1 × 10 −4 and a batch size of 256 . For NADB, we set the hyperparameters α = 0 .4 and k = 0 .75 . All experi-ments were conducted on 8 NVIDIA A100 GPUs. 
+
+Baselines. We compare our method against three cate-gories of generative models (comparisons with some base-lines are provided in the Supplementary Materials): • Conditional Diffusion Models: We benchmark against established restoration methods, including DDRM [18], DDNM [37], ΠGDM [33], Palette [30], DiT4SR [11] and RDDM [22]. • Score-Based Diffusion Bridges: We conduct a com-parison against I2SB [21], I3SB [38], DDBM [41], RDBM [35], and GOUB [39]. For I2SB, we conduct a comprehensive evaluation to isolate the improvements from our proposed formulation. I2SB maintains the same training steps as NADB. 
+
+Datasets. We compare methods following the bench-marks from I2SB. For image restoration, we evaluate on three tasks: JPEG artifact removal, deblurring, and 4 ×
+
+super-resolution (64 ×64 → 256 ×256). All models are evaluated on the 256 ×256 ImageNet dataset [7]. For im-age translation, we use the standard edges →handbags and edges →shoes datasets, evaluated at 64 ×64 resolution. Figure 6. Endpoint performance comparison for the ablated models across the time step t (horizontal axis). Table 2. Comparison of NADB with diffusion models (NFE=100). Reported results are taken from [21], and 4 × Super-Resolution is evaluated on the full validation set, differing from Tab. 1.                                                
+
+> JPEG Restoration 4×Super-Resolution Deblurring
+> QF Method FID ↓Filter Method FID ↓Kernel Method FID ↓
+> 5DDRM 28.2 Pool DDRM 14.8 Uniform DDRM 9.9
+> ΠGDM 8.6 DDNM 9.9 DDNM 3.0 Palette 8.3 ΠGDM 3.8 Palette 4.1 NADB 4.3 NADB 1.1 NADB 3.4 10 DDRM 16.7 Bicubic DDRM 21.3 Gaussian DDRM 6.1
+> ΠGDM 6.0 DDNM 13.6 DDNM 2.9 Palette 5.4 ΠGDM 3.6 Palette 3.1 NADB 3.5 NADB 1.0 NADB 3.1
+
+Evaluation. For restoration, we sample from 10,000 im-ages from the ImageNet validation set, and FID is computed on full validation set. For translation, due to the small val-idation set, FID is computed on the training set, following standard practice. To ensure a fair comparison, all experi-mental settings were kept consistent with the baseline meth-ods. Models without pre-trained weights were faithfully re-produced from their published configurations. 
+
+5.2. Comparisons 
+
+Comparison with Conditional Diffusion Models Tab. 2 presents a comparison against leading conditional diffusion models for restoration. We observe that while these meth-ods perform well on distortion metrics, their outputs can ex-hibit blurring. This reflects a known perception-distortion trade-off [30], where pixel-wise losses favor over-smoothed results. Given that generative models are optimized for perceptual quality, we follow standard practice [30] in us-ing FID as the primary metric for comparing. The results demonstrate the strong performance of our bridge-based model against these general-purpose diffusion solvers. 
+
+Figure 7. Comparison of FID changing trends. 
+
+Comparison with I2SB We conduct a head-to-head com-parison with I2SB [21], the baseline our work directly im-proves upon. Both models were trained with an equivalent computational budget for a fair comparison. As shown in Tab. 1, NADB consistently outperforms I2SB across mul-tiple image restoration tasks. This superiority is evident in the vast majority of both perceptual and distortion metrics, confirming the effectiveness of our proposed modifications. 
+
+Generalization to Image-to-Image Translation To eval-uate the generalization capability of NADB, we conducted a systematic assessment on standard image-to-image trans-lation tasks at 64 ×64 resolution, as illustrated in Fig. 8. We compared NADB against I2SB and DDBM, a strong base-line for image translation. As shown in Tab. 3, our method outperforms both competing approaches. Notably, Fig. 7 shows that our method maintains high-quality generation with low NFE, while DDBM degrades significantly. Input I2SB DDBM Ours 
+
+> Edges2handbags Edges2shoes
+
+Figure 8. Image translation comparison. All images are in 64 × 64 resolution. Table 3. Comparison with diffusion bridge models on image trans-lation tasks.                                  
+
+> Edges to Handbags Edges to Shoes
+> Method FID ↓PSNR ↑SSIM ↑LPIPS ↓FID ↓PSNR ↑SSIM ↑LPIPS ↓
+> I2SB 64.8 16.70 0.62 0.21 42.9 19.39 0.73 0.15 DDBM 64.7 20.72 0.74 0.10 44.0 21.21 0.77 0.09 NADB 64.5 18.90 0.69 0.13 42.2 19.41 0.74 0.13
+
+5.3. Ablation Study 
+
+Our NADB framework introduces two key innovations to solve the endpoint underfitting phenomenon: a Mean Net-work to correct the directional error, and a Magnitude-Aligned Interpolant to resolve the magnitude mismatch. To validate the individual contributions and necessity of both components, we conduct a comprehensive ablation study. We compare four distinct models on the challenging JPEG-5 restoration task, a benchmark chosen specifically because its high degradation accentuates the endpoint fail-ures we aim to solve: the original I2SB model [21], the I2SB baseline augmented with our Mean Network prepro-cessing (I2SB w. Mean), our NADB formulation applied di-rectly between X0 and X1 without the Mean Network (Ours w/o Mean), our complete proposed method. The quantita-tive results of this ablation are presented in Tab. 4. We pro-vide qualitative comparisons in Fig. 5 and detailed endpoint performance plots (variance and cosine similarity) for the ablated models in Fig. 6. From these results, we draw two key conclusions: 
+
+Magnitude alignment alone is insufficient. “NADB w/o Mean” successfully resolves the variance collapse (magni-tude failure), but still exhibits a significant drop in cosine similarity (direction failure) at the endpoint. 
+
+Table 4. Qualitative comparisons with four models on JPEG-5 restoration tasks.                                          
+
+> QF NFE Method FID ↓PSNR ↑SSIM ↑LPIPS ↓
+> 510 I2SB 8.0 24.50 0.69 0.30 NADB 6.9 24.45 0.69 0.30 I2SB w. Mean 8.8 24.51 0.69 0.31 NADB w/o Mean 7.0 24.36 0.69 0.30 100 I2SB 4.7 23.60 0.65 0.31 NADB 4.3 23.63 0.65 0.30 I2SB w. Mean 4.4 23.64 0.65 0.31 NADB w/o Mean 5.2 23.54 0.65 0.31
+
+Mean network alone is insufficient. The “I2SB w. Mean” model fails to mitigate the underfitting, with both its variance and direction metrics collapsing. This demon-strates that simply preprocessing the endpoint is not enough if the underlying mapping remains ill-conditioned. These findings empirically confirm our analysis: the Mean Network is required to correct the prediction direc-tion, while the Magnitude-Aligned Interpolant is required to fix the variance. Both components are essential to fully resolve the endpoint underfitting problem. 
+
+## 6. Conclusion 
+
+In this paper, we identify a critical endpoint underfitting in diffusion bridge models, rooted in a fundamental noise level mismatch that causes a dual failure in prediction magnitude and direction. We propose NADB to resolve this by intro-ducing a Mean Network that corrects directional failure and a Magnitude-Aligned Interpolant that resolves magnitude failure. Experiments confirm NADB resolves underfitting and outperforms prior methods, highlighting the value of coupling the interpolant path with the training objective. Acknowledgments. This paper is supported by the National Natural Science Foundation of China (Nos. U23B2012, 12431012). 
+
+## References 
+
+[1] Michael S. Albergo, Nicholas M. Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A unifying framework for flows and diffusions. JMLR , 26, 2025. 3 [2] Yochai Blau and Tomer Michaeli. The perception-distortion tradeoff. In CVPR , 2018. 2, 5 [3] Valentin De Bortoli, James Thornton, Jeremy Heng, and Ar-naud Doucet. Diffusion schrödinger bridge with applications to score-based generative modeling. In NeurIPS , 2021. 1, 2 [4] Antoni Buades, Bartomeu Coll, and Jean-Michel Morel. A non-local algorithm for image denoising. In CVPR , 2005. 1 [5] Tianrong Chen, Guan-Horng Liu, and Evangelos A. Theodorou. Likelihood training of schrödinger bridge using forward-backward sdes theory. In ICLR , 2022. 1, 2 [6] Kostadin Dabov, Alessandro Foi, Vladimir Katkovnik, and Karen Egiazarian. Image denoising by sparse 3-d transform-domain collaborative filtering. IEEE Transactions on image processing , 16, 2007. 1 [7] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Fei-Fei Li. Imagenet: A large-scale hierarchical image database. In CVPR , 2009. 6 [8] Prafulla Dhariwal and Alex Nichol. Diffusion models beat gans on image synthesis. In NeurIPS , 2021. 2, 6 [9] Chao Dong, Chen Change Loy, Kaiming He, and Xiaoou Tang. Image super-resolution using deep convolutional net-works. IEEE TPAMI , 38, 2016. 2 [10] Chao Dong, Chen Change Loy, and Xiaoou Tang. Acceler-ating the super-resolution convolutional neural network. In 
+
+ECCV , 2016. 2 [11] Zheng-Peng Duan, Jiawei Zhang, Xin Jin, Ziheng Zhang, Zheng Xiong, Dongqing Zou, Jimmy S. Ren, Chun-Le Guo, and Chongyi Li. Dit4sr: Taming diffusion transformer for real-world image super-resolution. In ICCV , 2025. 6 [12] William T. Freeman, Thouis R. Jones, and Egon C. Pasztor. Example-based super-resolution. IEEE Computer graphics and Applications , 22, 2002. 1 [13] Jinjin Gu, Haoming Cai, Haoyu Chen, Xiaoxing Ye, Jimmy Ren, and Chao Dong. Pipal: a large-scale image quality as-sessment dataset for perceptual image restoration. In ECCV ,2020. 2 [14] Jeremy Heng, Valentin De Bortoli, Arnaud Doucet, and James Thornton. Simulating diffusion bridges with score matching. Biometrika , 112, 2025. 2 [15] Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. ArXiv , 2022. 2 [16] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffu-sion probabilistic models. In NeurIPS , 2020. 1 [17] Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusion-based generative models. In NeurIPS , 2022. 2 [18] Bahjat Kawar, Michael Elad, Stefano Ermon, and Jiaming Song. Denoising diffusion restoration models. In NeurIPS ,2022. 1, 2, 6 [19] Dilip Krishnan and Rob Fergus. Fast image deconvolution using hyper-laplacian priors. In NeurIPS , 2009. 1 [20] Christian Ledig, Lucas Theis, Ferenc Huszar, Jose Caballero, Andrew Cunningham, Alejandro Acosta, Andrew Aitken, Alykhan Tejani, Johannes Totz, Zehan Wang, and Wenzhe Shi. Photo-realistic single image super-resolution using a generative adversarial network. In CVPR , 2017. 1, 2 [21] Guan-Horng Liu, Arash Vahdat, De-An Huang, Evange-los A. Theodorou, Weili Nie, and Anima Anandkumar. I 2SB: Image-to-image schrödinger bridge. In ICML , 2023. 1, 2, 3, 4, 5, 6, 7, 8 [22] Jiawei Liu, Qiang Wang, Huijie Fan, Yinong Wang, Yan-dong Tang, and Liangqiong Qu. Residual denoising diffu-sion models. In CVPR , 2024. 6 [23] Xingchao Liu, Lemeng Wu, Mao Ye, and Qiang Liu. Let us build bridges: Understanding and extending diffusion gener-ative models. ArXiv , 2022. 2 [24] Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver: A fast ode solver for diffusion probabilistic model sampling in around 10 steps. In NeurIPS ,2022. 2 [25] Alexander Nichol and Prafulla Dhariwal. Improved denois-ing diffusion probabilistic models. In ICML , 2021. 2 [26] Guy Ohayon, Tomer Michaeli, and Michael Elad. Posterior-mean rectified flow: Towards minimum MSE photo-realistic image restoration. In ICLR , 2025. 2 [27] William Peebles and Saining Xie. Scalable diffusion models with transformers. In ICCV , 2023. 2 [28] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical image segmentation. In MICCAI , 2015. 5 [29] Leonid I. Rudin, Stanley Osher, and Emad Fatemi. Nonlinear total variation based noise removal algorithms. Physica D: Nonlinear Phenomena , 60, 1992. 1 [30] Chitwan Saharia, William Chan, Huiwen Chang, Chris A. Lee, Jonathan Ho, Tim Salimans, David J. Fleet, and Mo-hammad Norouzi. Palette: Image-to-image diffusion mod-els. In ACM SIGGRAPH 2022 Conference Proceedings ,2022. 6, 7 [31] Simo Särkkä and Arno Solin. Applied Stochastic Differential Equations . Cambridge University Press, 2019. 2 [32] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denois-ing diffusion implicit models. In ICLR , 2021. 2, 3 [33] Jiaming Song, Arash Vahdat, Morteza Mardani, and Jan Kautz. Pseudoinverse-guided diffusion models for inverse problems. In ICLR , 2023. 6 [34] Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Ab-hishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equa-tions. In ICLR , 2021. 2 [35] Hebaixu Wang, Jing Zhang, Haoyang Chen, Haonan Guo, Di Wang, Jiayi Ma, and Bo Du. Residual diffusion bridge model for image restoration. ArXiv , 2025. 1, 6 [36] Xintao Wang, Ke Yu, Shixiang Wu, Jinjin Gu, Yihao Liu, Chao Dong, Chen Change Loy, Yu Qiao, and Xiaoou Tang. Esrgan: Enhanced super-resolution generative adversarial networks. In ECCV , 2018. 1, 2 [37] Yinhuai Wang, Jiwen Yu, and Jian Zhang. Zero-shot image restoration using denoising diffusion null-space model. In 
+
+ICLR , 2023. 1, 2, 6 [38] Yuang Wang, Siyeop Yoon, Pengfei Jin, Matthew Tivnan, Sifan Song, Zhennong Chen, Rui Hu, Li Zhang, Quanzheng Li, Zhiqiang Chen, and Dufan Wu. Implicit image-to-image schrödinger bridge for image restoration. PR , 165, 2025. 2, 3, 6 [39] Conghan Yue, Zhengwei Peng, Junlong Ma, Shiyan Du, Pengxu Wei, and Dongyu Zhang. Image restoration through generalized ornstein-uhlenbeck bridge. In ICML , 2024. 6 [40] Qinsheng Zhang and Yongxin Chen. Fast sampling of dif-fusion models with exponential integrator. In ICLR , 2023. 2[41] Linqi Zhou, Aaron Lou, Samar Khanna, and Stefano Ermon. Denoising diffusion bridge models. In ICLR , 2024. 2, 6 Resolving Endpoint Underfitting in Diffusion Bridges via Noise Alignment 
+
+# Supplementary Material 
+
+## 7. Sampling Procedure 
+
+Since the training objective enables the prediction of the ini-tial image X0 from any noisy state Xt, we design the corre-sponding sampling distribution to ensure that samples pro-gressively denoise along the interpolation path. Let {ti}Ni=0 
+
+represent a partition of the unit interval [0 , 1] , where t0 = 0 ,
+
+tN = 1 , and ti < t i+1 for all i = 0 , . . . , N . Our sam-pling framework operates by coordinating the use of two distinct conditional distributions: the standard reverse tran-sition p(Xt−1 | Xϵ
+
+> 0
+
+, X t) and the endpoint-conditioned dis-tribution p(Xt−1 | Xϵ
+
+> 0
+
+, ˆX0, X t). Specifically, we adopt a partitioned approach that applies different conditional dis-tributions over distinct temporal regions. The standard re-verse transition is used over the interval over the interval 
+
+[ti, t N ], while the endpoint-conditioned distribution is em-ployed over the complementary interval [t0, t i]. This for-mulation eliminates the intermediate step of solving for xϵ
+
+> 0
+
+from the network output ϵθ . We refer to this sampling method as a two-stage sampling strategy, implemented as follows: 
+
+7.1. The First Stage 
+
+We use Xti−1 ∼ p(Xti−1 | Xϵ
+
+> 0
+
+, X ti ) from t = 1 to t = ti.The conditional probability distribution can be expressed in its reparameterized form as: 
+
+Xti−1 = Xti − ϵθ ∆t + σtZ, (15) where σt =
+
+q
+
+[kt i−1(1 − ti−1)] 2 − kt αi−1t1−αi (1 − ti)2,
+
+∆t = tαi − tαi−1, ti−1 ≥ 1−α 
+
+> 2−α
+
+. It is important to note that this formulation is only valid within the interval [ 1−α 
+
+> 2−α
+
+, 1] ,which constitutes the fundamental rationale for our two-stage sampling approach. Derivation of Eq. (15) can be found in Sec. 7.3. 
+
+7.2. The Second Stage 
+
+The direct application of Eq. (15) over the interval [0 , 1−α 
+
+> 2−α
+
+]
+
+is prohibited due to the non-negativity requirement of its standard deviation term σt. To overcome this limitation, we introduce a hyperparameter w into the noise term of 
+
+Xti−1 ∼ p(Xti−1 | Xϵ
+
+> 0
+
+, ˆX0, X ti ) , yielding the modified expression: 
+
+Xti−1 = aϵ θ − bX ti + c ˆX0 + σwt Z, (16) where 
+
+a = tαi
+
+ w + tαi−1 − 1 − wt αi
+
+ ,b = tαi−1 − 1 − wt αi ,c = tαi−1 − wt αi ,σwt =
+
+q
+
+[kt i−1(1 − ti−1)] 2 − [kwt i(1 − ti)] 2.
+
+(17) It should be noted that Eq. (16) remains valid over the en-tire interval [0 , 1] . This allows the value of ti to be flexibly chosen (as long as ti ≥ 1−α 
+
+> 2−α
+
+) in order to determine the spe-cific subinterval over which Eq. (16) is applied. We set the partition point d between the two sampling stages to 1−α
+
+> 2−α
+
+by default. The hyperparameter w controls the magnitude of σt, thereby determining the amount of stochastic noise introduced over the interval [0 , t i]. When σt = 0 , the sam-pling process within this interval reduces to a deterministic trajectory. In our experiments, we set w = ti−1 
+
+> ti
+
+to evalu-ate the impact of varying noise levels on the final output. Derivation of Eq. (16) can be found in Sec. 7.3. 
+
+7.3. Derivation of Sampling Procedure 
+
+Proof. Our derivation leverages the reparameterization technique. For s < t , we define the process as: 
+
+Xs = Xt − Xt − Xϵ
+
+> 0
+
+tα ∆t + σtZ (18) 
+
+= ∆t
+
+tα Xϵ 
+
+> 0
+
++ tα − ∆t
+
+tα Xt + σtZ. (19) According to the calculation rules of reparameterization, the coefficients of Gaussian noise in the left and right equations are equal, and we obtain the following equations: 
+
+∆t
+
+tα = 1 − tα, (20) 
+
+[ks (1 − s)] 2 =
+
+ tα − ∆t
+
+tα · kt (1 − t)
+
+2
+
++ σ2 
+
+> t
+
+. (21) Solving this system yields ∆t = tα − sα and σt =q
+
+[ks (1 − s)] 2 − [ks αt1−α(1 − t)] 2.The non-negativity constraint σt ≥ 0 implies s ≥ 1−α 
+
+> 2−α
+
+,and thus d ≥ 1−α 
+
+> 2−α
+
+.For the second stage from t = d to t = 0,we introduce a hyperparameter w and define σwt =q
+
+[ks (1 − s)] 2 − [wkt (1 − t)] 2. Using reparameterization: 
+
+Xs = (1 − sα)Xϵ 
+
+> 0
+
++ sα ˆX0 + ks (1 − s)Z (22) 
+
+= (1 − sα)Xϵ 
+
+> 0
+
++ sα ˆX0 + σwt Z + wkt (1 − t)Z, 
+
+(23) Table 5. Comparison with PMRF in numerous image restoration tasks.                                                                    
+
+> Method JPEG Restoration 4×Super-Resolution Deblurring
+> QF NFE FID ↓PSNR ↑SSIM ↑LPIPS ↓Filter NFE FID ↓PSNR ↑SSIM ↑LPIPS ↓Kernel NFE FID ↓PSNR ↑SSIM ↑LPIPS ↓
+> PMRF 510 7.6 24.62 0.69 0.31 Pool 10 5.1 25.24 0.73 0.21 Uniform 10 6.6 27.84 0.82 0.20 NADB 6.9 24.45 0.69 0.30 5.3 24.75 0.71 0.23 4.8 27.70 0.81 0.18 PMRF 100 7.8 23.69 0.64 0.32 100 4.5 24.03 0.69 0.21 100 7.2 27.53 0.81 0.21 NADB 4.3 23.63 0.65 0.30 3.7 23.63 0.67 0.22 3.4 27.39 0.80 0.17
+
+and substituting the identity wkt (1 − t)Z = w[Xt − (1 −
+
+tα)Xϵ 
+
+> 0
+
+− tα ˆX0], we rearrange to express Xs in terms of Xt,
+
+X1 and Z:
+
+Xs = [ wt α − sα + 1] Xt + ( sα − wt α) ˆX0 + σwt Z (24) 
+
++ tα [sα − 1 + w(1 − tα)] · Xt − Xϵ
+
+> 0
+
+tα . (25) This completes the derivation. 
+
+## 8. Proof of Theorem 2 
+
+Theorem 3. Let ρ0 be the target distribution, ρ1 the de-graded distribution, and ˆρ0 the output distribution of the mean network Mϕ optimized via Eq. (11). The mean net-work reduces the distributional gap in the Wasserstein-2 sense: 
+
+W2(ρ0, ˆρ0) ≤ W2(ρ0, ρ 1). (26) 
+
+Proof. Given (X0, X 1) ∼ (ρ0, ρ 1) and ˆX0 = Mϕ(X1) = 
+
+E(X0 | X1), there exits: 
+
+E
+
+h
+
+∥X0 − ˆX0∥2i
+
+≤ E ∥X0 − X1∥2 . (27) Eq. (27) can be verified by expanding the square on the left-hand side. Using the definition of Wasserstein-2 distance and Eq. (27), we obtain: 
+
+W 22 (ρ0, ρ 1) = inf  
+
+> γ∈Π( ρ0,ρ 1)
+
+E(X0,X 1)∼γ
+
+∥X0 − X1∥2
+
+(28) 
+
+= E(X0,X 1)∼γ∗
+
+∥X0 − X1∥2 (29) 
+
+≥ E(X0,X 1)∼γ∗
+
+∥X0 − E(X0 | X1)∥2
+
+(30) 
+
+= E(X0, ˆX0)∼π∗
+
+h
+
+∥X0 − ˆX0∥2i
+
+(31) 
+
+≥ inf   
+
+> π∈Π( ρ0,ˆρ0)
+
+E(X0, ˆX0)∼π
+
+h
+
+∥X0 − ˆX0∥2i
+
+(32) 
+
+= W 22 (ρ0, ˆρ0) (33) 
+
+## 9. Hyperparameters in Eq. 5 
+
+This section outlines the selection of hyperparameters α and 
+
+k in Eq. (5). The parameter k controls the overall scale of the stochastic term. We calibrate k so that the maxi-mum amplitude of the stochastic term in Eq. (5) closely matches that of I2SB [21] in Eq. (2). This alignment follows the empirical setup of prior work, as neither our method nor I2SB [21] systematically investigates the effect of the stochastic term’s magnitude on generation quality. A com-prehensive analysis of this effect will be explored in future work. The value of α in the mean term is theoretically con-strained to the range (0 , 1) , based on noise alignment con-siderations. We empirically determine its optimal value through systematic experiments, with quantitative results presented in Tab. 6. Considering the performance across all metrics, we select α = 0 .4.
+
+## 10. Supplement the Experimental and Qualita-tive Results 
+
+10.1. Compare with PMRF 
+
+We conducted a systematic comparison between the NADB and the Flow Matching-based PMRF [26] method under three different types of noise, using identical network archi-tectures and strictly adhering to the original hyperparame-ters. As shown in Tab. 5, the PMRF [26] method exhibits instability at higher NFE values. This result underscores the advantage of the diffusion bridge approach and high-lights the importance of our research into the endpoint fit-ting problem. 
+
+Table 6. Hyperparameter tuning using JPEG restoration tasks, QF=5. 
+
+JPEG Restoration 
+
+NFE α FID ↓ PSNR ↑ SSIM ↑ LPIPS ↓
+
+10 0.3 8.2 24.60 0.70 0.30 0.4 6.9 24.45 0.69 0.30 0.5 7.1 24.44 0.69 0.30 100 0.3 4.5 23.76 0.66 0.30 0.4 4.3 23.63 0.65 0.30 0.5 4.4 23.56 0.64 0.31 Table 7. Comparisons with additional baselines.                                                         
+
+> (a) Deblurring, kernel=uniform (b) Edges2Handbags (256 ×256)
+> Method NFE FID ↓PSNR ↑SSIM ↑LPIPS ↓Method PSNR ↑SSIM ↑LPIPS ↓
+> I3SB 10 6.5 24.17 0.65 0.32 NADB 19.25 0.740 0.231 NADB 4.8 27.70 0.81 0.18 RDBM 19.26 0.738 0.224 I3SB 100 4.9 22.70 0.58 0.33 GOUB 16.58 0.700 0.288 NADB 3.4 27.39 0.80 0.17 RDDM 14.66 0.645 0.256
+> (c) Comparison on DrealSR dataset, NFE=40
+> Method LPIPS ↓MUSIQ ↑MANIQA ↑ClipIQA ↑LIQE ↑
+> NADB 0.315 71.480 0.483 0.576 3.610 DiT4SR 0.365 64.950 0.627 0.548 3.964
+
+10.2. Additional Results 
+
+Tab. 7 provides additional image restoration, image transla-tion, and super-resolution comparison experiments. Fig. 9 to 11 provide additional qualitative results on each restora-tion tasks, Fig. 12, 13 provide additional qualitative results on each translation tasks, and Fig. 14 provides additional examples comparing between NADB and I2SB w.r.t. vari-ous NFE sampling. Degraded Image  𝒕 = 𝟎 . 𝟕𝟓 𝒕 = 𝟏 (𝐢𝐧𝐩𝐮𝐭 ) 𝒕 = 𝟎 . 𝟓𝟎  𝒕 = 𝟎 . 𝟐𝟓  𝒕 = 𝟎 (𝐨𝐮𝐭𝐩𝐮𝐭 ) Reference Figure 9. Generative processes of NADB on JPEG restoration tasks. Top 4 rows : QF=5. Bottom 3 rows : QF=10. Degraded Image  𝒕 = 𝟏 (input)  𝒕 = 𝟎 . 𝟕𝟓  𝒕 = 𝟎 . 𝟓𝟎  𝒕 = 𝟎 . 𝟐𝟓  𝒕 = 𝟎 (output)  Reference Figure 10. Generative processes of NADB on deblurring tasks. Top 4 rows : Uniform kernel. Bottom 4 rows : Gaussian kernel. Degraded Image  𝒕 = 𝟏 (𝐢𝐧𝐩𝐮𝐭 ) 𝒕 = 𝟎 . 𝟓𝟎  𝒕 = 𝟎 . 𝟐𝟓 𝒕 = 𝟎 . 𝟕𝟓  𝒕 = 𝟎 (output)  Reference Figure 11. Generative processes of NADB on 4 × super-resolution tasks. Top 4 rows : Pool kernel. Bottom 4 rows : Bicubic kernel. Figure 12. Generate results on edges2handbags dataset with resolution 64 × 64 .
+
+Figure 13. Generate results on edges2shoes dataset with resolution 64 × 64 .Degraded Image  NADB, NFE=100 I2SB, NFE=100  NADB, NFE=10 I2SB, NFE=10  Reference Figure 14. Additional qualitative comparison between NADB and I2SB. Top 4 rows : Deblurring tasks with gaussian kernel. Bottom 4 rows : 4 × super-resolution tasks with pool kernel.
