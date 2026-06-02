@@ -8,9 +8,14 @@
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+  const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com';
   const DEFAULT_DEEPSEEK_CHAT_MODELS = [
     'deepseek-v4-flash',
     'deepseek-v4-pro',
+  ];
+  const DEFAULT_OPENAI_CHAT_MODELS = [
+    'gpt-4o-mini',
+    'gpt-4.1-mini',
   ];
   const DEEPSEEK_V4_MAX_OUTPUT_TOKENS = 393216;
   const DEEPSEEK_PRESETS = Object.freeze({
@@ -113,10 +118,11 @@
     const safeSecret = secret && typeof secret === 'object' ? secret : {};
     const llmProvider = safeSecret.llmProvider || {};
     const explicit = normalizeText(llmProvider.type || llmProvider.provider || '').toLowerCase();
-    if (explicit === 'deepseek') {
-      return 'deepseek';
+    if (['deepseek', 'openai', 'compatible'].includes(explicit)) {
+      return explicit;
     }
-    return 'deepseek';
+    const summarized = resolveSummaryLLM(safeSecret) || {};
+    return inferChatApiProfile(summarized.baseUrl, summarized.model);
   };
 
   const getDeepSeekPreset = (key) => {
@@ -140,7 +146,13 @@
     if (normalizedModel.startsWith('deepseek-')) {
       return 'deepseek';
     }
-    return 'unsupported';
+    if (/(^|\/\/)api\.openai\.com(?:$|\/)/i.test(normalizedBaseUrl)) {
+      return 'openai';
+    }
+    if (/^(gpt-|o\d|chatgpt-)/i.test(normalizedModel)) {
+      return 'openai';
+    }
+    return 'compatible';
   };
 
   const resolveJsonResponseMode = ({ baseUrl, model, preferSchema = true }) => {
@@ -161,7 +173,7 @@
   };
 
   const shouldUseXApiKeyHeader = ({ baseUrl, model }) => {
-    return true;
+    return inferChatApiProfile(baseUrl, model) === 'deepseek';
   };
 
   const buildStreamingChatPayload = ({ baseUrl, model, messages }) => {
@@ -198,7 +210,9 @@
 
   return {
     DEFAULT_DEEPSEEK_BASE_URL,
+    DEFAULT_OPENAI_BASE_URL,
     DEFAULT_DEEPSEEK_CHAT_MODELS,
+    DEFAULT_OPENAI_CHAT_MODELS,
     DEEPSEEK_PRESETS,
     normalizeText,
     normalizeBaseUrlForStorage,

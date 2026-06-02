@@ -281,20 +281,36 @@ def prepare_rerank_fallback(input_path: str, output_path: str) -> bool:
 
 def resolve_summary_step_env() -> dict[str, str]:
     env = os.environ.copy()
-    summary_api_key = _read_env_text("SUMMARY_API_KEY", "DEEPSEEK_API_KEY")
-    summary_base_url = _read_env_text("SUMMARY_BASE_URL", "DEEPSEEK_BASE_URL")
+    summary_api_key = _read_env_text("LLM_API_KEY", "SUMMARY_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY")
+    summary_base_url = _read_env_text("LLM_BASE_URL", "SUMMARY_BASE_URL", "OPENAI_BASE_URL", "DEEPSEEK_BASE_URL")
     summary_model = _read_env_text("SUMMARY_MODEL", "DEEPSEEK_MODEL")
+    llm_model = _read_env_text("LLM_MODEL")
+    if llm_model and "/" in llm_model and not summary_model:
+        summary_model = llm_model.split("/", 1)[1].strip()
 
     if summary_api_key:
+        env["LLM_API_KEY"] = summary_api_key
         env["SUMMARY_API_KEY"] = summary_api_key
         env["DEEPSEEK_API_KEY"] = summary_api_key
     if summary_base_url:
+        env["LLM_BASE_URL"] = summary_base_url
         env["LLM_PRIMARY_BASE_URL"] = summary_base_url
         env["SUMMARY_BASE_URL"] = summary_base_url
         env["DEEPSEEK_BASE_URL"] = summary_base_url
     if summary_model:
         env["SUMMARY_MODEL"] = summary_model
         env["DEEPSEEK_MODEL"] = summary_model
+        if not llm_model:
+            provider = "deepseek"
+            lowered_base = summary_base_url.lower()
+            lowered_model = summary_model.lower()
+            if "api.openai.com" in lowered_base or lowered_model.startswith(("gpt-", "o1", "o3", "o4", "chatgpt-")):
+                provider = "openai"
+            elif summary_base_url and "deepseek.com" not in lowered_base and not lowered_model.startswith("deepseek-"):
+                provider = "compatible"
+            env["LLM_MODEL"] = f"{provider}/{summary_model}"
+        else:
+            env["LLM_MODEL"] = llm_model
     return env
 
 

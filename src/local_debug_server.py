@@ -53,6 +53,16 @@ def build_secret_env(secret: dict[str, Any] | None) -> dict[str, str]:
 
     env: dict[str, str] = {}
     if summarized or first_chat:
+        provider = "deepseek"
+        lowered_base = base_url.lower()
+        lowered_model = model.lower()
+        if "api.openai.com" in lowered_base or lowered_model.startswith(("gpt-", "o1", "o3", "o4", "chatgpt-")):
+            provider = "openai"
+        elif base_url and "deepseek.com" not in lowered_base and not lowered_model.startswith("deepseek-"):
+            provider = "compatible"
+        env["LLM_API_KEY"] = api_key
+        env["LLM_BASE_URL"] = base_url
+        env["LLM_MODEL"] = f"{provider}/{model}" if model else ""
         env["SUMMARY_API_KEY"] = api_key
         env["DEEPSEEK_API_KEY"] = api_key
         env["SUMMARY_BASE_URL"] = base_url

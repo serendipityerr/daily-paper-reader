@@ -93,7 +93,17 @@ function testInferProviderType() {
         model: 'other-model',
       },
     }),
-    'deepseek',
+    'compatible',
+  );
+  assert.equal(
+    inferProviderType({
+      summarizedLLM: {
+        apiKey: 'sk',
+        baseUrl: 'https://api.openai.com',
+        model: 'gpt-4o-mini',
+      },
+    }),
+    'openai',
   );
 }
 
@@ -118,8 +128,8 @@ function testInferChatApiProfile() {
     inferChatApiProfile('https://api.deepseek.com', 'deepseek-v4-flash'),
     'deepseek',
   );
-  assert.equal(inferChatApiProfile('https://example.com/v1', 'other-model'), 'unsupported');
-  assert.equal(inferChatApiProfile('https://example.com/v1', 'other-model'), 'unsupported');
+  assert.equal(inferChatApiProfile('https://api.openai.com', 'gpt-4o-mini'), 'openai');
+  assert.equal(inferChatApiProfile('https://example.com/v1', 'other-model'), 'compatible');
 }
 
 function testResolveJsonResponseMode() {
@@ -170,8 +180,8 @@ function testResolveMaxOutputTokens() {
 function testShouldUseXApiKeyHeader() {
   assert.equal(
     shouldUseXApiKeyHeader({
-      baseUrl: 'https://example.com/v1',
-      model: 'other-model',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-v4-flash',
     }),
     true,
   );
@@ -180,7 +190,7 @@ function testShouldUseXApiKeyHeader() {
       baseUrl: 'https://example.com/v1',
       model: 'other-model',
     }),
-    true,
+    false,
   );
 }
 
@@ -210,6 +220,19 @@ function testBuildStreamingChatPayload() {
       messages: [{ role: 'user', content: 'hi' }],
       stream: true,
       max_tokens: 393216,
+    },
+  );
+
+  assert.deepEqual(
+    buildStreamingChatPayload({
+      baseUrl: 'https://api.openai.com',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hi' }],
+    }),
+    {
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
     },
   );
 

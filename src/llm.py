@@ -10,7 +10,8 @@ import requests
 统一的 LLM 客户端封装。
 
 提供商/模型命名规则：'provider/model'，provider 大小写不敏感，model 保留大小写与路径。
-当前运行链路仅支持 DeepSeek；本地 reranker 不走 LLM API。
+当前运行链路支持 DeepSeek、OpenAI 官方以及 OpenAI-compatible Chat Completions 接口；
+本地 reranker 不走 LLM API。
 """
 
 # 单次实验级别的全局 token 统计（需由调用方在实验开始前手动 reset）
@@ -37,6 +38,7 @@ GLOBAL_TOKENS = {
 GLOBAL_TIME_SECONDS: float = 0.0
 
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com"
 
 
 def reset_global_tokens():
@@ -778,6 +780,11 @@ class DeepSeekClient(LLMClient):
         super().__init__(api_key=api_key, model=model, base_url=base_url)
 
 
+class OpenAICompatibleClient(LLMClient):
+    def __init__(self, api_key: str, model: str, base_url: str):
+        super().__init__(api_key=api_key, model=model, base_url=base_url)
+
+
 def parse_provider_model(model_str: str) -> Tuple[str, str]:
     """
     解析模型字符串为 (provider, model)。
@@ -815,7 +822,25 @@ class ClientFactory:
         if provider == 'deepseek':
             base_url = base_url or DEFAULT_DEEPSEEK_BASE_URL
             return DeepSeekClient(api_key=api_key or os.getenv('DEEPSEEK_API_KEY', ''), model=model, base_url=base_url)
-        raise ValueError(f"当前仅支持 DeepSeek API，请使用 'deepseek/模型名'，当前 provider={provider}")
+        if provider == 'openai':
+            base_url = base_url or DEFAULT_OPENAI_BASE_URL
+            return OpenAICompatibleClient(
+                api_key=api_key or os.getenv('OPENAI_API_KEY', ''),
+                model=model,
+                base_url=base_url,
+            )
+        if provider in ('compatible', 'openai_compatible', 'custom'):
+            if not base_url:
+                raise ValueError("OpenAI-compatible provider 需要设置 LLM_BASE_URL")
+            return OpenAICompatibleClient(
+                api_key=api_key or os.getenv('OPENAI_API_KEY', ''),
+                model=model,
+                base_url=base_url,
+            )
+        raise ValueError(
+            "当前支持 provider: deepseek/openai/compatible，"
+            f"请使用 'provider/模型名'，当前 provider={provider}"
+        )
 
     @staticmethod
     def from_config(_config: dict | None = None):

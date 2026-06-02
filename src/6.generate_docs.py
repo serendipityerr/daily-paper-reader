@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Tuple
 
 import fitz  # PyMuPDF
 import requests
-from llm import DeepSeekClient
+from llm import ClientFactory, LLMClient
 
 SCRIPT_DIR = os.path.dirname(__file__)
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
@@ -34,21 +34,42 @@ CONFIG_FILE = os.path.join(ROOT_DIR, "config.yaml")
 TODAY_STR = str(os.getenv("DPR_RUN_DATE") or "").strip() or datetime.now(timezone.utc).strftime("%Y%m%d")
 RANGE_DATE_RE = re.compile(r"^(\d{8})-(\d{8})$")
 
-# LLM 配置（使用 llm.py 内的 DeepSeek 客户端）
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY") or os.getenv("SUMMARY_API_KEY")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL") or os.getenv("SUMMARY_BASE_URL") or "https://api.deepseek.com"
-DEEPSEEK_MODEL = os.getenv("SUMMARY_MODEL") or os.getenv("DEEPSEEK_MODEL") or "deepseek-v4-flash"
+# LLM 配置（兼容 DeepSeek / OpenAI / OpenAI-compatible）
+SUMMARY_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("SUMMARY_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
+SUMMARY_BASE_URL = os.getenv("LLM_BASE_URL") or os.getenv("SUMMARY_BASE_URL") or os.getenv("OPENAI_BASE_URL") or os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com"
+SUMMARY_MODEL = os.getenv("SUMMARY_MODEL") or os.getenv("DEEPSEEK_MODEL") or "deepseek-v4-flash"
 STEP6_STRUCTURED_MAX_TOKENS = 16 * 1024
 
 
-def create_llm_client() -> DeepSeekClient | None:
-    if not DEEPSEEK_API_KEY:
+def _infer_provider(base_url: str, model: str) -> str:
+    lowered_base = str(base_url or "").lower()
+    lowered_model = str(model or "").lower()
+    if "api.openai.com" in lowered_base or lowered_model.startswith(("gpt-", "o1", "o3", "o4", "chatgpt-")):
+        return "openai"
+    if "deepseek.com" in lowered_base or lowered_model.startswith("deepseek-"):
+        return "deepseek"
+    return "compatible"
+
+
+def create_llm_client() -> LLMClient | None:
+    if not SUMMARY_API_KEY:
         return None
-    return DeepSeekClient(
-        api_key=DEEPSEEK_API_KEY,
-        model=DEEPSEEK_MODEL,
-        base_url=DEEPSEEK_BASE_URL,
-    )
+    old_env = {
+        "LLM_API_KEY": os.getenv("LLM_API_KEY"),
+        "LLM_BASE_URL": os.getenv("LLM_BASE_URL"),
+        "LLM_MODEL": os.getenv("LLM_MODEL"),
+    }
+    os.environ["LLM_API_KEY"] = SUMMARY_API_KEY
+    os.environ["LLM_BASE_URL"] = SUMMARY_BASE_URL
+    os.environ["LLM_MODEL"] = os.getenv("LLM_MODEL") or f"{_infer_provider(SUMMARY_BASE_URL, SUMMARY_MODEL)}/{SUMMARY_MODEL}"
+    try:
+        return ClientFactory.from_env()
+    finally:
+        for key, value in old_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 LLM_CLIENT = create_llm_client()
@@ -57,7 +78,7 @@ DEFAULT_DOCS_CONCURRENCY = 4
 
 
 def call_llm_text(
-    client: DeepSeekClient,
+    client: LLMClient,
     messages: List[Dict[str, str]],
     temperature: float,
     max_tokens: int,
@@ -74,7 +95,7 @@ def call_llm_text(
 
 
 def call_llm_structured_json(
-    client: DeepSeekClient,
+    client: LLMClient,
     messages: List[Dict[str, str]],
     schema_name: str,
     schema: Dict[str, Any],
@@ -292,7 +313,7 @@ def fetch_arxiv_paper_meta(arxiv_id: str) -> Dict[str, Any]:
 def translate_title_and_abstract_to_zh(
     title: str,
     abstract: str,
-    client: DeepSeekClient | None = None,
+    client: LLMClient | None = None,
 ) -> Tuple[str, str]:
     active_client = client or LLM_CLIENT
     if active_client is None:
@@ -537,11 +558,11 @@ def generate_deep_summary(
     md_file_path: str,
     txt_file_path: str,
     max_retries: int = 3,
-    client: DeepSeekClient | None = None,
+    client: LLMClient | None = None,
 ) -> str | None:
     active_client = client or LLM_CLIENT
     if active_client is None:
-        log("[WARN] 未配置 DEEPSEEK_API_KEY 或 SUMMARY_API_KEY，跳过精读总结。")
+        log("[WARN] 未配置 LLM_API_KEY / SUMMARY_API_KEY / DEEPSEEK_API_KEY，跳过精读总结。")
         return None
     if not os.path.exists(md_file_path):
         return None
@@ -613,7 +634,7 @@ def generate_glance_overview(
     title: str,
     abstract: str,
     max_retries: int = 3,
-    client: DeepSeekClient | None = None,
+    client: LLMClient | None = None,
 ) -> str | None:
     """
     生成论文速览（包含 TLDR、Motivation、Method、Result、Conclusion）。

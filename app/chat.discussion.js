@@ -83,7 +83,13 @@ window.PrivateDiscussionChat = (function () {
     ) {
       return 'deepseek';
     }
-    return 'unsupported';
+    if (
+      /(^|\/\/)api\.openai\.com(?:$|\/)/i.test(normalizedBaseUrl)
+      || /^(gpt-|o\d|chatgpt-)/i.test(normalizedModel)
+    ) {
+      return 'openai';
+    }
+    return 'compatible';
   };
 	  const buildStreamingChatPayload = (baseUrl, model, messages) => {
 	    const utils = window.DPRLLMConfigUtils || {};

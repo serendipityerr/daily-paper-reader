@@ -10,18 +10,19 @@ from typing import Any, Dict, List
 
 import yaml  # type: ignore
 
-from llm import DeepSeekClient
+from llm import ClientFactory, LLMClient
 
 SCRIPT_DIR = os.path.dirname(__file__)
 CONFIG_FILE = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "config.yaml"))
 
 MODEL_NAME = (
-  os.getenv("DEEPSEEK_REWRITE_MODEL")
+  os.getenv("LLM_REWRITE_MODEL")
+  or os.getenv("DEEPSEEK_REWRITE_MODEL")
   or os.getenv("SUMMARY_MODEL")
   or os.getenv("DEEPSEEK_MODEL")
   or "deepseek-v4-flash"
 )
-BASE_URL = os.getenv("DEEPSEEK_BASE_URL") or os.getenv("SUMMARY_BASE_URL") or "https://api.deepseek.com"
+BASE_URL = os.getenv("LLM_BASE_URL") or os.getenv("SUMMARY_BASE_URL") or os.getenv("OPENAI_BASE_URL") or os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com"
 
 def log(message: str) -> None:
   ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -112,7 +113,7 @@ def build_rewrite_prompt(query: str) -> List[Dict[str, str]]:
   ]
 
 
-def call_llm_json(client: DeepSeekClient, messages: List[Dict[str, str]], schema_name: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+def call_llm_json(client: LLMClient, messages: List[Dict[str, str]], schema_name: str, schema: Dict[str, Any]) -> Dict[str, Any]:
   resp = client.chat_structured(
     messages,
     schema_name=schema_name,
@@ -146,9 +147,9 @@ def main() -> None:
     if not os.path.exists(CONFIG_FILE):
         raise FileNotFoundError(f"找不到 config.yaml：{CONFIG_FILE}")
 
-    api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("SUMMARY_API_KEY")
+    api_key = os.getenv("LLM_API_KEY") or os.getenv("SUMMARY_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
-        raise RuntimeError("缺少 DEEPSEEK_API_KEY 或 SUMMARY_API_KEY 环境变量，无法调用 DeepSeek。")
+        raise RuntimeError("缺少 LLM_API_KEY / SUMMARY_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY 环境变量，无法调用 LLM。")
 
     group_start("Step 0.0 - load config")
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -159,7 +160,29 @@ def main() -> None:
     keywords = subs.get("keywords") or []
     llm_queries = subs.get("llm_queries") or []
 
-    client = DeepSeekClient(api_key=api_key, model=MODEL_NAME, base_url=BASE_URL)
+    provider = "deepseek"
+    lowered_base = BASE_URL.lower()
+    lowered_model = MODEL_NAME.lower()
+    if "api.openai.com" in lowered_base or lowered_model.startswith(("gpt-", "o1", "o3", "o4", "chatgpt-")):
+      provider = "openai"
+    elif BASE_URL and "deepseek.com" not in lowered_base and not lowered_model.startswith("deepseek-"):
+      provider = "compatible"
+    old_env = {
+      "LLM_API_KEY": os.getenv("LLM_API_KEY"),
+      "LLM_BASE_URL": os.getenv("LLM_BASE_URL"),
+      "LLM_MODEL": os.getenv("LLM_MODEL"),
+    }
+    os.environ["LLM_API_KEY"] = api_key
+    os.environ["LLM_BASE_URL"] = BASE_URL
+    os.environ["LLM_MODEL"] = os.getenv("LLM_MODEL") or f"{provider}/{MODEL_NAME}"
+    try:
+      client = ClientFactory.from_env()
+    finally:
+      for key, value in old_env.items():
+        if value is None:
+          os.environ.pop(key, None)
+        else:
+          os.environ[key] = value
 
     related_schema = {
       "type": "object",

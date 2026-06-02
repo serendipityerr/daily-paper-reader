@@ -40,10 +40,29 @@ class LocalDebugEnvTest(unittest.TestCase):
 
         self.assertEqual(env["DEEPSEEK_API_KEY"], "sk-new-key")
         self.assertEqual(env["SUMMARY_API_KEY"], "sk-new-key")
+        self.assertEqual(env["LLM_API_KEY"], "sk-new-key")
+        self.assertEqual(env["LLM_MODEL"], "deepseek/deepseek-v4-flash")
+        self.assertEqual(env["LLM_BASE_URL"], "https://api.deepseek.com")
         self.assertEqual(env["DEEPSEEK_BASE_URL"], "https://api.deepseek.com")
         self.assertEqual(env["RERANK_PROFILE"], "public-zwwen-rerank")
         self.assertEqual(env["PUBLIC_RERANK_API_KEY"], "")
         self.assertEqual(env["PUBLIC_RERANK_API_BASE_URL"], "https://zwwen.online/rerank")
+
+    def test_build_secret_env_maps_openai_provider_to_llm_env(self):
+        env = self.mod.build_secret_env(
+            {
+                "summarizedLLM": {
+                    "apiKey": "sk-openai",
+                    "baseUrl": "https://api.openai.com",
+                    "model": "gpt-4o-mini",
+                },
+            }
+        )
+
+        self.assertEqual(env["LLM_API_KEY"], "sk-openai")
+        self.assertEqual(env["LLM_BASE_URL"], "https://api.openai.com")
+        self.assertEqual(env["LLM_MODEL"], "openai/gpt-4o-mini")
+        self.assertEqual(env["SUMMARY_MODEL"], "gpt-4o-mini")
 
     def test_update_env_file_replaces_old_keys_preserves_comments_and_clears_stale_key(self):
         with tempfile.TemporaryDirectory() as tmp:
