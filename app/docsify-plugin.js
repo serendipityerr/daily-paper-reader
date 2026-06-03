@@ -934,7 +934,16 @@ window.$docsify = {
 
       const normalizeLatexForRendering = (markdown) => {
         if (!markdown) return '';
-        return String(markdown)
+        const displayBlocks = [];
+        const protectDisplayBlock = (match) => {
+          const idx = displayBlocks.length;
+          displayBlocks.push(match);
+          return `%%DPR_LATEX_DISPLAY_${idx}%%`;
+        };
+
+        let text = String(markdown)
+          .replace(/\^_([A-Za-z])/g, '^*_$1')
+          .replace(/,;/g, ';')
           .replace(
             /\\mathcal\{([A-Za-z])\}\s*\{\\text\{([A-Za-z0-9_-]+)\}\}/g,
             '\\mathcal{$1}_{\\text{$2}}',
@@ -943,6 +952,22 @@ window.$docsify = {
             /\$([^$\n]*?)\|([^|$\n]+?)\|(_\{?\d+\}?\^\d+)(，并设置)(\\[A-Za-z][^$\n]*?)\$/g,
             '$$$1\\lVert$2\\rVert$3$$$4 $$$5$$',
           );
+
+        text = text.replace(
+          /^\s*\[\s*([^\n]*\\[A-Za-z][^\n]*)\s*\]\s*$/gm,
+          '\\[\n$1\n\\]',
+        );
+        text = text
+          .replace(/\$\$[\s\S]*?\$\$/g, protectDisplayBlock)
+          .replace(/\\\[[\s\S]*?\\\]/g, protectDisplayBlock);
+        text = text.replace(
+          /(^|[^\\])\(([^()\n]*(?:\\[A-Za-z]|[A-Za-z]\^\*?_|[A-Za-z]_[A-Za-z0-9])[^()\n]*)\)/g,
+          '$1\\($2\\)',
+        );
+        return text.replace(
+          /%%DPR_LATEX_DISPLAY_(\d+)%%/g,
+          (_, idx) => displayBlocks[parseInt(idx, 10)] || '',
+        );
       };
 
       const escapeHtml = (str) => {
@@ -4489,12 +4514,12 @@ window.$docsify = {
 
         const { meta, body } = parseFrontMatter(content);
         if (!meta) {
-          return content;
+          return normalizeLatexForRendering(content);
         }
 
         // 生成论文页面 HTML + 正文
         const paperHtml = renderPaperFromMeta(meta);
-        return paperHtml + body;
+        return paperHtml + normalizeLatexForRendering(body);
       });
 
       const refreshDeferredPageEnhancements = () => {

@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 
 function setupDocsifyPlugin() {
+  delete global.window;
   global.location = {
     hash: '',
     hostname: 'localhost',
@@ -55,13 +56,16 @@ function setupDocsifyPlugin() {
   require(pluginPath);
 
   const hook = {
-    beforeEach: noop,
+    beforeEach: (fn) => {
+      global.window.__DPR_TEST_BEFORE_EACH__ = fn;
+      window.__DPR_TEST_BEFORE_EACH__ = fn;
+    },
     doneEach: noop,
   };
   const vm = {
     route: {
-      file: 'README.md',
-      path: '/',
+      file: '202606/02/test-paper.md',
+      path: '/202606/02/test-paper',
     },
   };
   window.$docsify.plugins[0](hook, vm);
@@ -112,8 +116,36 @@ function testMarkdownRendererNormalizesCommonLatexTypos() {
   );
 }
 
+function testDocsifyBeforeEachNormalizesPaperBodyLatex() {
+  setupDocsifyPlugin();
+
+  const rendered = window.__DPR_TEST_BEFORE_EACH__(
+    [
+      '---',
+      'title: "IRBridge"',
+      '---',
+      '其状态可统一重参数化为：',
+      '[ x^\\circ_i = f^\\circ_i x_0 + b^\\circ_i + \\sigma^\\circ_i \\epsilon_1,\\quad x^_j = f^_j x_0 + b^_j + \\sigma^_j \\epsilon_2 ]',
+      '则状态 (x^\\circ_i)（恢复桥）与 (x^_j)（生成扩散）之间的转移可表达为：',
+      '[ x^_j = \\alpha \\cdot x^\\circ_i + \\beta \\cdot x_0 + \\gamma + \\sigma \\epsilon,\\quad \\alpha = \\sqrt{\\frac{(\\sigma^_j)^2 - \\sigma^2}{(\\sigma^\\circ_i)^2}},; \\beta = f^_j - \\alpha f^\\circ_i,; \\gamma = b^*_j - \\alpha b^\\circ_i ]',
+      '其中 (\\sigma) 是可控噪声系数。',
+    ].join('\n'),
+  );
+
+  assert.match(rendered, /\\\[\s*x\^\\circ_i/);
+  assert.match(rendered, /x\^\*_j = f\^\*_j x_0/);
+  assert.match(rendered, /\\\(\s*x\^\\circ_i\s*\\\)/);
+  assert.match(rendered, /\\\(\s*x\^\*_j\s*\\\)/);
+  assert.match(rendered, /\\sigma\^\*_j/);
+  assert.doesNotMatch(rendered, /(^|[^\\])\[\s*x\^/);
+  assert.doesNotMatch(rendered, /\([^)]+x\^/);
+  assert.doesNotMatch(rendered, /\^_/);
+  assert.doesNotMatch(rendered, /,;/);
+}
+
 testRenderMathSupportsCommonLatexDelimiters();
 testMarkdownRendererProtectsBackslashLatexDelimiters();
 testMarkdownRendererNormalizesCommonLatexTypos();
+testDocsifyBeforeEachNormalizesPaperBodyLatex();
 
 console.log('docsify latex rendering tests passed');
