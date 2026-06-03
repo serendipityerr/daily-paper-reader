@@ -97,7 +97,23 @@ function testMarkdownRendererProtectsBackslashLatexDelimiters() {
   assert.doesNotMatch(rendered, /%%LATEX_/);
 }
 
+function testMarkdownRendererNormalizesCommonLatexTypos() {
+  setupDocsifyPlugin();
+
+  const rendered = window.DPRMarkdown.renderMarkdownWithTables(
+    '$$ \\mathcal{L} = \\lambda_w \\mathcal{L}{\\text{wire}} + \\lambda_b \\mathcal{L}_{\\text{bg}} $$\n' +
+      '其中 $\\mathcal{L}{\\text{wire}} = \\frac{1}{\\sum_i m_i} \\sum_i m_i |\\hat{y}_i - y_i|_2^2，并设置\\lambda_w \\gg \\lambda_b$，强制模型关注导丝纹理。',
+  );
+
+  assert.match(rendered, /\\mathcal\{L\}_\{\\text\{wire\}\}/);
+  assert.match(
+    rendered,
+    /\$\\mathcal\{L\}_\{\\text\{wire\}\} = \\frac\{1\}\{\\sum_i m_i\} \\sum_i m_i \\lVert\\hat\{y\}_i - y_i\\rVert_2\^2\$，并设置 \$\\lambda_w \\gg \\lambda_b\$/,
+  );
+}
+
 testRenderMathSupportsCommonLatexDelimiters();
 testMarkdownRendererProtectsBackslashLatexDelimiters();
+testMarkdownRendererNormalizesCommonLatexTypos();
 
 console.log('docsify latex rendering tests passed');

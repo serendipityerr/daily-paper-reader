@@ -932,6 +932,19 @@ window.$docsify = {
         return result.join('\n');
       };
 
+      const normalizeLatexForRendering = (markdown) => {
+        if (!markdown) return '';
+        return String(markdown)
+          .replace(
+            /\\mathcal\{([A-Za-z])\}\s*\{\\text\{([A-Za-z0-9_-]+)\}\}/g,
+            '\\mathcal{$1}_{\\text{$2}}',
+          )
+          .replace(
+            /\$([^$\n]*?)\|([^|$\n]+?)\|(_\{?\d+\}?\^\d+)(，并设置)(\\[A-Za-z][^$\n]*?)\$/g,
+            '$$$1\\lVert$2\\rVert$3$$$4 $$$5$$',
+          );
+      };
+
       const escapeHtml = (str) => {
         return str
           .replace(/&/g, '&amp;')
@@ -945,7 +958,7 @@ window.$docsify = {
       // 其他内容仍交给 marked 渲染。
       // 同时保护 LaTeX 公式块，避免被 marked 误解析。
       const renderMarkdownWithTables = (markdown) => {
-        const text = normalizeTables(markdown || '');
+        const text = normalizeLatexForRendering(normalizeTables(markdown || ''));
 
         // 保护 LaTeX 公式：先用占位符替换，渲染后再恢复
         const latexBlocks = [];
@@ -1106,6 +1119,7 @@ window.$docsify = {
       // 导出给外部模块（例如聊天模块）复用
       window.DPRMarkdown = {
         KATEX_DELIMITERS,
+        normalizeLatexForRendering,
         normalizeTables,
         renderMarkdownWithTables,
         renderMathInEl,
