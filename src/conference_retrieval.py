@@ -48,6 +48,12 @@ CONFERENCE_DEFAULTS: Dict[str, Dict[str, str]] = {
         "bm25_rpc": "match_icml_openreview_papers_bm25",
         "vector_rpc_exact": "match_icml_openreview_papers_exact",
     },
+    "iclr": {
+        "label": "ICLR",
+        "papers_table": "iclr_openreview_papers",
+        "bm25_rpc": "match_iclr_openreview_papers_bm25",
+        "vector_rpc_exact": "match_iclr_openreview_papers_exact",
+    },
     "neurips": {
         "label": "NeurIPS",
         "papers_table": "neurips_openreview_papers",
@@ -58,6 +64,7 @@ CONFERENCE_DEFAULTS: Dict[str, Dict[str, str]] = {
 
 CONFERENCE_ALIASES = {
     "icml": "icml",
+    "iclr": "iclr",
     "nips": "neurips",
     "neurips": "neurips",
 }
@@ -125,7 +132,7 @@ def parse_conferences(value: str) -> List[str]:
     for raw in parse_csv_items(value):
         key = CONFERENCE_ALIASES.get(raw.strip().lower())
         if not key:
-            raise ValueError(f"不支持的会议：{raw}，当前仅支持 ICML / NIPS(NeurIPS)。")
+            raise ValueError(f"不支持的会议：{raw}，当前仅支持 ICLR / ICML / NIPS(NeurIPS)。")
         if key not in seen:
             seen.add(key)
             out.append(key)

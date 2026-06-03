@@ -25,6 +25,16 @@ class GenerateDocsMetaParseTest(unittest.TestCase):
                 def __init__(self, *args, **kwargs):
                     pass
 
+            class DummyLLMClient:
+                pass
+
+            class DummyClientFactory:
+                @staticmethod
+                def from_env():
+                    return None
+
+            llm_stub.ClientFactory = DummyClientFactory
+            llm_stub.LLMClient = DummyLLMClient
             llm_stub.DeepSeekClient = DummyDeepSeekClient
             llm_stub.resolve_max_output_tokens = lambda default=393216: default
             sys.modules["llm"] = llm_stub
@@ -236,6 +246,41 @@ class GenerateDocsMetaParseTest(unittest.TestCase):
         self.assertIn("30-70个中文字符", prompt)
         self.assertIn("问题背景→核心方法→关键结果→贡献意义", prompt)
         self.assertNotIn("每个字段一句话概括", prompt)
+
+    def test_generate_deep_summary_prompt_requires_katex_safe_latex(self):
+        captured = {}
+
+        def fake_call_llm_text(client, messages, **kwargs):
+            captured["client"] = client
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return "（完）"
+
+        explicit_client = object()
+        original_call = self.mod.call_llm_text
+        self.mod.call_llm_text = fake_call_llm_text
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                md_path = Path(d) / "paper.md"
+                txt_path = Path(d) / "paper.txt"
+                md_path.write_text("---\ntitle: Test\n---\n## Abstract\nabstract", encoding="utf-8")
+                txt_path.write_text("formula text", encoding="utf-8")
+                out = self.mod.generate_deep_summary(str(md_path), str(txt_path), client=explicit_client)
+        finally:
+            self.mod.call_llm_text = original_call
+
+        self.assertEqual(out, "（完）")
+        self.assertIs(captured["client"], explicit_client)
+        prompt = captured["messages"][-1]["content"]
+        self.assertIn("KaTeX", prompt)
+        self.assertIn("\\( ... \\)", prompt)
+        self.assertIn("\\[ ... \\]", prompt)
+        self.assertIn("不要使用普通圆括号或方括号包裹公式", prompt)
+        self.assertIn("x^*_j", prompt)
+        self.assertIn("\\mathcal{L}_{\\text{wire}}", prompt)
+        self.assertIn("\\lVert x \\rVert_2^2", prompt)
+        self.assertIn("x^_j", prompt)
+        self.assertIn("\\mathcal{L}{\\text{wire}}", prompt)
 
     def test_generate_glance_uses_explicit_client(self):
         explicit_client = object()

@@ -19,6 +19,7 @@ const {
   __setRunSelectionState,
   __initializeConferenceChoices,
   __getSelectedConferenceYearPairs,
+  __applyCustomConferenceYears,
   runSelectedQuickFetch,
 } = global.window.SubscriptionsManager.__test;
 
@@ -157,16 +158,31 @@ function testConferenceCurrentYearDisabledForPendingSources() {
   assert.equal(isConferenceYearSelectable('NeurIPS', currentYear), false);
   assert.equal(isConferenceYearSelectable('NIPS', currentYear), false);
   assert.equal(isConferenceYearSelectable('ICML', currentYear), false);
+  assert.equal(isConferenceYearSelectable('ICLR', currentYear), false);
   assert.equal(isConferenceYearSelectable('NeurIPS', previousYear), true);
   assert.equal(isConferenceYearSelectable('NIPS', previousYear), true);
   assert.equal(isConferenceYearSelectable('ICML', previousYear), true);
+  assert.equal(isConferenceYearSelectable('ICLR', previousYear), true);
 }
 
-function testConferenceDefaultYearOnlySelects2025() {
+function testConferenceDefaultYearSelectsPreviousYearForAllSupportedConferences() {
   __setRunSelectionState({ conferencePairs: [] });
   __initializeConferenceChoices();
   const pairs = __getSelectedConferenceYearPairs().sort();
-  assert.deepEqual(pairs, ['ICML:2025', 'NeurIPS:2025']);
+  const previousYear = String(new Date().getFullYear() - 1);
+  assert.deepEqual(pairs, [
+    `ICLR:${previousYear}`,
+    `ICML:${previousYear}`,
+    `NeurIPS:${previousYear}`,
+  ]);
+}
+
+function testCustomConferenceYearsAcceptsHistoricalYear() {
+  __setRunSelectionState({ conferencePairs: [] });
+  const applied = __applyCustomConferenceYears('2023');
+  const pairs = __getSelectedConferenceYearPairs().sort();
+  assert.equal(applied, true);
+  assert.deepEqual(pairs, ['ICLR:2023', 'ICML:2023', 'NeurIPS:2023']);
 }
 
 function testQuickRunUnsavedMessageClearsAfterSave() {
@@ -284,11 +300,12 @@ async function testQuickFetchIncludesAnySelectedProfile() {
 (async () => {
   testNormalizeSubscriptionsAddsBiorxivBackend();
   testNormalizeSubscriptionsPreservesCustomBiorxivBackendFields();
-  testNormalizeSubscriptionsConvertsChineseTagToEnglishFallback();
-  await testRunProfileQuickFetchPassesProfileTagToWorkflow();
-  testConferenceCurrentYearDisabledForPendingSources();
-  testConferenceDefaultYearOnlySelects2025();
-  testQuickRunUnsavedMessageClearsAfterSave();
+testNormalizeSubscriptionsConvertsChineseTagToEnglishFallback();
+await testRunProfileQuickFetchPassesProfileTagToWorkflow();
+testConferenceCurrentYearDisabledForPendingSources();
+testConferenceDefaultYearSelectsPreviousYearForAllSupportedConferences();
+testCustomConferenceYearsAcceptsHistoricalYear();
+testQuickRunUnsavedMessageClearsAfterSave();
   testConferenceRunDisabledWhenUnsaved();
   await testQuickFetchIncludesAnySelectedProfile();
 

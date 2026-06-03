@@ -1021,6 +1021,7 @@ window.DPRWorkflowRunner = (function () {
     const text = String(value || '').trim();
     const lower = text.toLowerCase();
     if (lower === 'nips' || lower === 'neurips') return 'NeurIPS';
+    if (lower === 'iclr') return 'ICLR';
     if (lower === 'icml') return 'ICML';
     return '';
   };

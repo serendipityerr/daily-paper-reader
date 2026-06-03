@@ -94,13 +94,15 @@ window.SubscriptionsManager = (function () {
   ].join('\n');
 
   const QUICK_RUN_CONFERENCES = [
-    'NeurIPS',
+    'ICLR',
     'ICML',
+    'NeurIPS',
   ];
   const CONFERENCES_WITH_PENDING_CURRENT_YEAR = new Set([
+    'ICLR',
+    'ICML',
     'NIPS',
     'NEURIPS',
-    'ICML',
   ]);
 
   const normalizeText = (v) => String(v || '').trim();
@@ -457,7 +459,7 @@ window.SubscriptionsManager = (function () {
 
   const initializeConferenceChoices = () => {
     if (!selectedConferenceYearPairs.size) {
-      const defaultYear = '2025';
+      const defaultYear = String(new Date().getFullYear() - 1);
       QUICK_RUN_CONFERENCES.forEach((conference) => {
         if (isConferenceYearSelectable(conference, defaultYear)) {
           selectedConferenceYearPairs.add(`${conference}:${defaultYear}`);
@@ -483,7 +485,41 @@ window.SubscriptionsManager = (function () {
     return true;
   };
 
+  const parseConferenceYearsInput = (value) => {
+    const years = [];
+    const seen = new Set();
+    normalizeText(value)
+      .split(/[\s,，、;；]+/)
+      .forEach((item) => {
+        const year = parseInt(item, 10);
+        if (!Number.isFinite(year) || year < 2000 || year > 2100 || seen.has(year)) return;
+        seen.add(year);
+        years.push(String(year));
+      });
+    return years;
+  };
+
+  const applyCustomConferenceYears = (value) => {
+    const years = parseConferenceYearsInput(value);
+    let changed = false;
+    years.forEach((year) => {
+      QUICK_RUN_CONFERENCES.forEach((conference) => {
+        if (!isConferenceYearSelectable(conference, year)) return;
+        const key = `${conference}:${year}`;
+        if (selectedConferenceYearPairs.has(key)) return;
+        selectedConferenceYearPairs.add(key);
+        changed = true;
+      });
+    });
+    if (changed) {
+      renderConferenceChoiceButtons();
+      refreshQuickRunButtons();
+    }
+    return changed;
+  };
+
   const renderConferenceChoiceButtons = () => {
+    if (!document || typeof document.getElementById !== 'function') return;
     const conferenceWrap = document.getElementById('arxiv-admin-conference-choice-group');
     if (conferenceWrap) {
       conferenceWrap.innerHTML = QUICK_RUN_CONFERENCES
@@ -1244,6 +1280,22 @@ window.SubscriptionsManager = (function () {
               <div class="dpr-choice-field">
                 <div class="chat-quick-run-title">会议年份</div>
                 <div id="arxiv-admin-conference-choice-group" class="dpr-conference-choice-grid"></div>
+                <div class="dpr-conference-custom-years">
+                  <input
+                    id="arxiv-admin-conference-custom-years"
+                    class="dpr-conference-custom-years-input"
+                    type="text"
+                    inputmode="numeric"
+                    placeholder="输入历史年份，如 2023 或 2022,2023"
+                  >
+                  <button
+                    id="arxiv-admin-conference-apply-years-btn"
+                    class="arxiv-tool-btn"
+                    type="button"
+                  >
+                    添加年份
+                  </button>
+                </div>
               </div>
               <button
                 id="arxiv-admin-quick-run-conference-run-btn"
@@ -1593,6 +1645,34 @@ window.SubscriptionsManager = (function () {
       });
     }
 
+    const conferenceCustomYearsInput = document.getElementById('arxiv-admin-conference-custom-years');
+    const conferenceApplyYearsBtn = document.getElementById('arxiv-admin-conference-apply-years-btn');
+    const applyCustomYearsFromInput = () => {
+      if (!conferenceCustomYearsInput) return;
+      const applied = applyCustomConferenceYears(conferenceCustomYearsInput.value || '');
+      const conferenceMsgEl = document.getElementById('arxiv-admin-conference-run-msg');
+      if (!conferenceMsgEl) return;
+      if (applied) {
+        conferenceMsgEl.textContent = '已添加历史会议年份。';
+        conferenceMsgEl.style.color = '#080';
+      } else {
+        conferenceMsgEl.textContent = '请输入有效年份，当前年份暂未接入。';
+        conferenceMsgEl.style.color = '#c00';
+      }
+    };
+    if (conferenceApplyYearsBtn && !conferenceApplyYearsBtn._bound) {
+      conferenceApplyYearsBtn._bound = true;
+      conferenceApplyYearsBtn.addEventListener('click', applyCustomYearsFromInput);
+    }
+    if (conferenceCustomYearsInput && !conferenceCustomYearsInput._bound) {
+      conferenceCustomYearsInput._bound = true;
+      conferenceCustomYearsInput.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        applyCustomYearsFromInput();
+      });
+    }
+
     if (resetContentBtn && !resetContentBtn._bound) {
       resetContentBtn._bound = true;
       resetContentBtn.addEventListener('click', () => {
@@ -1670,6 +1750,7 @@ window.SubscriptionsManager = (function () {
       },
       __initializeConferenceChoices: () => initializeConferenceChoices(),
       __getSelectedConferenceYearPairs: () => Array.from(selectedConferenceYearPairs),
+      __applyCustomConferenceYears: (value) => applyCustomConferenceYears(value),
       runSelectedQuickFetch,
       refreshQuickRunButtons,
       clearQuickRunUnsavedMessage,

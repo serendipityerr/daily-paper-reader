@@ -25,6 +25,9 @@ class ConferenceRetrievalTest(unittest.TestCase):
     def test_parse_conferences_supports_nips_alias_and_dedupes(self):
         self.assertEqual(self.mod.parse_conferences("NIPS,ICML,neurips"), ["neurips", "icml"])
 
+    def test_parse_conferences_supports_iclr(self):
+        self.assertEqual(self.mod.parse_conferences("ICLR,icml"), ["iclr", "icml"])
+
     def test_parse_years_keeps_user_order_and_dedupes(self):
         self.assertEqual(self.mod.parse_years("2025,2024,2025"), [2025, 2024])
 
@@ -54,6 +57,22 @@ class ConferenceRetrievalTest(unittest.TestCase):
         self.assertEqual(backend["papers_table"], "icml_openreview_papers")
         self.assertEqual(backend["bm25_rpc"], "match_icml_openreview_papers_bm25")
         self.assertEqual(backend["vector_rpc_exact"], "match_icml_openreview_papers_exact")
+
+    def test_resolve_iclr_backend_falls_back_to_legacy_supabase(self):
+        backend = self.mod.resolve_conference_backend(
+            {
+                "supabase": {
+                    "url": "https://example.supabase.co",
+                    "anon_key": "anon",
+                    "schema": "public",
+                }
+            },
+            "iclr",
+        )
+        self.assertEqual(backend["url"], "https://example.supabase.co")
+        self.assertEqual(backend["papers_table"], "iclr_openreview_papers")
+        self.assertEqual(backend["bm25_rpc"], "match_iclr_openreview_papers_bm25")
+        self.assertEqual(backend["vector_rpc_exact"], "match_iclr_openreview_papers_exact")
 
     def test_save_result_writes_only_tagged_papers(self):
         paper = self.mod.PaperHit(id="p1", title="Paper", pdf_url="https://openreview.net/pdf?id=p1", best_score=1.0)
