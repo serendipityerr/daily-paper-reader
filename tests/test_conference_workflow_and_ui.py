@@ -49,6 +49,7 @@ class ConferenceWorkflowAndUiTest(unittest.TestCase):
         self.assertIn("requirements-paper-media.txt", text)
         self.assertIn("PaperCropper smoke OK", text)
         self.assertIn("Probe conference table visibility", text)
+        self.assertIn("resolve_conference_backend", text)
         self.assertIn("source=like.", text)
         self.assertIn("anon-visible", text)
         self.assertIn("python src/conference_pipeline.py", text)
