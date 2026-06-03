@@ -87,7 +87,10 @@ class SupabaseInitAndSyncTest(unittest.TestCase):
         self.assertIn('FETCH_DAYS="9"', text)
         self.assertIn('ARGS=(--fetch-days "$FETCH_DAYS")', text)
         self.assertIn('MAINTAIN_TARGET="${{ github.event.inputs.maintain_target }}"', text)
+        self.assertIn("github.event_name == 'workflow_dispatch'", text)
+        self.assertIn("github.event_name == 'schedule'", text)
         self.assertIn('python src/maintain/neurips.py --years "$YEARS" --skip-cleanup', text)
+        self.assertIn('python src/maintain/iclr.py --years "$YEARS" --skip-cleanup', text)
         self.assertIn('python src/maintain/icml.py --years "$YEARS" --skip-cleanup', text)
 
     def test_deduplicate_rows_by_id(self):
