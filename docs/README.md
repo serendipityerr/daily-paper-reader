@@ -6,31 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-02
-- 运行时间：2026-06-02 21:42:02 UTC
+- 最新运行日期：2026-06-03
+- 运行时间：2026-06-03 21:45:34 UTC
 - 运行状态：成功
 - 本次总论文数：3
-- 精读区：2
-- 速读区：1
+- 精读区：0
+- 速读区：3
 
 ### 今日简报（AI）
-今日聚焦医学影像生成与细胞动力学，精读两项高分研究：扩散薛定谔桥实现解剖可行的冠脉导丝合成，以及可一步预测细胞动态与扰动的细胞世界模型Chreode。  
-若对医疗Al或系统生物学感兴趣，这两篇分别展现了生成模型在精密介入模拟与生物过程简洁建模上的突破。  
-普通读者可先了解扩散模型如何保证医学合成结果的解剖合理性，再关注细胞模型如何用“世界模型”思想简化复杂动态预测。
-- 详情：[/202606/02/README](/202606/02/README)
+今天速读3篇扩散模型与最优传输前沿论文，覆盖熵弱最优传输动力学、流形扩散模型及量子系综生成。  
+最值得关注的是7分论文《Projected McKean--Vlasov Dynamics》提出的熵弱最优传输投影动力学方法，以及6分论文《Riemannian Diffusion Models》用物理信息神经网络实现一般流形上的扩散。  
+建议普通读者从第一篇入手，理解最优传输的熵正则化新视角；后两篇适合对扩散模型与量子、几何领域交叉感兴趣的读者进一步探索。
+- 详情：[/202606/03/README](/202606/03/README)
 
 ### 精读区论文标签
-1. [VDSB-GWSyn: Diffusion Schrödinger Bridge for Controllable and Anatomically Feasible Guidewire Synthesis in Coronary Angiography](/202606/02/2606.00109v1-vdsb-gwsyn-diffusion-schrdinger-bridge-for-controllable-and-anatomically-feasible-guidewire-synthesis-in-coronary-angiography)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：使用扩散薛定谔桥模型进行条件合成
-2. [Chreode: A Cell World Model for One-Step Temporal Dynamics and Perturbation Prediction](/202606/02/2605.28111v1-chreode-a-cell-world-model-for-one-step-temporal-dynamics-and-perturbation-prediction)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：明确提到解决ODE/薛定谔桥问题以预测细胞状态转变。
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Learning Energy-Based Models from Stochastic Interpolants using Spatiotemporal Differences](/202606/02/2605.26850v1-learning-energy-based-models-from-stochastic-interpolants-using-spatiotemporal-differences)  
+1. [Projected McKean--Vlasov Dynamics for Entropic Weak Optimal Transport](/202606/03/2605.30560v1-projected-mckean--vlasov-dynamics-for-entropic-weak-optimal-transport)  
    标签：评分：7.0/10、query:diff-bridge
-   evidence：随机插值桥接数据与噪声分布，用于基于能量的模型训练
+   evidence：熵最优传输与薛定谔桥问题相关
+2. [Riemannian Diffusion Models on General Manifolds via Physics-Informed Neural Networks](/202606/03/2605.31106v1-riemannian-diffusion-models-on-general-manifolds-via-physics-informed-neural-networks)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：热核近似可用于流形上的扩散桥
+3. [Generating quantum ensembles via reverse-time quantum diffusions](/202606/03/2606.03848v1-generating-quantum-ensembles-via-reverse-time-quantum-diffusions)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：反向时间量子扩散生成目标系综
 
 
 <div class="dpr-home-promo-card">
