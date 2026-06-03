@@ -2,6 +2,7 @@
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 
 * Conference Papers
+  * ICLR 2024 <!--dpr-conference:iclr-2024-->
   * ICML 2025 <!--dpr-conference:icml-2025-->
     * diff-bridge <!--dpr-conference-topic:icml-2025:query-diff-bridge-->
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/conference/icml-2025/openreview-icml-2025-uqcfovxb67-unidb-a-unified-diffusion-bridge-framework-via-stochastic-optimal-control" data-sidebar-item="{&quot;title&quot;: &quot;UniDB: A Unified Diffusion Bridge Framework via Stochastic Optimal Control&quot;, &quot;link&quot;: &quot;https://openreview.net/forum?id=uqCfoVXb67&quot;, &quot;score&quot;: &quot;10.0&quot;, &quot;selection_source&quot;: &quot;conference_retrieval&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;diff-bridge&quot;}], &quot;evidence&quot;: &quot;通过随机最优控制统一扩散桥模型，实现固定端点传输&quot;}">UniDB: A Unified Diffusion Bridge Framework via Stochastic Optimal Control</a>
