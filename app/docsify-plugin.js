@@ -886,14 +886,18 @@ window.$docsify = {
           console.error('Zotero meta update failed:', e);
         });
 
+      const KATEX_DELIMITERS = [
+        { left: '$$', right: '$$', display: true },
+        { left: '\\[', right: '\\]', display: true },
+        { left: '$', right: '$', display: false },
+        { left: '\\(', right: '\\)', display: false },
+      ];
+
       // 公共工具：在指定元素上渲染公式
       const renderMathInEl = (el) => {
         if (!window.renderMathInElement || !el) return;
         window.renderMathInElement(el, {
-          delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false },
-          ],
+          delimiters: KATEX_DELIMITERS,
           throwOnError: false,
         });
       };
@@ -954,8 +958,22 @@ window.$docsify = {
           return `%%LATEX_BLOCK_${idx}%%`;
         });
 
+        // 保护块级公式 \[...\]
+        protectedText = protectedText.replace(/\\\[([\s\S]*?)\\\]/g, (match) => {
+          const idx = latexBlocks.length;
+          latexBlocks.push(match);
+          return `%%LATEX_BLOCK_${idx}%%`;
+        });
+
         // 保护行内公式 $...$（不跨行）
         protectedText = protectedText.replace(/\$([^\$\n]+?)\$/g, (match) => {
+          const idx = latexBlocks.length;
+          latexBlocks.push(match);
+          return `%%LATEX_INLINE_${idx}%%`;
+        });
+
+        // 保护行内公式 \(...\)（不跨行）
+        protectedText = protectedText.replace(/\\\(([^\n]*?)\\\)/g, (match) => {
           const idx = latexBlocks.length;
           latexBlocks.push(match);
           return `%%LATEX_INLINE_${idx}%%`;
@@ -1087,6 +1105,7 @@ window.$docsify = {
 
       // 导出给外部模块（例如聊天模块）复用
       window.DPRMarkdown = {
+        KATEX_DELIMITERS,
         normalizeTables,
         renderMarkdownWithTables,
         renderMathInEl,
