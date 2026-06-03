@@ -232,6 +232,60 @@ jobs:
             exit 0
           fi
 
+          echo "[INFO] Probe conference table visibility: conference=${CONF_TOKEN} years=${YEAR_TOKEN}"
+          CONF_TOKEN="$CONF_TOKEN" YEAR_TOKEN="$YEAR_TOKEN" python - <<'PY'
+          import os
+          import sys
+          import urllib.parse
+          import urllib.request
+
+          sys.path.insert(0, "src")
+          from conference_retrieval import CONFERENCE_DEFAULTS, load_config, parse_conferences, parse_years
+          from source_config import get_source_backend
+
+          config = load_config("config.yaml")
+          conferences = parse_conferences(os.environ.get("CONF_TOKEN", ""))
+          years = parse_years(os.environ.get("YEAR_TOKEN", ""))
+          for conference in conferences:
+              backend = get_source_backend(config, conference)
+              defaults = CONFERENCE_DEFAULTS[conference]
+              url = str(backend.get("url") or "").rstrip("/")
+              api_key = str(backend.get("anon_key") or "")
+              table = str(backend.get("papers_table") or defaults["papers_table"])
+              if not url or not api_key:
+                  print(f"[INFO] Probe conference table visibility: {conference} missing url/anon_key")
+                  continue
+              for year in years:
+                  source_like = f"{defaults['label']}-{year}*"
+                  query = urllib.parse.urlencode({
+                      "select": "id,title,source,published",
+                      "source": f"like.{source_like}",
+                      "limit": "3",
+                  })
+                  endpoint = f"{url}/rest/v1/{table}?{query}"
+                  req = urllib.request.Request(
+                      endpoint,
+                      headers={
+                          "apikey": api_key,
+                          "Authorization": f"Bearer {api_key}",
+                          "Accept-Profile": str(backend.get("schema") or "public"),
+                      },
+                  )
+                  try:
+                      with urllib.request.urlopen(req, timeout=20) as resp:
+                          body = resp.read().decode("utf-8", "replace")
+                          print(
+                              f"[INFO] Probe conference table visibility: "
+                              f"{conference.upper()} {year} anon-visible status={resp.status} "
+                              f"source=like.{source_like} sample={body[:500]}"
+                          )
+                  except Exception as exc:
+                      print(
+                          f"[WARN] Probe conference table visibility failed: "
+                          f"{conference.upper()} {year} source=like.{source_like}: {exc}"
+                      )
+          PY
+
           ARGS=(
             --conferences "$CONFERENCE"
             --years "$YEARS"
