@@ -87,6 +87,7 @@ class SupabaseInitAndSyncTest(unittest.TestCase):
         self.assertIn('FETCH_DAYS="9"', text)
         self.assertIn('ARGS=(--fetch-days "$FETCH_DAYS")', text)
         self.assertIn('MAINTAIN_TARGET="${{ github.event.inputs.maintain_target }}"', text)
+        self.assertIn('python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.5.1+cpu"', text)
         self.assertIn("github.event_name == 'workflow_dispatch'", text)
         self.assertIn("github.event_name == 'schedule'", text)
         self.assertIn('python src/maintain/neurips.py --years "$YEARS" --skip-cleanup', text)
