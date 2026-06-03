@@ -3,7 +3,7 @@
 -- ============================================================
 --
 -- 用途：
--- - 让前端使用 config.yaml 中的 Supabase anon key 读取 ICML / NeurIPS 会议论文。
+-- - 让前端使用 config.yaml 中的 Supabase anon key 读取 ICLR / ICML / NeurIPS 会议论文。
 -- - 修复 REST 查询返回 200 [] 的问题：RLS 开启后，没有 SELECT policy 时 anon 看不到行。
 --
 -- 安全边界：
@@ -15,11 +15,13 @@
 begin;
 
 alter table public.icml_openreview_papers enable row level security;
+alter table public.iclr_openreview_papers enable row level security;
 alter table public.neurips_openreview_papers enable row level security;
 
 grant usage on schema public to anon, authenticated;
 
 grant select on table public.icml_openreview_papers to anon, authenticated;
+grant select on table public.iclr_openreview_papers to anon, authenticated;
 grant select on table public.neurips_openreview_papers to anon, authenticated;
 
 drop policy if exists "public read icml openreview papers" on public.icml_openreview_papers;
@@ -40,6 +42,15 @@ using (
   source ~ '^NeurIPS-[0-9]{4}-(Accepted|Public|Rejected-Public|Withdrawn-Public)$'
 );
 
+drop policy if exists "public read iclr openreview papers" on public.iclr_openreview_papers;
+create policy "public read iclr openreview papers"
+on public.iclr_openreview_papers
+for select
+to anon, authenticated
+using (
+  source ~ '^ICLR-[0-9]{4}-(Accepted|Public|Rejected-Public|Withdrawn-Public)$'
+);
+
 grant execute on function public.match_icml_openreview_papers_exact(vector, int, timestamptz, timestamptz)
 to anon, authenticated;
 
@@ -50,6 +61,12 @@ grant execute on function public.match_neurips_openreview_papers_exact(vector, i
 to anon, authenticated;
 
 grant execute on function public.match_neurips_openreview_papers_bm25(text, int, timestamptz, timestamptz)
+to anon, authenticated;
+
+grant execute on function public.match_iclr_openreview_papers_exact(vector, int, timestamptz, timestamptz)
+to anon, authenticated;
+
+grant execute on function public.match_iclr_openreview_papers_bm25(text, int, timestamptz, timestamptz)
 to anon, authenticated;
 
 commit;
@@ -65,5 +82,9 @@ commit;
 --   -H "Authorization: Bearer $SUPABASE_ANON_KEY"
 --
 -- curl "$SUPABASE_URL/rest/v1/neurips_openreview_papers?select=id,title,source&source=like.NeurIPS-2025*&limit=1" \
+--   -H "apikey: $SUPABASE_ANON_KEY" \
+--   -H "Authorization: Bearer $SUPABASE_ANON_KEY"
+--
+-- curl "$SUPABASE_URL/rest/v1/iclr_openreview_papers?select=id,title,source&source=like.ICLR-2024*&limit=1" \
 --   -H "apikey: $SUPABASE_ANON_KEY" \
 --   -H "Authorization: Bearer $SUPABASE_ANON_KEY"

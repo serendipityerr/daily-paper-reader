@@ -36,6 +36,11 @@ class ConferenceRetrievalTest(unittest.TestCase):
         self.assertEqual(start.isoformat(), "2025-01-01T00:00:00+00:00")
         self.assertEqual(end.isoformat(), "2026-01-01T00:00:00+00:00")
 
+    def test_source_label_matches_conference_year_without_published_date(self):
+        row = {"source": "ICLR-2024-Accepted", "published": "2023-09-28T00:00:00+00:00"}
+        self.assertTrue(self.mod.row_matches_conference_year(row, "iclr", 2024))
+        self.assertFalse(self.mod.row_matches_conference_year(row, "iclr", 2023))
+
     def test_clone_queries_for_conference_does_not_mutate_original(self):
         queries = [{"query_text": "test", "paper_sources": ["arxiv"]}]
         cloned = self.mod.clone_queries_for_conference(queries, "icml")

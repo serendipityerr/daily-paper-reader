@@ -12,6 +12,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -164,6 +165,19 @@ def year_window(year: int) -> Tuple[datetime, datetime]:
         datetime(int(year), 1, 1, tzinfo=timezone.utc),
         datetime(int(year) + 1, 1, 1, tzinfo=timezone.utc),
     )
+
+
+def row_matches_conference_year(row: Dict[str, Any], conference_key: str, year: int) -> bool:
+    label = CONFERENCE_DEFAULTS[conference_key]["label"].lower()
+    source = str(row.get("source") or "").strip().lower()
+    if not source:
+        return False
+    source_tokens = [item for item in re.split(r"[^a-z0-9]+", source) if item]
+    return label in source_tokens and str(int(year)) in source_tokens
+
+
+def filter_rows_by_conference_year(rows: List[Dict[str, Any]], conference_key: str, year: int) -> List[Dict[str, Any]]:
+    return [row for row in rows if row_matches_conference_year(row, conference_key, year)]
 
 
 def build_years_token(years: Iterable[int]) -> str:
@@ -337,7 +351,6 @@ def build_result_for_queries(
             if not backend.get("url") or not backend.get("anon_key"):
                 raise RuntimeError(f"{CONFERENCE_DEFAULTS[conference_key]['label']} 缺少 Supabase url/anon_key。")
             for year in years:
-                start_dt, end_dt = year_window(year)
                 label = CONFERENCE_DEFAULTS[conference_key]["label"]
                 if mode == "bm25":
                     rows, msg = match_papers_by_bm25(
@@ -347,9 +360,6 @@ def build_result_for_queries(
                         query_text=q_text,
                         match_count=top_k,
                         schema=str(backend.get("schema") or "public"),
-                        start_dt=start_dt,
-                        end_dt=end_dt,
-                        time_fields=("published",),
                     )
                 else:
                     raw_embedding = query.get("query_embedding")
@@ -368,13 +378,13 @@ def build_result_for_queries(
                         query_embedding=query_embedding,
                         match_count=top_k,
                         schema=str(backend.get("schema") or "public"),
-                        start_dt=start_dt,
-                        end_dt=end_dt,
-                        time_fields=("published",),
                     )
+                raw_row_count = len(rows)
+                rows = filter_rows_by_conference_year(rows, conference_key, year)
                 log(
                     f"[Supabase Conference {mode}] query={q_idx}/{len(queries)} "
-                    f"tag={query.get('tag') or ''} conference={label} year={year} | {msg}"
+                    f"tag={query.get('tag') or ''} conference={label} year={year} "
+                    f"source_filtered={len(rows)}/{raw_row_count} | {msg}"
                 )
                 total_rpc_hits += len(rows)
                 for row in rows:

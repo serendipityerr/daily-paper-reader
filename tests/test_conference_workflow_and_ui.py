@@ -109,6 +109,17 @@ class ConferenceWorkflowAndUiTest(unittest.TestCase):
         self.assertNotIn("dpr-run-confirm", css)
         self.assertNotIn("runConferenceMaintain(conf, years)", manager)
 
+    def test_conference_anon_policy_includes_iclr(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        sql = (root / "sql" / "enable_conference_anon_read_policies.sql").read_text(encoding="utf-8")
+
+        self.assertIn("alter table public.iclr_openreview_papers enable row level security", sql)
+        self.assertIn("grant select on table public.iclr_openreview_papers to anon, authenticated", sql)
+        self.assertIn("public read iclr openreview papers", sql)
+        self.assertIn("^ICLR-[0-9]{4}", sql)
+        self.assertIn("grant execute on function public.match_iclr_openreview_papers_exact", sql)
+        self.assertIn("grant execute on function public.match_iclr_openreview_papers_bm25", sql)
+
     def test_local_debug_uses_browser_config_override(self):
         root = pathlib.Path(__file__).resolve().parents[1]
         server = (root / "src" / "local_debug_server.py").read_text(encoding="utf-8")
