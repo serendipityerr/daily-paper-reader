@@ -1,0 +1,1314 @@
+Title: A New Perspective on Reverse Diffusion for Monte Carlo Sampling
+
+URL Source: https://arxiv.org/pdf/2606.04357v1
+
+Published Time: Thu, 04 Jun 2026 00:34:21 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# A New Perspective on Reverse Diffusion for Monte Carlo Sampling 
+
+## Jairon H. N. Batista FGV EMAp Rio de Janeiro, Brazil 
+
+## jairon.batista@fgv.edu.br 
+
+## Fl´ avio B. Gon¸ calves UFMG and FGV EMAp Rio de Janeiro, Brazil 
+
+## fbgoncalves@ufmg.br 
+
+## Yuri F. Saporito FGV EMAp Rio de Janeiro, Brazil 
+
+## yuri.saporito@fgv.br 
+
+## Rodrigo S. Targino FGV EMAp Rio de Janeiro, Brazil 
+
+## rodrigo.targino@fgv.br 
+
+Abstract 
+
+This paper introduces a novel perspective on the use of reverse diffusion processes for sampling from unnormalized densities. The central idea is to embed the target density as the marginal at the initial time of a suitably constructed diffusion process evolving over a finite horizon. In contrast to existing approaches, the proposed methodology involves neither time discretization error nor score function es-timation, so that Monte Carlo variability is the only source of approximation. A key theoretical result characterizes the Radon-Nikodym derivative of the reverse diffusion transition distribution with respect to that of an Ornstein-Uhlenbeck (OU) process. This representation provides a tractable change-of-measure formulation and serves as the foundation for two distinct classes of Monte Carlo algorithms. The first class approximates the reverse transition distribution via a sequence of pseudo-marginal Metropolis-Hastings MCMC algorithms. The resulting scheme produces an approximate i.i.d. sample from the target dis-tribution and is fully parallelizable, as trajectories can be generated independently. The second class consists of MCMC algorithms targeting the joint law of the whole diffusion path in [0 , T ], for a suitably chosen horizon T . The proposed samplers combine three types of updates. One update simulates the diffusion forward in time according to an OU dynamics, conditional on its initial value. The remaining two update the backward component via Metropolis-type steps: one conditions on the terminal value at time T and the other one does not. In both cases, acceptance probabilities are implemented using Barker-type Bernoulli factory constructions. The proposed methods perform particularly well in the presence of multimodality and remain effective for targets with complex dependence structures, providing a scalable and efficient alternative to the widely used random-walk Metropolis algorithm. 
+
+# 1 Introduction 
+
+Monte Carlo methods have become indispensable tools in modern Bayesian statistics, providing practical means to approximate complex integrals and to explore multi-dimensional posterior distributions that resist analytical treatment. They bridge rigorous theory and applied computation across a wide range of disciplines, including genetics, neuroscience, image reconstruction, spatial analysis, and machine learning Liu (2001); Robert and Casella (2004). Over the past decades, this has motivated the development of a broad family of simulation-based methods, with particular emphasis on Markov chain Monte Carlo (MCMC) (Gamerman and Lopes, 2006; Brooks et al., 2011) and Sequential Monte Carlo (SMC) (Doucet et al., 2001; Chopin et al., 2020) algorithms. While these methodologies have considerably expanded the scope of feasible inference, they still face substantial challenges when the target distribution is highly multimodal or exhibits strong posterior dependence among components – features that frequently arise in realistic models encountered in contemporary applications. Standard Markov chain Monte Carlo algorithms such as Gibbs sampling and random-walk Metropolis-Hastings are well known to perform poorly when the target distribution is multimodal or exhibits strong 1
+
+> arXiv:2606.04357v1 [stat.CO] 3 Jun 2026
+
+posterior dependence (ex. highly correlated coordinates). In multimodal settings, local proposals make it difficult for the chain to move between distant modes, leading to metastability and extremely slow mixing times. Likewise, when coordinates are strongly correlated, component-wise Gibbs updates and isotropic random-walk proposals tend to explore the posterior along “wrong” directions, resulting in highly persistent autocorrelations and large effective sample size penalties. To address these issues, the literature has proposed a range of more sophisticated algorithms. Tempering-based methods, such as parallel tempering and sim-ulated tempering, introduce auxiliary temperatures to flatten the target and encourage mode switching, at the cost of running multiple chains and tuning temperature ladders (Swendsen and Wang, 1986; Geyer, 1991; Neal, 1996). Closely related ideas arise in annealing and bridging approaches, including annealed impor-tance sampling and bridge sampling (Neal, 2001; Gelman and Meng, 1998). Population-based Monte Carlo methods provide another strategy by evolving a collection of particles through a sequence of intermediate distributions (Capp´ e et al., 2004). Sequential Monte Carlo methods offer a natural framework for imple-menting such schemes, allowing particles to propagate through tempered distributions while incorporating resampling and MCMC mutation steps (Del Moral et al., 2006). Another important class of approaches relies on gradient information to construct more informed propos-als. Langevin-based samplers incorporate gradient drift terms to guide proposals toward regions of higher posterior density (Roberts and Rosenthal, 1998), while Hamiltonian Monte Carlo (HMC) generates distant proposals by simulating Hamiltonian dynamics in an augmented phase space (Neal, 2011). Subsequent de-velopments include Riemannian manifold variants that adapt to local curvature (Girolami and Calderhead, 2011) and automated tuning strategies such as the No-U-Turn Sampler (NUTS), which dynamically selects integration lengths to avoid inefficient trajectories (Hoffman et al., 2014). These gradient-based methods can dramatically improve exploration in strongly correlated posteriors, but they may still struggle in the presence of well-separated modes and can become computationally expensive in high-dimensional settings due to repeated gradient evaluations and the need to tune numerical integration parameters. Another line of work investigates non-reversible Monte Carlo methods, which aim at improving sampling efficiency by breaking detailed balance and generating persistent trajectories. In particular, piecewise deter-ministic Markov processes (PDMPs) (Fearnhead et al., 2018), such as the zig-zag process (Bierkens et al., 2019) and the bouncy particle sampler (Bouchard-Cˆ ot´ e et al., 2018) produce continuous-time dynamics with deterministic flows interrupted by random events. These methods can substantially reduce diffusive behavior and improve mixing in some settings, although they typically require access to gradient information and can be challenging to implement for complex models. More recently, a different line of work has emerged based on denoising diffusion and score-based generative models, in which a forward diffusion process gradually corrupts data with noise, and a learned reverse-time dynamics (often parameterized by neural networks) is used to generate approximate samples from high-dimensional distributions. These methods have achieved remarkable success in producing photorealistic images and other complex data objects in very high dimensions (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2021), and there is growing interest in using them as generic samplers for intractable distributions beyond computer vision. In most of these constructions, the reverse diffusion or score function is only available through an approximation, typically learned from data via deep neural networks, so the resulting algorithms are effectively black-box and their theoretical sampling properties can be difficult to analyze (Song and Ermon, 2019; Song et al., 2021). Moreover, practical implementations invariably rely on time-discretized versions of the reverse stochastic differential equation or its ODE counterpart, which introduce systematic bias unless the discretization is taken to an idealized limit; in addition, learning and evaluating the score network can be computationally demanding. Thus, while diffusion-based samplers offer powerful new mechanisms for exploring complex, high-dimensional distributions, they are almost always approximate, often biased, and not straightforward to adapt when one seeks fully controlled sampling from a prescribed unnormalized target density. This paper proposes a new framework for sampling from an unnormalized density, such as a Bayesian posterior distribution, through the simulation of reverse diffusion processes. In contrast to diffusion-based generative samplers, the methods developed here do not rely on neural-network approximations of score func-tions or on time-discretized solutions of stochastic differential equations. As a consequence, the procedures introduced in this work involve only Monte Carlo error, with no additional bias arising from numerical ap-proximations of the underlying diffusions. This shifts the perspective on reverse diffusions from approximate generative modeling to a principled mechanism for exact inference from a prescribed target density. 2Our starting point is a diffusion process with the initial distribution given by the target density and whose forward dynamics follows an Ornstein-Uhlenbeck (OU) process converging to a standard Gaussian distribution of matching dimension. The proposed methodology builds on a change-of-measure identity expressing the Radon-Nikodym derivative of the reverse-time dynamics with respect to a non-reverting OU process. Although this representation is exact, its direct use in a rejection sampler is infeasible: the supremum of the Radon-Nikodym derivative is unavailable, and the only attainable upper bound is loose and deteriorates exponentially with time. To address this, we construct a collection of Monte Carlo building blocks to approximately sample (in Monte Carlo sense) from the reverse transition and marginal distributions of the diffusion whose initial distri-bution is the target one. Those blocks include sampling-importance-resampling (SIR) and pseudo-marginal Metropolis-Hastings MCMC algorithms. These blocks are then used to propose two global algorithms tar-geting the desired distribution. One of them considers independent replications of a sequence of MCMC algorithms sequentially targeting the reverse transition (and optionally the marginal) distribution(s) of the diffusion process, resulting in a Monte Carlo independent sample of the target distribution. The second one involves only one MCMC algorithm targeting the whole diffusion path in a time interval, resulting in an MCMC correlated sample from the target distribution. The second algorithm has higher computational cost but involves the MC error of only one MCMC chain. Other techniques that use the reverse SDE framework in this context are described in Shi et al. (2024) and Huang et al. (2024). Both works use an Euler–Maruyama time discretization to approximately sample from reverse diffusion, relying on approximations of the score function. In Shi et al. (2024), the score is approximated by solving a transformed version of the Fokker–Planck PDE using a Physics-Informed Neural Network (PINN), where the initial condition is given by a transformation of πu. In contrast, Huang et al. (2024) estimates the score via a Monte Carlo approach based on Langevin dynamics or importance sampling. These methods rely on simulating the reverse SDE, which poses a significant challenge due to its complexity. Even in cases where we might have an good approximation of the score function, its behavior is initially unknown, and so we cannot guarantee the stability of numerical discretization methods used for the simulation of the reverse SDE. 
+
+## Overview of the paper 
+
+The goals and contributions of the paper are the following: 
+
+• introduce a new perspective on the denoising-diffusion approach for sampling from arbitrary unnor-malized densities by bridging it with classical SMC and MCMC ideas; 
+
+• propose two classes of algorithms –SPARK and Ping-Pong MCMC– that operate under this perspective and involve no approximation bias; 
+
+• show how the algorithms arise from two key analytical results for reverse diffusions –a change-of-measure identity for the reverse-time law and an integral identity that enables unbiased estimation of the corresponding transition and marginal densities– yielding a unified framework for constructing samplers based on reverse stochastic dynamics; 
+
+• demonstrate that the algorithms are zeroth-order (requiring no derivative evaluations) and are partic-ularly effective for sampling from multimodal distributions and complex dependence structures ;
+
+• validate the efficiency and robustness of the proposed methods through computational experiments on several benchmark examples. The remainder of the paper is organized as follows. Section 2 presents the theoretical background on reverse diffusions that underpins the proposed methodology. Sections 3 and 4 introduce the two classes of algorithms – SPARK and Ping-Pong MCMC, respectively, and discusses their main computational aspects related to efficiency, scaling, and practical implementation. Finally, section 5 simulated examples designed to investigate the empirical performance of both algorithms in challenging scenarios. 32 Theoretical foundation 
+
+## 2.1 Reverse diffusions 
+
+This section presents the background definitions and results required to develop our methodology. We focus first on the forward diffusion that gradually injects Gaussian noise into an arbitrary initial distribution p0
+
+and then review the corresponding reverse-time dynamics that play a central role in our algorithms. Let ( Xs)s≥0 solve the d-dimensional SDE 
+
+dX s = − 12 Xs ds + dB s, X0 ∼ p0, (1) where ( Bs)s≥0 is a d-dimensional Brownian motion independent of X0. Then Xsd
+
+−→ N (0 , I d) as s → ∞ 
+
+(add a reference here). When p0 is bounded, positive, and C2, Haussmann and Pardoux (1986) showed that the reverse-time process Xt := XT −t is itself a diffusion with dynamics 
+
+dX s =   12 Xs + ∇ log p(T − s, X s) ds + dB s, (2) for X0 = XT , where p(t, ·) is the density of Xt and ( Bs)s≥0 is an independent Brownian motion. We analyze the convergence of the proposed algorithms in terms of both the total variation (TV) distance and the Kullback-Leibler (KL) divergence. Throughout, we treat densities and their associated probability measures interchangeably when evaluating these discrepancies, whenever no ambiguity arises. The next result quantifies the approximation error of the distribution and moments of Xt to a standard normal. 
+
+Proposition 1. Let pt be the distribution of Xt under the SDE in (1) and γd := N (0 , I d). Then, (i) TV (pT , γ d) ≤
+
+r 12 KL (pT | γd) ≤ e−T / 2
+
+r 12 KL (p0 | γd)
+
+(ii) E[Xt] = e−t/ 2 Ep0 [X], Var( Xt,i ) = 1 + e−t (Var p0 (Xi) − 1) , Cov( Xt,i , X t,j ) = e−t Cov p0 (Xi, X j ),
+
+i̸ = j, provided that the corresponding moments under p0 are finite. 
+
+## 2.2 Main theoretical results 
+
+The methodology developed in this paper is built upon two key theoretical results. The first result is a change-of-measure formula giving the Radon-Nikodym derivative between the law of the reverse diffusion in (2) and that of a non-reverting OU process. It is obtained as a corollary of a more general theorem that establishes the analogous Radon-Nikodym derivative for the reverse diffusion associated with a broad class of forward diffusions. The second result is an integral identity yielding an unbiased estimator of the marginal density p(t, x ) of the forward diffusion with initial distribution p0 and OU dynamics. 
+
+2.2.1 Girsanov change of measure for the reverse diffusion Theorem 1. Let p0 be a C2 density on Rd, and let f : Rd × [0 , T ] → Rd and g : [0 , T ] → R>0 satisfy the regularity assumptions guaranteeing a unique weak solution of 
+
+dX s = f (s, X s)ds + g(s)dB s, X0 ∼ p0,
+
+with marginal density p(t, ·) of Xt, which is positive and C2, solving the Fokker-Planck equation 
+
+∂tp(t, x ) = −∇ · [f (t, x )p(t, x )] + 12 ∆p(t, x ).
+
+Let C := C([0 , T ], R) be the space of continuous paths, with cylinder σ-algebra C. For 0 < s 0 < s 1 < T , let 
+
+¯P and ¯Q be respectively the path measures on (C, C) (restricted to [s0, s 1]) induced by the solutions of 
+
+dX s =  −f (T − s, X s) + g(T − s)2 ∇ log p(T − s, X s) ds + g(T − s)dB s,dY s = −f (T − s, Y s)ds + g(T − s)dB s,
+
+4with common initial condition Xs0 = Y s0 = x0. Then, 
+
+d ¯Pd ¯Q (ω) = exp 
+
+
+
+−
+
+Z s1
+
+> s0
+
+∇ · f (T − s, ω s) ds 
+
+ p(T − s1, ω s1 )
+
+p(T − s0, x 0) ,
+
+provided the right-hand side is a true ¯Q-martingale, which is guaranteed when ∇ · f and p are bounded. 
+
+Corollary 1. Suppose that p0 is bounded and C2 and take f (s, x ) = − 12 x and g(s) = 1 . Then Y s+t | Y s =
+
+x ∼ N (et/ 2x, (et − 1) Id) and 
+
+d ¯Pd ¯Q (ω) = exp  d 
+
+> 2
+
+(s1 − s0) p(T − s1, ω s1 )
+
+p(T − s0, x 0) . (3) 
+
+This implies that: (i) conditional on ωs1 , ¯P ≡ ¯Q;(ii) the ratio of the transition densities of ωs1 | ωs0 under ¯P and ¯Q equals the expression in (3) .
+
+The next proposition, a direct consequence of the previous result, characterizes the target density of the MCMC algorithms proposed in the paper. 
+
+Proposition 2. Consider the definitions of f and g in Corollary 1. Define ω0: T = {ωt, t ∈ [0 , T ]} and let 
+
+¯q be the Lebesgue density of ω0 under ¯Q. Then, 
+
+d ¯Pd ¯Q (ω0: J ) ∝ p0(ωT )
+
+q(ω0) . (4) 
+
+2.2.2 Unbiased estimation of the marginal density of the forward diffusion 
+
+Assume that the initial density has the form p0(x) = c π u(x), where πu is a known unnormalized density. 
+
+Proposition 3. Let p(t, x ) denote the marginal density of Xt from (1) . Then 
+
+p(t, x ) = c e d  
+
+> 2t
+
+EZt,x [πu(Zt,x )] , Zt,x ∼ N (et/ 2x, (et − 1) Id). (5) This yields the unbiased estimator ˆ p(t, x ) = c e d  
+
+> 2t1
+> m
+
+Pmi=1 πu(Zi), which evaluates πu at points of order 
+
+O(et/ 2) (for x = O(1)), and thus becomes increasingly unstable as t grows, since it probes the tails of π. To stabilize this behavior, we introduce an importance sampling (IS) version of the estimator. Let ˜ qt denote the density of N (et/ 2x, (et − 1) Id). For a proposal density qt, define ˆpIS (t, x ) = c e d  
+
+> 2t
+
+1
+
+m
+
+> m
+
+X
+
+> i=1
+
+πu(Zi) w(Zi, t ), Ziiid 
+
+∼ qt, w(z, t ) = ˜qt(z)
+
+qt(z) . (6) Since only an unbiased estimator of the unnormalized p(t, ·) is needed withing the proposed algorithms, the constant term c e d 
+
+> 2t
+
+/m can be ignored. If π = N (μ, σ 2Id), then the optimal (zero-variance) IS proposal is proportional to π(y)˜ qt(y), and is therefore Gaussian: 
+
+qGt = N
+
+ (et − 1) μ + σ2et/ 2xσ2 + et − 1 , σ2(et − 1) 
+
+σ2 + et − 1 Id
+
+
+
+. (7) This interpolates between a point mass at x as t ↓ 0 and π as t → ∞ .When π is not Gaussian, we mimic this optimal structure and make qt = qGt . In practice, π is standardized (e.g., via preliminary MCMC runs), and we set μ = 0 and σ2 > 1. The choice σ2 > 1 inflates the proposal variance, providing robustness against multimodality and non-linear dependence of πu.The IS estimator may exhibit large or even infinite variance if the proposal qt has lighter tails than ˜ qt.Its variance is finite if and only if 
+
+Eqt
+
+πu(Z)2w(Z, t )2 < ∞.
+
+5Since πu is assumed bounded, we only require Eqt [w(Z, t )2] < ∞.For the Gaussian proposal described above, this condition holds if and only if σ2 > e t − 1. However, this requirement is of limited practical interest, as it forces the proposal variance to grow at the same rate as that of ˜ qt, and therefore does not achieve the goal of stabilizing the argument of π in the IS estimator. If π has (sub-)Gaussian tails, the condition can be substantially relaxed, as shown in the following result. 
+
+Proposition 4. Suppose that there exist constants C > 0, a > 0, and R < ∞ such that 
+
+π(y) ≤ Ce −a∥y∥2
+
+, ∥y∥ > R. 
+
+Then the IS estimator in (6) has finite variance if σ2 > et − 11 + 4 a(et − 1) .
+
+More generally, variance can be expressed in terms of the chi-square divergence. 
+
+Proposition 5. Let 
+
+q⋆(y) = π(y)˜ qt(y)
+
+r , r =
+
+Z
+
+π(y)˜ qt(y) dy. 
+
+Then the single-sample IS estimator of r has variance 
+
+Var qt
+
+ π(Y )˜ qt(Y )
+
+qt(Y )
+
+
+
+= r2 χ2(q⋆∥qt), for χ2(q⋆∥qt) = Eqt
+
+" q⋆
+
+qt
+
+(Y ) − 1
+
+2#
+
+.
+
+The above result provides a clear criterion for assessing the effectiveness of the IS proposal. In particular, the variance of the IS estimator is reduced relative to the original estimator if and only if 
+
+χ2(q⋆∥qt) < χ 2(q⋆∥˜qt) = CV 2˜qt (π).
+
+That is, variance reduction is achieved precisely when the proposal qt is closer to the optimal distribution 
+
+q⋆ than the original sampling distribution ˜ qt, in the sense of the chi-square divergence. 
+
+Heavy-tailed targets. We now construct a robust IS proposal when π has (sub-)Student-t tails. Suppose that there exist constants C > 0, ν > 0, and R < ∞ such that 
+
+π(y) ≤ C(1 + ∥y∥2)−(ν+d)/2, ∥y∥ > R. 
+
+In this setting, the optimal proposal is not available in closed form. We retain the Gaussian-optimal location and scale, and replace the Gaussian by a Student-t distribution: 
+
+qt(y) = tνq
+
+
+
+y; σ2et/ 2xσ2 + et − 1 , ω 2 
+
+> t
+
+Id
+
+
+
+, ω2 
+
+> t
+
+= σ2(et − 1) 
+
+σ2 + et − 1 c(νq ), c(νq ) = 
+
+( νq −2 
+
+> νq
+
+, νq > 2,
+
+1, νq ≤ 2.
+
+The resulting IS estimator has finite variance for all ν > 0 and νq > 0, due to the Gaussian factor in ˜ qt.In practice, we recommend choosing νq ≲ ν and σ2 > 1, so that the proposal has tails at least as heavy as those of π, while retaining efficiency. 
+
+## 2.3 Monte Carlo building blocks 
+
+The IS estimator devised in the previous section enables unbiased estimation not only of the marginal density of Xt, but also of the transition density of the reverse diffusion, via Corollary 1. These estimators, in turn, provide the building blocks for (approximate) sampling from these distributions using standard Monte Carlo algorithms. Classical Monte Carlo methods such as rejection sampling, sampling–importance–resampling (SIR), and Metropolis-type MCMC depend on the ratio between target and proposal densities. These methods can still be implemented when the target density is intractable, provided that an almost surely positive unbiased estimator is available. 6In rejection sampling, if a proposal value x has acceptance probability α(x), it suffices to construct an unbiased estimator ˆ α(x, U ) ∈ [0 , 1] such that EU [ˆ α(x, U )] = α(x), and then simulate a Bernoulli random variable with success probability ˆ α(x, U ) to determine acceptance. In the SIR algorithm, the unnormalized importance weights can be replaced by unbiased estimators. Similarly, pseudo-marginal Metropolis–Hastings (PMMH) can be implemented on an augmented state space by replacing the target density with its unbiased estimator (Andrieu and Roberts, 2009). In the present setting, however, the uniform bound on π required for rejection sampling leads to a loose control of the density ratio. As a consequence, the global acceptance probability decays at least exponentially fast in t (see Proposition D.2 in Appendix D), rendering the method impractical for moderate or large values of t.By contrast, SIR and PMMH do not require such a bound, at the cost of only approximately sampling from the target distribution. A key difference between them is that SIR relies on independent proposals, whereas PMMH allows for local (e.g., random walk-type) proposals. Since no natural independent proposal is available for the marginal of Xt, and the Gaussian proposal N (e∆/2x, (e∆ − 1) Id) for the reverse transition over an interval of length ∆ may be poorly matched to the target, PMMH with local proposals is preferred. Nevertheless, SIR algorithms targeting the marginal of XT and the reverse transition remain of interest, as they enable the construction of global MCMC schemes on X0. We therefore consider SIR for XT and for the reverse transition, as well as two PMMH schemes: one targeting the reverse transition and one targeting the marginal of Xt.
+
+Remark 1. A standard particle filter could be constructed by propagating and resampling N particles via SIR. However, the weights at time t involve the intractable quantity p(t + ∆ , ·). In the single-particle scheme, this term is common across candidates and cancels in the normalized weights. In a multi-particle setting, it varies across particles and cannot be ignored, requiring unbiased estimators of both p(t + ∆ , ·) and its reciprocal (Chopin et al., 2025), with a substantial increase in complexity. 
+
+SIR for the reverse transition. Let 0 ≤ t < t + ∆ ≤ T . By Corollary 1, the conditional distribution of 
+
+Xt | Xt+∆ = x under (1) is absolutely continuous with respect to 
+
+N
+
+
+
+e∆/2x, (e∆ − 1) Id
+
+
+
+,
+
+with Radon–Nikodym derivative proportional to p(t, ·). Since p(t, ·) is not available in closed form (except at t = 0), we replace this quantity by the unbiased estimator in (6). This leads to the following SIR algorithm. 
+
+Algorithm 1: SIR algorithm 
+
+Data: Time t and increment ∆, number of particles n and estimator sample size m.
+
+Result: An approximate realization of Xt | Xt+∆ = x
+
+Draw X(i) 
+
+> t
+
+∼ N  e∆/2x, (e∆ − 1) Id
+
+, i = 1 , . . . , n ;Draw Z(i) 
+
+> ℓ
+
+∼ qt, ℓ = 1 , . . . , m , i = 1 , . . . , n ;
+
+w(i) ← ˆpIS (t, X (i) 
+
+> t
+
+), if t > 0, w(i) ← πu
+
+
+
+X(i)0
+
+
+
+, if t = 0; Normalize weights: W (i) ← w(i)
+
+Pnk=1 w(k) ;Draw I ∼ Categorical  W (1) , . . . , W (n);Set Xt ← X(I) 
+
+> t
+
+;
+
+SIR for the marginal of XT . The SIR algorithm for XT draws nJ particles from ¯ qT and selects one with probability proportional to an unbiased estimator of the weight p(T, ·)/¯qT (·), where the numerator is replaced by the estimator in (6) with t = T .
+
+PMMH for the reverse transition. A key feature of the reverse-time formulation is that the conditional distribution of Xt | Xt+∆ = x admits a natural Gaussian reference measure. Specifically, it has a density 7with respect to N
+
+
+
+e∆/2x, (e∆ − 1) Id
+
+
+
+, proportional to p(t, ·). This structure naturally motivates the use of Gaussian-reference MCMC methods, such as the preconditioned Crank–Nicolson (pCN) algorithm, whose proposals preserve the reference measure exactly. In contrast to standard random-walk proposals, whose efficiency typically deteriorates with dimension due to the accumulation of independent perturbations, pCN proposals respect the underlying Gaussian geometry and correct only through the Radon–Nikodym derivative. This advantage becomes more pronounced as t
+
+increases: the OU dynamics smooth the marginal density pt, leading to a more regular Radon–Nikodym derivative and improved mixing. In this setting, the acceptance probability of a move y → y∗ is 1 ∧ p(t, y ∗)
+
+p(t, y ) , or 1 ∧ ˆpIS (t, y ∗)ˆpIS (t, y ) (8) for the ideal and pseudo-marginal cases, respectively. The pCN proposal is given by 
+
+y∗ = e∆/2x + p1 − β2 (y − e∆/2x) + β(e∆ − 1) 1/2Z, Z ∼ N (0 , I d), (9) where β ∈ (0 , 1) is tuned to achieve suitable acceptance rates. 
+
+PMMH for the marginal of Xt. When targeting the marginal distribution of Xt, no such Gaussian reference structure is available. In this case, we use a standard random-walk proposal, 
+
+y∗ ∼ N (y, σ 2Id),
+
+with σ2 tuned according to standard optimal scaling considerations (Roberts et al., 1997). The corresponding acceptance probabilities are again given by (8). Finally, note that the chains targeting X0 | X∆ and the marginal X0 are standard Metropolis–Hastings algorithms, since the corresponding unnormalized target densities are tractable. 
+
+# 3 The SPARK algorithm 
+
+We introduce two algorithms for generating approximate samples from the target distribution p0, the marginal law of X0. We call the algorithms Sequential Pseudo-marginal Algorithm with Reverse-time Kernels 
+
+(SPARK). Both are constructed as sequences of MCMC schemes along a time schedule 0 = t0 < t 1 < · · · < t J = T. 
+
+The construction is guided by two principles: (i) the sequence of target distributions evolves smoothly in time, so that successive targets are locally close; and (ii) each MCMC step is required only to mix locally around its initialization, which is inherited from the previous step. This construction can be viewed as a sequential local approximation to a global MCMC targeting p0.Each run of the algorithm produces a single approximate draw from p0; independent repetitions yield an approximate i.i.d. sample. The first algorithm consists of a sequence of PMMH chains targeting 
+
+XT , XtJ−1 | XT , . . . , Xt1 | Xt2 , X0 | Xt1 ,
+
+where the output of each chain provides the conditioning value for the next. Since the targets evolve gradually, each chain need only explore a local neighborhood of its starting point. The procedure yields an approximate reverse-time trajectory and, in particular, a draw from X0.The second algorithm augments this sequence by inserting PMMH steps targeting the marginals: 
+
+XT , {(Xtj | Xtj+1 ), Xtj }1
+
+> j=J−1
+
+, X0 | Xt1 , X0.
+
+8These additional steps mitigate the accumulation of approximation error by periodically re-targeting the marginal distributions. The resulting scheme no longer produces trajectories, but yields approximate samples from each marginal; in particular, the final step is a standard Metropolis–Hastings algorithm targeting p0.The marginal-refreshing steps increase computational cost, but can substantially reduce the effort required in the conditional chains. In practice, this trade-off often favors the second algorithm. 
+
+Algorithm 2: SPARK algorithm 
+
+Data: Time schedule 0 = t0 < · · · < t J = T ; iterations nJ , {nj1, n j2}J−1 
+
+> j=0
+
+; PM estimator sample sizes; number of replications M .
+
+Result: Independent approximate samples {x(i)0 }Mi=1 
+
+for i = 1 , . . . , M do 
+
+Run a PMMH chain targeting XT for nJ iterations; set x(i) 
+
+> tJ
+
+;
+
+for j = J − 1, . . . , 0 do 
+
+Run a PMMH chain (MH if j = 0) targeting Xtj | Xtj+1 = x(i) 
+
+> tj+1
+
+for nj1 iterations; set ˜ x(i) 
+
+> tj
+
+;Run a PMMH chain (MH if j = 0) targeting Xtj initialized at ˜ x(i) 
+
+> tj
+
+for nj2 iterations; set x(i) 
+
+> tj
+
+;
+
+end end return {x(i)0 }Mi=1 
+
+Unlike standard Metropolis–Hastings algorithms, for which a well-developed asymptotic theory provides robust and widely applicable guidelines for tuning proposal scales and acceptance rates, there is comparatively limited theory for tuning the variance of the estimator and the resulting acceptance rate in pseudo-marginal methods. The main available results, notably Sherlock et al. (2015) and Doucet et al. (2015), derive optimal-ity criteria under a number of strong and stylized assumptions. These typically include: (i) an additive noise representation for the log-target estimator; (ii) independence between the noise distribution and the point at which the target is evaluated; (iii) approximate Gaussianity of the log-noise, with variance inversely propor-tional to the computational effort; and, in some cases, (iv) high-dimensional asymptotics with product-form targets and isotropic random-walk proposals. While analytically convenient, these assumptions are unlikely to hold in many realistic applications and are explicitly acknowledged as approximations in the aforemen-tioned works. In particular, the independence of the noise from the state is generally violated in practice and is introduced primarily to enable tractable analysis. Moreover, the structure considered here differs substantially from the setting of these results. We employ a sequence of PMMH kernels targeting a collection of intermediate distributions, with only the final target corresponding to the posterior of interest; earlier targets are close to a Gaussian reference. In addition, the unnormalized target density is available in closed form, so that the final MH step is exact rather than pseudo-marginal, and each chain is run only for a small number of iterations with the aim of producing a single approximately independent draw via multiple independent replications. This regime emphasizes local mixing rather than long-run stationary efficiency and falls outside the asymptotic frameworks considered in the existing theory. Taken together, these considerations suggest that the available prescriptions, such as targeting a specific variance of the log-target estimator or a corresponding acceptance rate, should not be expected to provide reliable or universal guidance in this setting. Instead, we advocate tuning the variance and acceptance rate empirically, on a case-by-case basis, using diagnostics that directly reflect computational efficiency, such as effective sample size per unit time, acceptance probabilities, short-lag autocorrelations, and the stability of the estimator across the relevant regions of the state space. 
+
+## 3.1 Practical considerations 
+
+Rescaling p0. Since the Ornstein–Uhlenbeck (OU) forward diffusion converges to a standard Gaussian distribution regardless of the initial law, it is natural to place the initial target on the same global scale as this reference measure. Accordingly, we standardize p0 to have mean zero and unit variance using model knowledge and/or empirical estimates. This normalization also facilitates the specification of proposal dis-tributions in the importance sampling estimators of pt (see Section 2.2.2). When a reliable estimate of the correlation structure is available, we further whiten the target so that 9its covariance matrix is close to the identity. This removes linear dependence and isolates the genuinely non-Gaussian features of the distribution, such as multimodality, skewness, non-linear dependence, or heavy tails. The OU dynamics then act primarily on these features, progressively regularizing the distribution as 
+
+t increases. From an algorithmic perspective, this normalization provides a convenient baseline under which the time horizon T directly controls the degree of smoothing required for the marginal XT to become amenable to efficient local MCMC exploration. In practice, the required transformations can be obtained from short preliminary runs, as is standard in algorithms such as random-walk Metropolis–Hastings. The resulting estimates need not be highly accurate: their role is simply to place the problem on a sensible global scale and reduce linear dependence prior to applying SPARK. 
+
+Choice of the terminal time T . The terminal time T plays a central role in the efficiency of SPARK, as it governs a fundamental trade-off. As T increases, the marginal distribution of XT approaches the standard Gaussian, making it easier for independent replications of the PMMH algorithm targeting this marginal to approximate it accurately. Conversely, larger values of T require finer time discretizations (larger J), increasing the overall computational cost. A natural strategy is therefore to select the smallest value of T for which independent replications of a relatively inexpensive PMMH scheme targeting pT yield a representative sample. This choice can be guided by theoretical results such as the ones in Proposition 1. 
+
+Choice of the time schedule. The time schedule {tj }Jj=0 is also critical for efficiency. There is again a trade-off: coarser schedules (smaller J) reduce the number of PMMH chains but make the corresponding conditional targets more challenging, while finer schedules improve local mixing at the cost of additional chains. In line with the choice of T , one should therefore select the coarsest schedule for which the conditional PMMH updates remain reasonably efficient. More importantly, the placement of the time points should reflect the non-uniform rate at which the diffusion regularizes the target. In particular, Proposition 1 indicates that convergence is exponential in t, suggesting that the spacing between consecutive times should decrease as t ↓ 0. A practical way to balance efficiency across levels is to choose the schedule so that the conditional PMMH kernels exhibit comparable acceptance rates for a common choice of the pCN tuning parameter β.
+
+Specification of the PMMH algorithms. We now discuss the main specifications of the PMMH algo-rithms within SPARK, including initialization, estimator variance, acceptance rates, and number of itera-tions. Initialization is straightforward. For the marginal chain at t = T , it is natural to draw the initial value from N (0 , I d), as the target is expected to be close to this distribution. For chains targeting Xtj with 
+
+tj < T , a natural choice is to initialize at the final state of the preceding conditional PMMH chain targeting 
+
+Xtj | Xtj+1 . For this conditional chain, a convenient initialization is to draw a random value from the Gaussian reference distribution N e∆j xtj+1 , (e∆j − 1) Id
+
+, for ∆ j = tj+1 − tj .The variance of the importance sampling estimator in (6) typically increases with t, implying that the corresponding pseudo-marginal noise is larger for early stages of the algorithm. Empirical estimates of the variance of the log-noise can be obtained at representative points (e.g. within [ −2, 2] d under the standardized scale). In practice, however, the most reliable guidance comes from standard MCMC diagnostics, including trace plots, autocorrelation functions, and the dependence of the acceptance rate on the proposal tuning. As t ↓ 0, the variance of the estimator decreases and the PMMH chains approach the ideal marginal MH algorithm. Accordingly, the optimal acceptance rate is expected to increase toward the standard MH regime (e.g. 0 .44 in dimension 1 and 0 .234 in moderate-to-high dimensions), while for larger t lower acceptance rates are typically appropriate. As a rough reference, Sherlock et al. (2015) suggest an acceptance rate of approximately 0 .07 for random-walk PMMH in high dimensions. Given these considerations, and since each chain is only required to mix locally, a few hundred iterations are typically sufficient for each PMMH component. 10 Alleviating the computational cost. A potential limitation of SPARK is its computational cost, as it requires multiple independent replications of a sequence of MCMC chains, each involving repeated evaluations of the unnormalized density πu.On the other hand, the independence of the replications yields an independent sample, eliminating the long-range autocorrelation typically associated with standard MCMC. This structure can be exploited to reduce the number of required replications. In particular, the last chain in the SPARK sequence is a standard MH chain targeting the marginal of X0; instead of running this chain only long enough to produce a single output per replication, one may run it for a larger number of iterations and retain multiple samples. Since this chain operates in a regime where only local mixing is required, it can efficiently explore local structure, thereby reducing the burden on the replication mechanism. For example, in multimodal settings, the independent replications primarily serve to approximate the relative weights of the modes, while the local MH chains targeting X0 are responsible for exploring each mode. This separation of global and local mixing can substantially reduce the overall computational cost. 
+
+# 4 Ping-Pong MCMC 
+
+The SPARK algorithm is typically the more robust option in difficult examples, since it relies on a sequence of MCMC updates with random-walk type proposals rather than on sequential importance-resampling steps with independent proposals. Its limitation is that the final approximation depends on the joint behaviour of several Markov chains. The Ping-Pong construction provides a complementary alternative: it defines a single Markov chain whose marginal invariant distribution is exactly p0. It is therefore less generally robust than SPARK, but can offer higher precision when the corresponding proposals are sufficiently accurate, and it can also be embedded as an exact block update within larger Gibbs sampling schemes, with p0 playing the role of a full conditional density. A direct Metropolis–Hastings correction of SPARK itself would require the density, or an unbiased estima-tor of the density, of its output distribution. This is not available because the SPARK proposal is generated through internal accept–reject MCMC dynamics. We therefore replace SPARK by a sequential reverse-time SIR proposal, for which unbiased estimators of the output density are available. We call this proposal mechanism Sequential Path Importance sampling for Diffusion Equations in Reverse time (SPIDER). 
+
+Algorithm 3: SPIDER algorithm 
+
+Data: Time schedule 0 = t0 < · · · < t J = T ; particles {Nj }Jj=0 ; weight estimator sample sizes. 
+
+Result: An approximate path sample {xtj }Jj=0 
+
+Sample xT by SIR with proposal ¯ qT and weights ˆ pIS (T, ·)/¯qT (·); 
+
+for j = J − 1, . . . , 0 do 
+
+Conditional on xtj+1 , sample xtj by SIR using Algorithm 1, with n = Nj ;
+
+end return {xtj }Jj=0 
+
+The Ping-Pong algorithms operate (initially) on the extended path X0, X t1 , . . . , X tJ−1 , X T , and use SPIDER proposals inside Metropolis-type transitions. Three elementary updates are used: 1) a forward update of Xt1 , . . . , X T | X0, simulated exactly from (1); 2) a backward update of X0, . . . , X tJ−1 | XT ,proposed by SPIDER and corrected by Barker’s rule; and 3) a joint update at the whole time schedule, also proposed by SPIDER and corrected by Barker’s rule. Alternating updates 1) and 2) yields a Gibbs-type scheme, update 3) alone gives an independence MH-type chain, and hybrid schemes combine local correction with occasional global moves. The algorithms can be formulated on the space of continuous trajectories in [0 , T ]. By Corollary 1, the bridges of ¯P and ¯Q have the same law, so only the values at the selected time schedule enter the accept– reject step explicitly. Consequently, the time schedule may be changed across MCMC iterations. In practice, one may keep comparable increments while shifting the time points; since both proposal and acceptance probabilities depend on the schedule, this can help avoid persistent sticking caused by an unfavourable fixed schedule. Intermediate path values can be sampled retrospectively, after the accept-reject step, from the corresponding OU bridge law. The SPIDER output density is intractable, but it admits a positive bounded unbiased estimator. Let 11 ˜Q denote the SPIDER law, completed with bridges from ¯Q and assume that XT has Lebesgue density ¯ qT
+
+under ¯Q, we have that (see Proposition C.1 in Appendix C) 
+
+qS (x) := d ˜Qd ¯Q (x) = qJ (xT )
+
+> 0
+
+Y
+
+> j=J−1
+
+qj (xtj |xtj+1 ),qj (xtj |xtj+1 ) = nj E ˙Xj ,Z j
+
+" wj (xtj , Z j,n j )
+
+wj (xtj , Z j,n j ) + Pnj −1 
+
+> i=1
+
+wj ( ˙Xj,i , Z j,i )
+
+#
+
+, for qJ (xtJ |xtJ+1 ) := qJ (xT ), (10) 
+
+w0(x) = πu(x), wj (x, z ) = 
+
+> mj
+
+X
+
+> l=1
+
+πu(zl) ˜qtj (zl)
+
+qtj (zl) , 1 ≤ j ≤ J − 1, wJ (x, z ) = 1¯qT (xT )
+
+> mj
+
+X
+
+> l=1
+
+πu(zl) ˜qT (zl)
+
+qT (zl)where ˙Xj,i i.i.d. 
+
+∼ N  e∆tj /2Xtj+1 , (e∆tj − 1) Id
+
+, j = 0 , . . . , J − 1; ˙XJ,i i.i.d. 
+
+∼ ¯qT ; Zj,i = {Zj,i,l }mj
+
+> l=1
+
+, Zj,i,l i.i.d. 
+
+∼ qtj ,
+
+j = 1 , . . . , J , and w0(x, z ) := w0(x). An unbiased estimator for qS is obtained by replacing the expectation in (10) with its Monte Carlo realization. Importantly, this estimator is almost surely positive and bounded, which enables the construction of exact MCMC updates targeting the true distribution. Although this suggests pseudo-marginal Metropolis–Hastings, that route is not attractive here. It would require augmenting the state space with all auxiliary variables used to estimate the proposal density, and the intractable object is the proposal rather than the target, so that a standard pseudo-marginal construction would require an unbiased estimator of a reciprocal proposal density, therefore demanding significant extra auxiliary variables and computational effort. We instead use Barker’s rule (Barker, 1965), whose acceptance probability can be simulated by a Bernoulli factory using unbiased estimators of the proposal density it-self. For a target density π and a proposal density q, both w.r.t. the same dominating measure, Barker’s acceptance probability for a move x → y is 
+
+αB (x, y ) = p(y)q(x)
+
+p(y)q(x) + p(x)q(y) . (11) Although Metropolis-Hastings dominates Barker’s in the Peskun ordering (Peskun, 1973), the latter is at least half as efficient as MH in terms of asymptotic variance and inherits a CLT whenever MH does (Latuszy´ nski and Roberts, 2013). For the Ping-Pong algorithm, the target density w.r.t. ¯Q is given by (4). Therefore, the Barker acceptance probability of a SPIDER proposal x → ¨x is 
+
+αS (x, ¨x) = {πu(¨ x0)/¯qT (¨ xT )}qS (x)
+
+{πu(¨ x0)/¯qT (¨ xT )}qS (x) + {πu(x0)/¯qT (xT )}qS (¨ x) .
+
+An αS (x, ¨x)-coin can be simulated using the divide-and-conquer Bernoulli factory (DCBF) of Stumpf-F´ etizon and Gon¸ calves (2025), which exploits the product structure of qS to improve computational efficiency. Details about DCBF for the Ping-Pong are presented in Appendix B. The general algorithm is described below. 
+
+Algorithm 4: Ping-Pong MCMC 
+
+Data: Schedule rule; particles; estimator sample sizes; Bernoulli factory specifications; number of iterations M .
+
+Result: MCMC sample from the marginal law of X0
+
+Initialize a path x(0) , for instance using SPARK; 
+
+for k = 1 , . . . , M do 
+
+Select a schedule and one of the three admissible updates: sample Xt1 , . . . , X T | X0 = x(k−1) 0 exactly from (1); propose X0, . . . , X tJ−1 | XT = x(k−1)  
+
+> T
+
+using SPIDER and accept by Barker’s rule; propose ¨ x | x(k−1)  
+
+> T
+
+using SPIDER and accept by Barker’s rule; If the schedule changes, sample the required path values from the corresponding OU bridges; 
+
+end return {x(k)0 }Mk=1 
+
+12 The resulting chain is ergodic under standard domination and positivity conditions, although geometric convergence need not hold because the relevant importance ratios may be unbounded. This is not a serious limitation in the intended use of the method: the chain is initialized from a distribution close to the target and acts primarily as an exact correction of a high-quality path proposal, rather than as a generic global exploration mechanism. Practical efficiency is therefore governed by the quality of the SPIDER proposal, and hence by the terminal time, time schedule, particle numbers and estimator sample sizes. These quan-tities should be calibrated to keep the importance weights stable and the Barker’s acceptance probabilities sufficiently high, while controlling the computational cost of the Bernoulli factory. Further discussions about the Ping-Pong algorithms are provided in Appendix C. Finally, to use Ping-Pong within a larger Gibbs sampler, one sets p0 equal to the full conditional density of the block being updated. Conditional on the remaining variables, the reverse-diffusion construction defines the corresponding path law on [0 , T ], and the Ping-Pong kernel targets this extended law while preserving the desired full conditional of X0 as its marginal invariant distribution. Thus the resulting update is an exact Barker’s-within-Gibbs block update. 
+
+# 5 Numerical Examples 
+
+We present two examples to illustrate and empirically explore the properties of the proposed algorithms. 
+
+Bidimensional radial distribution Define a distribution on R2 by sampling a point in polar coordinates (θ, z ), where θ ∼ U[0 , 2π] and z follows a mixture of normals with means (3 , 6, 9, 12), variance 0 .12, and weights (0 .1, 0.4, 0.1, 0.4). The resulting density is 
+
+p0(x) ∝ 1
+
+∥x∥
+
+> 4
+
+X
+
+> j=1
+
+wj exp 
+
+
+
+− (∥x∥ − 3j)2
+
+2 · 0.12
+
+
+
+.
+
+Both SPARK and Ping-Pong are run with the time schedule (0 .1, 0.04 , 0.02 , 0.01 , 0.005 , 0.002 , 0.0006 , 0) and the standardized version of p0. For SPARK, only the reverse-time transition block is used, with an estimator sample size of 50. All pCN proposals use β = 0 .99 and each chain runs for 100 iterations. The SPIDER proposal in Ping-Pong uses 5 particles and an estimator sample size of 10. SPARK generates 5 ,000 samples; Ping-Pong runs 15 ,000 iterations and achieves an acceptance rate of approximately 0 .3. Both algorithms are run on an M2 MacBook Air using 7 cores in parallel. SPARK completes 5 ,000 independent samples in 15 seconds; Ping-Pong completes 15 ,000 iterations in 1 .6 minutes. 
+
+Ten-dimensional mixture of normals Consider an equal-weight mixture of three ten-dimensional nor-mal distributions with means μk = mk110 , where ( m1, m 2, m 3) = ( −√10 , 0, √10), and covariance 0 .3 I10 .SPARK is implemented with the time schedule (1 .7, 1.5, . . . , 0.3, 0.15 , 0.1, 0.07 , 0.04 , 0.02 , 0.015 , 0.01 , 0) and the standardized version of p0. Both MC blocks –reverse-time transition and marginals– are used, with estimator sample sizes ranging from 2 ,500 at time 1 .7 to 250 at time 0 .01. Each PMMH chain runs for 100 iterations, and a final sample of size 5 ,000 is produced. Total running time is 8 .6 minutes. 
+
+# 6 Conclusion 
+
+This paper introduces a new perspective on the use of reverse-time diffusions for sampling from unnormalized densities. The central novelty of the approach lies in two key features. First, the proposed methods avoid any time-discretization error, as they rely on exact representations of the underlying diffusion dynamics. Second, they are zeroth-order methods, in the sense that they do not require the evaluation or estimation of derivatives of the log-density. This distinguishes them from a large class of existing diffusion-based samplers whose implementation depends on gradient information. The methodology developed in this work builds on the theory of exact simulation for diffusion processes. In particular, the algorithms rely on a change-of-measure relationship between the transition law of a reverse-time diffusion and that of a Gaussian Markov process. A key ingredient of the approach is the availability 13 -15 -10 -5 0 5 10 15                                         
+
+> -15  -10  -5  0 5 10  15
+> t = 0.1
+> -15 -10 -5 0510 15
+> -15  -10  -5  0 5 10  15
+> t = 0.04
+> -15 -10 -5 0510 15
+> -15  -10  -5  0 5 10  15
+> t = 0.02
+> -15 -10 -5 0510 15
+> -15  -10  -5  0 5 10  15  t = 0.01
+> -15 -10 -5 0510 15
+> -15  -10  -5  0 5 10  15  t = 0.005
+> -15 -10 -5 0510 15
+> -15  -10  -5  0 5 10  15  t = 0.002
+> -15 -10 -5 0510 15
+> -10  -5  0 5 10
+> t = 6e-04
+> -10 -5 0510
+> -10  -5  0 5 10
+> t = 0
+
+Figure 1: Samples generated by SPARK at each time in the schedule. -15 -10 -5 0 5 10 15 
+
+> -10  -5  0 5 10
+
+X1
+
+> X2
+
+0 5000 10000 15000 
+
+> 4 6 8 10  12
+
+Figure 2: Sample (left) and trace plot of the radius (right) generated by Ping-Pong. of unbiased estimators for the marginal density of the diffusion evaluated at a collection of intermediate times. These estimators allow us to construct valid acceptance probabilities and importance weights without introducing bias, and play a central role in both classes of algorithms proposed in the paper. Two main algorithmic frameworks are developed. The first is based on a sequence of MCMC algorithms with the last one converging to the original target under consideration. The second consists of a single MCMC chain targeting an augmented space that has the target as its marginal. While the latter is more precise in the sense of relying on the convergence of only one Markov chain, the former has broader application. As is common with methods based on stochastic estimators and exact simulation techniques, the algo-rithms involve several tuning parameters whose specification can strongly influence performance. This paper 14 -4 -2 0 2 4 6
+
+> -6  -4  -2  0 2 4
+
+Figure 3: Sample generated by SPARK projected onto the first two coordinates. Empirical component weights are 0 .340, 0 .326, and 0 .334. Red crosshairs indicate the true component means. provides practical guidelines for selecting these quantities, supported by theoretical analysis that clarifies the role of the main parameters controlling the variance of the estimators and the stability of the algorithms. These results help illuminate the trade-offs between computational cost and statistical efficiency. The proposed methods also present some limitations that should be acknowledged. In particular, the algorithms may incur a non-negligible computational cost due to repeated evaluations of the target density and the use of unbiased estimation procedures, including Bernoulli factory constructions. These operations can be computationally intensive in certain settings. Nevertheless, it is important to emphasize that the resulting algorithms remain zeroth-order procedures that do not require gradients of the log-density. In many applications where derivative information is unavailable, unreliable, or expensive to compute, this property can represent a substantial practical advantage compared to state-of-the-art gradient-based diffusion samplers. The empirical results presented for simulated examples illustrate the practical behavior of the proposed algorithms, highlighting their robustness and providing insight into the impact of the main tuning parameters. More broadly, this work opens a new avenue in the development of reverse-time diffusion-based sampling methods. By combining ideas from exact diffusion simulation, unbiased estimation, and extended-space MCMC methodology, the framework proposed here provides a flexible foundation for future research. We expect that the techniques introduced in this paper may inspire further developments, including improved estimators, more efficient algorithmic implementations, and extensions to broader classes of stochastic pro-cesses and target distributions. 
+
+# References 
+
+Andrieu, C. and Roberts, G. O. (2009). The pseudo-marginal approach for efficient monte carlo computations. 
+
+The Annals of Statistics , pages 697–725. Bakry, D., Gentil, I., and Ledoux, M. (2014). Analysis and Geometry of Markov Diffusion Operators , volume 348 of Grundlehren der mathematischen Wissenschaften . Springer, Cham. Barker, A. A. (1965). Monte carlo calculations of the radial distribution functions for a proton-electron plasma. Australian Journal of Physics , 18(2):119–134. 15 Bierkens, J., Fearnhead, P., and Roberts, G. (2019). The zig-zag process and super-efficient sampling for bayesian analysis of big data. The Annals of Statistics , 47(3):1288. Bouchard-Cˆ ot´ e, A., Vollmer, S. J., and Doucet, A. (2018). The bouncy particle sampler: A nonre-versible rejection-free markov chain monte carlo method. Journal of the American Statistical Association ,113(522):855–867. Brooks, S., Gelman, A., Jones, G., and Meng, X.-L. (2011). Handbook of markov chain monte carlo . CRC press. Capp´ e, O., Guillin, A., Marin, J.-M., and Robert, C. P. (2004). Population monte carlo. Journal of Computational and Graphical Statistics , 13(4):907–929. Chopin, N., Crucinio, F. R., and Singh, S. S. (2025). Towards a turnkey approach for unbiased monte carlo estimation of smooth functions of expectations. Biometrika , 112(3):asaf030. Chopin, N., Papaspiliopoulos, O., et al. (2020). An introduction to sequential Monte Carlo , volume 4. Springer. Del Moral, P., Doucet, A., and Jasra, A. (2006). Sequential monte carlo samplers. Journal of the Royal Statistical Society Series B: Statistical Methodology , 68(3):411–436. Deligiannidis, G., Jacob, P. E., Khribch, E. M., and Wang, G. (2025). On importance sampling and inde-pendent metropolis–hastings with an unbounded weight function. arXiv:2411.09514v2. Doucet, A., Freitas, N., and Gordon, N. (2001). Sequential Monte Carlo Methods in Practice . Springer. Doucet, A., Pitt, M. K., Deligiannidis, G., and Kohn, R. (2015). Efficient implementation of markov chain monte carlo when using an unbiased likelihood estimator. Biometrika , 102(2):295–313. Fearnhead, P., Bierkens, J., Pollock, M., and Roberts, G. O. (2018). Piecewise Deterministic Markov Processes for Continuous-Time Monte Carlo. Statistical Science , 33(3):386 – 412. Gamerman, D. and Lopes, H. F. (2006). Markov chain Monte Carlo: stochastic simulation for Bayesian inference . Chapman and Hall/CRC. Gelman, A. and Meng, X.-L. (1998). Simulating normalizing constants: From importance sampling to bridge sampling to path sampling. Statistical science , pages 163–185. Geyer, C. J. (1991). Markov chain monte carlo maximum likelihood. In Proceedings of the 23rd Symposium on the Interface: Computing Science and Statistics . Interface Foundation of North America. Girolami, M. and Calderhead, B. (2011). Riemann manifold langevin and hamiltonian monte carlo methods. 
+
+Journal of the Royal Statistical Society Series B: Statistical Methodology , 73(2):123–214. Gon¸ calves, F. B., Latuszy´ nski, K., and Roberts, G. O. (2023). Exact monte carlo likelihood-based inference for jump-diffusion processes. Journal of the Royal Statistical Society Series B: Statistical Methodology ,85(3):732–756. Haussmann, U. G. and Pardoux, E. (1986). Time Reversal of Diffusions. The Annals of Probability , 14(4):1188 – 1205. Ho, J., Jain, A., and Abbeel, P. (2020). Denoising diffusion probabilistic models. Advances in neural information processing systems , 33:6840–6851. Hoffman, M. D., Gelman, A., et al. (2014). The no-u-turn sampler: adaptively setting path lengths in hamiltonian monte carlo. J. Mach. Learn. Res. , 15(1):1593–1623. Huang, X., Dong, H., Hao, Y., Ma, Y.-A., and Zhang, T. (2024). Reverse Diffusion Monte Carlo. Latuszy´ nski, K. and Roberts, G. O. (2013). Clts and asymptotic variance of time-sampled markov chains. 
+
+Methodology and Computing in Applied Probability , 15(1):237–247. 16 Liu, J. S. (2001). Monte Carlo strategies in scientific computing . Springer. Mengersen, K. L. and Tweedie, R. L. (1996). Rates of convergence of the Hastings and Metropolis algorithms. 
+
+The Annals of Statistics , 24(1):101 – 121. Neal, R. M. (1996). Sampling from multimodal distributions using tempered transitions. Statistics and computing , 6(4):353–366. Neal, R. M. (2001). Annealed importance sampling. Statistics and computing , 11(2):125–139. Neal, R. M. (2011). Mcmc using hamiltonian dynamics. Handbook of markov chain monte carlo , pages 47–95. Peskun, P. H. (1973). Optimum monte-carlo sampling using markov chains. Biometrika , 60(3):607–612. Robert, C. P. and Casella, G. (2004). Monte Carlo statistical methods . Springer, 2 edition. Roberts, G. O., Gelman, A., and Gilks, W. R. (1997). Weak convergence and optimal scaling of random walk metropolis algorithms. The Annals of Applied Probability , 7(1):110–120. Roberts, G. O. and Rosenthal, J. S. (1998). Optimal scaling of discrete approximations to langevin diffusions. 
+
+Journal of the Royal Statistical Society: Series B (Statistical Methodology) , 60(1):255–268. Sherlock, C., Thiery, A. H., Roberts, G. O., and Rosenthal, J. S. (2015). On the efficiency of pseudo-marginal random walk metropolis algorithms. The Annals of Statistics , 43(1):238–275. Shi, Z., Yu, L., Xie, T., and Zhang, C. (2024). Diffusion-PINN Sampler. Sohl-Dickstein, J., Weiss, E., Maheswaranathan, N., and Ganguli, S. (2015). Deep unsupervised learning using nonequilibrium thermodynamics. In International conference on machine learning , pages 2256–2265. pmlr. Song, Y. and Ermon, S. (2019). Generative modeling by estimating gradients of the data distribution. 
+
+Advances in neural information processing systems , 32. Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Ermon, S., and Poole, B. (2021). Score-based generative modeling through stochastic differential equations. In International Conference on Learning Representations .Stumpf-F´ etizon, T. and Gon¸ calves, F. B. (2025). Scalable bernoulli factories for bayesian inference with intractable likelihoods. Swendsen, R. H. and Wang, J.-S. (1986). Replica monte carlo simulation of spin-glasses. Physical review letters , 57(21):2607. Vats, D., Gon¸ calves, F. B., Latuszy´ nski, K., and Roberts, G. O. (2022). Efficient bernoulli factory markov chain monte carlo for intractable posteriors. Biometrika , 109(2):369–385. 
+
+# A Proofs 
+
+Proof of Proposition 1. Part ( i): the first inequality follows from Pinsker’s inequality and the second one from Theorem 5.2.1 in Bakry et al. (2014) and the Gross logarithmic Sobolev inequality. Part ( ii ): Notice that he process ( Xt)t≥0 has a closed-form solution, 
+
+Xt = e−t/ 2X0 + e−t/ 2
+
+Z t
+
+> 0
+
+es/ 2 dB s.
+
+Then, Xt | X0 = x0 ∼ N (e−t/ 2x0, (1 − e−t)Id), and the result follows straightforwardly. 17 Proof of Theorem 1. Let q(s, x ) = log p(T − s, x ), ¯f (s, x ) = f (T − s, x ), and ¯ g(s) = g(T − s). By the Fokker-Planck equation, 
+
+∂sq = ∇· ¯f + ¯f · ∇ q − ¯g2
+
+2
+
+ ∆q + ∥∇ q∥2 = 0 .
+
+Applying Itˆ o’s formula to q(s, Y s) gives 
+
+q(s1, Y s1 ) − q(s0, Y s0 ) = 
+
+Z s1
+
+> s0
+
+h
+
+∂sq(s, Y s) − ∇ q(s, Y s)· ¯f (s, Y s) + ¯g(s)2
+
+2 ∆q(s, Y s)
+
+i
+
+ds +
+
+Z s1
+
+> s0
+
+¯g(s)∇q(s, Y s) dB s.
+
+Substituting the Fokker-Planck identity yields 
+
+q(s1, Y s1 ) − q(s0, Y s0 ) = 
+
+Z s1
+
+> s0
+
+∇· ¯f (s, Y s) ds − 12
+
+Z s1
+
+> s0
+
+¯g(s)2∥∇ q(s, Y s)∥2ds +
+
+Z s1
+
+> s0
+
+¯g(s)∇q(s, Y s) dB s.
+
+Exponentiating both sides gives exp 
+
+Z s1
+
+> s0
+
+¯g(s)∇q(s, Y s) dB s − 12
+
+Z s1
+
+> s0
+
+¯g(s)2∥∇ q(s, Y s)∥2ds 
+
+
+
+= e− R s1    
+
+> s0∇· f(T−s,Y s)ds
+
+p(T − s1, Y s1 )
+
+p(T − s0, ¯x0) .
+
+The result then follows from Girsanov’s theorem. 
+
+Proof of Corollary 1. Substituting f (s, x ) = − 12 x and g(s) = 1 into the Radon-Nikodym expression of Theorem 1 yields the stated Gaussian transition and the identity 
+
+d ¯Pd ¯Q (ω) = exp  d 
+
+> 2
+
+(s1 − s0) p(T − s1, ω s1 )
+
+p(T − s0, ω s0 ) .
+
+To establish parts (i) and (ii), consider the conditional measures ˜¯P (·) = ¯P (· | ωs1 ) and ˜¯Q(·) = ¯Q(· | ωs1 ). By the chain rule for Radon-Nikodym derivatives, d ¯Pd ¯Q (ω) = d ¯Pd ¯Q (ωs1 ) d ˜¯Pd ˜¯Q (ω). Since the expression for d ¯Pd ¯Q (ω) depends on ω only through ωs1 , it follows that d ˜¯Pd ˜¯Q (ω) = 1, which proves (i) and (ii). 
+
+Proof of Proposition 2. Define ωA = {ωt, t ∈ A}, we have 
+
+d ¯Pd ¯Q (ω[0: J]) = p(T, ω 0)
+
+q(ω0)
+
+d ¯Pd ¯Q (ω(0: J)) ∝ p(T, ω 0)
+
+q(ω0)
+
+p0(ωT )
+
+p(T, ω 0) = p0(ωT )
+
+q(ω0) .
+
+Proof of Proposition 3. Since Xt | X0 = x0 ∼ N (e−t/ 2x0, (1 − e−t)Id), we have that 
+
+p(t, x ) = 
+
+Z
+
+> Rd
+
+p0(z) (2 π(1 − e−t)) −d/ 2 exp 
+
+
+
+− ∥x − e−t/ 2z∥2
+
+2(1 − e−t)
+
+
+
+dz = c(t) EZt,x [p0(Zt,x )] .
+
+Proof of Proposition 4. Let v = et − 1 and recall Var( g) = 
+
+Z
+
+π(y)2 px(y)2
+
+qt(y) dy − r2. It suffices to show finiteness of the integral. Since π is bounded on {∥ y∥ ≤ R}, the integral over this region is finite. For ∥y∥ > R , π(y)2 ≤ C2e−2a∥y∥2
+
+.Moreover, for Gaussian densities, px(y)2
+
+qt(y) ≍ exp 
+
+ 
+
+− 1
+
+v + 12τ 2
+
+
+
+∥y∥2 + O(∥y∥)
+
+
+
+, where τ 2 = σ2vσ2+v .Hence, for large ∥y∥,
+
+π(y)2 px(y)2
+
+qt(y) ≲ exp 
+
+ 
+
+−2a − 1
+
+v + 12τ 2
+
+
+
+∥y∥2 + O(∥y∥)
+
+
+
+.
+
+18 Thus integrability holds if −2a − 1
+
+v + 12τ 2 < 0 ⇐⇒ 12τ 2 < 2a + 1
+
+v . Substituting τ 2 = σ2vσ2+v gives 
+
+σ2 + v
+
+2σ2v < 2a + 1
+
+v ⇐⇒ σ2 > v
+
+1 + 4 av . This ensures finiteness of the second moment, hence Var( g) < ∞.
+
+Proof of Proposition 5. Let g(Y ) = π(Y )˜ qt(Y )
+
+qt(Y ) , Y ∼ qt. Then E[g(Y )] = r and E[g(Y )2] = 
+
+Z π(y)2 ˜qt(y)2
+
+qt(y) dy .Using q⋆(y) = π(y)˜ qt(y) 
+
+> r
+
+, E[g(Y )2] = r2
+
+Z q⋆(y)2
+
+qt(y) dy . Hence Var( g(Y )) = r2
+
+Z q⋆(y)2
+
+qt(y) dy − 1
+
+
+
+.Finally, χ2(q⋆∥qt) = Eqt
+
+" q⋆
+
+qt
+
+− 1
+
+2#
+
+=
+
+Z q⋆(y)2
+
+qt(y) dy − 1, which gives Var( g(Y )) = r2 χ2(q⋆∥qt). 
+
+# B Bernoulli Factory for the Ping-Pong Algorithms 
+
+The Metropolis-type updates within the Ping-Pong class require the simulation of Bernoulli random variables with acceptance probabilities αS or αT,S , depending on the update used. These probabilities are not available in closed form, but can be expressed in terms of quantities for which unbiased estimators can be simulated. Consequently, acceptance is implemented through a Bernoulli factory .
+
+Bernoulli factory formulation. Let p = ( p0, p 1) denote unknown probabilities for which we can simulate independent pi-coins, i = 0 , 1. A Bernoulli factory problem consists of simulating an f (p)-coin, that is, a Bernoulli random variable with success probability f (p) ∈ (0 , 1), using only pi-coins. In our setting, the Barker acceptance probability has the form 
+
+f (p) = c1p1
+
+c0p0 + c1p1
+
+, (12) where c0, c 1 > 0 are known constants and p0, p 1 are unknown probabilities. This structure admits the so-called 2-coin algorithm , originally proposed in Gon¸ calves et al. (2023) and later refined in Vats et al. (2022); Stumpf-F´ etizon and Gon¸ calves (2025). 
+
+Simulation of pi-coins. In our setting, we do not observe pi directly, but can simulate unbiased estimators ˆpi satisfying E[ˆ pi] = pi and ˆ pi ∈ [0 , 1] almost surely. A pi-coin can then be simulated exactly by: 1. Simulating ˆ pi;2. Given ˆ pi, drawing a Bernoulli(ˆ pi) variable. By iterated expectation, the resulting coin has success probability pi.
+
+The 2-coin algorithm. The 2-coin algorithm exploits representation (12). At each iteration, one first selects index i ∈ { 0, 1} with probability ci/(c0 + c1), then simulates a pi-coin. If the pi-coin is successful, the algorithm outputs i; otherwise it restarts. Algorithm 5 presents the procedure for an f (p)-coin. 
+
+Algorithm 5: 2-coin algorithm 
+
+Data: Constants c0, c 1 > 0; mechanism to simulate pi-coins 
+
+Result: An f (p)-coin 
+
+while no output do 
+
+Draw I ∼ Ber {c1/(c0 + c1)};Simulate a pI -coin; 
+
+if pI -coin = 1 then 
+
+Output I;
+
+else 
+
+continue; 
+
+end end 
+
+19 Vats et al. (2022) propose a generalization of Barker’s 2-coin algorithm in which a β-coin is simulated at the beginning of each iteration of the 2-coin procedure. If this β-coin returns 1, the algorithm immediately outputs 0; otherwise, the usual 2-coin step is performed. This modification effectively truncates the number of loops of the 2-coin algorithm, thereby preventing occasionally very costly realizations that may arise when the underlying coin probabilities are small. The choice of β reflects a trade-off between computational cost and mixing efficiency. Larger values of 
+
+β reduce the expected cost per invocation of the 2-coin algorithm by increasing the probability of early termination. However, this comes at the price of additional rejections, which slow down the mixing of the Markov chain. Thus, β should be calibrated to balance computational savings against the induced degradation in mixing performance. 
+
+Product structure and divide-and-conquer. In both Barker’s updates (Update 2 and Update 3), the acceptance probabilities admit a product representation of the form 
+
+cipi =
+
+> J⋆
+
+Y
+
+> j=1
+
+c1/J ⋆ 
+
+> i
+
+pij ,
+
+where J⋆ = J for Update 2 and J⋆ = J + 1 for Update 3. A pi-coin can therefore be simulated by generating independent pij -coins and returning 1 if and only if all sub-coins equal 1. Directly applying the 2-coin algorithm to simulate an f (p)-coin when pi = QJj=1 pij leads to an exponen-tial cost in J (see Stumpf-F´ etizon and Gon¸ calves (2025)). The divide-and-conquer Bernoulli factory (DCBF) of Stumpf-F´ etizon and Gon¸ calves (2025) reduces this cost by organizing the J factors along a balanced bi-nary tree. The index set {1, . . . , J } is partitioned across the leaves of the tree, and at each leaf l the 2-coin algorithm is used to simulate an fl(p)-coin depending only on the corresponding subset of factors. More precisely, if l ⊂ { 1, . . . , J } denotes the subset of indices assigned to leaf l, then 
+
+fl(p) = 
+
+Q 
+
+> j∈l
+
+c1/J  
+
+> 1
+
+p1j
+
+Q 
+
+> j∈l
+
+c1/J  
+
+> 1
+
+p1j + Q 
+
+> j∈l
+
+c1/J  
+
+> 0
+
+p0j
+
+.
+
+After simulating the fl(p)-coin at each leaf, the outputs are propagated upward through the tree. At each internal node, the two children are compared: if they agree (both 0 or both 1), their common value is assigned to the parent node; if they differ, the parent node remains unresolved. Once this upward pass is completed, some internal nodes may remain unresolved due to disagreement between their children. The leaves connected to such unresolved nodes identify precisely the subsets of indices that must be re-simulated, while all other leaves retain their previously simulated values. If the root node becomes resolved, its value is returned as the fl(p)-coin. Otherwise, only the leaves associated with unresolved branches are re-simulated, and the procedure repeats. This recursive propagation and localized re-simulation prevents repeated evaluation of all J factors at each restart and is the key mechanism reducing the overall computational complexity from exponential to polynomial in J under the regimes studied in Stumpf-F´ etizon and Gon¸ calves (2025). Although developed in a Bayesian asymptotic setting, the same structure substantially reduces computational cost in the present context. Algorithm 6 outlines the DCBF construction. 20 Algorithm 6: Divide-and-Conquer Bernoulli Factory (DCBF) 
+
+Data: Constants ci; number of levels ℓ; mechanism to simulate fl(p)-coins via the 2-coin algorithm 
+
+Result: An f (p)-coin Construct a balanced binary tree with 2 ℓ leaves; Partition {1, . . . , J } across the leaves as evenly as possible, defining the subsets l;Mark all leaves as active; 
+
+while the root node is unresolved do 
+
+Simulate an fl(p)-coin at each active leaf l;Propagate the leaf outputs upward through the tree as described in the text; 
+
+if the root node becomes resolved then 
+
+Output its value as the f (p)-coin; 
+
+else 
+
+Mark as active only the leaves belonging to unresolved branches; 
+
+end end DCBF for Update 2. For Update 2, we have j = 0 , . . . , J − 1 and 
+
+c0j = ( πu(x0)) 1/J , ˆp0j = wj (xtj , Z j,n j )
+
+wj (xtj , Z j,n j ) + Pnj −1 
+
+> i=1
+
+wj ( ˙Xj,i , Z j,i ) . (13) The expressions for c1j and ˆ p1j are obtained by replacing x with ¨ x.
+
+DCBF for Update 3. For Update 3, we set j = 0 , . . . , J and 
+
+c0j =
+
+ πu(x0)˜qT (xT )
+
+1/(J+1) 
+
+. (14) For j = 0 , . . . , J − 1, the estimators ˆ p0j are defined exactly as in Update 2. 
+
+# C Analysis of the Ping-Pong algorithms 
+
+This section analyzes the theoretical properties of the Ping-Pong class of MCMC algorithms and discusses how these properties guide practical implementation choices. Some factors influencing efficiency are shared with SPARK, such as the terminal time T , the time schedule and the Monte Carlo sample size used in the density estimators. Others are specific to the MCMC context, including the number of particles in the SPIDER proposal, the choice of update combination within the Ping-Pong class and the specifications of the DCBF algorithm. 
+
+Proposal distribution 
+
+The densities of the proposal distributions within the Ping-Pong class are intractable because the distribution of the SPIDER output is itself intractable. Nevertheless, unbiased estimators can be constructed, based on the following result. 
+
+Proposition C.1. Let ˜Q denote the SPIDER law associated with the IS estimator (6) , with qt = qGt ,completed with bridges from ¯Q, and assume that XT has Lebesgue density ¯qT under ¯Q. Then 
+
+qS (x) := d ˜Qd ¯Q (x) = qJ (xT )
+
+> 0
+
+Y
+
+> j=J−1
+
+qj (xtj | xtj+1 ),
+
+where, for j = 0 , . . . , J − 1,
+
+qj (xtj | xtj+1 ) = nj E ˙Xj ,Z j
+
+" wj (xtj , Z j,n j )
+
+wj (xtj , Z j,n j ) + Pnj −1 
+
+> i=1
+
+wj ( ˙Xj,i , Z j,i )
+
+#
+
+, (15) 21 with 
+
+w0(x) = πu(x), wj (x, z ) = 
+
+> mj
+
+X
+
+> l=1
+
+πu(zl) ˜qtj (zl)
+
+qtj (zl) , 1 ≤ j ≤ J − 1, wJ (x, z ) = 1¯qT (xT )
+
+> mJ
+
+X
+
+> l=1
+
+πu(zl) ˜qT (zl)
+
+qT (zl) ,
+
+and ˙Xj,i i.i.d. 
+
+∼ N
+
+
+
+e∆tj /2Xtj+1 , (e∆tj − 1) Id
+
+
+
+, ˙XJ,i i.i.d. 
+
+∼ ¯qT , Zj,i,l i.i.d. 
+
+∼ qtj , j = 1 , . . . , J. 
+
+Proof of Proposition C.1. Under SPIDER, the path is generated sequentially backward. It suffices to identify, for each j, the conditional density of Xtj given Xtj+1 with respect to the proposal kernel ¯Qj (xtj+1 , dx tj ) = N
+
+
+
+e∆tj /2xtj+1 , (e∆tj − 1) Id
+
+
+
+(dx tj ), for j < J, and ¯ qT for j = J. 
+
+Conditionally on Xtj+1 = xtj+1 , the algorithm draws ˙Xj, 1, . . . , ˙Xj,n j
+
+> i.i.d.
+
+∼ ¯Qj (xtj+1 , ·), together with independent auxiliary variables Zj, 1, . . . , Z j,n j with Zj,i,l i.i.d. 
+
+∼ qtj , and selects an index Ij with probability 
+
+P(Ij = k | ˙Xj , Z j ) = wj ( ˙Xj,k , Z j,k )
+
+Pnj 
+
+> i=1
+
+wj ( ˙Xj,i , Z j,i ) ,
+
+where wj includes the IS correction ˜ qtj /q tj . Thus Xtj = ˙Xj,I j . For any measurable A,˜Q(Xtj ∈ A | Xtj+1 ) = 
+
+> nj
+
+X
+
+> k=1
+
+E
+
+"
+
+1{ ˙Xj,k ∈A}
+
+wj ( ˙Xj,k , Z j,k )
+
+Pnj 
+
+> i=1
+
+wj ( ˙Xj,i , Z j,i )
+
+#
+
+= nj E
+
+"
+
+1{ ˙Xj,n j ∈A}
+
+wj ( ˙Xj,n j , Z j,n j )
+
+wj ( ˙Xj,n j , Z j,n j ) + Pnj −1 
+
+> i=1
+
+wj ( ˙Xj,i , Z j,i )
+
+#
+
+= nj E
+
+"Z
+
+> A
+
+wj (x, Z j,n j )
+
+wj (x, Z j,n j ) + Pnj −1 
+
+> i=1
+
+wj ( ˙Xj,i , Z j,i )¯Qj (xtj+1 , dx )
+
+#
+
+=
+
+Z
+
+> A
+
+nj E ˙Xj ,Z j
+
+" wj (x, Z j,n j )
+
+wj (x, Z j,n j ) + Pnj −1 
+
+> i=1
+
+wj ( ˙Xj,i , Z j,i )
+
+#
+
+¯Qj (xtj+1 , dx ).
+
+This identifies qj (· | xtj+1 ) as the Radon–Nikodym derivative in (15). 
+
+Convergence and ergodicity 
+
+For independence Metropolis-Hastings algorithms with proposal density q and invariant distribution π, the associated Markov kernel P satisfies: 1. lim  
+
+> n→∞
+
+∥P n(x, ·) − π∥TV = 0 , for π-a.e. x ∈ X ,
+
+2. 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+h(Xi) −→ π(h), P -a.s., for any measurable h with π(|h|) < ∞, provided (Deligiannidis et al., 2025): (i) π ≪ q;(ii) w = π/q satisfies w > 0 q-a.s. and q(w) = 1. 22 These conditions apply directly to the pure independence formulation (Update 3), and analogous argu-ments extend to the two-block Gibbs-type formulation (Updates 1 and 2), since each Metropolis-type update satisfies the same domination and positivity conditions. Furthermore, Mengersen and Tweedie (1996) show that geometric ergodicity holds if and only if the importance weight w is essentially bounded. Bounded weights imply a global minorization condition and hence uniform (and therefore geometric) ergodicity. When w is unbounded, geometric convergence in total variation fails. An analogous statement holds for the independence Barker’s kernel. In our setting, πu is bounded, so the auxiliary weights wj (·, ·) are uniformly bounded above. This does not imply that the global importance ratios arising in Update 2 or Update 3 are bounded. A single small factor in qS can make the product arbitrarily small. Accordingly, we do not assume bounded importance ratios and therefore do not rely on uniform or geometric ergodicity. Nevertheless, this is not problematic. Uniform ergodicity requires worst-case control over all starting points. In practice, the Ping-Pong algorithms are initialized from a distribution ν designed to approximate 
+
+π. Hence it is more relevant to study 
+
+∥νP t − π∥TV 
+
+rather than worst-case bounds. Moreover, the SPIDER proposal approximates the full diffusion path law. The MCMC acts primarily as a correctness mechanism ensuring exactness, rather than as a global explorer of the state space. In this regime, the acceptance rate becomes a structurally meaningful diagnostic: sustained high acceptance reflects that the proposal already lies close to stationarity and that the MCMC performs only small perturbative corrections. This interpretation differs from generic independence samplers, where high acceptance may arise from accidental tail matching. A natural initialization ν is given by a SPARK realization. This places the chain in a high-probability region of the target, aligning theoretical considerations with practical operation. 
+
+Terminal time T and proposal ˜ qT
+
+The choice of T plays a distinct role under the two canonical strategies. Under the Updates 1 and 2 Gibbs sampling formulation, mixing is affected by inter-block dependence, specifically by the correlation between X0 and XT under the target. As T decreases, this dependence strengthens, reducing Gibbs efficiency. Under Update 3 alone formulation, this block-correlation effect is absent. The choice of T then follows the same rationale as in SPARK: T must be large enough that the SIR proposal for XT produces reasonable candidates and hence satisfactory acceptance rates. Because the second formulation avoids block correlation, it may permit smaller values of T , potentially improving overall efficiency. Regarding the choice of the particle distribution ¯ qT in the SIR step for XT (Update 3), a preliminary learning phase is generally beneficial. One practical approach is to run a PMMH algorithm targeting XT
+
+(as in SPARK) in order to obtain empirical information about salient features of p(T, ·), such as location, scale, and potential residual dependence or tail behavior. Provided that T is large enough to have mitigated strong multimodality and dependence, a multivariate Student-t distribution with independent coordinates typically yields a robust and efficient SIR proposal. The heavier tails offer additional protection against moderate misspecification. Under this perspective, the terminal time T for Update 3 can be selected following the same calibration strategy proposed for SPARK. Specifically, T should be large enough so that the marginal law p(T, ·) exhibits sufficiently regular structure, with attenuated multimodality and weakened dependence, allowing a simple parametric proposal such as the Student-t to approximate it effectively. At the same time, T should not be taken unnecessarily large, since this increases computational cost without substantial gains in proposal quality. Thus, the choice of T reflects a balance between structural simplification of the target at time T
+
+and overall computational efficiency. 23 Time schedule and number of particles 
+
+Given a fixed terminal time T , the intermediate time schedule should be chosen with care. Although the MCMC correction guarantees exactness, and therefore compensates for the approximation error introduced by the self-normalized sequential SIR mechanism, the quality of the time discretization remains crucial for efficiency. The schedule determines how smoothly the reverse-diffusion bridge connects the target at time 0 to the reference distribution at time T . If the intermediate times are poorly spaced, successive importance weights become more variable, degrading the quality of the SPIDER proposal and ultimately lowering acceptance probabilities in the MCMC correction step. For this reason, the time schedule should be chosen so as to control the incremental inefficiency at each level. In particular, adjacent time points should be sufficiently close to prevent large variability in the incremental importance ratios, thereby maintaining stable particle weights and a well-aligned global proposal. An efficient way to measure the efficiency of each SIR algorithm and make it uniformly reasonable across all the time points is to evaluate the effective sample size of the particle approximation, commonly defined as 
+
+> n
+
+X
+
+> k=1
+
+w2
+
+> i
+
+!−1
+
+, where wi are the exact self-normalized weights of the generate sample. In our case, these can be estimated using the respective estimator of the IS weights. The additional robustness provided by the MCMC correction is more effectively exploited to reduce the number of particles, rather than to relax the time schedule. This is because the computational cost of the adopted Bernoulli factory is highly sensitive to the particle specification. Indeed, the probability of the second coin in (13) is exactly the normalized importance weight of the selected particle, computed after a fresh draw of the remaining nj − 1 particles and of all auxiliary random variables used in the unbiased estimators of the nj weights. A typical normalized weight is of order O(1 /n j ), so increasing the number of particles nj decreases this probability proportionally. This, in turn, increases the expected cost of the two-coin procedure executed at the leaves of the DCBF tree (Stumpf-F´ etizon and Gon¸ calves, 2025). Ultimately, the practitioner must balance the trade-off between maintaining stable incremental impor-tance weights (via an adequate time schedule) and controlling the computational burden of the DCBF (via the particle numbers). 
+
+DCBF specifications 
+
+The DCBF algorithm involves two key tuning parameters: the escape probability β in Portkey’s generalized 2-coin procedure, and the number of leaves ℓ in the binary tree. The escape probability β controls the frequency of early termination in the 2-coin routine. A conservative choice corresponds to selecting β such that only a small proportion of iterations are terminated due to the 
+
+β-coin, typically on the order of 1-2%. This limits the inflation of rejection probability while still preventing excessively costly realizations of the 2-coin algorithm. In practice, β should be calibrated to achieve a substantial reduction in computational cost without materially degrading the mixing of the Markov chain. The second specification concerns the number of leaves ℓ in the DCBF tree. The intractable probabilities 
+
+p0 and p1 in the Barker’s acceptance probability involve J⋆ product terms, where J⋆ = J for Update 2 and 
+
+J⋆ = J + 1 for Update 3. For computational efficiency, J⋆ should be chosen as a power of two, say J⋆ = 2 K ,so that the DCBF tree is balanced with ℓ = 2 K−1 leaves, assigning two product terms to each leaf. In all examples reported in Section 5, this specification was empirically optimal. 
+
+# D Why rejection sampling is impractical 
+
+In principle, one could simulate exactly from the transition distribution of the reverse diffusion in (2) using rejection sampling, since the Radon-Nikodym derivative d ¯Pd ¯Q is uniformly bounded. In practice, however, this approach is infeasible because only a very loose upper bound on this derivative is available. While rejection sampling is efficient when the optimal bound Mopt (the supremum of the derivative) is used, employing a loose bound M increases the expected number of proposals until acceptance by a 24 factor M/M opt . In our setting, the acceptance probability deteriorates with the time t, decaying at least exponentially fast in t and therefore vanishing as t → ∞ (see Proposition D.2). Specifically, assume without loss of generality that sup x πu(x) ≤ 1. The rejection sampler for Xt | Xt+∆ =
+
+x proceeds as follows: 1. Propose y ∼ N (e(∆) /2x, (e∆ − 1) Id), 2. Draw z ∼ N (et/ 2y, (et − 1) Id) and compute α(y, z ) = πu(z), 3. Draw I ∼ Ber( α(y, z )), 4. If I = 1, return ¯Xt = y, otherwise return to Step 1. 
+
+Proposition D.2. The global acceptance probability of the rejection sampler is 
+
+P(accept) = Ey,z [α(y, z )] ,
+
+where we assume without loss of generality that πu ≤ 1. Moreover, if πu ∈ L1(Rd), then 
+
+Ey,z [α(y, z )] = O(e−td/ 2), t → ∞ ,
+
+and in particular E[πu(W )] → 0 as t → ∞ .Proof. Iterated expectation gives P(accept) = Ey,z [α(y, z )] = Ey
+
+Ez|y [πu(z)] .Let u = z − et/ 2y. Then 
+
+Ez|y [πu(z)] = 
+
+Z
+
+> Rd
+
+πu(z)˜ qt(z|y), dz = (2 π(et − 1)) −d/ 2
+
+Z
+
+> Rd
+
+πu(u + et/ 2y) exp 
+
+
+
+− |u|2
+
+2( et − 1) 
+
+
+
+du. 
+
+By translation invariance and because πu ∈ L1(Rd), 
+
+Z
+
+> Rd
+
+πu(u + et/ 2y)du =
+
+Z
+
+> Rd
+
+πu(v)dv < ∞.Thus, 
+
+Ez|y [πu(z)] ≤ C(et − 1) −d/ 2,
+
+with C independent of y. Therefore, Ey,z [α(y, z )] ≤ C(et − 1) −d/ 2 = O(e−td/ 2), t → ∞ .
+
+25

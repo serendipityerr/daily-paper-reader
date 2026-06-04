@@ -1,0 +1,2551 @@
+Title: Nonlocal Mean Field Schrödinger Bridge with Learned Interactions
+
+URL Source: https://arxiv.org/pdf/2606.04265v1
+
+Published Time: Thu, 04 Jun 2026 00:24:37 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+# Nonlocal Mean Field Schr¨ odinger Bridge with Learned Interactions 
+
+Daisuke Inoue ∗ Mathieu Lauri` ere † Dante Kalise ‡
+
+Abstract 
+
+The Schr¨ odinger Bridge Problem constructs a stochastic process that connects an initial dis-tribution to a terminal distribution with minimum energy. This work considers its mean-field extension, the Mean-Field Schr¨ odinger Bridge, for interacting particle systems. With nonlocal in-teractions, evaluating the resulting particle-dependent distributional terms can scale quadratically with the population size, which makes large-scale problems intractable. We address this bottleneck by approximating the nonlocal interactions with neural network surrogates. The resulting four-stage alternating algorithm reduces the per-step cost from quadratic to linear in the population size at inference. We also derive Gr¨ onwall-type stability bounds that show how surrogate errors propagate to the generated trajectories. In numerical experiments on navigation and opinion-dynamics tasks, the proposed method reproduces trajectories obtained with analytical evaluation and reduces training time. 
+
+# 1 Introduction 
+
+The Schr¨ odinger Bridge Problem (SBP) constructs a stochastic process that connects an initial distri-bution ρ0 to a terminal distribution ρT with minimum transport energy. First posed by Schr¨ odinger [1], it is now read as an entropy-regularized optimal transport problem [2, 3], a connection that under-lies most current numerical algorithms. The framework has been applied to stochastic optimal con-trol [4, 5, 6, 7, 8] and probabilistic inference [9, 10]. More recently, diffusion-based generative models have also cast trajectory generation between data and prior distributions as an SBP [11, 12, 13]. A natural extension of SBP, and the subject of this paper, is to interacting particle systems, in which a population of agents is transported under dynamics and costs that depend on the collective distri-bution. Such problems appear in swarm robotics with collision avoidance [14, 15, 16], crowd density steering [7, 8], and trajectory reconstruction from cellular movement data [17, 18, 19]. In the finite-particle formulation with N agents, each agent’s dynamics and cost depend on the configuration of the other N − 1 agents. Evaluating these pairwise interactions requires O(N 2) operations per time step, making direct optimization intractable for large populations. This motivates the mean-field limit [20, 21, 22]: as N → ∞ , a typical agent interacts with a contin-uum density ρ(x, t ) rather than with N − 1 individual agents. The N -particle problem then becomes a problem on the space of probability measures, the Mean-Field Schr¨ odinger Bridge (MFSB) [23, 24]. Its optimality conditions are given by a coupled Hamilton–Jacobi–Bellman (HJB) and Fokker–Planck (FP) system [25], which admits a probabilistic representation as Forward–Backward Stochastic Dif-ferential Equations (FBSDEs) [10]. Building on this representation, Liu et al. [26] proposed a deep learning method that solves the MFSB by alternately training forward and backward neural networks to satisfy the FBSDE system, bringing MFSBs within reach of dimensions out of scope for classical PDE solvers [27, 28]. Because the FBSDE solver trains on finite particle ensembles, its cost depends on how the distribution-dependent terms are evaluated along the simulated trajectories. The local 
+
+and aggregated distributional terms considered by Liu et al. [26] can be evaluated without forming all pairwise interactions: the former depend on the pointwise density ρ(x, t ), while the latter are batch-level statistics shared across particles, such as the mean Eρt [y]. In contrast, the nonlocal interactions             
+
+> ∗Department of Mathematics, Imperial College London, London SW7 2AZ, United Kingdom. dinoue@ic.ac.uk
+> †Shanghai Frontiers Science Center of Artificial Intelligence and Deep Learning, NYU-ECNU Institute of Mathemat-ical Sciences, NYU Shanghai, Shanghai 200126, People’s Republic of China. mathieu.lauriere@nyu.edu
+> ‡Department of Mathematics, Imperial College London, London SW7 2AZ, United Kingdom.
+> d.kalise-balza@imperial.ac.uk
+
+1
+
+> arXiv:2606.04265v1 [math.OC] 2 Jun 2026
+
+considered here require a separate empirical population average at each evaluation point x; kernel convolutions R k(x, y )ρ(y, t ) d y are a representative example. Such terms arise in pairwise collision avoidance and crowd congestion, but direct evaluation for all N particles and all training iterations costs O(N 2KM iter ), with K the number of time steps and Miter the number of training iterations. In this paper, we build on the FBSDE-based framework to address nonlocal interactions in the MFSB. The idea is to replace the analytically known but expensive nonlocal terms in the dynamics and running cost by neural surrogates . During training, the exact empirical interaction value is evaluated on sampled particle trajectories and used as supervision; after training, the surrogate returns the corresponding value from the particle state and time alone. A related line of work approximates known distribution-dependent interactions or controls by neural networks: deep solvers for McKean– Vlasov FBSDEs [29, 30], neural population-dependent controls in mean-field control [31], and random-Fourier-feature surrogates for known kernel interactions [32]. Compared with these works, the present setting is the Schr¨ odinger bridge, in which the surrogate must coexist with the forward–backward consistency and the prescribed endpoint marginals. Concretely, we use separate networks for these two nonlocal terms and organize training as a four-stage loop that alternates between updating the forward/backward potentials and updating the surrogates. The contributions of this paper are: 1) A proposal of a four-stage alternating algorithm for the nonlocal MFSB. In addition to the forward and backward FBSDE potentials, the algorithm trains separate neural surrogates for the nonlocal term in the dynamics and the nonlocal term in the running cost, reducing the per-step evaluation cost from O(N 2) to O(N ) in the drift-update steps and eliminating quadratic cost at inference. 2) A stability analysis for the FBSDE system of the MFSB under approximation of the interaction terms. The analysis yields Gr¨ onwall-type bounds that quantify how surrogate errors in the nonlocal dynamics and running cost propagate to the forward and backward FBSDE solutions, and to the combined Schr¨ odinger bridge satisfying both marginal constraints. 3) Numerical experiments on two crowd navigation tasks and a high-dimensional opinion-dynamics task. The learned surrogates reproduce trajectories obtained with analytical evaluation while cutting training time, and they outperform a random-batch approximation in the accuracy–speed trade-off. The rest of the paper is organized as follows. Section 2 formulates the finite-particle control problem, passes to the mean-field Schr¨ odinger bridge, and derives the HJB–FP and FBSDE charac-terizations that underlie the learning algorithm. Section 3 starts from the FBSDE losses proposed by Liu et al. [26], then introduces neural surrogates for the nonlocal drift and cost and combines them into a four-stage alternating training procedure. Section 4 analyzes how surrogate errors in the non-local drift and running cost affect the forward and backward stochastic systems. Section 5 evaluates the method on crowd-navigation and opinion-dynamics benchmarks, comparing analytical evaluation, the learned surrogate, and the random-batch approximation. Section 6 summarizes the findings and discusses remaining theoretical questions. 
+
+Related Work. The link between the SBP and optimal transport has been studied from a stochas-tic control perspective [2, 3, 33], with numerical methods including Sinkhorn-type algorithms [34, 35], FBSDE-based approaches [9, 10], and neural-network methods [11, 13, 36]. The mean-field exten-sion was formulated by Backhoff et al. [23]; Hern´ andez and Tangpi [24] subsequently established existence, optimality conditions, and propagation of chaos via terminal-marginal penalization. On the algorithmic side, Liu et al. [26] treat the MFSB as a mean-field control problem with state- and distribution-dependent running costs, including local or aggregated distributional terms whose particle evaluation does not create a pairwise bottleneck; the present work extends this FBSDE-based neural approach to nonlocal interactions, which are expensive to evaluate directly. Interaction learning in many-agent systems splits into two settings: recovering unknown interac-tion laws from data, and approximating known interactions with cheaper surrogates. Our work falls 2in the second. In the first setting, trajectory-based nonparametric estimators with theoretical guar-antees extend to heterogeneous and stochastic systems [37, 38, 39]; complementary directions include likelihood-based drift estimation [40], density-based identification [41, 42], and inverse problems for mean-field games that recover interaction costs from aggregate data [43, 44, 45, 46]. In the second, Dayanikli et al. [31] learn population-dependent controls with neural embeddings, Han et al. [29] and Hu et al. [30] build deep solvers for McKean–Vlasov FBSDEs, and Cao et al. [32] accelerate kernel-based training via random Fourier features; broader kernel-based surrogate modeling is surveyed in [47]. Compared with these, we aim to accelerate the MFSB with known but expensive nonlocal interactions while preserving the forward–backward consistency and prescribed endpoint marginals of the Schr¨ odinger bridge. To our knowledge, this is the first surrogate-acceleration strategy specifically for this setting. 
+
+Notation. We denote by P(Rd) the space of probability measures on Rd equipped with the 2-Wasserstein metric. The notation E[·] denotes expectation, ∇x denotes the spatial gradient, and ∆ x
+
+denotes the spatial Laplacian. The symbol ∥ · ∥ denotes the Euclidean norm for vectors and the Frobenius norm for matrices. 
+
+# 2 Problem Formulation and FBSDE Characterization 
+
+This section starts from the finite-particle control problem, takes its mean-field limit, derives the associated HJB–FP equations, and recalls the FBSDE representation used by the learning algorithm. 
+
+2.1 Finite Particle Control Problem 
+
+Consider N interacting particles in Rd. Let (Ω , F, (Ft)t∈[0 ,T ], P) be a filtered probability space sup-porting N independent d-dimensional Brownian motions {Wi}Ni=1 . The particle states xi(t) ∈ Rd are driven by Ft-adapted controls αi(t) ∈ Rd. We consider the cost functional and dynamics inf 
+
+> {αi}i=1 ,...,N
+> N
+
+X
+
+> i=1
+
+E
+
+Z T
+
+> 0
+
+12σ2 ∥αi(t)∥2 + F (xi(t), t, ρ Nt ) d t
+
+
+
+,
+
+s.t. dxi(t) =  αi(t) + f (xi(t), t, ρ Nt ) dt + σ dWi(t),xi(0) ∼ ρ0, x i(T ) ∼ ρT .
+
+Here F : Rd × [0 , T ] × P (Rd) → R is the nonlocal running cost, f : Rd × [0 , T ] × P (Rd) → Rd the nonlocal drift, σ ∈ R the diffusion coefficient, and 
+
+ρNt := 1
+
+N
+
+> N
+
+X
+
+> j=1
+
+δxj (t)
+
+is the empirical distribution of the particle system. Unlike standard stochastic control, both the initial and terminal distributions of the particle laws are prescribed, so classical stochastic-control techniques do not apply directly. When f = F = 0, it reduces to the classical Schr¨ odinger Bridge, i.e., entropy-regularized optimal transport minimizing KL( ρ0∥ρT ) along diffusion paths. We distinguish these terms from local or aggregated distributional terms: local terms depend on quantities such as ρ(x, t ) at the evaluation point, while aggregated terms are population-level statistics that can be computed once and shared across particles. This paper focuses on nonlocal interactions, where the drift or cost depends on a population average evaluated separately at each particle state. A canonical example is a spatial convolution of the density: 
+
+f (xi(t), t, ρ Nt ) = 
+
+Z
+
+kf
+
+ xi(t), x ρNt ( d x) = 1
+
+N
+
+> N
+
+X
+
+> j=1
+
+kf
+
+ xi(t), x j (t),F (xi(t), t, ρ Nt ) = 
+
+Z
+
+kF
+
+ xi(t), x ρNt ( d x) = 1
+
+N
+
+> N
+
+X
+
+> j=1
+
+kF
+
+ xi(t), x j (t),
+
+(1) 3for kernels kf : Rd × Rd → Rd and kF : Rd × Rd → R. A naive evaluation of such nonlocal interactions costs O(N 2) pairwise operations per time step, which makes the finite-N problem intractable for large populations. 
+
+2.2 Mean-Field Schr¨ odinger Bridge 
+
+At the formal level, as N → ∞ , the empirical distribution ρNt is approximated by a deterministic density ρ(·, t ). A rigorous justification of this limit for Schr¨ odinger-type control problems, including propagation of chaos for the underlying particle system, is given in [24]. The Mean-Field Schr¨ odinger Bridge (MFSB) is the resulting minimization of the expected cost of a representative particle subject to the transport constraint: min 
+
+> α
+
+Z T
+
+> 0
+
+Z h 12σ2 ∥α(x, t )∥2 + F (x, t, ρ t)
+
+i
+
+ρ(x, t ) d x dt, (2) s.t. ∂tρ(x, t ) = −∇ x ·  ρ(x, t ) ( α(x, t ) + f (x, t, ρ t))  + σ2
+
+2 ∆xρ(x, t ),ρ(·, 0) = ρ0, ρ (·, T ) = ρT . (3) With ρt = ρ(·, t ), the interaction terms take the form 
+
+f (x, t, ρ t) = 
+
+Z
+
+kf (x, y ) ρ(y, t ) d y, F (x, t, ρ t) = 
+
+Z
+
+kF (x, y ) ρ(y, t ) d y. 
+
+2.3 Coupled PDEs corresponding to the MFSB 
+
+We formally apply Pontryagin’s maximum principle to (2)–(3); a rigorous derivation via penalization of the terminal cost is given in [24]. Define the Hamiltonian 
+
+H(x, ρ, ∇xu, t ) := sup 
+
+> α
+
+n
+
+− α⊤∇xu − 12σ2 ∥α∥2o
+
+− ∇ xu⊤f − F. 
+
+The first-order optimality condition gives α∗ = −σ2∇xu, so that 
+
+H = σ2
+
+2 ∥∇ xu∥2 − ∇ xu⊤f − F. 
+
+The resulting optimality conditions take the form of coupled Hamilton–Jacobi–Bellman (HJB) and Fokker–Planck (FP) equations 
+
+−∂tu = − σ2
+
+2 ∥∇ xu∥2 + ∇xu⊤f + σ2
+
+2 ∆xu + F, (4) 
+
+∂tρ = ∇x ·  ρ(σ2∇xu − f ) + σ2
+
+2 ∆xρ, (5) subject to the boundary conditions ρ(·, 0) = ρ0 and ρ(·, T ) = ρT .We linearize (4)–(5) via the Cole–Hopf transformation [48, 33] Ψ( x, t ) := exp  −u(x, t ), bΨ( x, t ) := ρ(x, t ) exp  u(x, t ),
+
+so that ρ = Ψ bΨ. Substituting into (4)–(5) and using standard identities for the Laplacian of log Ψ yields the linear forward–backward system 
+
+∂tΨ = −∇ xΨ⊤f − σ2
+
+2 ∆xΨ + F Ψ, (6) 
+
+∂t bΨ = −∇ x · ( bΨf ) − σ2
+
+2 ∆x bΨ − F bΨ. (7) The boundary conditions on ρ become Ψ( ·, 0) bΨ( ·, 0) = ρ0, Ψ( ·, T ) bΨ( ·, T ) = ρT . (8) Equations (6)–(7) are the forward/backward Schr¨ odinger system associated with the MFSB. 42.4 FBSDEs corresponding to the MFSB 
+
+Liu et al. [26] derived a probabilistic representation for (6)–(7) via Itˆ o’s formula. Define the logarithmic value functions 
+
+Y (x, t ) := − log Ψ( x, t ), Z(x, t ) := σ∇xY (x, t ),
+
+bY (x, t ) := − log bΨ( x, t ), bZ(x, t ) := σ∇x bY (x, t ).
+
+Applying Itˆ o’s formula to Y (Xt, t ) and bY (Xt, t ) along the diffusion processes gives the FBSDE system below. The forward-time FBSDE for (6) reads dXt =  f (Xt, t, ρ t) + σZ t
+
+ dt + σ dWt, (9a) dYt =
+
+ 12 ∥Zt∥2 + F (Xt, t, ρ t)
+
+
+
+dt + Z⊤ 
+
+> t
+
+dWt, (9b) d bYt =
+
+ 12 bZt
+
+> 2
+
++ ∇x ·  σ bZ(·, t ) − f (·, t, ρ t)(Xt) + bZ⊤ 
+
+> t
+
+Zt − F (Xt, t, ρ t)
+
+
+
+dt + bZ⊤ 
+
+> t
+
+dWt. (9c) The divergence term ∇x · (σ bZ − f ) in (9c) comes from the second-order term in Itˆ o’s formula when converting the Fokker–Planck-type PDE (7) into a backward SDE for the log-density. The backward-time FBSDE, solved from T to 0, is d bXt =   − f ( bXt, t, bρt) + σ bZt
+
+ dt + σ dWt, (10a) d bYt =
+
+ 12 bZt
+
+> 2
+
++ F ( bXt, t, bρt)
+
+
+
+dt + bZ⊤ 
+
+> t
+
+dWt, (10b) dYt =
+
+ 12 ∥Zt∥2 + ∇x ·  σZ (·, t ) + f (·, t, bρt)( bXt) + Z⊤ 
+
+> t
+
+bZt − F ( bXt, t, bρt)
+
+
+
+dt + Z⊤ 
+
+> t
+
+dWt. (10c) Here bXT ∼ ρT , bρt denotes the distribution of bXt. The divergence term ∇x · (σZ + f ) in (10c) arises from the dual relation. A solution of the Schr¨ odinger bridge problem is characterized by consistency between the forward process ( Xt) and the backward process ( bXt): they induce the same path measure and satisfy ρt = bρt for all t ∈ [0 , T ]. The variables Y and bY are not independent value functions; they are complementary potentials whose sum recovers the density via the Cole–Hopf relation ρ = exp( −(Y + bY )). In the forward-time FBSDE, Y is the HJB value function enforcing optimality of the controlled dynamics, while bY is an auxiliary potential that aligns the density with the terminal constraint ρT . In the backward-time FBSDE the roles are reversed: bY is the backward HJB value function and Y enforces consistency with the initial distribution ρ0. The two FBSDEs are thus two stochastic representations of the same pair (Ψ , bΨ); their consistency characterizes the Schr¨ odinger bridge under both marginal constraints. 
+
+# 3 Proposed Method 
+
+Our method builds on the FBSDE learning framework of Liu et al. [26]. This framework trains neural networks to approximate the solutions of the FBSDEs obtained from the mean-field model. For local or aggregated distributional terms, the required particle-batch evaluation is not the dominant cost. For nonlocal interactions, however, the same evaluation becomes an empirical population average over all particles for each evaluation point. To reduce this cost, we introduce learned surrogates for the nonlocal interaction terms. We then analyze the resulting computational cost. 
+
+3.1 Baseline FBSDE Learning Objectives 
+
+Following [26], we parameterize the unknown functions in the FBSDEs (9)–(10) by neural networks and train them with the losses below. Our method keeps these losses and changes only how the interaction terms are evaluated. For the forward SDE, Y (x, t ) and Z(x, t ) are represented by networks ˜Yθ(x, t ) and ˜Zθ(x, t ) with parameters θ. For the backward SDE, bY (x, t ) and bZ(x, t ) are represented 5by ˜bY ϕ(x, t ) and ˜bZϕ(x, t ) with parameters ϕ. On a time grid 0 = t0 < t 1 < · · · < t K = T , with ∆Wk = Wtk+1 − Wtk , samples from the forward SDE and the backward SDE are generated by the Euler–Maruyama updates 
+
+Xtk+1 = Xtk + f (Xtk , t k, ρ tk )∆ t + σ ˜Zθ(Xtk , t k)∆ t + σ∆Wk,
+
+bXtk = bXtk+1 −   − f ( bXtk+1 , t k+1 , bρtk+1 ) + σ ˜bZϕ( bXtk+1 , t k+1 )∆t − σ∆Wk.
+
+The losses below are evaluated on the trajectory used in the corresponding update in Algorithm 1: backward losses for ϕ use the forward trajectory X, while forward losses for θ use the backward trajectory bX.
+
+IPF Loss. The Iterative Proportional Fitting (IPF) loss is 
+
+Lfwd IPF (θ) := 
+
+> K−1
+
+X
+
+> k=0
+
+∆t E
+
+ 12 ˜Zθ( bXtk , t k) + ˜bZϕ( bXtk , t k) 2
+
++ ∇x ·  σ ˜Zθ(·, t k) − f (·, t k, bρtk )( bXtk )
+
+
+
+,
+
+Lbwd IPF (ϕ) := 
+
+> K−1
+
+X
+
+> k=0
+
+∆t E
+
+ 12
+
+˜bZϕ(Xtk , t k) + ˜Zθ(Xtk , t k) 2
+
++ ∇x ·  σ ˜bZϕ(·, t k) + f (·, t k, ρ tk )(Xtk )
+
+
+
+.
+
+These correspond to KL( qθ∥qϕ) and KL( qϕ∥qθ) for the forward and backward directions, and drive the two drifts toward each other. 
+
+TD Loss. The Temporal Difference (TD) loss enforces temporal consistency of the value functions. Discretizing (9c) along the forward trajectory, we compare ˜bY ϕ(Xtk+1 , t k+1 ) to the target propagated from tk:˜bY ϕ(Xtk+1 , t k+1 ) ≈ TD bwd  
+
+> ϕ|θ
+
+(Xtk , t k),
+
+where TD bwd  
+
+> ϕ|θ
+
+(Xtk , t k) := ˜bY ϕ(Xtk , t k)+ ∆ t
+
+ 12
+
+˜bZϕ(Xtk , t k) 2
+
++ ∇x ·  σ ˜bZϕ(·, t k) − f (·, t k, ρ tk )(Xtk )+ ˜bZϕ(Xtk , t k)⊤ ˜Zθ(Xtk , t k) − F (Xtk , t k, ρ tk )
+
+
+
++ ˜bZϕ(Xtk , t k)⊤∆Wk.
+
+At tK = T , we impose the boundary condition ˜bY ϕ(XtK , t K ) ≈ − log ρT (XtK ),
+
+which is the terminal constraint of the Schr¨ odinger system. The backward TD loss is then 
+
+Lbwd TD (ϕ) := 
+
+> K−1
+
+X
+
+> k=0
+
+E
+
+h  ˜bY ϕ(Xtk+1 , t k+1 ) − TD bwd  
+
+> ϕ|θ
+
+(Xtk , t k)2i
+
++ E
+
+h  ˜bY ϕ(XtK , t K ) + log ρT (XtK )2i
+
+. (11) Analogously, discretizing (10c) backward from tk+1 to tk gives the forward TD residual for interior steps: 
+
+Lfwd TD (θ) := 
+
+> K−1
+
+X
+
+> k=0
+
+E
+
+h  ˜Yθ( bXtk , t k) − TD fwd  
+
+> θ|ϕ
+
+( bXtk+1 , t k+1 )2i
+
++ E
+
+h  ˜Yθ( bXt0 , t 0) + log ρ0( bXt0 )2i
+
+. (12) 6where TD fwd  
+
+> θ|ϕ
+
+( bXtk+1 , t k+1 ) := ˜Yθ( bXtk+1 , t k+1 )
+
+− ∆t
+
+ 12 ˜Zθ( bXtk+1 , t k+1 ) 2
+
++ ∇x ·  σ ˜Zθ(·, t k+1 ) + f (·, t k+1 , bρtk+1 )( bXtk+1 )+ ˜Zθ( bXtk+1 , t k+1 )⊤ ˜bZϕ( bXtk+1 , t k+1 ) − F ( bXtk+1 , t k+1 , bρtk+1 )
+
+
+
+− ˜Zθ( bXtk+1 , t k+1 )⊤∆Wk.
+
+FK Loss. The Feynman–Kac (FK) loss penalizes the gradient consistency σ∇xY = Z:
+
+Lfwd FK (θ) := 
+
+> K
+
+X
+
+> k=0
+
+E
+
+
+
+σ∇x ˜Yθ( bXtk , t k) − ˜Zθ( bXtk , t k) 2
+
+,
+
+Lbwd FK (ϕ) := 
+
+> K
+
+X
+
+> k=0
+
+E
+
+
+
+σ∇x ˜bY ϕ(Xtk , t k) − ˜bZϕ(Xtk , t k) 2
+
+.
+
+The total learning objective is 
+
+Ltot (θ, ϕ ) := λIPF 
+
+ Lfwd IPF (θ) + Lbwd IPF (ϕ) + λTD 
+
+ Lfwd TD (θ) + Lbwd TD (ϕ) + λFK 
+
+ Lfwd FK (θ) + Lbwd FK (ϕ), (13) with λ• the relative weights. 
+
+3.2 Four-Stage Algorithm with Interaction Surrogates 
+
+The particle counterparts of the baseline losses require evaluating empirical interactions along sam-pled trajectories. For large particle systems this is the dominant cost. To remove this bottleneck, we train separate networks ˜fψ, ˜Fψ to match the empirical interaction values, in addition to the for-ward/backward potentials represented by ˜Yθ, ˜Zθ, ˜bY ϕ, ˜bZϕ. We write X(i)0: K := ( X(i) 
+
+> tk
+
+)Kk=0 for one trajec-tory of particle i, and X0: K :=  X(i)0: K
+
+Ni=1 for one N -particle trajectory. Backward trajectories are denoted analogously by bX(i)0: K and bX0: K . For such batches, the empirical laws are 
+
+ρNtk := 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+δX(i)
+
+> tk
+
+, bρNtk := 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+δ bX(i)
+
+> tk
+
+.
+
+For kernel interactions of the form (1), direct evaluation with ρNtk uses the pairwise sums 
+
+f (X(i) 
+
+> tk
+
+, t k, ρ Ntk ) = 1
+
+N
+
+> N
+
+X
+
+> j=1
+
+kf
+
+ X(i) 
+
+> tk
+
+, X (j)
+
+> tk
+
+,F (X(i) 
+
+> tk
+
+, t k, ρ Ntk ) = 1
+
+N
+
+> N
+
+X
+
+> j=1
+
+kF
+
+ X(i) 
+
+> tk
+
+, X (j)
+
+> tk
+
+.
+
+These sums take O(N 2) operations per time step. On the particle trajectories generated during the forward/backward updates, we train ˜fψ, ˜Fψ with the empirical analytical values computed from these sums as supervision targets. The trained surro-gates ˜fψ(x, t ), ˜Fψ(x, t ) are then evaluated in O(N ) time in the drift-update steps, replacing the O(N 2)analytical sums there. The empirical interaction losses on forward and backward particle trajectories 7are 
+
+LN, fwd int (ψ) := 
+
+> K−1
+
+X
+
+> k=0
+
+E
+
+"
+
+1
+
+N
+
+> N
+
+X
+
+> i=1
+
+˜fψ(X(i) 
+
+> tk
+
+, t k) − f (X(i) 
+
+> tk
+
+, t k, ρ Ntk ) 2
+
++ 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+˜Fψ(X(i) 
+
+> tk
+
+, t k) − F (X(i) 
+
+> tk
+
+, t k, ρ Ntk ) 2
+
+#
+
+, (14) 
+
+LN, bwd int (ψ) := 
+
+> K−1
+
+X
+
+> k=0
+
+E
+
+"
+
+1
+
+N
+
+> N
+
+X
+
+> i=1
+
+˜fψ( bX(i) 
+
+> tk
+
+, t k) − f ( bX(i) 
+
+> tk
+
+, t k, bρNtk ) 2
+
++ 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+˜Fψ( bX(i) 
+
+> tk
+
+, t k) − F ( bX(i) 
+
+> tk
+
+, t k, bρNtk ) 2
+
+#
+
+. (15) Algorithm 1 summarizes the resulting four-stage training scheme, in which each outer iteration alternates between interaction updates and drift updates. In the interaction updates, the surrogate networks ( ˜fψ, ˜Fψ) are trained with the empirical interaction losses (14)–(15), using the analytical pairwise sums evaluated on particle batches through the empirical laws ρNtk and bρNtk as supervision targets. In the drift updates, the FBSDE networks ( ˜Yθ, ˜Zθ, ˜bY ϕ, ˜bZϕ) are trained with the particle-average loss LN
+
+> tot
+
+, the finite-particle counterpart of (13), with the learned surrogates supplying the interaction terms. The algorithm thus minimizes the combined empirical objective min  
+
+> θ,ϕ,ψ
+
+J N (θ, ϕ, ψ ) := LN
+
+> tot
+
+(θ, ϕ ) + λint LN
+
+> int
+
+,
+
+where LN 
+
+> int
+
+:= LN, fwd int + LN, bwd int and λint weights the interaction losses. 
+
+3.3 Complexity Analysis 
+
+We compare Algorithm 1 to a baseline that evaluates f and F analytically at every drift update. We count the cost of one directional pass, since the forward and backward passes are symmetric. Let 
+
+MSDE and Mint denote the numbers of drift-update and interaction-update steps in one such pass. Let Cana int be the cost of one analytical evaluation of the nonlocal interaction terms along an N -particle trajectory. Let CNN traj , CNN pol , and CNN int be, respectively, the neural costs of generating one trajectory, updating the forward/backward bridge networks, and performing one supervised interaction-network update. In Algorithm 1, each drift update generates a trajectory and updates the FBSDE networks using the learned surrogates. Each interaction update generates a trajectory, computes analytical labels, and updates the interaction network. The proposed cost per directional pass is therefore 
+
+Cprop = MSDE (CNN traj + CNN pol ) + Mint (CNN traj + Cana int + CNN int ).
+
+The direct-computation baseline performs MSDE drift updates with analytical evaluation of f and F .Each step generates a trajectory and updates the FBSDE networks as above, but also evaluates the nonlocal terms analytically during the drift update. Its cost per directional pass is 
+
+Cdirect = MSDE (CNN traj + CNN pol + Cana int ).
+
+We say that Algorithm 1 is efficient relative to the direct-computation baseline if it has lower cost for one directional pass, namely 
+
+Cprop < C direct . (16) 
+
+Proposition 3.1 (Efficiency condition) . Under the cost model above, Algorithm 1 is efficient relative to the direct-computation baseline if and only if 
+
+Mint 
+
+MSDE 
+
+< 11 + CNN 
+
+> Cana int
+
+, (17) 
+
+where CNN := CNN traj + CNN int .
+
+8Algorithm 1 Four-Stage Training of MFSB  
+
+> 1:
+
+while Not Converged do  
+
+> 2:
+
+Backward drift update ( ϕ):  
+
+> 3:
+
+for j = 1 , . . . , M SDE do  
+
+> 4:
+
+Sample one N -particle batch X0 with X(i)0 ∼ ρ0. 
+
+> 5:
+
+Generate the forward trajectory X0: K , {∆Wk} using ( ˜Yθ, ˜Zθ, ˜fψ, ˜Fψ).  
+
+> 6:
+
+Update ( ˜bY ϕ, ˜bZϕ) once on this trajectory using λIPF LN, bwd IPF + λTD LN, bwd TD + λFK LN, bwd FK . 
+
+> 7:
+
+end for  
+
+> 8:
+
+Forward interaction update ( ψ):  
+
+> 9:
+
+for m = 1 , . . . , M int do  
+
+> 10:
+
+Sample one N -particle forward trajectory X0: K , compute f (X(i) 
+
+> tk
+
+, t k, ρ Ntk ) and F (X(i) 
+
+> tk
+
+, t k, ρ Ntk )for all i, k . 
+
+> 11:
+
+Update ( ˜fψ, ˜Fψ) once on the fixed trajectory X0: K using LN, fwd int . 
+
+> 12:
+
+end for  
+
+> 13:
+
+Forward drift update ( θ):  
+
+> 14:
+
+for j = 1 , . . . , M SDE do  
+
+> 15:
+
+Sample one N -particle batch XT with X(i) 
+
+> T
+
+∼ ρT . 
+
+> 16:
+
+Generate the backward trajectory bX0: K , {∆Wk} using ( ˜bY ϕ, ˜bZϕ, ˜fψ, ˜Fψ).  
+
+> 17:
+
+Update ( ˜Yθ, ˜Zθ) once on this trajectory using λIPF LN, fwd IPF + λTD LN, fwd TD + λFK LN, fwd FK . 
+
+> 18:
+
+end for  
+
+> 19:
+
+Backward interaction update ( ψ):  
+
+> 20:
+
+for m = 1 , . . . , M int do  
+
+> 21:
+
+Sample one N -particle backward trajectory bX0: K , compute f ( bX(i) 
+
+> tk
+
+, t k, bρNtk ) and F ( bX(i) 
+
+> tk
+
+, t k, bρNtk )for all i, k . 
+
+> 22:
+
+Update ( ˜fψ, ˜Fψ) once on the fixed trajectory bX0: K using LN, bwd int . 
+
+> 23:
+
+end for  
+
+> 24:
+
+end while Proof of Proposition 3.1. Subtracting the two directional-pass costs gives 
+
+Cdirect − Cprop = MSDE Cana int − Mint (Cana int + CNN traj + CNN int )= ( MSDE − Mint )Cana int − Mint CNN 
+
+= MSDE 
+
+ 
+
+1 − Mint 
+
+MSDE 
+
+
+
+Cana int − Mint 
+
+MSDE 
+
+CNN 
+
+
+
+= MSDE Cana int 
+
+
+
+1 − Mint 
+
+MSDE 
+
+
+
+1 + CNN 
+
+Cana int 
+
+ 
+
+.
+
+Since MSDE > 0 and Cana int > 0, the last expression is positive exactly when (17) holds. Hence (17) is necessary and sufficient for (16). 
+
+Remark 3.2 (Regimes for the efficiency condition) . Large populations and infrequent interaction updates make the efficiency condition less restrictive. In (17), infrequent interaction updates reduce the left-hand side Mint /M SDE . To see the populations scaling, suppose that the analytical interaction is evaluated by all-pairs sums and that the surrogate is an MLP. Let N be the number of particles, 
+
+K the number of time steps, d the state dimension, and dout the output dimension of the interaction terms ( d for the drift f , 1 for the cost F ). The neural networks are MLPs with LNN layers and hidden width HNN . Then, the dominant costs are approximately 
+
+Cana int ≈ kana KN 2(d + dout ),CNN ≈ kNN KN  dH NN + ( LNN − 1) H2NN + HNN dout 
+
+,
+
+9with hardware- and implementation-dependent constants kana and kNN . Thus 
+
+CNN 
+
+Cana int 
+
+≈ kNN 
+
+ dH NN + ( LNN − 1) H2NN + HNN dout 
+
+
+
+kana N (d + dout ) .
+
+For a fixed architecture, this ratio decreases as N grows, increasing the right-hand side of (17). 
+
+# 4 Stability Analysis 
+
+This section provides a stability analysis for the FBSDE formulation of the MFSB. Stability here means that the error between the true system driven by ( f, F ) and the learned system driven by ( ˜f , ˜F ) can be controlled by the surrogate approximation errors and an endpoint residual. The analysis is carried out at the mean-field level; the finite-particle error from replacing the marginal laws by empirical measures in Algorithm 1 is not included. We state the assumptions and the total energy estimate in this section, while the auxiliary estimates and proofs are collected in Appendix A. 
+
+4.1 Setup 
+
+The error analysis compares the “true” system driven by f and F with the “learned” system driven by the neural surrogates. Both systems live on a common filtered probability space (Ω , F, (Ft)t∈[0 ,T ], P)carrying a d-dimensional Brownian motion W , and all stochastic processes below are adapted to this filtration. 
+
+Assumption 4.1 (Consistent MFSB solution) . There exists a collection of stochastic processes (X, Y, Z ) and ( bX, bY , bZ),
+
+defined on a common filtered probability space, such that: (i) ( X, Y, Z ) is the unique strong solution of the forward-time FBSDE (9a)–(9b) driven by the true interaction terms ( f, F ) with initial condition X0 ∼ ρ0.(ii) ( bX, bY , bZ) is the unique strong solution of the backward-time FBSDE (10a)–(10b) driven by the same interaction terms ( f, F ) with terminal condition bXT ∼ ρT .(iii) The forward and backward processes are globally consistent in the sense that they induce the same family of time-marginal distributions {ρt}t∈[0 ,T ]:
+
+Xt ∼ ρt, bXt ∼ ρt, ∀ t ∈ [0 , T ],
+
+and the associated potentials satisfy the Schr¨ odinger factorization 
+
+ρt(x) = exp  −Y (x, t ) − bY (x, t ).
+
+(iv) The logarithmic potentials are taken in the endpoint representative 
+
+Y (·, 0) = − log ρ0 ρ0-a.e. , bY (·, T ) = − log ρT ρT -a.e. .
+
+Together with the factorization in (iii), this implies 
+
+bY (·, 0) = 0 ρ0-a.e. , Y (·, T ) = 0 ρT -a.e. .
+
+Assumption 4.2 (Consistent learned solution) . There exists a collection of stochastic processes ( ˜X, ˜Y , ˜Z) and ( ˜bX, ˜bY , ˜bZ),
+
+defined on the same filtered probability space, such that: 10 (i) ( ˜X, ˜Y , ˜Z) is the unique strong solution of the forward-time FBSDE (9a)–(9b) with interaction terms ( ˜f , ˜F ), driven by the same Brownian motion as ( X, Y, Z ), and with the coupled initial condition ˜X0 = X0 a.s. (so ˜X0 ∼ ρ0). (ii) ( ˜bX, ˜bY , ˜bZ) is the unique strong solution of the backward-time FBSDE (10a)–(10b) with inter-action terms ( ˜f , ˜F ), driven by the same Brownian motion as ( bX, bY , bZ), and with the coupled terminal condition ˜bXT = bXT a.s. (so ˜bXT ∼ ρT ). (iii) Defining the learned time-marginal density ˜ ρt by ˜Xt ∼ ˜ρt, ˜bXt ∼ ˜ρt, ∀ t ∈ [0 , T ],
+
+the learned forward and backward processes are assumed to be consistent in the sense that the learned potentials satisfy ˜ρt(x) = exp  − ˜Y (x, t ) − ˜bY (x, t ), ∀ t ∈ [0 , T ].
+
+(iv) The learned logarithmic potentials are taken in the same endpoint representative: ˜Y (·, 0) = − log ρ0 ρ0-a.e. , ˜bY (·, T ) = − log ρT ρT -a.e. .
+
+Together with (i)–(iii), this implies ˜bY (·, 0) = 0 ρ0-a.e. , ˜Y (·, T ) = 0 ρT -a.e. .
+
+Remark 4.3 (Consistency assumptions) . Assumption 4.1 states that a globally consistent MFSB solution exists; existence in variational settings is established by Backhoff et al. [23]. Assumption 4.2 describes the learned system after the interaction terms have been replaced by their surrogates and the resulting forward and backward components are mutually consistent. Assumptions 4.1(iv) and 4.2(iv) fix the endpoint representative of the FBSDE potentials, and thereby make the comparison of the potential variables well defined. Indeed, the endpoint factorization (8) determines only the sum Y + bY , so one degree of freedom remains in the endpoint values of the logarithmic potentials. This representative is the one singled out by the TD boundary losses (11)–(12); when these boundary residuals are small and the learned factorization is consistent, the learned potentials are expected to satisfy Assumption 4.2(iv). In the analysis, this representative is used for combining the forward and backward estimates. We compare the true and learned solutions through the forward-time differences ∆Xt = Xt − ˜Xt, ∆Yt = Yt − ˜Yt, ∆Zt = Zt − ˜Zt,
+
+and the forward total energy error 
+
+Efwd := sup  
+
+> t∈[0 ,T ]
+
+E∥∆Xt∥2 + sup  
+
+> t∈[0 ,T ]
+
+E|∆Yt|2 +
+
+Z T
+
+> 0
+
+E∥∆Zt∥2 dt. 
+
+Analogously, we define the backward-time differences ∆ bXs = bXs − ˜bXs, ∆ bYs = bYs − ˜bY s, ∆ bZs = bZs − ˜bZs,
+
+and the backward total energy error Ebwd as 
+
+Ebwd := sup  
+
+> s∈[0 ,T ]
+
+E∥∆ bXs∥2 + sup  
+
+> s∈[0 ,T ]
+
+E|∆ bYs|2 +
+
+Z T
+
+> 0
+
+E∥∆ bZs∥2 ds. 
+
+11 We measure the surrogate quality by the maximum deviations 
+
+εf := sup 
+
+> x,t
+
+f (x, t, ρ t) − ˜f (x, t ) , εF := sup 
+
+> x,t
+
+|F (x, t, ρ t) − ˜F (x, t )|,
+
+where ρt is the marginal of the true solution. The goal of the analysis is to bound Efwd and Ebwd explicitly in terms of the surrogate errors and the endpoint errors. We impose the following regularity assumptions on the interaction functions and the FBSDE solutions. 
+
+Assumption 4.4 (Lipschitz interaction terms) . The functions f, ˜f and F, ˜F are uniformly Lipschitz in the spatial variable. Namely, there exist constants Lf > 0 and LF > 0 such that, for all t ∈ [0 , T ], all probability densities ρt ∈ P (Rd), and all x, x ′ ∈ Rd,
+
+∥f (x, t, ρ t) − f (x′, t, ρ t)∥ ≤ Lf ∥x − x′∥,
+
+|F (x, t, ρ t) − F (x′, t, ρ t)| ≤ LF ∥x − x′∥,
+
+and the same bounds hold for ˜f and ˜F with the same constants. 
+
+Assumption 4.5 (Uniform gradient bounds) . There exists a positive constant CZ such that the following uniform bounds hold: sup 
+
+> x,t
+
+∥∇ xY (x, t )∥ ≤ CZ , sup 
+
+> x,t
+
+∥∇ x ˜Y (x, t )∥ ≤ CZ ,
+
+sup 
+
+> x,s
+
+∥∇ x bY (x, s )∥ ≤ CZ , sup 
+
+> x,s
+
+∥∇ x ˜bY (x, s )∥ ≤ CZ .
+
+Remark 4.6 (Regularity assumptions) . For kernel interactions of the form (1), Assumption 4.4 follows when the kernels are uniformly Lipschitz in the evaluation variable. For the neural surrogates, the same condition corresponds to working in a network class with uniformly controlled Lipschitz constants, for instance by bounding the weights or using spectral normalization. Assumption 4.5 is an explicit stability assumption on the logarithmic Schr¨ odinger potentials, ruling out blow-up of their spatial gradients in the estimates below. 
+
+4.2 Results 
+
+Fix parameters α, β > 0, η ∈ (0 , 2), and γ > 0, and define 
+
+CXX := (Lf )2
+
+α + 3 α, CXZ := σ2
+
+α , CX,ε f := 1
+
+α ,CY Y := 9β
+
+4 , CY Z := 1 + 4σ2C2
+
+> Z
+
+β , CY X := (LF )2
+
+β ,CY,ε F := 1
+
+β , CZX := 2( LF )2
+
+γ , CZY := 2σ2C2
+
+> Z
+
+η + γ, CZ,ε F := 2
+
+γ ,κ := 11 − η/ 2 , EX := eCXX T , EY := eCY Y T ,aX := EX CXZ κ C ZX T, aY := EX CXZ κ C ZY T, bX := EY
+
+
+
+CY X T + CY Z κ C ZX T
+
+
+
+, bY := EY CY Z κ C ZY T. (18) Assume 
+
+Ddet := (1 − aX )(1 − bY ) − aY bX > 0, (19) and 1 − aX > 0, 1 − bY > 0. (20) 12 Under these conditions, define 
+
+CE := 1
+
+Ddet 
+
+"
+
+1 + κC ZX T
+
+
+
+(1 − bY ) + 
+
+
+
+1 + κC ZY T
+
+
+
+bX
+
+#
+
+EX
+
+
+
+CX,ε f + CXZ κ(1 + CZ,ε F )
+
+
+
++ 1
+
+Ddet 
+
+"
+
+1 + κC ZX T
+
+
+
+aY +
+
+
+
+1 + κC ZY T
+
+
+
+(1 − aX )
+
+#
+
+EY
+
+
+
+1 + CY,ε F + CY Z κ(1 + CZ,ε F )
+
+
+
++ κ(1 + CZ,ε F ).
+
+(21) The main estimate controls the combined forward–backward error by the surrogate error and the endpoint errors in the logarithmic potentials. 
+
+Theorem 4.7 (Total energy bound) . Assume that Assumptions 4.1, 4.2, 4.4, and 4.5 hold. Assume also (19) –(20) . Then, the combined forward–backward energy satisfies 
+
+Efwd + Ebwd ≤ 2T CE
+
+ ε2 
+
+> f
+
++ ε2
+
+> F
+
+. (22) The proof of Theorem 4.7 has three steps. First, the forward-time FBSDE gives differential inequalities for E∥∆Xt∥2 and E|∆Yt|2, together with an energy estimate for R T 
+
+> 0
+
+E∥∆Zt∥2 dt. Solving these estimates yields the forward bound in Lemma A.3. Second, the same argument is applied to the backward-time FBSDE after reversing time, giving Lemma A.4. Finally, the two estimates are added, leaving the four endpoint errors collected in the intermediate bounds; these endpoint errors vanish under the endpoint representative in Assumptions 4.1(iv) and 4.2(iv). These estimates and their proofs are collected in Appendix A. 
+
+Remark 4.8 (Small-gain condition) . Conditions (19)–(20) are the small-gain requirements needed to close the two coupled estimates for sup t E∥∆Xt∥2 and sup t E|∆Yt|2. After the ∆ Z estimate is substituted, these two quantities satisfy a two-by-two system of inequalities, displayed in (35)–(36). The conditions state that the diagonal margins in this system are positive and that the system can be solved with positive control of the error. For fixed Young parameters α, β, η, γ , each feedback coefficient aX , a Y , b X , b Y is proportional to T , and hence the conditions are satisfied on sufficiently short horizons. For a fixed horizon, with CZ fixed, the same conditions are satisfied when Lf , LF ,and σ are sufficiently small, with γ chosen so that both γ and L2 
+
+> F
+
+/γ are small. 
+
+# 5 Numerical Experiments 
+
+We evaluate the proposed method on two navigation tasks in d = 2 and one opinion-dynamics task in 
+
+d = 10, all with nonlocal interactions: 1. Gaussian Mixture Model (GMM): transport from an initial distribution to an 8-component Gaussian mixture while avoiding obstacles, with the nonlocal drift f attracting each agent toward its neighbors. 2. V-neck bottleneck: transport between Gaussian distributions through a narrow V-shaped chan-nel, with a running-cost term that penalizes congestion. 3. Opinion dynamics: transport between Gaussian opinion distributions under a smooth bounded-confidence drift interaction. We compare three methods for evaluating f and F along particle trajectories: (i) baseline FBSDE training with direct analytical evaluation at every step; (ii) the proposed Algorithm 1, which substi-tutes the learned surrogates ˜f and ˜F ; (iii) a random-batch (RB) approximation, which retains the analytical formula but evaluates the empirical sum over a random subset of agents at each step. For each interaction kernel k· ∈ { kf , k F }, RB replaces the full empirical average 1
+
+> N
+
+PNj=1 k·(x, X j ) by the mini-batch average 1
+
+> MRB
+
+P 
+
+> j∈B
+
+k·(x, X j ), with B ⊂ { 1, . . . , N } a uniformly sampled subset of size 
+
+MRB ≪ N . Each experiment compares the three methods via particle trajectories, training loss versus 13 wall-clock time, and sensitivity to the interaction strength. For the last comparison, we summarize each trajectory ensemble by 
+
+A(t) = 1
+
+N (N − 1) 
+
+X
+
+> i̸=j
+
+exp − ∥X(i) 
+
+> t
+
+− X(j) 
+
+> t
+
+∥2
+
+2σ2int 
+
+!
+
+.
+
+Here {X(i) 
+
+> t
+
+}Ni=1 are the particle positions and σint is the Gaussian scale parameter. A large value of 
+
+A(t) indicates that many particles cluster at scale σint ; a small value indicates they are well separated. All FBSDE networks ( ˜Yθ, ˜Zθ, ˜bY ϕ, ˜bZϕ) are MLPs with three hidden layers of 128 units and SiLU activations, optimized with AdamW at learning rates 10 −3 for the value networks and 5 × 10 −4 for the gradient networks. The surrogate networks ˜fψ and ˜Fψ use the same architecture with learning rate 5 × 10 −4. All loss weights are set to λIPF = λTD = λFK = λint = 1 .0. Algorithm 1 uses MSDE = 250 drift-update steps and Mint = 50 interaction-update steps per outer iteration. The computational environments used for the experiments are summarized in Appendix B. 
+
+5.1 GMM Navigation 
+
+Setup. We use N = 1000 particles, horizon T = 1 .0, and K = 20 time steps. The initial distribution is ρ0 = N (0 , I ) and the terminal distribution ρT is an 8-component Gaussian mixture arranged on a circle. The nonlocal drift 
+
+f (x, t, ρ t) = w
+
+Z
+
+> Rd
+
+exp 
+
+
+
+− ∥x − y∥2
+
+2σ2int 
+
+
+
+(y − x)ρ(y, t ) d y, 
+
+with w = 2 .0 and σint = 2 .0, attracts each agent toward its neighbors. The running cost 
+
+F (x, t, ρ t) = 1500 
+
+> 3
+
+X
+
+> k=1
+
+max(0 , 1.5 − ∥ x − ck∥)6,
+
+with centers ck ∈ { (6 , 6) , (6 , −6) , (−6, −6) }, penalizes proximity to three fixed obstacles. 
+
+Results. Figure 1 shows particle trajectories for both methods: Figure 1a uses analytical evaluation of f and F , and Figure 1b uses the learned surrogate. The trajectories in Figure 1b closely match those in Figure 1a, so the learned surrogate preserves the transport pattern obtained with analytical evaluation. Figure 2 plots the total loss Ltot evaluated with analytical f and F against wall-clock time at N = 1000, and the learned surrogate reaches the same loss level substantially faster. Figure 3 plots the interaction matching loss LN
+
+> int
+
+; it decreases rapidly and settles at a small value, showing that ˜fψ tracks f on the sampled trajectories. Figure 4 shows how the per-iteration time scales with N :the analytical cost grows steeply, the learned surrogate grows only mildly, and the gap exceeds an order of magnitude at the largest N tested. Figure 5 compares the diagnostic A(t) computed from trajectories obtained with analytical evaluation and with the learned surrogate, for several values of the weight w in the nonlocal drift f . The learned surrogate reproduces the qualitative change in 
+
+A(t) as w varies. Table 1 provides a direct comparison between the learned surrogate ( Mint = 200) and the random-batch approximation ( MRB = 128). The learned surrogate attains lower time per iteration and lower best analytical loss, while the random-batch approximation gives a slightly smaller pointwise interaction error. 
+
+5.2 V-neck Navigation 
+
+Setup. Particles cross a narrow V-shaped bottleneck while avoiding congestion through a running-cost term. We use N = 1000 agents, horizon T = 2 .0, and K = 20 time steps. The initial and target distributions are Gaussians centered at ( −7, 0) and (7 , 0) with standard deviation ≈ 0.447. A constant base drift 
+
+f (x, t, ρ t) = [6 , 0] ⊤
+
+14 (a) Analytical evaluation 
+
+(b) Learned surrogate 
+
+Figure 1: GMM: trajectory comparison (forward left, backward right). The learned surrogate repro-duces the trajectories obtained with analytical evaluation. 0 2500 5000 7500 10000 12500 15000 17500 20000 
+
+Elapsed Time (s) 
+
+> 0
+> 2000
+> 4000
+> 6000
+> 8000
+> Total Loss (Forward + Backward)  Analytic Learned
+
+Figure 2: GMM: total loss evaluated with analytical f and F vs wall-clock time. 15 0 20 40 60 80 100 
+
+Iteration 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> Interaction Loss
+
+Figure 3: GMM: interaction matching loss LN
+
+> int
+
+.200 400 600 800 1000 
+
+N
+
+25 
+
+50 
+
+75 
+
+100 
+
+125 
+
+150 
+
+175 
+
+200 
+
+> Time per iteration (s)
+
+Analytic Learned 
+
+Figure 4: GMM: wall-clock time per outer iteration vs number of agents N .0.0 0.2 0.4 0.6 0.8 1.0
+
+t    
+
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> A(t)
+> baseline
+> w= 1
+> w= 2
+> w= 4
+> w= 8
+
+(a) Analytical evaluation. 0.0 0.2 0.4 0.6 0.8 1.0
+
+t     
+
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> A(t)
+> baseline
+> w= 1
+> w= 2
+> w= 4
+> w= 8
+
+(b) Learned surrogate. 
+
+Figure 5: GMM: proximity diagnostic A(t) across values of w. Each panel shows the case w = 0 and several nonzero values of w.16 Method Time/iter. (s) Analytical loss Interaction error Learned surrogate ( Mint = 200) 93 .66 ± 1.36 3.78 ± 0.83 0.229 ± 0.040 Random batch ( MRB = 128) 99 .10 ± 0.95 4.48 ± 1.36 0.208 ± 0.014 Table 1: GMM backend comparison at N = 1000, ∆ t = 0 .01. All columns are averaged over five independent runs and reported as mean ± standard deviation. Time per iteration is the total training time divided by the 100 outer iterations. Analytical loss is the best checkpoint-evaluated value of Ltot ,computed with analytical interactions. Interaction error is the mean relative L2 error of the forward and backward drift interaction. Method Time/iter. (s) Analytical loss Interaction error Learned surrogate ( Mint = 200) 187 .72 ± 1.71 12 .62 ± 1.44 0.02195 ± 0.00001 Random batch ( MRB = 128) 430 .47 ± 2.42 13 .78 ± 1.72 0.03663 ± 0.00031 Table 2: V-neck backend comparison at N = 1000, ∆ t = 0 .01. Analytical loss and interaction error are averaged over two independent runs and reported as mean ± standard deviation. Analytical loss is the best checkpoint-evaluated value of Ltot , computed with analytical interactions. Interaction error is the mean relative L2 error of the forward and backward cost interaction. pushes the flow through a parabolic V-neck obstacle 
+
+Fobs (x) = 1500 · 1{5x21 − x22 < −0.36 },
+
+and the congestion term in the running cost is the Gaussian convolution 
+
+Fint (x, t, ρ t) = w
+
+Z
+
+> Rd
+
+exp 
+
+
+
+− ∥x − y∥2
+
+2σ2int 
+
+
+
+ρ(y, t ) d y, 
+
+with w = 1 .0 and σint = 1 .0. The total cost is F = Fobs + Fint .
+
+Results. Figure 6 plots forward/backward trajectories under analytical evaluation of f and F and under the learned surrogate. In both, particles pass through the V-shaped gate while avoiding the high-cost region, and the flow patterns agree. Figure 7 plots the total loss Ltot evaluated with analytical f
+
+and F against wall-clock time at N = 1000. The learned surrogate reaches the same loss level in less wall-clock time. Figure 8 shows the interaction matching loss decreasing through training, confirming that the surrogate fits Fint along the sampled trajectories. Figure 9 plots wall-clock time per outer iteration against N ; the analytical cost grows steeply, the learned surrogate grows only mildly, and the gap exceeds an order of magnitude for large N . Figure 10 compares the diagnostic A(t) computed from trajectories obtained with analytical evaluation and with the learned surrogate, for several values of the weight w in the nonlocal running cost Fint at N = 500. The learned surrogate reproduces the qualitative change in A(t) as w varies. Table 2 provides a direct comparison between the learned surrogate ( Mint = 200) and the random-batch approximation ( MRB = 128). The learned surrogate achieves lower time per iteration, lower analytical loss, and lower pointwise interaction error. 
+
+5.3 Opinion Dynamics 
+
+Setup. Finally, we consider a d = 10 opinion-dynamics problem in which the interaction enters through the drift. The initial and terminal opinion distributions are ρ0 = N (0 , 0.25 2Id) and ρT =
+
+N (0 , 3.02Id). We use N = 400 particles, horizon T = 3 .0, time step ∆ t = 0 .01, and diffusion coefficient σ = 1 .0. The drift follows Hegselmann–Krause-type bounded-confidence dynamics [49, 50, 51], replacing the discontinuous confidence set [52, 53] with a Gaussian kernel Kh(r) = exp 
+
+
+
+− r2
+
+> 2h2
+
+
+
+.In the mean-field formulation, the drift interaction is 
+
+f (x, t, ρ t) = w
+
+R 
+
+> Rd
+
+Kh(∥y − x∥)( y − x)ρ(y, t ) d y
+
+R 
+
+> Rd
+
+Kh(∥y − x∥)ρ(y, t ) d y + ε ,
+
+17 (a) Analytical evaluation 
+
+(b) Learned surrogate 
+
+Figure 6: V-neck experiment with Gaussian convolution in the running cost: trajectory comparison (forward left, backward right). The learned surrogate reproduces the trajectories obtained with ana-lytical evaluation. 0 2500 5000 7500 10000 12500 15000 17500 20000 
+
+Elapsed Time (s) 
+
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> Total Loss (Forward + Backward)  Analytic Learned
+
+Figure 7: V-neck: total loss evaluated with analytical f and F vs wall-clock time. 18 0 5 10 15 20 25 30 
+
+Iteration 
+
+0.000 
+
+0.002 
+
+0.004 
+
+0.006 
+
+0.008 
+
+0.010 
+
+> Interaction Loss
+
+Figure 8: V-neck: interaction matching loss LN
+
+int .200 400 600 800 1000 
+
+N
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+1200 
+
+1400 
+
+1600 
+
+> Time per iteration (s)
+
+Analytic Learned 
+
+Figure 9: V-neck: wall-clock time per outer iteration vs number of agents N .0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00 
+
+t   
+
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> A(t)
+> baseline
+> w= 0 .25
+> w= 0 .5
+> w= 1
+
+(a) Analytical evaluation. 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00 
+
+t    
+
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> A(t)
+> baseline
+> w= 0 .25
+> w= 0 .5
+> w= 1
+
+(b) Learned surrogate. 
+
+Figure 10: V-neck: proximity diagnostic A(t) across values of w at N = 500. Each panel shows the case w = 0 and several nonzero values of w.19 Method Time/iter. (s) Analytical loss Interaction error Learned surrogate ( Mint = 100) 331 .14 18 .95 0.215 Random batch ( MRB = 80) 683 .85 3334 .79 2.544 Table 3: Opinion dynamics backend comparison at N = 400, d = 10, and ∆ t = 0 .01. Values are from one run through 30 outer iterations. Analytical loss is the best checkpoint-evaluated value of Ltot ,computed with the analytical drift. Interaction error is the mean relative L2 error of the forward and backward drift interaction. with w = 1 .0, h = 1 .5, and ε = 10 −8. In this formulation, nearby opinions have greater influence on the drift, and the influence decays smoothly with distance. Related computational approaches to controlled opinion dynamics include deep kinetic neural networks [54] and mean-field equilibrium computation for the Hegselmann–Krause model [55]. Since only f is nonlocal, the algorithm trains a drift surrogate ˜fψ with Mint = 100 interaction updates. 
+
+Results. Figure 11 compares time snapshots from analytical evaluation and from the learned surro-gate after projecting the 10-dimensional paths onto a common two-dimensional PCA basis. Starting from a concentrated opinion distribution, the forward process spreads the population toward the higher-variance terminal distribution, while the backward process contracts it in reverse time. The learned surrogate reproduces this qualitative expansion and contraction pattern obtained with analyti-cal evaluation. Figure 12 plots the total loss evaluated with the analytical drift against wall-clock time. The learned surrogate converges to a lower analytical loss in less wall-clock time than direct analytical evaluation. Figure 13 shows the interaction matching loss for the learned surrogate; the forward and backward drift errors decrease over training, indicating that the pairwise bounded-confidence drift is being approximated along the sampled trajectories. Figure 14 shows how the per-iteration time scales with the number of particles. The learned surrogate is substantially faster than direct analytical eval-uation across all values of N tested, with the gap already visible at N = 150. Figure 15 shows the proximity diagnostic A(t) at N = 400 as the interaction weight w varies. Both analytical evaluation and the learned surrogate show the same qualitative response: larger values of w keep the particles more tightly clustered over a longer portion of the trajectory. Table 3 provides a direct comparison between the learned surrogate and the random-batch approximation. Although random batching is also an approximation of the pairwise drift, it is slower than the learned surrogate in this setting and does not recover the trajectory quality, as reflected in its much larger analytical loss and interaction error. 
+
+# 6 Conclusion 
+
+We addressed the computational bottleneck of solving MFSB problems with nonlocal interactions by introducing neural surrogates for the interaction terms. The four-stage alternating algorithm integrates surrogates of f and F into the FBSDE framework, reducing the per-step cost from O(N 2)to O(N ) in the drift-update steps and eliminating quadratic cost at inference. The accompanying stability analysis gives Gr¨ onwall-type bounds on how surrogate errors propagate to the generated trajectories. On navigation and opinion-dynamics tasks, the trajectories match those obtained with analytical evaluation at lower training time. An important direction for future work is to establish a convergence proof for the alternating training scheme. The experiments show stable convergence in practice, but a theoretical guarantee on the alternating minimization is missing, and we plan to address this gap in subsequent work. 20 −5 0 5
+
+> −5
+> 0
+> 5
+> Analytical forward
+
+t = 0   
+
+> −505
+> −5
+> 0
+> 5
+
+t = 0 .25 T  
+
+> −505
+> −5
+> 0
+> 5
+
+t = 0 .50 T  
+
+> −505
+> −5
+> 0
+> 5
+
+t = 0 .75 T  
+
+> −505
+> −5
+> 0
+> 5
+
+t = T                              
+
+> −505
+> −5
+> 0
+> 5
+> Analytical backward
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> Learned forward
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> Learned backward
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+> −505
+> −5
+> 0
+> 5
+
+Figure 11: Opinion dynamics: PCA snapshots of forward and backward trajectories in d = 10. Analytical evaluation and the learned surrogate are projected onto the same PCA basis. 0 10000 20000 30000 40000 
+
+Elapsed Time (s) 
+
+10 1
+
+10 2
+
+10 3
+
+10 4
+
+10 5
+
+> Total Loss (Forward + Backward)
+
+Analytic Learned 
+
+Figure 12: Opinion dynamics: total loss evaluated with analytical drift vs wall-clock time. 21 0 10 20 30 40 
+
+Iteration 
+
+0.0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+> Interaction Loss
+
+Figure 13: Opinion dynamics: interaction matching loss LN
+
+int for the learned drift surrogate. 50 100 150 200 250 300 350 400 
+
+N
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+1200 
+
+1400 
+
+> Time per iteration (s)
+
+Analytic Learned 
+
+Figure 14: Opinion dynamics: wall-clock time per outer iteration vs number of agents N .0.0 0.5 1.0 1.5 2.0 2.5 3.0
+
+t    
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> A(t)
+> baseline
+> w= 0 .25
+> w= 0 .5
+> w= 1
+> w= 1 .5
+
+(a) Analytical evaluation. 0.0 0.5 1.0 1.5 2.0 2.5 3.0
+
+t     
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> A(t)
+> baseline
+> w= 0 .25
+> w= 0 .5
+> w= 1
+> w= 1 .5
+
+(b) Learned surrogate. 
+
+Figure 15: Opinion dynamics: proximity diagnostic A(t) across values of w at N = 400. Each panel includes the no-interaction baseline. 22 A Proofs 
+
+Lemma A.1 (Forward differential inequalities) . Assume that Assumptions 4.1, 4.2, 4.4, and 4.5 hold. Then, for all t ∈ [0 , T ], the error processes ∆Xt = Xt − ˜Xt, ∆Yt = Yt − ˜Yt satisfy 
+
+ddt E ∥∆Xt∥2 ≤ CXX E ∥∆Xt∥2 + CXZ E ∥∆Zt∥2 + CX,ε f ε2 
+
+> f
+
+, (23a) ddt E|∆Yt|2 ≤ CY Y E|∆Yt|2 + CY X E ∥∆Xt∥2 + CY Z E ∥∆Zt∥2 + CY,ε F ε2 
+
+> F
+
+. (23b) 
+
+Proof of Lemma A.1. First, we focus on the forward difference ∆ Xt := Xt − ˜Xt. Let 
+
+δf t := f (Xt, t, ρ t) − f ( ˜Xt, t, ρ t),rft := f ( ˜Xt, t, ρ t) − ˜f ( ˜Xt, t ),
+
+then, we have d∆ Xt = ( δf t + rft ) d t + σ ∆Zt dt. 
+
+Applying Itˆ o’s formula to ∥∆Xt∥2 yields d ∥∆Xt∥2 = 2 ⟨∆Xt, δf t⟩ dt + 2 
+
+D
+
+∆Xt, r ft
+
+E
+
+dt + 2 ⟨∆Xt, σ ∆Zt⟩ dt. (24) By Assumption 4.4, 
+
+∥δf t∥ ≤ Lf ∥∆Xt∥ .
+
+Using Young’s inequality 2 ab ≤ αa 2 + b2/α (for α > 0), we obtain 2 ⟨∆Xt, δf t⟩ ≤ 
+
+ (Lf )2
+
+α + α
+
+
+
+∥∆Xt∥2 .
+
+Also, by definition, rft satisfies rft ≤ εf , so 2
+
+D
+
+∆Xt, r ft
+
+E
+
+≤ α ∥∆Xt∥2 + ε2
+
+> f
+
+α .
+
+The cross term ⟨∆Xt, σ ∆Zt⟩ can be separated as 2 ⟨∆Xt, σ ∆Zt⟩ ≤ α ∥∆Xt∥2 + σ2
+
+α ∥∆Zt∥2 .
+
+Substituting these into (24) and taking expectations yields (23a). Next, for the backward difference ∆ Yt := Yt − ˜Yt, let 
+
+δF t := F (Xt, t, ρ t) − F ( ˜Xt, t, ρ t),rFt := F ( ˜Xt, t, ρ t) − ˜F ( ˜Xt, t ),
+
+then we can express d∆ Yt =
+
+ 
+
+> 12
+
+(∥Zt∥2 − ˜Zt
+
+> 2
+
+) + δF t + rFt
+
+
+
+dt + ∆ Z⊤ 
+
+> t
+
+dWt.
+
+Applying Itˆ o’s formula to |∆Yt|2 gives d|∆Yt|2 = 2∆ Yt
+
+ 
+
+> 12
+
+(∥Zt∥2 − ˜Zt
+
+> 2
+
+) + δF t + rFt
+
+
+
+dt + ∥∆Zt∥2 dt + 2∆ Yt∆Z⊤ 
+
+> t
+
+dWt. (25) 23 The last martingale term vanishes when taking expectations. For the first term, using ∥Zt∥2 − ˜Zt
+
+> 2
+
+=∆Z⊤ 
+
+> t
+
+(Zt + ˜Zt) and Young’s inequality |ab | ≤ βa 2/4 + β−1b2 with a = ∆ Yt and b = ∆ Z⊤ 
+
+> t
+
+(Zt + ˜Zt), we obtain 
+
+∆Yt∆Z⊤ 
+
+> t
+
+(Zt + ˜Zt) ≤ β
+
+4 |∆Yt|2 + 1
+
+β ∥∆Zt∥2∥Zt + ˜Zt∥2.
+
+From Assumption 4.5, we have ∥Zt∥ ≤ σC Z and ∥ ˜Zt∥ ≤ σC Z , so ∥Zt + ˜Zt∥2 ≤ (∥Zt∥+∥ ˜Zt∥)2 ≤ 4σ2C2
+
+> Z
+
+a.s.; taking expectations yields 
+
+E∆Yt∆Z⊤ 
+
+> t
+
+(Zt + ˜Zt) ≤ β
+
+4 E|∆Yt|2 + 4σ2C2
+
+> Z
+
+β E ∥∆Zt∥2 .
+
+For δF t, by Assumption 4.4, 
+
+E|δF t|2 ≤ (LF )2E ∥∆Xt∥2 .
+
+By Young’s inequality, 2E[∆ YtδF t] ≤ βE|∆Yt|2 + 1
+
+β E|δF t|2 ≤ βE|∆Yt|2 + (LF )2
+
+β E ∥∆Xt∥2 .
+
+Similarly, for rFt ,2E[∆ YtrFt ] ≤ βE|∆Yt|2 + 1
+
+β ε2 
+
+> F
+
+.
+
+Combining these with (25) yields (23b). 
+
+Lemma A.2 (Forward Z-energy estimate) . Assume that Assumptions 4.1, 4.2, 4.4, and 4.5 hold. Then, the error R T 
+
+> 0
+
+∥∆Zt∥2 dt satisfies 
+
+Z T
+
+> 0
+
+E∥∆Zt∥2 dt
+
+≤ 11 − η/ 2
+
+"
+
+E|∆YT |2 + E|∆Y0|2 + CZX E
+
+Z T
+
+> 0
+
+∥∆Xt∥2 dt + CZY E
+
+Z T
+
+> 0
+
+|∆Yt|2 dt + CZ,ε F T ε 2
+
+> F
+
+#
+
+.
+
+Proof of Lemma A.2. Integrating (25) over [0 , T ] and taking expectations, the martingale term vanishes, giving 
+
+E|∆YT |2 − E|∆Y0|2
+
+= E
+
+Z T
+
+> 0
+
+2∆ Yt
+
+ 12 (∥Zt∥2 − ˜Zt
+
+> 2
+
+) + δF t + rFt
+
+
+
+dt + E
+
+Z T
+
+> 0
+
+∥∆Zt∥2 dt 
+
+= E
+
+Z T
+
+> 0
+
+∥∆Zt∥2 dt + E
+
+Z T
+
+> 0
+
+∆Yt
+
+ ∥Zt∥2 − ˜Zt
+
+> 2
+
+ dt + 2 E
+
+Z T
+
+> 0
+
+∆Yt(δF t + rFt ) dt. 
+
+Rearranging and using −a ≤ | a| gives 
+
+E
+
+Z T
+
+> 0
+
+∥∆Zt∥2 dt 
+
+= E|∆YT |2 − E|∆Y0|2 − E
+
+Z T
+
+> 0
+
+∆Yt
+
+ ∥Zt∥2 − ˜Zt
+
+> 2
+
+ dt − 2E
+
+Z T
+
+> 0
+
+∆Yt(δF t + rFt ) dt 
+
+≤ E|∆YT |2 + E|∆Y0|2 + E
+
+Z T
+
+> 0
+
+∆Yt
+
+ ∥Zt∥2 − ˜Zt
+
+> 2
+
+ dt + 2 E
+
+Z T
+
+> 0
+
+|∆Yt|  |δF t| + |rFt | dt. (26) 24 For any η > 0, we bound the quadratic term. Using ∥Zt∥2 − ˜Zt
+
+> 2
+
+= ( Zt + ˜Zt)⊤∆Zt and Cauchy– Schwarz inequality, we have 
+
+∆Yt(∥Zt∥2 − ˜Zt
+
+> 2
+
+) = ∆Yt(Zt + ˜Zt)⊤∆Zt ≤ | ∆Yt| Zt + ˜Zt ∥∆Zt∥≤ η
+
+2 ∥∆Zt∥2 + 12η Zt + ˜Zt
+
+> 2
+
+|∆Yt|2.
+
+By Assumption 4.5, ∥Zt∥ ≤ σC Z and ∥ ˜Zt∥ ≤ σC Z , so ∥Zt + ˜Zt∥2 ≤ (2 σC Z )2 = 4 σ2C2 
+
+> Z
+
+. Therefore, 
+
+∆Yt(∥Zt∥2 − ˜Zt
+
+> 2
+
+) ≤ η
+
+2 ∥∆Zt∥2 + 2σ2C2
+
+> Z
+
+η |∆Yt|2. (27) Next, for any γ > 0, Young’s inequality yields 2|∆Yt δF t| ≤ γ
+
+2 |∆Yt|2 + 2
+
+γ |δF t|2 ≤ γ
+
+2 |∆Yt|2 + 2( LF )2
+
+γ ∥∆Xt∥2 , (28) where we used |δF t| ≤ LF ∥∆Xt∥ from Assumption 4.4. Similarly, 2|∆Yt rFt | ≤ γ
+
+2 |∆Yt|2 + 2
+
+γ |rFt |2 ≤ γ
+
+2 |∆Yt|2 + 2
+
+γ ε2 
+
+> F
+
+. (29) Substituting (27), (28), and (29) into (26), and integrating over t ∈ [0 , T ], we obtain 
+
+E
+
+Z T
+
+> 0
+
+∥∆Zt∥2 dt ≤ E|∆YT |2 + E|∆Y0|2 + η
+
+2 E
+
+Z T
+
+> 0
+
+∥∆Zt∥2 dt 
+
++
+
+ 2σ2C2
+
+> Z
+
+η + γ
+
+
+
+E
+
+Z T
+
+> 0
+
+|∆Yt|2 dt + 2( LF )2
+
+γ E
+
+Z T
+
+> 0
+
+∥∆Xt∥2 dt + 2Tγ ε2 
+
+> F
+
+.
+
+Rearranging and assuming η ∈ (0 , 2) yields the claimed estimate. 
+
+Lemma A.3 (Forward total energy bound) . Assume that Assumptions 4.1, 4.2, 4.4, and 4.5 hold. Assume also (19) –(20) . Then, with CE defined in (21) ,
+
+Efwd ≤ C E (E|∆YT |2 + E|∆Y0|2 + T ε 2 
+
+> f
+
++ T ε 2 
+
+> F
+
+). (30) 
+
+Proof of Lemma A.3. We define 
+
+X (t) := E∥∆Xt∥2, Y(t) := E|∆Yt|2, Z := 
+
+Z T
+
+> 0
+
+E∥∆Zt∥2 dt, 
+
+X∗ := sup  
+
+> t∈[0 ,T ]
+
+X (t), Y∗ := sup  
+
+> t∈[0 ,T ]
+
+Y(t), Efwd = X∗ + Y∗ + Z.
+
+First, we bound X∗. From (23a), Gr¨ onwall’s inequality gives, for all t ∈ [0 , T ], 
+
+X (t) ≤ eCXX tX (0) + eCXX t
+
+Z t
+
+> 0
+
+e−CXX s
+
+CXZ E∥∆Zs∥2 + CX,ε f ε2
+
+> f
+
+
+
+ds. 
+
+Since eCXX t ≤ EX , X (0) = 0 (because ∆ X0 = 0), and R t 
+
+> 0
+
+E∥∆Zs∥2ds ≤ Z , we obtain 
+
+X∗ ≤ EX
+
+ CXZ Z + CX,ε f T ε 2
+
+> f
+
+ . (31) Next, we bound Y∗. From (23b), Gr¨ onwall’s inequality gives, for all t ∈ [0 , T ], 
+
+Y(t) ≤ eCY Y tY(0) + eCY Y t
+
+Z t
+
+> 0
+
+e−CY Y s
+
+CY X X (s) + CY Z E∥∆Zs∥2 + CY,ε F ε2
+
+> F
+
+
+
+ds. 
+
+25 Since eCY Y t ≤ EY , R t 
+
+> 0
+
+X (s)ds ≤ T X∗, and R t 
+
+> 0
+
+E∥∆Zs∥2ds ≤ Z , we obtain 
+
+Y∗ ≤ EY
+
+
+
+Y(0) + CY X T X∗ + CY Z Z + CY,ε F T ε 2
+
+> F
+
+
+
+. (32) Then we bound Z. By Lemma A.2, 
+
+Z ≤ κ
+
+
+
+K + CZX 
+
+Z T
+
+> 0
+
+X (t) dt + CZY 
+
+Z T
+
+> 0
+
+Y(t) dt 
+
+
+
+,
+
+where 
+
+K := E|∆YT |2 + E|∆Y0|2 + CZ,ε F T ε 2 
+
+> F
+
+.
+
+Since R T 
+
+> 0
+
+X (t)dt ≤ T X∗ and R T 
+
+> 0
+
+Y(t)dt ≤ T Y∗, we obtain 
+
+Z ≤ κ
+
+
+
+K + CZX T X∗ + CZY T Y∗
+
+
+
+. (33) We now close the inequalities for X∗ and Y∗. We define 
+
+a0 := EX
+
+
+
+CX,ε f T ε 2 
+
+> f
+
++ CXZ κ K
+
+
+
+,b0 := EY
+
+
+
+Y(0) + CY,ε F T ε 2 
+
+> F
+
++ CY Z κ K
+
+
+
+.
+
+(34) Substituting (33) into (31) yields 
+
+X∗ ≤ EX
+
+
+
+CXZ κ(K + CZX T X∗ + CZY T Y∗) + CX,ε f T ε 2
+
+> f
+
+
+
+.
+
+Rearranging gives (1 − aX )X∗ − aY Y∗ ≤ a0, (35) with aX , a Y , a 0 as defined in (18) and (34). Similarly, substituting (33) into (32) yields 
+
+Y∗ ≤ EY
+
+
+
+Y(0) + CY X T X∗ + CY Z κ(K + CZX T X∗ + CZY T Y∗) + CY,ε F T ε 2
+
+> F
+
+
+
+,
+
+which rearranges to 
+
+−bX X∗ + (1 − bY )Y∗ ≤ b0, (36) with bX , b Y , b 0 as defined in (18) and (34). We solve the resulting linear system. Since aY , b X ≥ 0, 1 − aX > 0, 1 − bY > 0 by (20), and Ddet = (1 − aX )(1 − bY ) − aY bX > 0 by assumption (19), multiplying (35) by (1 − bY ) and (36) by aY preserves the inequality directions and yields 
+
+X∗ ≤ (1 − bY )a0 + aY b0
+
+Ddet 
+
+.
+
+Likewise, multiplying (35) by bX and (36) by (1 − aX ) gives 
+
+Y∗ ≤ bX a0 + (1 − aX )b0
+
+Ddet 
+
+.
+
+Finally, we bound Efwd . Substituting the above bounds into (33) gives 
+
+Efwd = X∗ + Y∗ + Z≤
+
+
+
+1 + κC ZX T
+
+
+
+X∗ +
+
+
+
+1 + κC ZY T
+
+
+
+Y∗ + κK,
+
+≤
+
+
+
+1 + κC ZX T
+
+ (1 − bY )a0 + aY b0
+
+Ddet 
+
++
+
+
+
+1 + κC ZY T
+
+ bX a0 + (1 − aX )b0
+
+Ddet 
+
++ κK.
+
+(37) 26 In particular, define the shorthand notations 
+
+Serr := E|∆YT |2 + E|∆Y0|2 + T ε 2 
+
+> f
+
++ T ε 2 
+
+> F
+
+,CK := 1 + CZ,ε F ,
+
+so that K ≤ CK Serr . Then, we have 
+
+a0 = EX
+
+
+
+CX,ε f T ε 2 
+
+> f
+
++ CXZ κK
+
+
+
+≤ EX
+
+
+
+CX,ε f + CXZ κC K
+
+
+
+Serr ,b0 = EY
+
+
+
+Y(0) + CY,ε F T ε 2 
+
+> F
+
++ CY Z κK
+
+
+
+≤ EY
+
+
+
+1 + CY,ε F + CY Z κC K
+
+
+
+Serr .
+
+Consequently, from (37) and the definitions (21), 
+
+Efwd ≤ C E Serr ,
+
+which is exactly (30). 
+
+Lemma A.4 (Backward total energy bound) . Assume that Assumptions 4.1, 4.2, 4.4, and 4.5 hold. Assume also (19) –(20) . Then, with the same constant CE ,
+
+Ebwd ≤ C E
+
+
+
+E|∆ bY0|2 + E|∆ bYT |2 + T ε 2 
+
+> f
+
++ T ε 2
+
+> F
+
+
+
+. (38) 
+
+Proof of Lemma A.4. We rewrite the backward-time system as a forward problem by time reversal. For t ∈ [0 , T ], define ˇXt := bXT −t, ˜ˇXt := ˜bXT −t, ˇYt := − bYT −t, ˜ˇYt := − ˜bY T −t,
+
+and ˇZt := − bZT −t, ˜ˇZt := − ˜bZT −t.
+
+Also let ˇWt := WT − WT −t,
+
+which is a Brownian motion with respect to the reversed filtration. A direct substitution shows that ( ˇX, ˇY , ˇZ) and ( ˜ˇX, ˜ˇY, ˜ˇZ) satisfy forward-time FBSDEs of the same algebraic form as (9a)–(9b), with the same constants Lf , L F , C Z and with the coupled initial condition ˜ˇX0 = ˇX0 a.s. ,
+
+because ˜bXT = bXT a.s. by Assumption 4.2. Therefore, the proof of Lemma A.3 applies to the reversed pair. Since sup  
+
+> t∈[0 ,T ]
+
+E∥ ˇXt − ˜ˇXt∥2 = sup  
+
+> s∈[0 ,T ]
+
+E∥∆ bXs∥2,
+
+sup  
+
+> t∈[0 ,T ]
+
+E| ˇYt − ˜ˇYt|2 = sup  
+
+> s∈[0 ,T ]
+
+E|∆ bYs|2,
+
+Z T
+
+> 0
+
+E∥ ˇZt − ˜ˇZt∥2 dt =
+
+Z T
+
+> 0
+
+E∥∆ bZs∥2 ds, 
+
+the left-hand side is exactly Ebwd . The boundary terms of the reversed system become 
+
+E| ˇYT − ˜ˇYT |2 = E|∆ bY0|2, E| ˇY0 − ˜ˇY0|2 = E|∆ bYT |2,
+
+which proves (38). 27 Proof of Theorem 4.7. By Lemma A.3, there exists a constant CE > 0 such that 
+
+Efwd ≤ C E
+
+
+
+E|∆Y0|2 + E|∆YT |2 + T ε 2 
+
+> f
+
++ T ε 2
+
+> F
+
+
+
+, (39) Likewise, by Lemma A.4, the same constant CE > 0 satisfies 
+
+Ebwd ≤ C E
+
+
+
+E|∆ bY0|2 + E|∆ bYT |2 + T ε 2 
+
+> f
+
++ T ε 2
+
+> F
+
+
+
+, (40) Adding (39) and (40) yields 
+
+Efwd + Ebwd ≤ C E
+
+
+
+E|∆Y0|2 + E|∆ bY0|2 + E|∆YT |2 + E|∆ bYT |2 + 2 T ε 2 
+
+> f
+
++ 2 T ε 2
+
+> F
+
+
+
+. (41) The endpoint representative in Assumptions 4.1(iv) and 4.2(iv), together with the endpoint couplings in Assumption 4.2(i)–(ii) and the marginal consistency in Assumptions 4.1(iii) and 4.2(iii), gives ∆Y0 = 0 , ∆YT = 0 , ∆ bY0 = 0 , ∆ bYT = 0 a.s. Substituting these identities into (41) gives (22). 
+
+# B Computational Environment 
+
+The numerical experiments were run on two GPU environments, summarized in Table 4. Table 4: Computational environments used for the numerical experiments. Experiments GPU environment GMM and V-neck NVIDIA L40S PCIe GPU with 48 GB memory. Opinion dynamics NVIDIA GeForce RTX 3090 GPU with 24 GB memory. 
+
+# References 
+
+[1] E. Schr¨ odinger, ¨ uber die Umkehrung der Naturgesetze, Angewandte Chemie 44 (30) (1931) 636– 636. doi:10.1002/ange.19310443014 .[2] C. L´ eonard, A survey of the Schr¨ odinger problem and some of its connections with optimal transport, Discrete and Continuous Dynamical Systems 34 (4) (2014) 1533–1574. doi:10.3934/ dcds.2014.34.1533 .[3] Y. Chen, T. T. Georgiou, M. Pavon, Stochastic Control Liaisons: Richard Sinkhorn Meets Gas-pard Monge on a Schr¨ odinger Bridge, SIAM Review 63 (2) (2021) 249–313. doi:10.1137/ 20M1339982 .[4] Y. Chen, T. T. Georgiou, M. Pavon, Optimal Steering of a Linear Stochastic System to a Final Probability Distribution, Part I, IEEE Transactions on Automatic Control 61 (5) (2016) 1158– 1169. doi:10.1109/TAC.2015.2457784 .[5] Y. Chen, T. T. Georgiou, M. Pavon, Optimal Steering of a Linear Stochastic System to a Final Probability Distribution, Part II, IEEE Transactions on Automatic Control 61 (5) (2016) 1170– 1180. doi:10.1109/TAC.2015.2457791 .[6] Y. Chen, T. T. Georgiou, M. Pavon, Optimal Steering of a Linear Stochastic System to a Final Probability Distribution—Part III, IEEE Transactions on Automatic Control 63 (9) (2018) 3112– 3118. doi:10.1109/TAC.2018.2791362 .[7] K. F. Caluya, A. Halder, Wasserstein Proximal Algorithms for the Schr¨ odinger Bridge Problem: Density Control With Nonlinear Drift, IEEE Transactions on Automatic Control 67 (3) (2022) 1163–1178. doi:10.1109/TAC.2021.3060704 .28 [8] K. F. Caluya, A. Halder, Reflected Schr¨ odinger Bridge: Density Control with Path Constraints, in: 2021 American Control Conference (ACC), 2021, pp. 1137–1142. doi:10.23919/ACC50511. 2021.9482813 .[9] F. Vargas, P. Thodoroff, A. Lamacraft, N. Lawrence, Solving Schr¨ odinger Bridges via Maximum Likelihood, Entropy 23 (9) (2021) 1134. doi:10.3390/e23091134 .[10] T. Chen, G.-H. Liu, E. Theodorou, Likelihood Training of Schr¨ odinger Bridge using Forward-Backward SDEs Theory, in: International Conference on Learning Representations, 2022. [11] V. De Bortoli, J. Thornton, J. Heng, A. Doucet, Diffusion Schr¨ odinger Bridge with Applications to Score-Based Generative Modeling, in: Advances in Neural Information Processing Systems, Vol. 34, Curran Associates, Inc., 2021, pp. 17695–17709. [12] G.-H. Liu, A. Vahdat, D.-A. Huang, E. Theodorou, W. Nie, A. Anandkumar, I 2SB: Image-to-Image Schr¨ odinger Bridge, in: Proceedings of the 40th International Conference on Machine Learning, PMLR, 2023, pp. 22042–22062. [13] Y. Shi, V. De Bortoli, A. Campbell, A. Doucet, Diffusion Schr¨ odinger Bridge Matching, in: Thirty-Seventh Conference on Neural Information Processing Systems, 2023. [14] T. Zheng, Q. Han, H. Lin, Transporting Robotic Swarms Via Mean-Field Feedback Control, IEEE Transactions on Automatic Control 67 (8) (2022) 4170–4177. doi:10.1109/TAC.2021.3108672 .[15] K. Cui, M. Li, C. Fabian, H. Koeppl, Scalable Task-Driven Robotic Swarm Control via Collision Avoidance and Learning Mean-Field Control, in: 2023 IEEE International Conference on Robotics and Automation (ICRA), 2023, pp. 1192–1199. doi:10.1109/ICRA48891.2023.10161498 .[16] G. Rapakoulias, A. Reza Pedram, P. Tsiotras, Steering Large Agent Populations Using Mean-Field Schr¨ odinger Bridges With Gaussian Mixture Models, IEEE Control Systems Letters 9 (2025) 1760–1765. doi:10.1109/LCSYS.2025.3581859 .[17] G. Schiebinger, J. Shu, M. Tabaka, B. Cleary, V. Subramanian, A. Solomon, J. Gould, S. Liu, S. Lin, P. Berube, L. Lee, J. Chen, J. Brumbaugh, P. Rigollet, K. Hochedlinger, R. Jaenisch, A. Regev, E. S. Lander, Optimal-Transport Analysis of Single-Cell Gene Expression Identifies Developmental Trajectories in Reprogramming, Cell 176 (4) (2019) 928–943.e22. doi:10.1016/ j.cell.2019.01.006 .[18] A. Tong, J. Huang, G. Wolf, D. V. Van Dijk, S. Krishnaswamy, TrajectoryNet: A Dynamic Opti-mal Transport Network for Modeling Cellular Dynamics, in: Proceedings of the 37th International Conference on Machine Learning, PMLR, 2020, pp. 9526–9536. [19] Z. Zhang, Z. Wang, Y. Sun, T. Li, P. Zhou, Modeling Cell Dynamics and Interactions with Unbalanced Mean Field Schr¨ odinger Bridge, in: The Thirty-ninth Annual Conference on Neural Information Processing Systems, 2025. [20] A.-S. Sznitman, Topics in propagation of chaos, in: D. L. Burkholder, E. Pardoux, A.-S. Sznitman, P.-L. Hennequin (Eds.), Ecole d’Et´ e de Probabilit´ es de Saint-Flour XIX — 1989, Springer, Berlin, Heidelberg, 1991, pp. 165–251. doi:10.1007/BFb0085169 .[21] D. Lacker, A general characterization of the mean field limit for stochastic differential games, Probability Theory and Related Fields 165 (2016) 581–648. doi:10.1007/s00440-015-0641-9 .[22] R. Carmona, F. Delarue, Probabilistic Theory of Mean Field Games with Applications I: Mean Field FBSDEs, Control, and Games, Vol. 83 of Probability Theory and Stochastic Modelling, Springer International Publishing, Cham, 2018. doi:10.1007/978-3-319-58920-6 .[23] J. Backhoff, G. Conforti, I. Gentil, C. L´ eonard, The mean field Schr¨ odinger problem: Ergodic behavior, entropy estimates and functional inequalities, Probability Theory and Related Fields 178 (1) (2020) 475–530. doi:10.1007/s00440-020-00977-8 .29 [24] C. Hern´ andez, L. Tangpi, Propagation of Chaos for Mean Field Schr¨ odinger Problems, SIAM Journal on Control and Optimization 63 (1) (2025) 112–150. doi:10.1137/23M1566716 .[25] H. Pham, X. Wei, Bellman equation and viscosity solutions for mean-field stochastic control problem, ESAIM: Control, Optimisation and Calculus of Variations 24 (1) (2018) 437–461. doi: 10.1051/cocv/2017019 .[26] G.-H. Liu, T. Chen, O. So, E. Theodorou, Deep Generalized Schr¨ odinger Bridge, Advances in Neural Information Processing Systems 35 (2022) 9374–9388. [27] J. Han, A. Jentzen, W. E, Solving High-Dimensional Partial Differential Equations using Deep Learning, Proceedings of the National Academy of Sciences 115 (34) (2018) 8505–8510. doi: 10.1073/pnas.1718942115 .[28] L. Ruthotto, S. J. Osher, W. Li, L. Nurbekyan, S. W. Fung, A machine learning framework for solving high-dimensional mean field game and mean field control problems, Proceedings of the National Academy of Sciences 117 (17) (2020) 9183–9193. doi:10.1073/pnas.1922204117 .[29] J. Han, R. Hu, J. Long, Learning High-Dimensional McKean–Vlasov Forward-Backward Stochas-tic Differential Equations with General Distribution Dependence, SIAM Journal on Numerical Analysis 62 (1) (2024) 1–24. doi:10.1137/22M151861X .[30] R. Hu, B. Jin, M. Lauri` ere, J. Zhang, Deep Signature Approach for McKean-Vlasov FBSDEs in a Random Environment (Nov. 2025). arXiv:2511.09112 , doi:10.48550/arXiv.2511.09112 .[31] G. Dayanikli, M. Lauri` ere, J. Zhang, Deep Learning for Population-Dependent Controls in Mean Field Control Problems with Common Noise, in: Proceedings of the 23rd International Confer-ence on Autonomous Agents and Multiagent Systems, AAMAS ’24, International Foundation for Autonomous Agents and Multiagent Systems, Richland, SC, 2024, pp. 2231–2233. [32] Z. Cao, K. Das, N. Langren´ e, M. Lauri` ere, Scalable Method for Mean Field Control with Ker-nel Interactions via Random Fourier Features (Jan. 2026). arXiv:2601.01175 , doi:10.48550/ arXiv.2601.01175 .[33] P. Dai Pra, A stochastic control approach to reciprocal diffusion processes, Applied Mathematics and Optimization 23 (1) (1991) 313–329. doi:10.1007/BF01442404 .[34] M. Cuturi, Sinkhorn Distances: Lightspeed Computation of Optimal Transport, in: Advances in Neural Information Processing Systems, Vol. 26, Curran Associates, Inc., 2013, pp. 2292–2300. [35] G. Peyr´ e, M. Cuturi, Computational Optimal Transport, Foundations and Trends ® in Machine Learning 11 (5-6) (2019) 355–607. [36] N. Gushchin, S. Kholkin, E. Burnaev, A. Korotin, Light and Optimal Schr¨ odinger Bridge Match-ing, in: Proceedings of the 41st International Conference on Machine Learning, Vol. 235 of ICML’24, JMLR.org, Vienna, Austria, 2024, pp. 17100–17122. [37] F. Lu, M. Zhong, S. Tang, M. Maggioni, Nonparametric inference of interaction laws in systems of agents from trajectory data, Proceedings of the National Academy of Sciences 116 (29) (2019) 14424–14433. doi:10.1073/pnas.1822012116 .[38] F. Lu, M. Maggioni, S. Tang, Learning interaction kernels in heterogeneous systems of agents from multiple trajectories, Journal of Machine Learning Research 22 (32) (2021) 1–67. [39] F. Lu, M. Maggioni, S. Tang, Learning Interaction Kernels in Stochastic Systems of Interacting Particles from Multiple Trajectories, Foundations of Computational Mathematics 22 (4) (2022) 1013–1067. doi:10.1007/s10208-021-09521-z .[40] R. Yao, X. Chen, Y. Yang, Mean-field nonparametric estimation of interacting particle systems, in: Proceedings of Thirty Fifth Conference on Learning Theory, PMLR, 2022, pp. 2242–2275. 30 [41] Q. Lang, F. Lu, Learning Interaction Kernels in Mean-Field Equations of First-Order Systems of Interacting Particles, SIAM Journal on Scientific Computing 44 (1) (2022) A260–A285. doi: 10.1137/20M1377072 .[42] Y. Shi, W. Yang, L. Hong, Extracting interaction kernels for many-particle systems by a two-phase approach, Physics of Fluids 37 (3) (2025) 033331. doi:10.1063/5.0255706 .[43] J. Yang, X. Ye, R. Trivedi, H. Xu, H. Zha, Learning Deep Mean Field Games for Modeling Large Population Behavior, in: International Conference on Learning Representations, 2018. [44] L. Ding, W. Li, S. Osher, W. Yin, A Mean Field Game Inverse Problem, Journal of Scientific Computing 92 (1) (2022) 7. doi:10.1007/s10915-022-01825-8 .[45] H. Liu, C. Mou, S. Zhang, Inverse problems for mean field games, Inverse Problems 39 (8) (2023) 085003. doi:10.1088/1361-6420/acdd90 .[46] Z. Mo, X. Chen, X. Di, E. Iacomini, C. Segala, M. Herty, M. Lauriere, A Game-Theoretic Framework for Generic Second-Order Traffic Flow Models Using Mean Field Games and Ad-versarial Inverse Reinforcement Learning, Transportation Science 58 (6) (2024) 1403–1426. 
+
+doi:10.1287/trsc.2024.0532 .[47] C. Fiedler, M. Herty, C. Segala, S. Trimpe, Recent kernel methods for interacting particle systems: First numerical results, European Journal of Applied Mathematics 36 (2) (2025) 464–489. doi: 10.1017/S0956792524000706 .[48] F. L´ eger, W. Li, Hopf–Cole transformation via generalized Schr¨ odinger bridge problem, Journal of Differential Equations 274 (2021) 788–827. doi:10.1016/j.jde.2020.10.029 .[49] B. Chazelle, Q. Jiu, Q. Li, C. Wang, Well-posedness of the limiting equation of a noisy consensus model in opinion dynamics, Journal of Differential Equations 263 (1) (2017) 365–397. doi: 10.1016/j.jde.2017.02.036 .[50] C. Bernardo, C. Altafini, A. Proskurnikov, F. Vasca, Bounded confidence opinion dynamics: A survey, Automatica 159 (2024) 111302. doi:10.1016/j.automatica.2023.111302 .[51] J. Garnier, G. Papanicolaou, T.-W. Yang, Consensus Convergence with Stochastic Effects, Viet-nam Journal of Mathematics 45 (1) (2017) 51–75. doi:10.1007/s10013-016-0190-2 .[52] F. Ceragioli, P. Frasca, Continuous-time Discontinuous Equations in Bounded Confidence Opinion Dynamics, IFAC Proceedings Volumes 44 (1) (2011) 1986–1990. doi:10.3182/ 20110828-6-IT-1002.02106 .[53] F. Ceragioli, P. Frasca, Continuous and discontinuous opinion dynamics with bounded confidence, Nonlinear Analysis: Real World Applications 13 (3) (2012) 1239–1251. doi:10.1016/j.nonrwa. 2011.10.002 .[54] G. Albi, S. Bicego, D. Kalise, Control of high-dimensional collective dynamics by deep neural feedback laws and kinetic modelling, Journal of Computational Physics 539 (2025) 114229. doi: 10.1016/j.jcp.2025.114229 .[55] S. Bicego, D. Kalise, G. A. Pavliotis, Computation and control of unstable steady states for mean field multiagent systems, Proceedings of the Royal Society A: Mathematical, Physical and Engineering Sciences 481 (2311) (2025) 20240476. doi:10.1098/rspa.2024.0476 .31
