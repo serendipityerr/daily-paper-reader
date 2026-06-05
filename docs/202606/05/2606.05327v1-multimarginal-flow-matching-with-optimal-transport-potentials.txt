@@ -1,0 +1,4890 @@
+Title: Multimarginal flow matching with optimal transport potentials
+
+URL Source: https://arxiv.org/pdf/2606.05327v1
+
+Published Time: Fri, 05 Jun 2026 00:17:45 GMT
+
+Number of Pages: 41
+
+Markdown Content:
+## Multimarginal flow matching with optimal transport potentials 
+
+Raghav Kansal 1 David Crair 1 Nghia Nguyen 1 Scott Pope 1 Bradley Parry 1
+
+Abstract 
+
+Flow matching (FM) has emerged as a power-ful framework for learning dynamic transport maps between two empirical distributions. How-ever, less explored is the setting with intermedi-ate observed marginals that can help constrain the flows between the endpoints. This “multi-marginal” regime is central to modeling temporal evolution in dynamical systems in many scien-tific domains that can sample sequential distribu-tions. We tackle this problem with a novel ap-proach that leverages the connection between FM and dynamic optimal transport (OT), softly steer-ing the flow towards the intermediate marginals through potential terms in the dynamic OT ac-tion. By extending the conditional FM learning target to incorporate these potentials, we derive an efficient, simulation-free algorithm for multi-marginal FM that offers considerable flexibility in the spatiotemporal dynamics of the learned flows. We demonstrate state-of-the-art performance and training efficiency of OT-potential FM (OTP-FM) on diverse single-cell RNA sequencing, oceano-graphic, and meteorological datasets. Our code is available at https://github.com/Bexor g-Inc/OTP-FM .
+
+1. Introduction 
+
+Understanding the complex nonlinear dynamics of physical systems is of central importance in many scientific domains, including transcriptomic state transitions in developmental biology, disease progression in neurodegenerative diseases, and climate modeling. There has been significant recent progress in these disciplines towards developing a corpus of static snapshots of these systems during their evolution, such as with longitudinal single-cell RNA sequencing (scRNA-seq) measurements; however, inferring accurate per-sample 
+
+> 1
+
+Bexorg, Inc., New Haven, CT, USA. Correspondence to: Raghav Kansal <raghav.kansal@bexorg.com >, Bradley Parry 
+
+<brad.parry@bexorg.com >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+trajectories from these, often independent, snapshots re-mains a critical challenge for mechanistic understanding, therapeutic target identification, and predictive inference. 
+
+Conditional flow matching (CFM) (Lipman et al., 2023; Tong et al., 2024; Liu et al., 2023; Albergo et al., 2025) has emerged as a leading framework for this problem, learning continuous-time transport maps through efficient, simulation-free regression of simple conditional trajecto-ries, which are commonly conditional optimal transport (OT) solutions between paired source and target samples. When intermediate marginals are available, the natural ex-tension has been to apply CFM piecewise between con-secutive marginals, stitching conditional paths end-to-end (Fig. 1). However, this produces trajectories with unphysical discontinuities at each marginal boundary. Recent multi-marginal methods such as MMFM (Rohbeck et al., 2025) and 3MSBM (Theodoropoulos et al., 2026) have tried to smooth these, but with prescriptive, ad-hoc strategies that we argue need not describe the physical system. We propose a principled relaxation: we show that piece-wise CFM corresponds to conditional dynamic OT with 
+
+hard constraints on each intermediate marginal, and relax these to smooth, finite-strength potential energy terms in the dynamic OT action with OT-potential FM (OTP-FM)— recovering piecewise CFM as a limiting case. Our contribu-tions are: • A multimarginal generalization of dynamic OT with exact conditional solutions and theoretical bound on alignment to the ground-truth intermediate marginals, controlled by the potential strength and training loss. • A flexible, simulation-free training algorithm with a broad design space in the potential parameters, effec-tively allowing the data to determine the interpolated dynamics through optimization over this space rather than the prescriptive approaches of prior methods. • State-of-the-art (SOTA) performance and training efficiency on diverse scientific datasets, with system-atic ablations and concrete recommendations for ap-plying OTP-FM to new datasets. 1
+
+> arXiv:2606.05327v1 [cs.LG] 3 Jun 2026
+
+Multimarginal flow matching with optimal transport potentials t0 1                 
+
+> CFM
+> t01
+> (piecewise linear)
+> Multimarginal CFM
+> t01
+> (fixed interpolation)
+> MMFM / 3MSBM
+> t01
+> varying strength w
+> w=1
+> w=10
+> w=500
+> t01
+> varying width τ
+> τ=0 .02
+> τ=0 .25
+> τ=0 .60
+> t
+> λ(t)
+> 01
+> varying λshape
+> Gaussian
+> Triangle
+> Box
+> 0t1t21
+> Xt=Xbase
+> t+α
+> ∑
+> k
+> Xcorr
+> k, t
+> α=0 (CFM)
+> α=0 .02
+> α=0 .1
+> α=1 (OTP-FM)
+> t
+> λ(t)
+> OTP-FM (ours)
+
+Figure 1. (Left) Comparing standard CFM — straight-line trajectories ignoring intermediate marginals; multimarginal CFM — stitching CFM trajectories piecewise between consecutive marginals; prescriptive approaches such as MMFM and 3MSBM — using fixed interpolation strategies to smooth kinks; and OTP-FM, whose soft potential-driven dynamics with tunable strength w, temporal width τ ,and λ shape yields smooth and flexible trajectories. (Right) Method overview: trajectories Xt are decomposed as a base CFM path Xbase 
+
+> t
+
+plus marginal-driven corrections Xcorr  
+
+> k,t
+
+that are gradually scaled by the curriculum parameter α to converge to the OTP-FM solution. 
+
+2. Background and preliminaries 
+
+2.1. Optimal transport 
+
+The original static Monge OT problem solves for a transport map ψ : Rd → Rd between source and target measures μ0
+
+and μ1, such that the push-forward operation ψ#μ0 = μ1,that is optimal with respect to a cost c : Rd × Rd → R (Vil-lani, 2009): LOT := min ψ:ψ#μ0=μ1
+
+R c(x, ψ (x))d μ0(x).For cost cp(x, y ) = ∥x − y∥p, L1/p  
+
+> OT
+
+is the Wasserstein p-distance Wp.Particularly relevant is the dynamic OT (DOT) formula-tion (Benamou & Brenier, 2000), where we define a dy-namic probability path ρt : [0 , 1] × Rd → R+ interpolating 
+
+μ0 to μ1. This path is generated by a velocity field ut via the continuity equation ∂tρ = −∇ · (ρu ), with sample tra-jectories satisfying ˙Xt = ut(Xt) for X0 ∼ ρ0, and the corresponding map, or flow , ψt : [0 , 1] × Rd → Rd trans-ports the samples along the trajectory Xt = ψt(X0) ∼ ρt.The objective for squared Euclidean cost c2/2 is: 1
+
+LDOT := min 
+
+> ρt,u t
+
+Z 10
+
+Z
+
+> Rd
+
+12 ∥ut(x)∥2dρt(x)d t, (1) subject to the continuity equation and boundary conditions 
+
+ρ0 = μ0, ρ1 = μ1.Interestingly, this can be interpreted as minimizing the action S[L] of a fluid with Lagrangian L = T − V , ki-netic energy T = 12 ρ∥u∥2, and potential energy V = 0 :
+
+> 1
+
+We adopt the conventional factor of 1/2 to maintain the analogy with physical kinetic energy. 
+
+S[L] = 
+
+Z 10
+
+Z
+
+> Rd
+
+h 12 ρt(x)∥ut(x)∥2 − V (x, t )+ 
+
+φt(x)[ ∂tρt(x) + ∇ · (ρt(x)ut(x))] 
+
+i
+
+dxdt, (2) where φ is a Lagrange multiplier enforcing the continuity equation. Minimizers for V = 0 satisfy the Euler-Lagrange (E-L) equations: 
+
+ut = ∇φt, ∂tφt(x) + ∥∇ φt(x)∥2
+
+2 = 0 , (3) and follow straight-line trajectories Xt = (1 − t)X0 +
+
+tψ (X0), ˙Xt = ψ(X0) − X0, where ψ is the static OT map for cost c2. A detailed derivation is provided in App. A.1. These straight-line minimizers correspond to the conditional paths commonly used in CFM, as we describe next, while in OTP-FM we explore the case of non-zero V .
+
+2.2. Conditional flow matching 
+
+Conditional flow matching (CFM) similarly aims to find a flow between measures by learning a parametric velocity 
+
+uθt . Obtaining a valid marginal training target to which to regress this is often intractable; however, Lipman et al. (2023); Tong et al. (2024) show that we can derive an equivalent, simpler conditional target by constructing the marginal ρt(x) = R ρt(x|z)q(z)d z as a mixture of condi-tional paths ρt(x|z), with associated conditional velocity 
+
+ut(x|z), conditioned on a latent variable z ∼ q(z), and satisfying ρ0(x) = μ0(x), ρ1(x) = μ1(x).The simplest and most common way to do so is choosing 
+
+z = ( x0, x 1) ∼ π(x0, x 1), where π is some joint distribu-tion of the endpoints, and ut(x|z) the conditional dynamic 
+
+2Multimarginal flow matching with optimal transport potentials 
+
+OT solution (for V = 0 ) between ρ0(x|z) = δ(x − x0) and 
+
+ρ1(x|z) = δ(x − x1), defining the CFM objective: 
+
+Xt(x|z) = (1 −t)x0 + tx 1, (4) 
+
+ut(x|z) = ˙Xt(x|z) = x1 − x0, (5) 
+
+LCFM (θ) := Et,z,x ∼ρt(x|z) uθ (t, x ) − ut(x|z) 2 . (6) Perhaps surprisingly, this far simpler objective is gradient-equivalent to the marginal FM objective, thereby providing an efficient and scalable training algorithm for learning flows. In OTP-FM, we generalize this regression target to non-zero potentials V that flexibly incorporate intermediate marginal constraints. 
+
+2.3. Few-step and consistency models 
+
+As we will describe in Sec. 4.1, OTP-FM can require eval-uating sample positions Xtk at intermediate times during training. To avoid costly ODE simulation for this, we train a consistency model for few-step inference. Broadly, con-sistency models aim to learn (variations of) the flow map 
+
+Ψt1,t 2 : [0 , 1] 2 × Rd → Rd — a generalization of ψt that can transport samples between two arbitrary time points 
+
+t1 and t2: Ψt1,t 2 (Xt1 ) = Xt2 , with boundary condition 
+
+Ψt,t (x) = x (Boffi et al., 2025; 2026). While OTP-FM is agnostic to the particular training pro-cedure used to learn Ψt1,t 2 , for our experiments we pri-marily employ that of improved MeanFlow (iMF) (Geng et al., 2026b), which, at the time of writing, is SOTA in one- and two-step inference. Namely, we parameterize 
+
+Ψt1,t 2 in terms of the mean velocity between t1 and t2,
+
+vt1,t 2 (Xt1 ) = 1
+
+> t2−t1
+
+R t2 
+
+> t1
+
+ut(Xt)d t, from which the regres-sion target is derived: 
+
+LiMF (θ) := Et1,t 2,z,x ∼ρt1 (·| z) V θt1,t 2 (x) − ut1(x|z) 2 (7) 
+
+V θt1,t 2 (x) ≡ vθ(x) − (t2 − t1) sg vθt1,t 1(x)∂xvθ + ∂t1vθ  ,
+
+where sg is the stop-gradient operator, ut(x|z) is the instan-taneous conditional velocity target used in CFM, and V θt1,t 2
+
+is parametrization of the model vθt1,t 2 that directly regresses this target. 2 Further discussion of consistency methods and a derivation of our iMF objective appear in App. C, and re-sults with alternatives in App. G, demonstrating OTP-FM’s flexibility to the choice of consistency model. 
+
+3. The dynamic OTP problem 
+
+We now generalize CFM to the multimarginal trajectory in-ference problem: given empirical marginals {μtk }K+1  
+
+> k=0
+
+(two endpoint and K intermediate) at times tk ∈ [0 , 1] , we aim 
+
+> 2
+
+Our formulation is largely equivalent to the original of Geng et al. (2026b) except for a modification of the training target to flow forward in time. Details are provided in App. C.2. 
+
+to learn a velocity field uθt whose flow induces densities ρt
+
+aligned with μtk while describing physically plausible inter-polated trajectories, as measured by alignment to held-out marginals (Sec. 6). We first observe that standard piecewise CFM targets can be recast as conditional solutions of dy-namic OT with hard penalty terms, or singular potentials (Sec. 3.1). This motivates a smooth relaxation to what we call the dynamic OT + potentials (OTP) problem (Sec. 3.2), in which the intermediate marginal constraints appear in-stead as soft potential terms in the OT action. Finally, we derive sample trajectories and discuss the design space of potentials (Secs. 3.3 and 3.4). 
+
+3.1. Piecewise CFM as OT with singular potentials 
+
+The standard multimarginal extension of CFM stitches conditional OT solutions piecewise between consecutive marginals (e.g. Tong et al. (2024; 2023), see App. A.2), whose target densities satisfy ρtk = μtk exactly at each intermediate time. This is equivalent to imposing hard constraints (HC) on the conditional dynamic OT problem (Eq. 1), to whose solutions we regress: 
+
+LHC := min 
+
+> ρt,u t
+
+Z 10
+
+Z
+
+> Rd
+
+ 12 ρt∥ut∥2+φt[∂tρt+∇· (ρtut)] dxdt, 
+
+s.t. ρtk = μtk ∀k. (8) Because the kinetic-energy integral is additive in time and the constraints fix the densities at each tk, this problem decouples across consecutive intervals into independent dy-namic OT problems between μtk and μtk+1 (Lemma A.3 in App. A.2), recovering piecewise CFM as its conditional solution (Lemma A.4). Equivalently, these constraints can be enforced by adding singular penalties based on a metric statistical distance D
+
+such as W22 , time-localized with Dirac deltas, and taking the penalty strength wk → ∞ :
+
+LHC := min 
+
+Z 10
+
+Z
+
+> Rd
+
+h 12 ρt∥ut∥2 +
+
+> ≡− VHC (x,t )
+
+z }| {
+
+> K
+
+X
+
+> k=1
+
+wk δ(t − tk) Dkt ρt
+
++ φt[∂tρt + ∇ · (ρtut)] dxdt, (9) where Dkt ≡ D [ρt, μ tk ] : P(Rd) × P (Rd) → R+ is the statistical distance between ρt and μtk . The limit wk → ∞ 
+
+enforces Dkt = 0 ⇔ ρtk = μtk (since Dkt is a metric), recovering the hard constraint (Prop. 3.1). Thus, we can interpret the penalties as singular potential terms in the action. 
+
+3.2. The OTP problem: a smooth relaxation 
+
+This viewpoint suggests a natural relaxation to smooth the resultant unphysical kinks in piecewise CFM: take wk ∈ R
+
+finite and soften the Dirac deltas to normalized temporal 3Multimarginal flow matching with optimal transport potentials 0                                                                                                    
+
+> 1
+> 2
+> 3
+> 4
+> 5
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> λ(t)
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> λ(t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> x(t)
+> Exact dynamic OT
+> D= MMD 2RBF ,w= 20
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> D= KL, w= 10
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> D=W22,w=−1 (Repulsive)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> D= MMD 2RBF ,w= 20
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> D=W22,w1= 70, w2= 100
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> x(t)
+> OTP-FM
+> D= MMD 2RBF ,w= 1000
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> D= KL, w= 3
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> D=W22,w=−3 (Repulsive)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> D= MMD 2RBF ,w= 300
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> D=W∞
+> 2,w1= 400, w2= 500
+> Source μ0Intermediate Intermediate Target μ1Xt∼ρtΣkλk(t)
+
+Figure 2. Top: Exact solutions to the marginal dynamic OTP problem for 1D Gaussian marginals for varying potentials, strengths, and 
+
+λk (t). Bottom: OTP-FM solutions for the same marginals and potentials, except the rightmost plot, which demonstrates D = W∞ 
+
+> 2
+
+.
+
+kernels λk : [0 , 1] → R+ centered around tk with charac-teristic width τ ∈ R+. The choice of statistical distance 
+
+D remains free; in fact, in the soft setting we can further admit non-metric divergences such as the Kullback-Leibler divergence (KLD), which sacrifice exact constraint enforce-ment in the hard limit but expand the design space (Sec. 3.4). These generalizations yield the OTP variational problem: 
+
+LOTP := min 
+
+Z 10
+
+Z
+
+Rd
+
+h 12 ρt∥ut∥2 +
+
+≡− VOTP (x,t )
+
+z }| {
+
+KX
+
+k=1 
+
+wkλk(t)Dkt ρt
+
++ φt[∂tρt + ∇ · (ρtut)] 
+
+i
+
+dxdt, (10) subject to the boundary conditions ρ0 = μ0, ρ1 = μ1.Each term wkλk(t) Dkt thus acts as a per-marginal potential energy in the action: smoothed in time around tk by λk(t);of finite strength wk; and shaped in density space by the choice of D. Proposition 3.1 states that in the singular-potential limit, the OTP problem recovers piecewise CFM and is thus a strict generalization; the precise statement and proof based on Γ-convergence are provided in App. A.2. 
+
+Proposition 3.1 (OTP converges to the hard-constrained problem in the hard-potential limit, informal) . In the sin-gular limit wk → ∞ , λk → δ(t − tk) for all k, the OTP problem (Eq. 10) with D = W22 converges to the hard-constrained problem (Eq. 8) and any sequence of OTP min-imizers converges to its unique piecewise OT solution be-tween consecutive marginals. 
+
+3.3. Minimizers and sample trajectories 
+
+To further understand what we have gained with this re-laxation, we derive the E-L equations and corresponding sample trajectories of the OTP problem. 
+
+Theorem 3.2. Minimizers of the OTP problem (Eq. 10) satisfy the following E-L equations: 
+
+ut(x) = ∇φt(x), (11) 
+
+∂tφt(x) + ∥∇ φt(x)∥2
+
+2 =
+
+KX
+
+k=1 
+
+wkλk(t)gk(x, t ), (12) 
+
+along with the continuity equation, where gk(x, t ) ≡
+
+δDkt /δρ t(x) is the functional derivative of Dkt w.r.t. ρtk (x).
+
+Corollary 3.3. Minimizers of the OTP problem (Eq. 10) satisfy the following sample trajectories: 
+
+¨Xt =
+
+KX
+
+k=1 
+
+wkλk(t)∇gk(Xt, t ). (13) Proofs are provided in App. A.3. We can interpret 
+
+∇gk(Xt, t ) as the force applied by the marginal μtk to each sample in analogy to Newton’s second law. Clearly, it is an important object, and in general not trivial to compute; however, we show that it has convenient forms for common choices of D such as W22 , MMD, and KLD in Table 1 (de-rived in App. B). Solving these trajectories for the marginal 
+
+problem remains computationally challenging; however, the 
+
+conditional solutions can be computed highly efficiently, as we show in Sec. 4. 
+
+3.4. Design space of potentials 
+
+One case where we can solve the marginal problem exactly is for isotropic Gaussian marginals (App. D), illustrated in Fig. 2 for various configurations to visualize our rich design space along three axes: the strength wk, the temporal kernel 
+
+λk(t), and the statistical distance D. Overall, we observe intuitive qualitative behavior: trajectories are driven towards 4Multimarginal flow matching with optimal transport potentials 
+
+Table 1. Functional derivatives gk (x, t ) ≡ δDkt /δρ t(x) and their gradients for different statistical distances Dkt ≡ D [ρt, μ tk ]. φ∗
+
+and ψ∗ are the OT H-J potential and map for c2 cost, respectively.                               
+
+> Dktgk(x, t )∇gk(x, t )
+> W22−φ∗(x)x−ψ∗(x)
+> D(kernel k)MMD 22Rk(x, y )[ ρt(y)−μtk(y)] d y2R∇xk(x, y )[ ρt(y)−μtk(y)] d y
+> DKL ln ρt(x)−ln μtk(x) + 1 ∇ln ρt(x)− ∇ ln μtk(x)
+
+(or away from) intermediates depending on wk, with the smoothness and temporal dynamics controlled by λk(t).3
+
+We discuss practical and performance considerations regard-ing this design space in the next two sections. 
+
+4. The OTP-FM algorithm 
+
+We now leverage the OTP dynamics to formulate a prac-tical training algorithm by deriving a CFM-style regres-sion objective. We first construct conditional OTP-FM trajectories—conditioned on endpoint and intermediate-marginal samples—and obtain an explicit consistency-model loss (Sec. 4.1). We then derive the regression tar-gets for different statistical distances (Sec. 4.2), identifying 
+
+W2/∞ 
+
+> 2
+
+—with either OT or independent couplings—as a particularly clean, efficient, and stable choice that we rec-ommend in practice. Algorithmic details on the loss and curriculum follow in Sec. 4.3, and we conclude with theoret-ical bounds on the alignment between learned and ground-truth marginals—controlled by the potential strengths and training loss—in Sec. 4.4. 
+
+4.1. Conditional OTP-FM and training objective Temporal localization. Since ∇gk(Xt, t ) in Eq. 13 de-pends on ρt and Xt throughout the support of λk(t), us-ing these dynamics directly as a regression target would require simulating the trajectory at every training step. In-stead, we can exploit the temporal localization of λk(t): on its effective support of width τ around tk, Xt − Xtk and 
+
+ρt − ρtk are both O(τ ) (assuming bounded velocity), so 
+
+∇gk(Xt, t ) = ∇gk(Xtk , t k) + O(τ ). Substituting this into Eq. 13 yields the OTP-FM dynamics :
+
+¨Xt =
+
+> K
+
+X
+
+> k=1
+
+wkλk(t)∇gk(Xtk , t k). (14) As the force ∇gk(Xt, t ) now depends only on the trajec-tory at the discrete marginal times {tk}, we are able to formulate the fully simulation-free training objective below. Furthermore, we observe qualitatively identical behavior to 
+
+> 3
+
+Counter-intuitively, boundary conditions cause repulsive 
+
+forces (negative V ) to drive trajectories towards intermediates; the sign convention in Eq. 10 ensures positive wk corresponds to “attractive” dynamics. 
+
+the exact OTP solutions (Fig. 2), and retain the important theoretical bounds (Sec. 4.4) with this approximation. 
+
+Conditional solutions. Integrating Eq. 14 once and twice yields the velocity and trajectory: 
+
+ut(Xt) = ui +
+
+> K
+
+X
+
+> k=1
+
+wk∇gk(Xtk , t k)I[λk]( t), (15) 
+
+Xt = X0 + uit +
+
+> K
+
+X
+
+> k=1
+
+wk∇gk(Xtk , t k)I(2) [λk]( t), (16) where I(n)[f ] ( t) denotes the n-th time integral from 0 to t
+
+and ui ∈ Rd is an integration constant fixed by the bound-ary conditions. As in CFM, we obtain tractable regression targets by conditioning on endpoints (x0, x 1), as well as, in general, a minibatch B of samples drawn from a joint distribution πall over all marginals. Imposing X0 = x0
+
+and X1 = x1 pins down ui, and the resulting conditional trajectory and velocity decompose into a CFM base term plus potential-driven corrections: 
+
+ut(Xt|x0, x 1, B) = x1 − x0
+
+| {z }
+
+> ≡ubase
+
++
+
+> K
+
+X
+
+> k=1
+
+wk∇gk(Xtk , t k, B)
+
+h
+
+I[λk] ( t) − I (2) [λk] (1) 
+
+i| {z }
+
+> ≡ucorr
+> k,t
+
+. (17) 
+
+Xt(x0, x 1, B) = x0 + ( x1 − x0)t
+
+| {z }
+
+> ≡Xbase
+> t
+
++
+
+> K
+
+X
+
+> k=1
+
+wk∇gk(Xtk , t k, B)
+
+h
+
+I(2) [λk] ( t) − I (2) [λk] (1) t
+
+i| {z }
+
+> ≡Xcorr
+> k,t
+
+,
+
+(18) The base terms recover the CFM straight-line path and ve-locity (Corollary A.2), while each correction Xcorr  
+
+> k,t
+
+, u corr 
+
+> k,t
+
+captures the impulse from the k-th potential. 
+
+The self-consistent fixed-point problem Note that Eq. 18 is implicit in {Xtk }: each ∇gk(Xtk , t k, B) is evaluated at Xtk , which itself depends on the trajectory through 
+
+∇gk(Xtk , t k, B). Solving for {Xtk } that are self-consistent with the trajectory they induce is therefore a fixed-point problem, whose structure and solver depend on the choice of distance D and how its force is estimated, as discussed next in Sec. 4.2. 
+
+The OTP-FM training objective We train a consistency model vθt1,t 2 (Sec. 2.3) by regressing it onto the conditional OTP-FM velocity ut(x|z) (Eq. 17). Using the iMF formula-tion (Eq. 7), to be explicit, we obtain the loss: 
+
+LOTP −FM (θ) := Et1,t 2,z,x ∥V θt1,t 2 (x) − ut(x|z)∥2, (19) 5Multimarginal flow matching with optimal transport potentials 
+
+where z = ( x0, x 1, B) and V θt1,t 2 (x) is the parametrization of vθ defined in Eq. 7. We reiterate, however, that OTP-FM is agnostic to the choice of consistency model; we ablate alternative objectives in App. C. 
+
+4.2. Computing forces and fixed-points 
+
+Eq. 19 introduced the general conditioning variable z =(x0, x 1, B) with B a minibatch of size M from the joint cou-pling πall , from which the force estimator ∇gk(Xtk , t k, B)
+
+is built. For the W22 potential, ∇gk(x) = x − ψ∗(x) is well-defined pointwise, so B reduces to a single sample per marginal and the estimator is linear—together yielding the closed-form fixed point and a clean training signal. MMD and KLD, by contrast, are functionals of the full density ρtk
+
+and degenerate on Diracs, so their estimators require all M
+
+samples and yield nonlinear fixed points (Sec. 6.2). 
+
+The W22 distance With a single sample xtk ∼ μtk
+
+per marginal, the conditional OT map collapses to 
+
+ψ∗(Xtk |xtk ) = xtk , yielding the one-sample estimator 
+
+∇gk(Xtk , t k, B) = Xtk − xtk at O(M ) cost per training step. Substituted into Eq. 18 at t ∈ { t1, . . . , t K }, this yields a linear system in XT ≡ [Xt1 , . . . , X tK ]⊤ with the direct closed-form solution 
+
+XFP  
+
+> T
+
+= ( 1 − A)−1 Xbase  
+
+> T
+
+− A x T
+
+ ,Aik ≡ wk
+
+h
+
+I(2) [λk] ( ti) − I (2) [λk] (1) ti
+
+i
+
+, (20) where xT ≡ [xt1 , . . . , x tK ]⊤ and the K × K inverse 
+
+(1 − A)−1 depends only on the time grid and kernel and is precomputed once per training (further details in App. E.3). The remaining design choice is the joint coupling πall across times; we use πOT all ≡ QKi=0 πOT  
+
+> ti,t i+1
+
+, the product of OT cou-plings between consecutive marginals, precomputed once across the dataset. This is closest in spirit to the W22 dis-tance on the marginal problem. We could alternatively con-dition on the full minibatch B and estimate ψ∗ via minibatch OT (Fatras et al., 2020) at each step, but find the per-iteration overhead impractical relative to this precomputed variant. 
+
+The W∞ 
+
+> 2
+
+distance While precomputing the OT map has been possible for all experiments in this work, we pro-pose replacing πOT all with the independent coupling πind all 
+
+for applications to larger-scale, higher-dimensional datasets where the exact OT coupling may not be practical. This is akin to couplings based on entropically regularized OT, 
+
+Wε 
+
+> 2
+
+(Cuturi, 2013), in the limit of the regularization param-eter ε → ∞ ; hence, we refer to this as the W∞ 
+
+> 2
+
+potential. Eq. 20 applies unchanged; only xT on the RHS is now drawn from πind all rather than πOT all . The resulting estimator 
+
+∇gk(Xtk , t k, B) = Xtk − xtk paired with πind all likewise costs O(M ) per training step and is hence extremely effi-cient; furthermore, it does not require the precomputation of the OT map across all marginals. 
+
+Beyond W22 : MMD and KLD potentials As exploratory generalizations of the design space, we also consider MMD and KLD potentials, with corresponding forces ∇gk derived in Table 1. The MMD admits a natural O(M 2) empirical es-timator using a tunable RBF kernel, while the KLD requires score estimators for ρtk and μtk , for which we explore an 
+
+O(M ) Gaussian fit and an O(M 2) RBF kernel-density esti-mate (App. B.2). Both yield nonlinear fixed-point systems in Xtk and noisier finite-sample gradients than the linear 
+
+W22 estimator, requiring ≤ 5 Picard iterations with damped Anderson acceleration (Anderson, 1965) per training step and proving less performant overall (Sec. 6.2). 
+
+4.3. Algorithmic details Algorithm 1 The ith training iteration of OTP-FM 
+
+1: Input: vθ (x, t 1, t 2): model; M : batch size; α(i): cur-riculum parameter; 
+
+2: Sample B ∼ πall # shape: M × (K + 2) × D
+
+3: Sample (t1, t 2) ∼ pt1,t 2 # Eq. 114 
+
+4: x0, x 1 ← B [: , 0] , B[: , −1] 
+
+5: ubase ← x1 − x0
+
+6: Compute fixed points XFP  
+
+> tk
+
+(B) (Eq. 20 for W22 or FP iterations for MMD / KLD) 
+
+7: Compute ucorr  
+
+> k,t 1
+
+and Xcorr  
+
+> k,t 1
+
+using Eqs. 17, 18 and XFP 
+
+> tk
+
+8: # α-weighted Eqs. 17 and 18 
+
+9: ut1 ← ubase + α(i) PKk=1 ucorr  
+
+> k,t 1
+
+# M × D
+
+10: Xt1 ← x0 + ( x1 − x0)t1 + α(i) PKk=1 Xcorr 
+
+> k,t 1
+
+11: # MeanFlow target (Eq. 19), computed using jvp 
+
+12: vtgt ← ut1 + ( t2 − t1) [ ut1 ∂x + ∂t1 ] vθ (Xt1 , t 1, t 2)
+
+13: Compute loss LOTP −FM (vθ (Xt1 , t 1, t 2), sg( vtgt ))
+
+14: Update vθ using ∇L OTP −FM 
+
+Consistency training We use a consistency model such as iMF (Geng et al., 2026b) for few-step inference. This is crucial for efficient training of the MMD/KLD potentials, which require evaluation of the learned Xtk during training to compute the forces ∇gk(Xtk , t k, B) and perform FP iter-ations (Sec. 4.2). While not necessary for the W22 potential, it nevertheless enables efficient inference. As is common for image generation, we additionally maintain an exponential moving average (EMA) of the model weights uEMA  
+
+> θ
+
+for both inference and evaluation of Xtk during training. 
+
+Loss function We experiment with three weightings of the squared-L2 regression target (Eq. 19): 1) unweighted MSE; 2) the adaptive weighting of MeanFlow, replacing 
+
+∥∆∥22 with ∥∆∥22/sg( ∥∆∥22 +c)p, where ∆ is the regression residual, c a small constant, and p a tunable exponent; and 3) a learnt log-variance weighting (Karras et al., 2024). We 6Multimarginal flow matching with optimal transport potentials 
+
+find the adaptive weighting with p = 1 generally the most performant; comparisons are shown in Apps. F and G. 
+
+Homotopy curriculum As the fixed points of Eq. 18 are not guaranteed to be attractive for arbitrary initializations, we find it beneficial to introduce a training curriculum that scales the correction terms by a smoothly increasing param-eter α(i) ∈ [0 , 1] over training iterations i, rewriting Eq. 18 as a family of fixed-point maps: 
+
+Xt = Fα(Xt) ≡ Xbase  
+
+> t
+
++α
+
+> K
+
+X
+
+> k=1
+
+Xcorr  
+
+> k,t
+
+, ∀t ∈ { tk}. (21) This is an application of the homotopy continuation tech-nique (Allgower & Georg, 2003): we start by allowing the model to learn at α ≈ 0, where the problem reduces to CFM with a trivially attractive fixed point, and gradually transition to the full OTP-FM dynamics at α = 1 . Under standard regularity conditions, the implicit function theo-rem guarantees the existence of a locally unique and smooth solution branch α 7 → XFP  
+
+> tk
+
+(α), and increasing α gradually allows the training dynamics to track this branch (App. E.2). In practice, we use a sigmoid schedule with tunable mean and slope, with ablations in Sec. 6.2. Interestingly, we find this more performant even for the W22 potentials, for which we have a closed-form solution. 
+
+4.4. Theoretical bounds 
+
+As in standard CFM, LOTP −FM is gradient-equivalent to a marginal FM loss regressing vθ onto the induced marginal velocity ut(x) = R ut(x|z) ρt(z|x) d z along ρt(x) =R ρt(x|z) q(z) d z.4 The following two propositions show that OTP-FM with the W22 potential guarantees alignment of this induced ρt and the ground-truth intermediate marginals 
+
+μtk , with the W2 bound between them controlled by the po-tential strength w and training loss LOTP −FM . Proofs are provided in App. A.4. 
+
+Proposition 4.1. (Marginal alignment bound). For W22 -type potentials of strength w, away from singular configu-rations: W22 (ρtk , μ tk ) ≤ Ck/w 2 + O(w−3), where Ck is a problem-dependent constant independent of w.
+
+Proposition 4.2. (End-to-end bound). For Eulerian and La-grangian consistency losses (App. C), combining Prop. 4.1 with flow-map learning bounds from Boffi et al. (2025): 
+
+W2(ρθtk , μ tk ) ≤ Dk
+
+pLOTP −FM + √Ck/w + O(w−3/2),where Ck and Dk are problem- and consistency-loss-dependent constants, respectively, both independent of w.     
+
+> 4This follows by direct application of Tong et al. (2024, Thms. 3.1–3.2) with the OTP-FM conditioning variables z=(x0, x 1,B)∼q.
+
+5. Related work 
+
+Like OTP-FM, previous work in trajectory inference has focused on modeling dynamics through neural ordinary or stochastic differential equations (ODEs or SDEs) (Chen et al., 2018). Originally, these methods were trained by re-peatedly simulating the ODE or SDE, with examples such as TrajectoryNet (Tong et al., 2020), MIOFlow (Huguet et al., 2022), and Schr ¨odinger-bridge methods like DMSB (Chen et al., 2023), NLSB (Koshizuka & Sato, 2023), and Deep-RUOT (Zhang et al., 2025). These, while flexible, gener-ally prove computationally prohibitive for large-scale, high-dimensional data. More recently, flow- and score-matching methods success-fully pioneered simulation-free training as described above. However, most focus only on trajectories between two endpoint marginals, simply stitching trajectories piecewise in the case of multiple marginals, as in I-/OT-CFM and [SF] 2M (Tong et al., 2024; 2023). MMFM (Rohbeck et al., 2025) and 3MSBM (Theodoropoulos et al., 2026) are two recent methods that smooth these trajectories, through cubic spline interpolation and lifting to phase space, respectively. However, as evidenced by our experiments below, these pre-scribed smoothing strategies need not describe the dynamics of the physical system. In contrast, OTP-FM provides a prin-cipled framework for deriving smooth, flexible dynamics that lets the data, rather than an ad-hoc interpolation rule, de-termine the trajectories through optimization over the broad design space. New methods such as MFM (Kapusniak et al., 2024) and VGFM (Wang et al., 2026) represent orthogo-nal improvements to CFM—learning the data manifold and modeling unbalanced cell growth, respectively—that can be combined with our approach. Finally, methods such as WLF (Neklyudov et al., 2024), JKOnet(*) (Bunne et al., 2022; Terpin et al., 2024), and iJKOnet (Persiianov et al., 2026) directly solve a multi-marginal OT-like variational problem over the entire dataset, and are promising but fundamentally different computa-tional approaches to solving the conditional OT problem within the CFM framework, as in OTP-FM. We benchmark against all of the above methods. 
+
+6. Experiments 
+
+6.1. Synthetic data 
+
+We first validate OTP-FM on 1D Gaussian marginals where exact dynamic OT solutions are available (App. D). Figure 2 illustrates that OTP-FM faithfully reproduces the qualitative behavior across potential types and configurations. Empir-ically, W22 with the πOT all coupling is the most performant and stable to train, with W∞ 
+
+> 2
+
+and πind all comparably effec-tive while avoiding the OT precomputation overhead; the kernel-based MMD and KLD potentials, by contrast, are 7Multimarginal flow matching with optimal transport potentials                                                      
+
+> Table 2. Ablation of OTP-FM design choices on EB 100D L2O (MMD on held-out times, lower is better). The optimal value is in bold .
+> Potential MMD ↓W220.0675
+> W∞
+> 20.0813 MMD 0.0861 KL 0.0876
+> wMMD ↓
+> w= 10 0.1431
+> w= 100 0.0726
+> w= 1000 0.0675
+> w= 10000 0.0683
+> λ(t)MMD ↓
+> Gaussian 0.0675
+> Box 0.0681 Triangle 0.0723
+> τ= 0 .20.0690
+> τ= 0 .33 0.0675
+> τ= 0 .50.0693
+> Curriculum MMD ↓
+> Linear ( α= 0 →1)0.0800 Constant ( α= 1 )0.0687
+> Sigmoid ( μ= 0 ,β= 6 )0.0675
+> Sigmoid ( μ= 1 ,β= 6 )0.0758 Sigmoid ( μ= 0 ,β= 3 )0.0683 Sigmoid ( μ= 0 ,β= 12 )0.0681
+
+less stable due to their nonlinear fixed-point problem and noisier gradient estimates (further details in App. F). 
+
+6.2. Ablation studies 
+
+We ablate the key design choices of OTP-FM on the EB 100D L2O benchmark (described below) in Table 2 to show sensitivity to 1) potential type, 2) potential strength, 3) λk(t)
+
+width and shape, and 4) curriculum. We vary one parameter at a time around the optimum (bold) and use an 8-layer MLP ResNet architecture for vθ (further details in App. G.3). Comparing potential types is the central ablation: W22 is most performant and W∞ 
+
+> 2
+
+second; combined with their effi-ciency and the training-stability issues of MMD/KLD, this establishes W2/∞ 
+
+> 2
+
+as the preferred potentials for OTP-FM. Surprisingly, a sigmoid curriculum outperforms a constant one even for the W22 potential—despite its original motiva-tion as homotopy continuation for MMD/KLD (Sec. 4.3)— suggesting training still benefits from starting from the sim-pler CFM target. The sensitivity to potential strength and temporal dynamics demonstrates the flexibility OTP-FM offers over prescribed-interpolation approaches: these are crucial axes for the SOTA performance shown next. Further ablations on the consistency model and loss function, as well as trajectory visualizations, are in App. G. 
+
+6.3. Single-cell RNA sequencing 
+
+We perform a comprehensive comparison in Table 3 with all baselines in Sec. 5 on two scRNA-seq datasets: developing embryoid bodies (EB, 5 time intervals t0—t4) (Moon et al., 2019) and CITE-seq of human CD34+ HSPCs (CITE, 4 time intervals) (Burkhardt et al., 2022), operating on up to a 100D PCA representation. To ensure at least one reported point of comparison with each baseline, we adopt six established protocols: EB 5D leave-one-marginal-out (L1O) evaluating 
+
+W1 at the held-out time (Tong et al., 2020); EB 100D L0O (no holdouts, MMD averaged over training times) and L1O (MMD over held-out times) (Persiianov et al., 2026); EB 100D L2O, holding out t1 and t3 with MMD averaged over 
+
+all four times after t0 (Theodoropoulos et al., 2026); and CITE 5D/50D L1O, averaging W1 over held-out times (Ka-pusniak et al., 2024); 5D/50D refer to the first 5/50 PCs. Evaluating on both training and held-out marginals tests how well each method recovers the training distribution 
+
+and learns physically plausible trajectories that accurately 
+
+interpolate unseen marginals. We additionally measure each method’s training time on consistent hardware and plot training time vs. performance for CITE 5D and EB 100D L2O in Fig. 3. Overall, OTP-FM achieves SOTA results on nearly all metrics in both performance and training efficiency, completing training within 3–5 minutes on an NVIDIA L40S GPU in all set-tings. The one exception in terms of fidelity is the EB 100D L0O experiment, where it is outperformed by plain piece-wise CFM and [SF] 2M; this is the only setting that does not measure interpolation ability — precisely the limitation of those methods that OTP-FM is designed to address. Addi-tional results, trajectory visualizations, and dataset, model, and benchmarking details are in App. G. 
+
+6.4. Gulf of Mexico and Beijing air quality 
+
+We further evaluate on two non-biological datasets: ocean current particle transport in the Gulf of Mexico (2D, 9 time-points) (Shen et al., 2025) and hourly particle concentra-tions from Beijing air quality monitoring stations (1D, 13 timepoints) (Chen, 2017). Following Theodoropoulos et al. (2026), Table 4 reports the average W2 across four held-out timepoints each as well as the remaining training timepoints. We compare against the two simulation-free methods clos-est in motivation to OTP-FM—MMFM and 3MSBM, both of which learn smooth multimarginal trajectories through 
+
+prescribed interpolation strategies (Fig. 1, Sec. 5). OTP-FM significantly outperforms both at interpolating the held-out times, particularly on Beijing, which we attribute directly to its flexible, data-driven dynamics; trajectory visualizations and further analysis are in Apps. H and I. 
+
+7. Conclusion 
+
+We introduced OTP-FM, a principled generalization of mul-timarginal CFM grounded in dynamic OT with soft potential energy terms to steer learnt trajectories toward intermedi-ate marginals. It recovers piecewise CFM in the singular-potential limit and unlocks a broad design space for the spatiotemporal dynamics. We derived exact conditional so-lutions and an efficient simulation-free training algorithm, 8Multimarginal flow matching with optimal transport potentials 
+
+Table 3. Results on the EB and CITE scRNA-seq datasets for different experimental protocols, as defined in the text. Mean and std. dev. over 5 seeds is shown where available (lower is better for all metrics). Results for all methods described in Sec. 5 are shown. A * indicates our own training of the method using the provided code, while gray indicates we were unable to produce reasonable results on that experiment; otherwise, the result is from the prior work. Best performing method is in bold and second-best in italics .
+
+EB 5D EB 100D CITE 5D CITE 50D 
+
+Method L1O W1 ↓ L0O MMD ↓ L1O MMD ↓ L2O MMD ↓ L1O W1 ↓ L1O W1 ↓
+
+Neural ODE / SDE: Simulation-based training 
+
+TrajectoryNet 0.784 NLSB 0.970 0.660 0.373 ±0.000 0.767 *
+
+MIOFlow 0.881 * 0.230 0.453 ±0.000 1.164 * 0.494 * 38.333 ±0.002 
+
+DMSB 1.775 ±0.429 1.976 * 0.579 * 0.518 * 1.705 ±0.160 61.188 *
+
+DeepRUOT 0.774 1.096 * 1.793 * 0.718 * 0.845 37.892 ±0.002 
+
+Variational / OT 
+
+WLF-UOT 0.800 ±0.002 1.414 * 0.190 * 0.262 * 0.733 ±0.063 37.035 ±0.079 
+
+JKOnet* 3.055 * 0.229 ±0.052 0.249 ±0.010 2.016 * 1.237 * 242.784 *
+
+iJKOnet 1.137 * 0.085 ±0.024 0.119 ±0.001 1.347 * 0.594 * 92.540 *
+
+Neural ODE / SDE: Simulation-free training 
+
+3MSBM 0.135 ±0.014 
+
+I-CFM 0.872 ±0.087 0.028 * 0.390 * 0.284 * 0.965 ±0.111 41.834 ±3.284 
+
+OT-CFM 0.790 ±0.068 0.079 * 0.151 * 0.093 * 0.882 ±0.058 38.756 ±0.010 
+
+[SF] 2M 0.793 ±0.066 0.023 * 0.248 * 0.157 * 0.920 ±0.049 38.524 ±0.293 
+
+OT-MFM 0.713 ±0.039 0.188 * 0.201 * 0.105 * 0.724 ±0.070 36.394 
+
+VGFM 0.676 0.129 * 0.208 * 0.131 * 0.745 37.386 MMFM 0.899 ±0.010 * 0.247 ±0.006 * 0.286 ±0.008 * 0.101 ±0.003 * 0.553 ±0.003 * 44.433 ±0.399 *
+
+OTP-FM ( W22 ) 0.675 ±0.019 0.041 ±0.002 0.117 ±0.010 0.068 ±0.001 0.435 ±0.003 36.966 ±0.398 
+
+OTP-FM ( W∞ 
+
+> 2
+
+) 0.804 ±0.023 0.173 ±0.015 0.151 ±0.004 0.081 ±0.002 0.466 ±0.022 40.312 ±0.239 1.00 6 × 10 −1 2 × 10 0 3 × 10 0               
+
+> 1 / W1→better
+> 0.0
+> 0.0
+> 0.1
+> 1.0
+> 10.0
+> 1 / Training time (min)  → faster
+> CITE 5D (leave-one-out)
+> NLSB
+> MIOFlow
+> DMSB
+> DeepRUOT
+> WLF-UOT
+> JKOnet*
+> iJKOnet
+> I-CFM
+> OT-CFM
+> [SF] 2M
+> OT-MFM
+> VGFM
+> MMFM
+> Simulation-based
+> Variational / OT
+> Simulation-free
+> OTP-FM (ours)
+> OTP-FM ( W22)
+> OTP-FM ( W∞
+> 2)1.0 10.0
+> 1 / MMD →better
+> 0.0
+> 0.0
+> 0.1
+> 1.0
+> 10.0
+> 1 / Training time (min)  → faster
+> EB 100D (leave-two-out)
+> MIOFlow
+> DMSB
+> DeepRUOT
+> WLF-UOT
+> JKOnet*
+> iJKOnet
+> 3MSBM
+> I-CFM
+> OT-CFM
+> [SF] 2M
+> OT-MFM
+> VGFM MMFM
+> Simulation-based
+> Variational / OT
+> Simulation-free
+> OTP-FM (ours)
+> OTP-FM ( W22)
+> OTP-FM ( W∞
+> 2)
+
+Figure 3. Training time vs. performance of different methods for the CITE 5D L1O (top) and EB 100D L2O (bottom) experiments. Red stars denote OTP-FM. Top right is better. 
+
+Table 4. Results on GoM and Beijing air quality datasets show-ing average W2 across held-out and training timepoints (lower is better). MMFM results are with our training (marked with *) and 3MSBM from the original paper, which does not report training 
+
+W2 scores on the Beijing air quality dataset. Best performing method is in bold and second-best in italics .
+
+Gulf of Mexico Beijing Air Quality 
+
+Method Holdout W2 ↓ Train W2 ↓ Holdout W2 ↓ Train W2 ↓
+
+3MSBM 0.135 ±0.012 0.050 ±0.030 38.09 ±3.67 
+
+MMFM 0.150 ±0.005 * 0.083 ±0.008 * 38.89 ±3.92 * 11.88 ±2.81 *
+
+OTP-FM ( W22 ) 0.107 ±0.001 0.059 ±0.006 17.28 ±0.56 16.52 ±2.33 
+
+OTP-FM ( W∞ 
+
+> 2
+
+) 0.121 ±0.003 0.069 ±0.009 23.15 ±1.08 24.08 ±1.79 
+
+proved Wasserstein bounds on the alignment with ground-truth marginals controlled by potential strength and training loss, and demonstrated that OTP-FM pushes the frontier in both performance and training efficiency across biological, oceanographic, and meteorological datasets. 
+
+Practical recommendations Across the design space, 
+
+W2/∞
+
+2 potentials are clearly preferred: they yield closed-form, low-variance gradients, a linear fixed-point sys-tem, and the best empirical performance. Our out-of-the-box recipe is W∞
+
+2 with strength w ≈ 1000 , equally-spaced Gaussian λk(t), and a sigmoid curriculum (Sec. 6.2, App. G); w is the most impactful parameter to tune, with 
+
+λk(t) shape and width having secondary effects. Switching to W22 with the πOT all coupling can provide further improve-ment when the O(N 3) OT precomputation is feasible. 
+
+Limitations and future work While matching interme-diate marginals encourages more plausible trajectories, it does not alone guarantee physically meaningful interpo-lated states, particularly for sparsely-sampled or noisily-labeled data; methods that explicitly learn the data manifold such as MFM (Kapusniak et al., 2024) and pixel Mean-Flow (Lu et al., 2026) are important orthogonal directions for improvement. Future work will also explore incorporat-ing domain-specific inductive biases such as cell growth in VGFM (Wang et al., 2026), and conditional inference as in MMFM (Rohbeck et al., 2025). Like CFM, OTP-FM solves the conditional OTP problem given a joint coupling πall ,rather than jointly optimizing the dynamics and coupling toward the full marginal variational problem. A rectified-flow-style retraining (Liu et al., 2023) or combining our conditional formulation with new direct multimarginal-OT solvers such as WLF (Neklyudov et al., 2024) are interesting directions toward self-consistent dynamics–coupling pairs. Beyond the W22 potential, our MMD and KLD force esti-mators rely on kernel-based estimates of the full marginal density, which are noisier than W22 ’s linear, pointwise gra-dient and yield nonlinear fixed-point systems. Improving them via adaptive kernels or learned score models could unlock a richer family of physically-motivated potentials. Finally, while W∞
+
+2 is a strong default, OTP-FM’s broad design space imposes a tuning burden absent from prescrip-tive methods; automating this search, exploring a broader parameter space, and deploying to novel scientific domains are all exciting directions for future work. 9Multimarginal flow matching with optimal transport potentials 
+
+Impact Statement 
+
+This work introduces a principled and computationally effi-cient framework for learning the latent dynamics of physical systems from discrete empirical snapshots. In biological contexts, OTP-FM enables reconstructing continuous tra-jectories from sparsely sampled, high-dimensional obser-vations. In climate science and oceanography, the same formulation improves dynamical modeling from limited temporal data. The efficiency and performance of OTP-FM lowers the barrier to trajectory inference on new, large-scale scientific datasets. 
+
+References 
+
+Albergo, M. S., Boffi, N. M., and Vanden-Eijnden, E. Stochastic Interpolants: A Unifying Framework for Flows and Diffusions. JMLR , 26(209):1–80, 2025. URL http s://jmlr.org/papers/v26/23-1605.html .Allgower, E. L. and Georg, K. Introduction to Numerical Continuation Methods . Society for Industrial and Applied Mathematics, 2003. doi: 10.1137/1.9780898719154. URL https://epubs.siam.org/doi/abs/10. 1137/1.9780898719154 .Ambrosio, L., Gigli, N., and Savar ´e, G. Gradient Flows in Metric Spaces and in the Space of Probability Measures .Lectures in Mathematics. ETH Z ¨urich. Birkh ¨auser Basel, 2nd edition, 2008. doi: 10.1007/978-3-7643-8722-8. URL https://doi.org/10.1007/978-3-764 3-8722-8 .Anderson, D. G. M. Iterative Procedures for Nonlinear Integral Equations. Journal of the ACM , 12(4):547–560, 1965. doi: 10.1145/321296.321305. URL https: //doi.org/10.1145/321296.321305 .Benamou, J.-D. and Brenier, Y. A computational fluid mechanics solution to the Monge–Kantorovich mass transfer problem. Numerische Mathematik , 84(3):375– 393, 2000. doi: 10.1007/s002110050002. URL 
+
+https://doi.org/10.1007/s002110050002 .Boffi, N. M., Albergo, M. S., and Vanden-Eijnden, E. Flow map matching with stochastic interpolants: A mathemat-ical framework for consistency models. Transactions on Machine Learning Research , 2025. URL https: //openreview.net/forum?id=cqDH0e6ak2 .Boffi, N. M., Albergo, M. S., and Vanden-Eijnden, E. How to build a consistency model: Learning flow maps via self-distillation. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. URL 
+
+https://openreview.net/forum?id=Di5a pl8HSH .Braides, A. A handbook of Γ-convergence, 2006. URL 
+
+http://cvgmt.sns.it/paper/57/ .Bunne, C., Meng-Papaxanthos, L., Krause, A., and Cuturi, M. Proximal Optimal Transport Modeling of Population Dynamics. In Proceedings of The 25th International Conference on Artificial Intelligence and Statistics , 2022. URL https://arxiv.org/abs/2106.06345 .Burkhardt, D., Luecken, M., Benz, A., Holderrieth, P., Bloom, J., Lance, C., Chow, A., and Holbrook, R. Open Problems - Multimodal Single-Cell Integration. 
+
+https://kaggle.com/competitions/open -problems-multimodal , 2022. Kaggle. Chen, R. T. Q., Rubanova, Y., Bettencourt, J., and Duvenaud, D. Neural Ordinary Differential Equations. In Advances in Neural Information Processing Systems , volume 31, 2018. URL https://arxiv.org/abs/1806.0 7366 .Chen, S. Beijing Multi-Site Air Quality. UCI Machine Learning Repository, 2017. URL https://doi.or g/10.24432/C5RK5G .Chen, T., Liu, G.-H., Tao, M., and Theodorou, E. Deep Mo-mentum Multi-Marginal Schr ¨odinger Bridge. In Thirty-seventh Conference on Neural Information Processing Systems , 2023. URL https://openreview.net /forum?id=ykvvv0gc4R .Cuturi, M. Sinkhorn Distances: Lightspeed Computation of Optimal Transport. In Advances in Neural Information Processing Systems , volume 26, 2013. URL https: //papers.nips.cc/paper_files/paper/2 013/hash/af21d0c97db2e27e13572cbf59e b343d-Abstract.html .Dal Maso, G. An Introduction to Γ-Convergence , volume 8 of Progress in Nonlinear Differential Equations and Their Applications . Birkh ¨auser Boston, 1993. doi: 10.1007/97 8-1-4612-0327-8. URL https://doi.org/10.1 007/978-1-4612-0327-8 .Fatras, K., Zine, Y., Flamary, R., Gribonval, R., and Courty, N. Learning with minibatch Wasserstein: asymptotic and gradient properties. In Proceedings of the Twenty Third International Conference on Artificial Intelligence and Statistics , volume 108 of Proceedings of Machine Learning Research , pp. 2131–2141. PMLR, 2020. URL 
+
+https://proceedings.mlr.press/v108/f atras20a.html .Frans, K., Hafner, D., Levine, S., and Abbeel, P. One Step Diffusion via Shortcut Models. In International Conference on Learning Representations , 2025. URL 
+
+https://openreview.net/forum?id=OlzB 6LnXcS .10 Multimarginal flow matching with optimal transport potentials 
+
+Geng, Z., Deng, M., Bai, X., Kolter, J. Z., and He, K. Mean Flows for One-step Generative Modeling. In The Thirty-ninth Annual Conference on Neural Information Process-ing Systems , 2026a. URL https://openreview.n et/forum?id=uWj4s7rMnR .Geng, Z., Lu, Y., Wu, Z., Shechtman, E., Kolter, J. Z., and He, K. Improved Mean Flows: On the Challenges of Fastforward Generative Models, 2026b. URL https: //arxiv.org/abs/2512.02012 .Gretton, A., Borgwardt, K. M., Rasch, M. J., Sch ¨olkopf, B., and Smola, A. A Kernel Two-Sample Test. Journal of Machine Learning Research , 13(25):723–773, 2012. URL https://jmlr.org/papers/v13/gret ton12a.html .Hairer, E. and Wanner, G. Solving Ordinary Differential Equations II: Stiff and Differential-Algebraic Problems ,volume 14 of Springer Series in Computational Mathe-matics . Springer-Verlag, Berlin, 2nd edition, 1996. ISBN 978-3-540-60452-5. doi: 10.1007/978-3-642-05221-7. URL https://doi.org/10.1007/978-3-642 -05221-7 .Huguet, G., Magruder, D. S., Tong, A., Fasina, O., Kuchroo, M., Wolf, G., and Krishnaswamy, S. Manifold Interpo-lating Optimal-Transport Flows for Trajectory Inference. In Advances in Neural Information Processing Systems ,2022. URL https://openreview.net/forum ?id=ahAEhOtVif . arXiv:2206.14928. HYCOM Consortium and Center for Ocean-Atmospheric Prediction Studies (COAPS). HYCOM-TSIS 1/100 ◦ Gulf of Mexico Reanalysis (GOMb0.01). Dataset, 2024. URL 
+
+https://www.hycom.org/data/gomb0pt01 /gom-reanalysis . Accessed 2026-01-24. Kapusniak, K., Potaptchik, P., Reu, T., Zhang, L., Tong, A., Bronstein, M. M., Bose, J., and Giovanni, F. D. Metric Flow Matching for Smooth Interpolations on the Data Manifold. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. URL ht tps://openreview.net/forum?id=fE3Rqi F4Nx .Karras, T., Aittala, M., Lehtinen, J., Hellsten, J., Aila, T., and Laine, S. Analyzing and Improving the Training Dynamics of Diffusion Models . In 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 24174–24184, Los Alamitos, CA, USA, June 2024. IEEE Computer Society. doi: 10.1109/CVPR52 733.2024.02282. URL https://doi.ieeecomput ersociety.org/10.1109/CVPR52733.2024 .02282 .Kim, D., Lai, C.-H., Liao, W.-H., Murata, N., Takida, Y., Uesaka, T., He, Y., Mitsufuji, Y., and Ermon, S. Con-sistency Trajectory Models: Learning Probability Flow ODE Trajectory of Diffusion. In International Confer-ence on Learning Representations , 2024. URL https: //openreview.net/forum?id=ymjI8feDTD .Koshizuka, T. and Sato, I. Neural Lagrangian Schr \”{o}dinger Bridge: Diffusion Modeling for Popu-lation Dynamics. In The Eleventh International Confer-ence on Learning Representations , 2023. URL https: //openreview.net/forum?id=d3QNWD_pcFv .Lipman, Y., Chen, R. T. Q., Ben-Hamu, H., Nickel, M., and Le, M. Flow Matching for Generative Modeling. In The Eleventh International Conference on Learning Representations , 2023. URL https://openreview .net/forum?id=PqvMRDCJT9t .Liu, X., Gong, C., and Liu, Q. Flow Straight and Fast: Learning to Generate and Transfer Data with Recti-fied Flow. In The Eleventh International Conference on Learning Representations , 2023. URL https: //openreview.net/forum?id=XVjTT1nw5z .Lu, Y., Lu, S., Sun, Q., Zhao, H., Jiang, Z., Wang, X., Li, T., Geng, Z., and He, K. One-step Latent-free Image Generation with Pixel Mean Flows, 2026. URL https: //arxiv.org/abs/2601.22158 .Moon, K. R., van Dijk, D., Wang, Z., Gigante, S., Burkhardt, D. B., Chen, W. S., Yim, K., Elzen, A. v. d., Hirn, M. J., Coifman, R. R., Ivanova, N. B., Wolf, G., and Krish-naswamy, S. Visualizing structure and transitions in high-dimensional biological data. Nature Biotechnology , 37: 1482–1492, 2019. doi: 10.1038/s41587-019-0336-3. URL https://doi.org/10.1038/s41587-0 19-0336-3 .M ¨uller, A. Integral Probability Metrics and Their Generating Classes of Functions. Advances in Applied Probability ,29(2):429–443, 1997. doi: 10.2307/1428011. URL 
+
+https://doi.org/10.2307/1428011 .Neklyudov, K., Brekelmans, R., Tong, A., Atanackovic, L., Liu, Q., and Makhzani, A. A Computational Framework for Solving Wasserstein Lagrangian Flows. In Salakhut-dinov, R., Kolter, Z., Heller, K., Weller, A., Oliver, N., Scarlett, J., and Berkenkamp, F. (eds.), Proceedings of the 41st International Conference on Machine Learning ,volume 235 of Proceedings of Machine Learning Re-search , pp. 37461–37485. PMLR, 21–27 Jul 2024. URL 
+
+https://proceedings.mlr.press/v235/n eklyudov24a.html .Pardo, L. Statistical Inference Based on Divergence Measures . Chapman and Hall/CRC., 2006. ISBN 11 Multimarginal flow matching with optimal transport potentials 
+
+9780429148521. doi: 10.1201/9781420034813. URL 
+
+https://doi.org/10.1201/9781420034813 .Persiianov, M., Chen, J., Mokrov, P., Tyurin, A., Burnaev, E., and Korotin, A. Learning of Population Dynamics: Inverse Optimization Meets JKO Scheme. In The Four-teenth International Conference on Learning Represen-tations , 2026. URL https://openreview.net/f orum?id=tVJIKd6CLF .Rohbeck, M., De Brouwer, E., Bunne, C., Huetter, J.-C., Biton, A., Chen, K. Y., Regev, A., and Lopez, R. Mod-eling Complex System Dynamics with Flow Matching Across Time and Conditions. In International Confer-ence on Learning Representations , 2025. URL https: //openreview.net/forum?id=hwnObmOTrV .Sabour, A., Fidler, S., and Kreis, K. Align Your Flow: Scaling Continuous-Time Flow Map Distillation. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. URL https://openrevi ew.net/forum?id=pzHuesCvcO .Santambrogio, F. Optimal Transport for Applied Mathe-maticians: Calculus of Variations, PDEs, and Model-ing , volume 87 of Progress in Nonlinear Differential Equations and Their Applications . Birkh ¨auser Cham, 2015. doi: 10.1007/978-3-319-20828-2. URL https: //doi.org/10.1007/978-3-319-20828-2 .Shen, Y., Berlinghieri, R., and Broderick, T. Multi-marginal Schr ¨odinger Bridges with Iterative Reference Refinement. In International Conference on Artificial Intelligence and Statistics , 2025. URL https://arxiv.org/abs/ 2408.06277 .Song, Y., Dhariwal, P., Chen, M., and Sutskever, I. Consis-tency Models. In Proceedings of the 40th International Conference on Machine Learning (ICML) , volume 202 of 
+
+Proceedings of Machine Learning Research , pp. 32211– 32252. PMLR, 2023. URL https://arxiv.org/ abs/2303.01469 .Stoer, J. and Bulirsch, R. Introduction to Numerical Anal-ysis . Texts in Applied Mathematics. Springer-Verlag, New York, 1980. ISBN 978-0-387-90420-7. doi: 10.1007/978-1-4757-5592-3. URL https://do i.org/10.1007/978-1-4757-5592-3 .Terpin, A., Lanzetti, N., Gadea, M., and Dorfler, F. Learn-ing diffusion at lightspeed. In The Thirty-eighth Annual Conference on Neural Information Processing Systems ,2024. URL https://openreview.net/forum ?id=y10avdRFNK .Theodoropoulos, P., Saravanos, A. D., Theodorou, E., and Liu, G.-H. Momentum Multi-Marginal Schr ¨odinger Bridge Matching. In The Thirty-ninth Annual Confer-ence on Neural Information Processing Systems , 2026. URL https://openreview.net/forum?id= C7BIQRM57T .Tong, A., Huang, J., Wolf, G., van Dijk, D., and Krish-naswamy, S. TrajectoryNet: A Dynamic Optimal Trans-port Network for Modeling Cellular Dynamics. In Pro-ceedings of the 37th International Conference on Ma-chine Learning , volume 119 of Proceedings of Machine Learning Research , pp. 9526–9536. PMLR, 2020. URL 
+
+https://proceedings.mlr.press/v119/t ong20a.html .Tong, A., Malkin, N., Fatras, K., Atanackovic, L., Zhang, Y., Huguet, G., Wolf, G., and Bengio, Y. Simulation-Free Schr ”odinger Bridges via Score and Flow Matching. In 
+
+AISTATS . arXiv, July 2023. Tong, A., Fatras, K., Malkin, N., Huguet, G., Zhang, Y., Rector-Brooks, J., Wolf, G., and Bengio, Y. Improving and generalizing flow-based generative models with mini-batch optimal transport. Transactions on Machine Learn-ing Research , 2024. ISSN 2835-8856. URL https: //openreview.net/forum?id=CD9Snc73AW .van de Rotten, B. A. A Limited Memory Broyden Method to Solve High-Dimensional Systems of Nonlinear Equations .PhD thesis, Mathematisch Instituut, Universiteit Leiden, The Netherlands, 2003. URL https://math.leide nuniv.nl/scripties/Rotten.pdf .Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., and Polosukhin, I. Attention is All You Need. In Advances in Neural Information Processing Systems , volume 30, 2017. URL https: //arxiv.org/abs/1706.03762 .Villani, C. Optimal Transport: Old and New , volume 338 of Grundlehren der mathematischen Wissenschaften .Springer, 2009. ISBN 978-3-540-71049-3. doi: 10.100 7/978-3-540-71050-9. URL https://doi.org/10 .1007/978-3-540-71050-9 .Virtanen, P., Gommers, R., Oliphant, T. E., et al. SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python. Nature Methods , 17:261–272, 2020. doi: 10.1038/s41592-019-0686-2. URL https://doi.or g/10.1038/s41592-019-0686-2 .Wang, D., Jiang, Y., Zhang, Z., Gu, X., Zhou, P., and Sun, J. Joint Velocity-Growth Flow Matching for Single-Cell Dynamics Modeling. In The Thirty-ninth Annual Con-ference on Neural Information Processing Systems , 2026. URL https://openreview.net/forum?id= aXAkNlbnGa .12 Multimarginal flow matching with optimal transport potentials 
+
+Zhang, Z., Li, T., and Zhou, P. Learning stochastic dynamics from snapshots through regularized unbalanced optimal transport. In The Thirteenth International Conference on Learning Representations , 2025. URL https://open review.net/forum?id=gQlxd3Mtru .13 Multimarginal flow matching with optimal transport potentials 
+
+A. Proofs of theorems 
+
+A.1. Dynamic OT without a potential 
+
+Proofs for the E-L equations and straight-line trajectories for the dynamic OT problem can be found in standard texts such as Villani (2009), and are reproduced here for completeness and later reference in App. A.3. 
+
+Theorem A.1 (E-L equations) . For V = 0 , minimizers of Eq. 2 satisfy the following Euler–Lagrange (E-L) equations: 
+
+ut = ∇φt, ∂tφt(x) + ∥∇ φt(x)∥2
+
+2 = 0 , (22) 
+
+along with the continuity equation. Proof. We start with the dynamic OT action without a potential: 
+
+S[L] = 
+
+Z 10
+
+Z
+
+> Rd
+
+h 12 ∥ut(x)∥2ρt(x) + φt(x)[ ∂tρt(x) + ∇ · (ρt(x)ut(x))] 
+
+i
+
+dxdt. (23) Integrating the second term by parts yields: 
+
+Z 10
+
+Z
+
+> Rd
+
+φt(x)[ ∂tρt(x)+ ∇· (ρt(x)ut(x))] = 
+
+Z
+
+> Rd
+
+[φt(x)ρt(x)] 10 dx−
+
+Z 10
+
+Z
+
+> Rd
+
+[∂tφt(x) + ut(x) · ∇ φt(x)] ρt(x)d xdt (24) For fixed boundary conditions, the first term is simply a constant with respect to u and ρ.The minima can thus be found by taking the functional derivatives of S:
+
+δS δφ = ∂tρt(x) + ∇ · (ρt(x)ut(x)) = 0 (Continuity equation) (25) 
+
+δS δu = ( ut(x) − ∇ φt(x)) ρt(x) = 0 ⇒ ut(x) = ∇φt(x) (26) 
+
+δS δρ = ∥ut(x)∥2
+
+2 − [∂tφt(x) + ut(x) · ∇ φt(x)] = 0 ⇒ ∂tφt(x) + ∥∇ φt(x)∥2
+
+2 = 0 (H-J equation) (27) where in Eq. 27 we plugged in Eq. 26. 
+
+Corollary A.2 (Straight-line trajectories) . Minimizers of Eq. 2 (with V = 0 ) yield straight-line sample trajectories 
+
+Xt = (1 − t)X0 + tψ (X0) with ˙Xt = ψ(X0) − X0, where ψ is the static OT map for cost c2.Proof. We first take the gradient of the H-J equation: 
+
+∂t∇φ + ( ∇2φ) ∇φ = 0 , (28) where ∇2φ is the Hessian of φ. Next, the time derivative of the sample velocity ˙Xt (Eq. 26): 
+
+du(Xt)dt = ddt ∇φt(Xt)= ∂t∇φt(Xt) + ( ∇2φ)( Xt) ˙Xt
+
+> (i)
+
+= ∂t∇φt(Xt) + ( ∇2φ)( Xt) ∇φt(Xt)
+
+> (ii )
+
+= 0 ,
+
+(29) where in (i) we applied Eq. 26 again and in (ii ) used Eq. 28. Thus, the sample trajectories obey 
+
+¨Xt = 0 . (30) As the dynamic OT solution is equivalent to that of the static OT problem with cost c2, given a sample X0 ∼ μ0, its trajectory must lead to X1 = ψ(X0) ∼ μ1. Therefore, integrating Eq. 30 with boundary conditions X0 at t = 0 and ψ(X0)
+
+at t = 1 yields Xt = (1 − t)X0 + tψ (X0) and ˙Xt = ψ(X0) − X0.14 Multimarginal flow matching with optimal transport potentials 
+
+A.2. Piecewise multimarginal CFM as the hard-potential limit of OTP 
+
+We make the connection between standard piecewise multimarginal CFM and the OTP variational problem (Sec. 3) precise via two main results: piecewise multimarginal CFM is equivalent to a single CFM training regressing onto conditional solutions of the hard-constrained problem LHC (Lemma A.4), and OTP minimizers converge to the solutions of the hard-constrained problem in the singular, hard-penalty limit of wk → ∞ , λk → δ(t − tk) (Prop. A.5, stated for D = W22 ). In order to prove the former, we first establish that LHC decomposes additively into K + 1 independent Benamou–Brenier (BB) subproblems (Lemma A.3), where K is the number of intermediate marginals. Throughout this subsection, we assume 0 = t0 < t 1 < · · · < t K < t K+1 = 1 and that all marginals {μtk }K+1  
+
+> k=0
+
+are absolutely continuous probability measures on Rd, uniformly bounded in P2(Rd) — i.e., with finite second moments — so that W22 (μtk , μ tk+1 ) < ∞ for all k. An admissible flow is a pair (ρt, u t)t∈[0 ,1] with ρt ∈ P 2(Rd) a curve of probability measures and ut a velocity field satisfying the continuity equation and endpoint boundary conditions ρ0 = μ0, ρ1 = μ1. We define intervals Ik ≡ [tk, t k+1 ] and write the rescaled time sk(t) := ( t − tk)/(tk+1 − tk) ∈ [0 , 1] for convenience. We refer to piecewise multimarginal CFM as the standard procedure from, e.g., Tong et al. (2024; 2023): pick any joint coupling πall of (μt0 , . . . , μ tK+1 ) and train K + 1 independent CFM models ukθk : Rd × Ik → Rd (k = 0 , . . . , K ), one per consecutive interval Ik between (μtk , μ tk+1 ), against the standard CFM regression losses Lpiecewise  
+
+> k
+
+(θk) with endpoint pairs drawn from the marginal of πall on (xtk , x tk+1 ) and conditional-OT solutions between them as regression targets (Eq. 5), then stitch the K + 1 learned flows at each {tk}Kk=1 :
+
+upiecewise  
+
+> θ
+
+(x, t ) = 
+
+> K
+
+X
+
+> k=0
+
+1Ik (t) ukθk (x, t ), θ ≡ (θ0, . . . , θ K ), (31) where 1Ik is the indicator function of Ik.5
+
+Lemma A.3 (Additive decomposition of LHC ). Under the setup above, the hard-constrained action LHC (Eq. 8) decomposes additively into K + 1 independent Benamou–Brenier dynamic OT subproblems between consecutive marginals, 
+
+LHC =
+
+> K
+
+X
+
+> k=0
+
+min 
+
+> (ρ,u )|Ik
+
+Z
+
+> Ik
+
+Z 12 ∥ut∥2ρt dx dt =
+
+> K
+
+X
+
+> k=0
+
+W22 (μtk , μ tk+1 )2( tk+1 − tk) , (32) 
+
+where the inner minimization on Ik is over admissible flows constrained by ρtk = μtk and ρtk+1 = μtk+1 .Proof. Let (ρt, u t) be an admissible flow that additionally satisfies ρtk = μtk for all k. The kinetic energy is additive over the intervals Ik, Z 10
+
+Z 12 ∥ut∥2ρt dx dt =
+
+> K
+
+X
+
+> k=0
+
+Z
+
+> Ik
+
+Z 12 ∥ut∥2ρt dx dt, (33) and the only active constraints over each interval are the continuity equation (ρt, u t)|Ik and the endpoint conditions 
+
+ρtk = μtk , ρtk+1 = μtk+1 ; no constraint couples distinct intervals. Hence, the joint minimization decouples into K + 1 
+
+independent subproblems: 
+
+LHC |Ik = min 
+
+> (ρ,u )|Ik
+
+Z
+
+> Ik
+
+Z 12 ∥ut∥2ρt dx dt s.t. ∂tρ + ∇· (ρu ) = 0 , ρtk = μtk , ρtk+1 = μtk+1 . (34) Each of these subproblems thus is the standard BB problem between μtk and μtk+1 , most easily seen by time rescaling 
+
+s ≡ sk(t) as above and defining ˜u(s, x ) ≡ (tk+1 − tk) u(t, x ) to satisfy the continuity equation in s:
+
+LHC |Ik = 1
+
+tk+1 − tk
+
+min 
+
+> (ρ,u )
+
+Z 10
+
+Z 12 ∥us∥2ρs dx ds s.t. ∂sρ + ∇· (ρu ) = 0 , ρ0 = μtk , ρ1 = μtk+1 .
+
+= W22 (μtk , μ tk+1 )2( tk+1 − tk)
+
+(35) Summing over all intervals yields Eq. 32. 
+
+> 5
+
+The overlap at the K interior endpoints {tk }Kk=1 is measure zero and so irrelevant to any time integral. 
+
+15 Multimarginal flow matching with optimal transport potentials 
+
+Lemma A.4 (Piecewise multimarginal CFM is equivalent to CFM regression onto conditional solutions of LHC ).
+
+Under the setup above and any joint coupling πall of (μt0 , . . . , μ tK+1 ), conditioning on a sampled endpoint tuple 
+
+z = ( xt0 , . . . , x tK+1 ) ∼ πall reduces each per-interval subproblem in Eq. 32 to the dynamic OT problem between the Dirac delta functions δ(x − xtk ) and δ(x − xtk+1 ), whose unique conditional solution is the straight-line trajectory: 
+
+XHC  
+
+> t
+
+(x|z) = (1 − sk(t)) xtk + sk(t) xtk+1 , uHC  
+
+> t
+
+(x|z) = xtk+1 − xtk
+
+tk+1 − tk
+
+, t ∈ Ik, (36) 
+
+with conditional path ρHC  
+
+> t
+
+(x | z) = δ(x − XHC  
+
+> t
+
+(x | z)) . The corresponding CFM regression loss 
+
+LHC −CFM (θ) := Et∼U [0 ,1] Ez∼πall Ex∼ρHC   
+
+> t(·| z)
+
+vθ (x, t ) − uHC  
+
+> t
+
+(x | z) 2 (37) 
+
+of a single shared model vθ (x, t ) on [0 , 1] then equals the total piecewise multimarginal CFM loss under πall ,
+
+LHC −CFM (θ) = 
+
+> K
+
+X
+
+> k=0
+
+Lpiecewise  
+
+> k
+
+(θk),
+
+when the K + 1 piecewise models are tied to a shared parameterization via ukθk (x, t ) = 1Ik vθ (x, t ).Proof. Conditional HC solution. Let the CFM conditioning variable z = ( xt0 , . . . , x tK+1 ) ∼ πall . By Lemma A.3, LHC 
+
+decomposes into K + 1 independent BB subproblems (Eq. 34); the conditional version of each replaces the marginal boundary constraints ρtk = μtk , ρtk+1 = μtk+1 with their conditional counterparts ρtk (x | z) = δ(x − xtk ), ρtk+1 (x | z) = 
+
+δ(x − xtk+1 ), yielding a dynamic OT problem between two Dirac delta functions on Ik.After rescaling to [0 , 1] as in Lemma A.3, Corollary A.2 provides its unique minimizer: the straight-line trajectory 
+
+Xs = (1 − s) xtk + s x tk+1 ; undoing the rescaling yields Eq. 36. 
+
+Loss equality. Splitting the time integral in Eq. 37 across the K + 1 subintervals and using ρHC  
+
+> t
+
+(x | z) = δ(x − XHC  
+
+> t
+
+)
+
+yields: 
+
+LHC −CFM (θ) = 
+
+> K
+
+X
+
+> k=0
+
+Z
+
+> Ik
+
+E(xtk ,x tk+1 )∼πtk ,t k+1 all 
+
+vθ (XHC  
+
+> t
+
+, t ) − xtk+1 −xtk
+
+> tk+1 −tk
+> 2
+
+dt, (38) where we marginalized the components of z not appearing in the k-th summand. Each summand is exactly the standard CFM loss on Ik under the consecutive-pair coupling πtk ,t k+1  
+
+> all
+
+; i.e., Lpiecewise  
+
+> k
+
+evaluated at ukθk (x, t ) = vθ (x, t ) for t ∈ Ik.Hence, LHC −CFM (θ) = PKk=0 Lpiecewise  
+
+> k
+
+(θk).
+
+Proposition A.5 (The OTP problem converges to the hard-constrained problem in the hard-potential limit) . Consider the OTP problem (Eq. 10) with D = W22 and temporal kernels of the form λk(t) = 1 
+
+> τ
+
+ηk
+
+  t−tk
+
+> τ
+
+, with any fixed nonnegative shapes ηk normalized so R ηk = 1 . Then, in the joint limit w → ∞ , τ → 0 with wτ → 0,6 the OTP problem converges to the hard-constrained problem (Eq. 8), and any sequence of OTP minimizers converges to the unique piecewise OT solutions of the Benamou–Brenier subproblems of Lemma A.3. Proof. We use the fundamental theorem of Γ-convergence (Braides, 2006): equi-coercivity + Γ -convergence ⇒ convergence of minimum problems. Γ-convergence implies that the OTP energies converge to that of the hard-constrained problem, while equi-coercivity is required for the minimizers to converge as well. We prove both ingredients. Note that since we assume absolute continuity of the marginals above, by Villani (2009, Thm. 9.4), the piecewise OT solution of the hard-constrained problem (Lemma A.3) is unique. 
+
+Setup. We define the family of functionals: 
+
+Fw,τ [ρ, u ] ≡
+
+Z 10
+
+Z  12 ∥ut∥2ρt + wX
+
+> k
+
+λk(t) W22 (ρt, μ tk ) ρt
+
+ dx dt, (39) 
+
+> 6
+
+The hard-constrained limit only requires that τ shrink faster than 1/w along the sequence considered, e.g., τ = w−2.
+
+16 Multimarginal flow matching with optimal transport potentials 
+
+fix sequences wn → ∞ , τn → 0 with wnτn → 0, and write Fn ≡ Fwn,τ n and λnk for the kernel at width τn. We define the limit functional to incorporate the hard constraints as follows: 
+
+FHC (ρ, u ) ≡
+
+(R 10
+
+R 12 ∥ut∥2ρt dx dt if (ρ, u ) solves the hard-constrained (HC) problem, 
+
++∞ otherwise, (40) where solving the HC problem means that (ρ, u ) is admissible as defined above and ρtk = μtk for all k, so min FHC = LHC 
+
+(Eq. 8). 
+
+Equi-coercivity. Equi-coercivity means that all minimizers of Fn must be confined to a compact set independent of n; i.e., they cannot escape to infinity if Fn is bounded. Our proof is based on the formal definition from Dal Maso (1993, Prop. 7.7): the sequence Fn is equi-coercive if and only if there exists a lower semicontinuous (l.s.c.) coercive function Ψ such that 
+
+Fn ≥ Ψ for all n. We take the kinetic energy as our candidate Ψ:
+
+Ψ( ρ, u ) = 
+
+Z 10
+
+Z 12 ∥ut∥2ρt dx dt; (41) since the OTP penalty is non-negative, Fn ≥ Ψ. Also, since 12 ∥ut∥2 is convex and l.s.c., by Ambrosio et al. (2008, Thm. 5.4.4(ii)), Ψ is l.s.c. under this convergence. What is left to show is that Ψ is coercive, for which we use Dal Maso (1993, Def. 1.12): Ψ is coercive if the set of all bounded energies {Ψ( ρn, u n) ≤ E} is relatively compact 7 for all E ∈ R. From Ambrosio et al. (2008, Thm. 8.3.1), if 
+
+Ψ( ρn, u n) ≤ E, then 
+
+W22 (ρnt1 , ρ nt2 ) ≤ | t1 − t2|
+
+Z t2
+
+> t1
+
+Z
+
+∥unt ∥2ρnt dx dt ≤ 2E |t1 − t2| (42) 
+
+⇒ W2(ρnt1 , ρ nt2 ) ≤ √2E |t1 − t2|1/2, (43) which means all bounded-energy paths are uniformly 12 -H ¨older continuous in W2 and thus, equi-continuous . Since they all start from the same distribution μ0 ∈ P 2, they also have uniformly bounded second moments throughout time. Thus, by Ascoli–Arzel `a theorem (Santambrogio, 2015, Box 1.7), {Ψ( ρn, u n) ≤ E} is relatively compact, and Ψ coercive. Ψ is therefore an l.s.c. coercive function, which means Fn is equi-coercive. 
+
+Γ-convergence. Γ-convergence requires both liminf and limsup inequalities (Dal Maso, 1993), essentially showing that the limit of Fn is bounded both below and above by FHC and, therefore, Fn converges to FHC .
+
+Limsup inequality. We seek to show for every (ρ, u ) there exists a sequence 8 (ρn, u n) → (ρ, u ) with lim sup n Fn(ρn, u n) ≤
+
+FHC (ρ, u ). If (ρ, u ) is not HC-admissible then FHC (ρ, u ) = + ∞ and the inequality is trivial. For HC-admissible 
+
+(ρ, u ), we simply consider the constant sequence (ρn, u n) = ( ρ, u ). By definition, FHC (ρ, u ) equals the kinetic energy 
+
+Ψ( ρ, u ) ≡ E ∈ R. Subtracting it from Fn leaves only the penalty: 
+
+Fn(ρ, u ) − E =
+
+> K
+
+X
+
+> k=1
+
+wn
+
+Z 10
+
+λnk (t) W22 (ρt, μ tk ) d t. (44) The same bound from Ambrosio et al. (2008, Thm. 8.3.1) as above further yields W22 (ρt, μ tk ) ≤ 2E |t − tk|. Substituting this and the explicit form of the temporal kernel with the change of variables ˜t ≡ t−tk 
+
+> τn
+
+:
+
+Fn(ρ, u ) − E ≤ 2E
+
+> K
+
+X
+
+> k=1
+
+wn
+
+Z 10
+
+λnk (t) |t − tk| dt = 2 E
+
+> K
+
+X
+
+> k=1
+
+wnτn
+
+Z
+
+|˜t| ηk(˜ t) d˜ t n→∞ 
+
+−−−−→ 0, (45) since wnτn → 0. Thus, lim sup n Fn(ρ, u ) ≤ E = FHC (ρ, u ).
+
+> 7
+
+A set is relatively compact if its closure is compact. 
+
+> 8
+
+Commonly referred to as a recovery sequence .
+
+17 Multimarginal flow matching with optimal transport potentials 
+
+Liminf inequality. We must show that for every sequence (ρn, u n) → (ρ, u ) (uniformly in W2), lim inf n Fn(ρn, u n) ≥
+
+FHC (ρ, u ). Case A: ρtk = μtk for all k. Then (ρ, u ) is HC-admissible, so 
+
+FHC (ρ, u ) = 
+
+Z 10
+
+Z 12 ∥ut∥2ρt
+
+> (i)
+
+≤ lim inf 
+
+> n
+> ≡Ψ( ρn,u n)
+
+z }| {Z 10
+
+Z 12 ∥unt ∥2ρnt
+
+> (ii)
+
+≤ lim inf  
+
+> n
+
+Fn(ρn, u n), (46) where (i) is lower-semicontinuity of the kinetic energy Ψ under (ρn, u n) → (ρ, u ) (established above), and (ii) follows from 
+
+Fn ≥ Ψ( ρn, u n) since the OTP penalty is non-negative. 
+
+Case B: W22 (ρtk∗ , μ tk∗ ) > 0 for some k∗. Kernel concentration ( λnk∗ → δ(t − tk∗ )) and uniform W2-convergence imply R 10 λnk∗ (t) W22 (ρnt , μ tk∗ ) d t → W 22 (ρtk∗ , μ tk∗ ) > 0. Since Fn ≥ wn times this integral and wn → ∞ , we get 
+
+Fn(ρn, u n) → +∞ = FHC (ρ, u ).
+
+A.3. Dynamic OT with a potential Theorem 3.2. Minimizers of the OTP problem (Eq. 10) satisfy the following E-L equations: 
+
+ut(x) = ∇φt(x), (11) 
+
+∂tφt(x) + ∥∇ φt(x)∥2
+
+2 =
+
+> K
+
+X
+
+> k=1
+
+wkλk(t)gk(x, t ), (12) 
+
+along with the continuity equation, where gk(x, t ) ≡ δDkt /δρ t(x) is the functional derivative of Dkt w.r.t. ρtk (x).Proof. We recall the OTP action (Eq. 10) for convenience: 
+
+S[L] = 
+
+Z 10
+
+Z
+
+> Rd
+
+" 
+
+> 12
+
+ρt(x)∥ut(x)∥2 +
+
+> K
+
+X
+
+> k=1
+
+wkλk(t)Dkt ρt(x) + φt(x) [ ∂tρt(x) + ∇· (ρt(x)ut(x))] 
+
+#
+
+dxdt, (47) where Dkt ≡ D [ρt, μ tk ] is a real-valued functional of ρt that varies smoothly with t through its dependence on ρt. Comparing this with Eq. 23, the variations δS/δφ and δS/δu recover the continuity equation and ut = ∇φt unchanged. 
+
+Variation w.r.t. ρt. Recalling from Eq. 10 that the potential contribution to the action is RR (−VOTP (y, s )) d y ds =P 
+
+> k
+
+wk
+
+RR λk(s) D[ρs, μ tk ] ρs(y) d y ds, direct functional differentiation yields: 
+
+δδρ t(x)
+
+Z Z 
+
+(−VOTP (y, s )) d y ds = X
+
+> k
+
+wk
+
+Z Z 
+
+λk(s)
+
+h
+
+gk(x, t ) δ(s − t) ρs(y)
+
+| {z } 
+
+> integrates to 1
+
++D[ρs, μ tk ] δ(s − t) δ(x − y)
+
+i
+
+dy ds
+
+= X
+
+> k
+
+wkλk(t) gk(x, t ) + X
+
+> k
+
+wkλk(t) Dkt
+
+| {z }
+
+> ≡h(t)
+
+,
+
+(48) where gk(x, t ) ≡ δDkt 
+
+> δρ t(x)
+
+and h(t) is an x-independent function of t that, as we show below, does not impact the dynamics. Thus, following the derivation in App. A.1, the third E-L equation becomes: 
+
+∂tφt(x) + ∥∇ φt(x)∥2
+
+2 =
+
+> K
+
+X
+
+> k=1
+
+wkλk(t) gk(x, t ) + h(t). (49) 
+
+Gauge re-parametrization. Note that h(t) is x-independent and can be absorbed into the field φt by a gauge transformation: 
+
+φt(x) 7 −→ ˜φt(x) := φt(x) + c(t), (50) 18 Multimarginal flow matching with optimal transport potentials 
+
+leaves ut = ∇φt = ∇ ˜φt (and hence the E-L equations of motion and entire flow) unchanged, since ∇c(t) = 0 . Choosing 
+
+c(t) := − R t 
+
+> 0
+
+h(s) d s so that c′(t) = −h(t), under φ 7 → ˜φ Eq. 49 becomes: 
+
+∂t[ ˜ φt(x) − c(t)] + ∥∇ ˜φt(x)∥2
+
+2 =
+
+> K
+
+X
+
+> k=1
+
+wkλk(t) gk(x, t ) + h(t)
+
+⇒ ∂t ˜φt(x) + ∥∇ ˜φt(x)∥2
+
+2 =
+
+> K
+
+X
+
+> k=1
+
+wkλk(t) gk(x, t ),
+
+(51) i.e., Eq. 12. Renaming ˜φ back to φ (the gauge choice is conventional) yields the stated form. 
+
+Corollary 3.3. Minimizers of the OTP problem (Eq. 10) satisfy the following sample trajectories: 
+
+¨Xt =
+
+> K
+
+X
+
+> k=1
+
+wkλk(t)∇gk(Xt, t ). (13) 
+
+Proof. The proof follows that of Corollary A.2. We first take the gradient of the H-J equation (Eq. 12): 
+
+∂t∇φ + ( ∇2φ) ∇φ =
+
+> K
+
+X
+
+> k=1
+
+wkλk(t) ∇gk(x, t ), (52) where ∇2φ is the Hessian of φ and ∇gk(x, t ) is the spatial gradient of gk at fixed t. The time derivative of ˙Xt along the flow then gives Eq. 13: 
+
+¨Xt = du(Xt)dt = ∂t∇φt(Xt) + ( ∇2φ)( Xt) ∇φt(Xt) = 
+
+> K
+
+X
+
+> k=1
+
+wkλk(t) ∇gk(Xt, t ). (53) 
+
+A.4. Proofs of Propositions 4.1–4.2 Proposition 4.1. (Marginal alignment bound). For W22 -type potentials of strength w, away from singular configurations: 
+
+W22 (ρtk , μ tk ) ≤ Ck/w 2 + O(w−3), where Ck is a problem-dependent constant independent of w.Proof. By the one-sample-per-marginal estimator of Sec. 4.2, ΨT (XT ) = xT ≡ [xt1 , . . . , x tK ]⊤ for any z = ( x0, x 1, B) ∼
+
+πall with one GT sample xtk ∼ μtk per intermediate marginal. The fixed-point Eq. 20 is equivalent to XT = Xbase  
+
+> T
+
++
+
+A(XT − ΨT (XT )) (App. E.3); substituting ΨT (XT ) = xT and subtracting xT from both sides yields 
+
+XT − xT = ( 1 − A)−1 Xbase  
+
+> T
+
+− xT
+
+. (54) 
+
+W2 bound. Using Eq. 54: 
+
+W22 (ρtk , μ tk ) (i) 
+
+≤ E∥Xtk − xtk ∥2 (ii) 
+
+≤ Pk(1 − A)−1 2 E∥Xbase  
+
+> T
+
+− xT ∥2. (55) 
+
+(i) follows by definition of W22 as the infimum of E∥X − Y ∥2 over all joint couplings of (ρtk , μ tk ) (Villani, 2009). The joint distribution of (Xtk , x tk ) induced by z ∼ πall is one such coupling, since Xtk has marginal ρtk and xtk has marginal 
+
+μtk by construction; plugging this specific joint into the squared cost thus gives an upper bound on the infimum. (ii) follows by reading off the k-th row of Eq. 54, Xtk − xtk = P 
+
+> j
+
+[( 1 − A)−1]kj 
+
+ Xbase  
+
+> tj
+
+− xtj
+
+, and applying the Cauchy–Schwarz inequality, where Pk is the projection operator onto the k-th canonical row vector. 
+
+Scaling in w. Recalling Aik = wk
+
+I(2) [λk] ( ti) − I (2) [λk] (1) ti
+
+ from Eq. 20, all Aik scale linearly in the global potential strength w, so A = w ˜A for a fixed matrix ˜A, which depends only on the time grid and temporal kernels. Away from singular configurations (i.e., ˜A invertible), the Taylor expansion at large w yields: 
+
+(1 − A)−1 = ( 1 − w ˜A)−1 = − 1
+
+w ˜A−1 + O(w−2), (56) 19 Multimarginal flow matching with optimal transport potentials 
+
+so Pk(1 − A)−1 = −Pk ˜A−1/w + O(w−2), and hence ∥Pk(1 − A)−1∥2 = ∥Pk ˜A−1∥2/w 2 + O(w−3). The data factor 
+
+E∥Xbase  
+
+> T
+
+− xT ∥2 is independent of w and finite by the second-moment assumption on the GT marginals. Combining with Eq. 55, 
+
+W22 (ρtk , μ tk ) ≤ Ck
+
+w2 + O(w−3), Ck = Pk ˜A−1 2 · E∥Xbase  
+
+> T
+
+− xT ∥2, (57) which is the claimed bound. We note that this bound applies for any choice of joint coupling πall (e.g., πOT all or πind all ,Sec. 4.2); only the constant Ck depends on the coupling. 
+
+Proposition 4.2. (End-to-end bound). For Eulerian and Lagrangian consistency losses (App. C), combining Prop. 4.1 with flow-map learning bounds from Boffi et al. (2025): W2(ρθtk , μ tk ) ≤ Dk
+
+pLOTP −FM + √Ck/w + O(w−3/2), where Ck
+
+and Dk are problem- and consistency-loss-dependent constants, respectively, both independent of w.Proof. We first decompose the distance by the triangle inequality for W2 (which holds since it is a metric): 
+
+W2(ρθtk , μ tk ) ≤ W 2(ρθtk , ρ tk ) + W2(ρtk , μ tk ), (58) where ρtk is the OTP target marginal at strength w and ρθtk = ( ˆΨθ 
+
+> 0,t k
+
+)# ρ0 is the pushforward of the source ρ0 under the learned consistency-model flow map at time tk. Taking the square root of Prop. 4.1, W2(ρtk , μ tk ) ≤ √Ck/w + O(w−3/2).
+
+OTP-FM training error as a flow-map distillation error . For the first term, we bound the flow-map matching error via the framework of Boffi et al. (2025), viewing the OTP-FM velocity field ut as the teacher (with associated true two-time flow map Ψt1,t 2 ) and the learned MeanFlow consistency model Ψθt1,t 2 (x) = x + ( t2 − t1)vθ (t1, t 2, x ) as the distilled student. As we establish in App. C, the conditional OTP-FM training objective (MeanFlow/ESD or LSD; Eqs. 85, 86) is by construction the squared self-distillation residual of one of two consistency conditions on Ψθt1,t 2 (Eulerian or Lagrangian, respectively). 
+
+Wasserstein bound. We assume ut satisfies the one-sided Lipschitz condition of Boffi et al. (2025, Assumption 3.3), 
+
+(ut(x) − ut(y)) · (x − y) ≤ Ct ∥x − y∥2 with Ct ∈ L1[0 , 1] for all (t, x, y ) ∈ [0 , 1] × Rd × Rd, to guarantee a unique solution to the flow ODE. Then, applying Boffi et al. (2025, Prop. 3.9 (Lagrangian) or Prop. 3.10 (Eulerian)) on the time interval [0 , t k] in place of [0 , 1] (the proofs run unchanged after restricting all integrals to [0 , t k]) yields 
+
+W22 (ρθtk , ρ tk ) (i) 
+
+≤ E ˆΨθ 
+
+> 0,t k
+
+(x0) − Ψ0,t k (x0) 2 (ii) 
+
+≤ κk LMOTP -FM (θ), (59) where (i) follows because W22 , by definition, is the infimum of all joint couplings, of which ( ˆΨθ 
+
+> 0,t k
+
+(x0), Ψ0,t k (x0)) is a valid one; and (ii) is the corresponding bound from Boffi et al. (2025) with constants: 
+
+κk = e tk +2 R tk   
+
+> 0|Ct|dt
+
+(LSD), κk = e tk (ESD/MeanFlow). (60) Substituting this into Eq. 58 yields the claimed bound: 
+
+W2(ρθtk , μ tk ) ≤ Dk
+
+pLOTP −FM +
+
+√Ck
+
+w + O(w−3/2), (61) where Dk = √κk and Ck are the constants from Prop. 4.1. 
+
+B. Distances between probability measures 
+
+B.1. The W22 distance, KLD, and MMD 
+
+The potentials we consider in this work are based on statistical distances between two probability measures D : P(Rd) ×P(Rd) → R+. Specifically, we consider three popular statistical distances. The first is the Kullback-Leibler divergence (KLD): 
+
+DKL [α, β ] = 
+
+Z
+
+> Rd
+
+ln α(x)
+
+β(x) dα(x). (62) The second is the W22 distance, a form of the static OT problem discussed in Sec. 2.1, and the third the maximum mean discrepancy (MMD), a type of integral probability metric (IPM). IPMs are defined as the difference in expectation of an optimal witness function h : Rd → R out of a class of real-valued measurable functions H:
+
+DIPM [α, β ] = sup 
+
+> h∈H
+
+Z
+
+> Rd
+
+h(x)d α(x) −
+
+Z
+
+> Rd
+
+h(x)d β(x) . (63) 20 Multimarginal flow matching with optimal transport potentials 
+
+They include the W1 distance and have the attractive property of satisfying the definition of a metric for most common choices of H (M ¨uller, 1997). In the case of MMD, H is a unit ball in a reproducing kernel Hilbert space (RKHS) with kernel 
+
+k : Rd × Rd → R. An RKHS satisfies the reproducing property: ∀h ∈ H , h(x) = ⟨h, k (x, ·)⟩H. The squared MMD can be expressed conveniently as (Gretton et al., 2012): 
+
+DMMD 2 [α, β ] = 
+
+ZZ 
+
+k(x, x ′) d α(x)d α(x′) − 2
+
+ZZ 
+
+k(x, y ) d α(x)d β(y) + 
+
+ZZ 
+
+k(y, y ′) d β(y)d β(y′). (64) 
+
+B.2. Functional derivatives 
+
+As highlighted in Sec. 3, the functional derivatives g of statistical distances D, and their gradients ∇g, are important objects for OTP-FM. The expressions for these for the W22 distance, MMD, and KL divergence, provided in Table 1, can be derived by direct differentiation as we detail here. 
+
+The W22 distance The derivative can be calculated most easily using the dynamic dual form of W22 (Villani, 2009): 
+
+D[ρt, μ tk ] := sup 
+
+> φt
+
+Z 
+
+> Rd
+
+φ1(x)d μtk (x) −
+
+Z
+
+> Rd
+
+φ0(x)d ρt(x)
+
+
+
+, (65) such that ∀t ∈ [0 , 1] , φt satisfies the H-J equation (Eq. 3). Taking the functional derivative with respect to ρt(x), we get: 
+
+δD
+
+δρ t
+
+≡ gk(x, t ) = −φ∗
+
+> 0
+
+(x), (66) where φ∗ is the optimal H-J potential. Finally, using Theorem A.1 and Corollary A.2, we have that: 
+
+∇gk(x, t ) = −∇ φ∗
+
+> 0
+
+(x) = −u0(x) = x − ψ∗(x), (67) where ψ∗ is the optimal (static) OT map between ρt and μtk .
+
+MMD Differentiating Eq. 64 with respect to ρt(x), we get: 
+
+δDMMD 2 [ρt, μ tk ]
+
+δρ t
+
+= 2 
+
+Z
+
+k(x, y ) [ ρt(y) − μtk (y)] d y. (68) The gradient, for arbitrary kernel k, is then simply: 
+
+∇gk(x, t ) = 2 
+
+Z
+
+∇xk(x, y ) [ ρt(y) − μtk (y)] d y. (69) Specifically, in this work, we primarily consider the well-known RBF kernel: 
+
+kRBF (x, y ) = exp 
+
+
+
+− ∥x − y∥2
+
+2σ2
+
+
+
+, (70) where σ is the kernel bandwidth; and experiment briefly with the polynomial kernel (see App. D): 
+
+kpoly (x, y ) = ( xT y + c)d, (71) where d is the polynomial degree and c a constant. The gradients for these kernels are: 
+
+∇xkRBF (x, y ) = − x − yσ2 · exp 
+
+
+
+− ∥x − y∥2
+
+2σ2
+
+
+
+, (72) 
+
+∇xkpoly (x, y ) = d · y · (xT y + c)d−1. (73) 21 Multimarginal flow matching with optimal transport potentials 
+
+KL divergence We consider only the “forward” KL divergence as it has a more useful derivative and gradient: 
+
+DKL [ρt, μ tk ] = 
+
+Z
+
+> Rd
+
+ρt(x) [ln ρt(x) − ln μtk (x)] d x. (74) Taking the functional derivative: 
+
+δDKL 
+
+δρ t
+
+= ln ρt(x) + 1 − ln μtk (x). (75) The gradient is then simply: 
+
+∇gk(x, t ) = ∇ ln ρt(x) − ∇ ln μtk (x). (76) 
+
+C. Consistency models and MeanFlow 
+
+C.1. Flow map matching 
+
+Consistency models have been presented in the literature in a wide variety of forms, with variations on, among other things: discrete- vs. continuous-time training; the use of one- vs. two-time flow maps; the requirement (or lack thereof) for a pre-trained “teacher” flow matching model; and training objectives. 
+
+Flow map matching (Boffi et al., 2025; 2026) provides a useful framework unifying many SOTA continuous-time approaches, such as that of Song et al. (2023), consistency trajectory models (Kim et al., 2024), shortcut models (Frans et al., 2025), and Align Your Flow (Sabour et al., 2025). These models are generally trained via objectives based on one of three self-consistent conditions required for a valid flow map Ψt1,t 2 .
+
+Semigroup condition: ψt2,t 3 (ψt1,t 2 (x)) = ψt1,t 3 (x), (77) 
+
+Eulerian condition: ∂t1 Ψt1,t 2 (x) + ∇Ψt1,t 2 (x)ut1 (x) = 0 , (78) 
+
+Lagrangian condition: ∂t2 Ψt1,t 2 (x) = ut2 (Ψ t1,t 2 (x)) , (79) for all (t1, t 2, t 3) ∈ [0 , 1] 3 and x ∈ Rd, where ut(x) : [0 , 1] × Rd → Rd is the instantaneous velocity field satisfying 
+
+ut(Xt) = dXt 
+
+> dt
+
+along a trajectory Xt2 = Ψ t1,t 2 (Xt1 ). Shortcut models, for example, are trained to satisfy the semigroup condition, while most other consistency models the Eulerian; the Lagrangian condition is a relatively newer idea introduced by Boffi et al. (2025; 2026). In our experiments, we consider only the Eulerian and Lagrangian conditions for their desirable theoretical properties (Boffi et al., 2026) and superior performance in computer vision. By substituting the flow map parametrization in terms of the mean velocity vt1,t 2 : [0 , 1] 2 × Rd → Rd:
+
+Ψt1,t 2 (Xt1 ) = Xt1 + ( t2 − t1)vt1,t 2 (Xt1 ), (80) we obtain the Eulerian and Lagrangian conditions in terms of vt1,t 2 :
+
+Eulerian condition: vt1,t 2 (x) = ut1 (x) + ( t2 − t1)( ut1(x) ∂xvt1,t 2 + ∂t1vt1,t 2 ). (81) 
+
+Lagrangian condition: vt1,t 2 (x) = ut2 (Ψ t1,t 2 (x)) − (t2 − t1)∂t2 vt1,t 2 (x). (82) 
+
+Flow map self-distillation. We can next inject a training target, referred to as a “teacher” flow map, into these conditions, to obtain a training objective to distill the teacher into a consistency model Ψθt1,t 2 (or, equivalently, vθt1,t 2 ). Generally, distillation requires a pre-trained flow matching model as the teacher; however, in this work we focus exclusively on the 
+
+self-distillation paradigm, wherein the “teacher” target is formed directly from the CFM-style conditional velocity targets 
+
+ut(x|z) (modified in Sec. 4.1 for OTP-FM). Explicitly, we consider the Eulerian and Lagrangian self-distillation (ESD and LSD) training objectives: 
+
+LESD (θ) := Et1,t 2, x t1 ∼ρt1 (·| z), z ∼q vθt1,t 2 (xt1 ) − ut1 (xt1 |z) + ( t2 − t1)( ut1(xt1 |z)∂xvθt1,t 2 + ∂t1vθt1,t 2 ) 2 , (83) 
+
+LLSD (θ) := Et1,t 2, x t1 ∼ρt1 (·| z), z ∼q vθt1,t 2 (xt1 ) − ut2 (Ψ t1,t 2 (xt1 )|z) − (t2 − t1)∂t2 vθt1,t 2 (xt1 ) 2 , (84) where we see that we aim to minimize the residual between the LHS and RHS of the Eulerian and Lagrangian conditions through a mean-squared error regression loss, with the ground-truth training signal injected via ut(x|z).22 Multimarginal flow matching with optimal transport potentials 
+
+As in many (continuous-time) consistency models, this objective involves derivatives of vθ with respect to its inputs 
+
+(x, t 1, t 2); these can be computed efficiently using the Jacobian-vector product (JVP) operation implemented in modern automatic differentiation libraries such as PyTorch and JAX. Furthermore, to avoid “double-backpropagation” through the JVP and improve training stability, it is standard practice to not backpropagate through the RHS term, represented by the “stop-gradient” operator sg :
+
+LESD (θ) := Et1,t 2, x t1 ∼ρt1 (·| z), z ∼q vθt1,t 2 (xt1 ) − sg ut1 (xt1 |z) + ( t2 − t1)( ut1(xt1 |z)∂xvθt1,t 2 + ∂t1vθt1,t 2 ) 2 , (85) 
+
+LLSD (θ) := Et1,t 2, x t1 ∼ρt1 (·| z), z ∼q vθt1,t 2 (xt1 ) − sg ut2 (Ψ t1,t 2 (xt1 )|z) − (t2 − t1)∂t2 vθt1,t 2 (xt1 ) 2 , (86) We note our stop-gradient version of LSD differs slightly from the original in Boffi et al. (2026) with the time-derivative moved inside the sg operator for further stability. Unlike ESD, LSD does not involve a spatial derivative through Ψt1,t 2
+
+or the learnt model, which can in principle improve training stability. We experiment with both (using the MeanFlow and improved MeanFlow (iMF) instantiations of ESD below) and find iMF to be most performant, as shown in Apps. F and G. 
+
+C.2. MeanFlow and improved MeanFlow 
+
+The MeanFlow objective is an instantiation of the Eulerian condition that has proven particularly performant; indeed, as of this writing, its improved variant is SOTA in one- and two-step generative modeling. The original formulation focuses on the average velocity object between two time points t1 and t2:
+
+vt1,t 2 (Xt1 ) = 1
+
+t2 − t1
+
+Z t2
+
+> t1
+
+ut(Xt)d t, (87) but is equivalent to the flow-map based description above and in Sec. 2.3. One modification we make to the original MeanFlow objective is to privilege t1 instead of t2, in order to flow forward 
+
+instead of backward in time. The corresponding regression target is derived as follows, following the same steps as Geng et al. (2026a). First, multiplying both sides of Eq. 87 by t2 − t1:
+
+(t2 − t1)vt1,t 2 (Xt1 ) = 
+
+Z t2
+
+> t1
+
+ut(Xt)d t. (88) Next, taking the derivative of both sides with respect to t1 (instead of t2) and rearranging: 
+
+vt1,t 2 (Xt1 ) = ut1 (Xt1 ) + ( t2 − t1) ddt1
+
+vt1,t 2 (Xt1 ). (89) Finally, expanding out the time derivative in terms of the partial derivatives, and using dXt1 
+
+> dt1
+
+= ut1 (Xt1 ), dt1 
+
+> dt1
+
+= 1 , and  
+
+> dt2
+> dt1
+
+= 0 , we obtain the final regression target: 
+
+vt1,t 2 (Xt1 ) = ut1 (Xt1 ) + ( t2 − t1)( ut1(Xt1) ∂xvt1,t 2 + ∂t1vt1,t 2 ). (90) As stated above, this yields the exact same regression target as ESD (Eq. 85). More recently, Geng et al. (2026b) propose the “improved MeanFlow” (iMF) objective, with the primary difference being the replacement of the second instance of ut1 (xt1 |z) in the MeanFlow target with the instantaneous velocity prediction from the model itself vθt1,t 1 (xt1 ).9 Incorporating this and rearranging terms to match their convention, we obtain the iMF objective: 
+
+LiMF (θ) := Et1,t 2, x t1 ∼ρt1 (·| z), z ∼q vθt1,t 2 (xt1 ) − (t2 − t1) sg vθt1,t 1 (xt1 )∂xvθt1,t 2 + ∂t1vθt1,t 2
+
+| {z } 
+
+> ≡Vθt1,t 2
+
+− ut1 (xt1 |z)
+
+> 2
+
+, (91) where V θt1,t 2 is a compound function of vθt1,t 2 that directly regresses the conditional instantaneous velocity regression target. Geng et al. (2026b) argue this substitution of vθt1,t 1 (xt1 ) for ut1 (xt1 |z) reduces the regression loss variance and improves training stability. Empirically, we find this modestly outperforms MeanFlow and LSD, as shown in App. G. 
+
+> 9
+
+Alternatively, they propose the possibility of using an auxiliary head to predict this instantaneous velocity, but we elect to use a single head inputting t1 for both time inputs. 
+
+23 Multimarginal flow matching with optimal transport potentials 
+
+D. Solutions for Gaussian marginals 
+
+For the special case of d-dimensional isotropic Gaussian marginals, we can derive closed-form solutions for the OTP problem under the ansatz that ρt is an isotropic Gaussian with time-dependent mean mρt and variance σ2 
+
+> ρt
+
+1d. In this case, following Lipman et al. (2023), the marginal velocity takes the form: 
+
+ut(x) = ˙σρt
+
+σρt
+
+(x − mρt ) + ˙ mρt . (92) This means the dynamic OT kinetic energy reduces to: 
+
+T (x) = 12
+
+Z
+
+∥ut(x)∥2dρt(x) = 12 E∥ut(x)∥2
+
+= 12
+
+" ˙σ2
+
+> ρt
+
+σ2
+
+> ρt
+
+E∥x − mρt ∥2
+
+| {z } 
+
+> =tr( σ2
+> ρt1d)= dσ 2
+> ρt
+
++2 · ˙σρt
+
+σρt
+
+· ˙mρt · E(x − mρt )
+
+| {z }
+
+> =0
+
++∥ ˙mρt ∥2
+
+#
+
+= 12 (∥ ˙mρt ∥2 + d ˙σ2 
+
+> ρt
+
+).
+
+(93) Each distance Dkt ≡ D [ρt, μ tk ] similarly reduces to a function of (mρt , σ ρt ) alone, as derived explicitly for different distance metrics below. In general, this means a Lagrangian of the form: 
+
+L(mρt , σ ρt , ˙mρt , ˙σρt , t ) = 12
+
+ ∥ ˙mρt ∥2 + d ˙σ2
+
+> ρt
+
+ +
+
+> K
+
+X
+
+> k=1
+
+wkλk(t) Dkt , (94) where the distance Dkt depends only on (mρt , σ ρt ) and the fixed parameters (mμtk , σ μtk ) of the intermediate marginal. The E-L equations for the generalized coordinates (mρt , σ ρt ) are therefore: 
+
+¨mρt =
+
+> K
+
+X
+
+> k=1
+
+wkλk(t) ∇mρt Dkt , (95) 
+
+¨σρt = 1
+
+d
+
+> K
+
+X
+
+> k=1
+
+wkλk(t) ∂Dkt
+
+∂σ ρt
+
+. (96) By plugging in the explicit forms for the distances and gradients derived below, this yields second-order ODEs for the time evolution of mρt and σρt that can be efficiently simulated numerically. To solve the boundary value problem, matching 
+
+mρ0 = mμ0 , σρ0 = σμ0 , mρ1 = mμ1 , and σρ1 = σμ1 , we use the shooting method (Stoer & Bulirsch, 1980) to reduce it to finding the initial conditions that solve an initial value problem yielding the desired final conditions. Specifically, we use an implicit Runge-Kutta method (Hairer & Wanner, 1996) (the Radau method implemented in the scipy.integrate 
+
+library (Virtanen et al., 2020)) to simulate the E-L equations as first-order ODEs in the velocities of the mean and standard deviation, and “Broyden’s good method” (van de Rotten, 2003) ( scipy.optimize.broyden1 ) to solve for the initial velocities. The exact code is provided in the linked OTP-FM repository. 
+
+D.1. The W22 distance 
+
+The W22 distance between two Gaussians ρt and μtk has the well-known form — also known as the Fr ´echet distance — that reduces in the case of isotropic Gaussians to: 
+
+DW22 [ρt, μ tk ] = ∥mρt − mμtk ∥2 + d(σρt − σμtk )2. (97) The gradients are simply: 
+
+∇mρt Dkt = 2( mρt − mμtk ), (98) 
+
+∂Dkt
+
+∂σ ρt
+
+= 2 d(σρt − σμtk ). (99) 24 Multimarginal flow matching with optimal transport potentials 
+
+D.2. KL divergence 
+
+The KL divergence between two Gaussians ρt and μtk similarly has a known form (Pardo, 2006), reducing to: 
+
+DKL [ρt∥μtk ] = 12
+
+"
+
+d ln σ2
+
+> μtk
+
+σ2
+
+> ρt
+
++ d σ2
+
+> ρt
+
+σ2
+
+> μtk
+
++ ∥mρt − mμtk ∥2
+
+σ2
+
+> μtk
+
+− d
+
+#
+
+, (100) with gradients: 
+
+∇mρt Dkt = mρt − mμtk
+
+σ2
+
+> μtk
+
+, (101) 
+
+∂Dkt
+
+∂σ ρt
+
+= d σρt
+
+σ2
+
+> μtk
+
+− 1
+
+σρt
+
+!
+
+. (102) 
+
+D.3. MMD (RBF kernel) 
+
+We first consider MMD with the RBF kernel (Eq. 70) with bandwidth γ. The squared MMD between two distributions is (Eq. 64): 
+
+DMMD 2 [ρt, μ tk ] = Ex,x ′∼ρt [k(x, x ′)] − 2Ex∼ρt,y ∼μtk [k(x, y )] + Ey,y ′∼μtk [k(y, y ′)] . (103) For the self-terms, if x, x ′ ∼ N (m, σ 2Id) are independent, then x − x′ ∼ N (0 , 2σ2Id). Using the moment generating function of a chi-squared distribution: 
+
+Ex,x ′∼N (m,σ 2I)[k(x, x ′)] = E
+
+
+
+exp 
+
+
+
+− ∥x − x′∥2
+
+2γ2
+
+ 
+
+=
+
+ γ2
+
+γ2 + 2 σ2
+
+d/ 2
+
+. (104) For the cross-term, if x ∼ N (m1, σ 21 Id) and y ∼ N (m2, σ 22 Id) are independent, then x − y ∼ N (m1 − m2, (σ21 + σ22 )Id).Hence: 
+
+Ex∼ρt,y ∼μtk [k(x, y )] = γ2
+
+γ2 + σ2 
+
+> ρt
+
++ σ2
+
+> μtk
+
+!d/ 2
+
+exp − ∥mρt − mμtk ∥2
+
+2( γ2 + σ2 
+
+> ρt
+
++ σ2
+
+> μtk
+
+)
+
+!
+
+. (105) Defining the effective variances τ 2 
+
+> ρ
+
+= γ2+2 σ2 
+
+> ρt
+
+, τ 2 
+
+> μ
+
+= γ2+2 σ2
+
+> μtk
+
+, and τ 2+ = γ2+σ2 
+
+> ρt
+
++σ2
+
+> μtk
+
+, and writing ∆m = mρt −mμtk :
+
+DMMD 2 [ρt, μ tk ] = 
+
+ γ2
+
+τ 2
+
+> ρ
+
+d/ 2
+
++
+
+ γ2
+
+τ 2
+
+> μ
+
+d/ 2
+
+− 2
+
+ γ2
+
+τ 2+
+
+d/ 2
+
+exp 
+
+
+
+− ∥∆m∥2
+
+2τ 2+
+
+
+
+. (106) Finally, the gradients are: 
+
+∇mρt DMMD 2 = 2∆ mτ 2+
+
+ γ2
+
+τ 2+
+
+d/ 2
+
+exp 
+
+
+
+− ∥∆m∥2
+
+2τ 2+
+
+
+
+, (107) 
+
+∂DMMD 2
+
+∂σ ρt
+
+= −2dσ ρt
+
+ γ2
+
+τ 2
+
+> ρ
+
+d/ 2 1
+
+τ 2
+
+> ρ
+
++ 2 σρt
+
+ γ2
+
+τ 2+
+
+d/ 2
+
+exp 
+
+
+
+− ∥∆m∥2
+
+2τ 2+
+
+  dτ 2+
+
+− ∥∆m∥2
+
+τ 4+
+
+
+
+. (108) 
+
+D.4. MMD (polynomial kernel) 
+
+We next consider the polynomial kernel (Eq. 71) with degree 2. Higher-degree kernels can be computed similarly but are more cumbersome. As the quadratic kernel is k(x, y ) = ( x⊤y + c)2, we first compute E[( x⊤y)2]. For independent x, x ′ ∼ N (m, σ 2Id):
+
+E[( x⊤x′)2] = ∥m∥4 + dσ 4 + 2 σ2∥m∥2. (109) For independent x ∼ N (m1, σ 21 Id) and y ∼ N (m2, σ 22 Id):
+
+E[( x⊤y)2] = ( m⊤ 
+
+> 1
+
+m2)2 + dσ 21 σ22 + σ21 ∥m2∥2 + σ22 ∥m1∥2. (110) 25 Multimarginal flow matching with optimal transport potentials 0             
+
+> 2
+> 4
+> 6
+> 8
+> 10
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> x(t)
+> =MMD 2
+> Poly r() =
+> Source 0
+> 0.3 (w= 10)
+> Target 1
+> Xtt
+> (t)
+
+Figure 4. A characteristic example of the exact dynamic OT solution (under the Gaussian ansatz) with MMD and a polynomial kernel failing to enforce the intermediate marginal at high strength. 
+
+Hence, combining all terms with E[( x⊤y + c)2] = E[( x⊤y)2] + 2 cE[x⊤y] + c2:
+
+DMMD 2 [ρt, μ tk ] = ∥mρt ∥4 + dσ 4
+
+ρt + 2 σ2
+
+ρt ∥mρt ∥2 + 2 c∥mρt ∥2 + c2
+
+− 2
+
+h
+
+(m⊤
+
+ρt mμtk )2 + dσ 2
+
+ρt σ2
+
+μtk
+
++ σ2
+
+ρt ∥mμtk ∥2 + σ2
+
+μtk
+
+∥mρt ∥2 + 2 cm ⊤
+
+ρt mμtk + c2i
+
++ ∥mμtk ∥4 + dσ 4
+
+μtk
+
++ 2 σ2
+
+μtk
+
+∥mμtk ∥2 + 2 c∥mμtk ∥2 + c2.
+
+(111) Finally, the gradients are: 
+
+∇mρt DMMD 2 = 4 
+
+h
+
+(∥mρt ∥2 + σ2
+
+ρt − σ2
+
+μtk
+
++ c)mρt − (m⊤
+
+ρt mμtk + c)mμtk
+
+i
+
+, (112) 
+
+∂DMMD 2
+
+∂σ ρt
+
+= 4 σρt
+
+h
+
+d(σ2
+
+ρt − σ2
+
+μtk
+
+) + ( ∥mρt ∥2 − ∥ mμtk ∥2)
+
+i
+
+. (113) We find this polynomial kernel to not be performant, even for this simple case of Gaussian marginals. A characteristic example is shown in Fig. 4, for the same marginal configuration as in the second MMD RBF example in Fig. 2. As we see, while the force of the polynomial kernel drives the mean as expected, it is not as effective on the variance; hence, we do not pursue it further in this work. 
+
+E. Details of the OTP-FM algorithm 
+
+E.1. Time sampling 
+
+We sample the training times t1 and t2 according to the joint distribution: 
+
+pt1,t 2 = 1
+
+K + 1 
+
+KX
+
+k=0 
+
+1[tk ,t k+1 ](t1)
+
+tk+1 − tk
+
+· 1[t1,1] (t2)1 − t1
+
+; (114) i.e., uniformly sampling t1 but with each of the K + 1 intervals between consecutive marginals weighted equally, and t2
+
+uniformly on the interval [t1, 1] , so that t2 > t 1 by construction (Fig. 5). This follows the convention of most consistency 0 5 10 15 20 25 30                          
+
+> Epoch
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Loss
+> Train Loss
+> Val Loss
+> (i)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> (i)0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> x(t)
+> (i) = 0.0
+> Xbase t
+> Target Xt
+> Learnt Xt
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> (i) = 0.5
+> x0
+> xt1
+> xt2
+> x1
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> (i) = 1.0 0.0 0.2 0.4 0.6 0.8 1.0
+> t1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> t2
+> tk= 1 tk= 2
+> 10 0
+> 10 1pt1, t2
+
+Figure 5. Left: Example loss curves and α(i) schedule. Center: Progression of target conditional trajectories during training for the W22
+
+distance based on example samples from four 1D marginals. Right: Example time sampling distribution pt1,t 2 .
+
+26 Multimarginal flow matching with optimal transport potentials 
+
+models of training only the upper or lower triangle of vθ (t1, t 2); however, we note there is no requirement in general to restrict t2 > t 1 and, indeed, allowing t2 < t 1 may be desirable in some applications for flowing “backwards”. We use positional embeddings (Vaswani et al., 2017) to encode t1 and ∆t = t2 − t1 as inputs to the model. 
+
+E.2. Fixed-point iteration convergence and homotopy continuation 
+
+As stated in Sec. 4.3, the curriculum on the correction strength in OTP-FM is an application of the homotopy continuation method (Allgower & Georg, 2003). Here, we analyze the convergence of the FP iterations and why the homotopy curriculum 
+
+α(i) helps stabilize them. 
+
+Contraction analysis Stacking the K intermediate positions as XT ≡ [Xt1 , . . . , X tK ]⊤, the FP iterations of Eq. 21 can be written as X(m+1)  
+
+> T
+
+= Fα(X(m) 
+
+> T
+
+) with 
+
+Fα(XT )i = Xbase  
+
+> ti
+
++ α
+
+> K
+
+X
+
+> k=1
+
+Aik ∇gk(Xtk , t k, B), (115) where Aik is as in Eq. 20. If each force ∇gk(·, t k, B) is Lipschitz-continuous with constant Lk, then the Jacobian of Fα is uniformly bounded: 
+
+∥JF α∥ ≤ α max 
+
+> iK
+
+X
+
+> k=1
+
+|Aik | Lk ≡ LF . (116) By the Banach fixed-point theorem, whenever LF < 1, Fα is a contraction and the iterations X(m) 
+
+> T
+
+converge linearly to a unique fixed point at rate at most LF .
+
+Lipschitz constants We can compute Lk directly from the Jacobians of the gradient estimators in Table 1: • W22 : ∇gk(Xtk , t k, B) = Xtk − xtk with xtk fixed (Sec. 4.2), so LW22 
+
+> k
+
+= 1 and Fα is in fact linear in XT ; we solve it directly by matrix inversion (App. E.3) and FP iterations are unnecessary. • DMMD 2 with an RBF kernel kσk (x, y ) = exp( −∥ x − y∥2/2σ2
+
+> k
+
+): LMMD  
+
+> k
+
+≤ 4/σ 2
+
+> k
+
+.• DKL with a KDE score estimator: LKL  
+
+> k
+
+≲ sup x ∥J∇ ln ˆ ρtk (x)∥ + sup x ∥J∇ ln ˆ μtk (x)∥, controlled by the KDE bandwidth and diverging in low-density regions. The Gaussian-score variant (Sec. 4.2) instead yields LKL ,Gauss  
+
+> k
+
+≤∥Σ−1
+
+> ρtk
+
+∥2 + ∥Σ−1
+
+> μtk
+
+∥2, finite away from degenerate covariances. The DMMD 2 bound follows from direct differentiation of the corresponding expression in Table 1. For DKL ,
+
+J∇gk(x, t ) = J∇ ln ˆ ρtk (x) − J∇ ln ˆ μtk (x) and the triangle inequality yields the KDE bound; for the Gaussian esti-mator, ∇ ln N (x; m, Σ) = −(x − m)⊤Σ−1 has constant Jacobian −Σ−1, so ∥J∇gk(x, t )∥2 ≤ ∥ Σ−1
+
+> ρtk
+
+∥2 + ∥Σ−1
+
+> μtk
+
+∥2.Intuitively, narrower kernels and stronger potentials (larger wk, hence larger |Aik |) yield larger LF and slower or non-contractive iterations; KL with KDE scores is particularly sensitive due to the divergence of LKL  
+
+> k
+
+in sparse regions. This matches our empirical findings and motivates both damped Anderson acceleration (Anderson, 1965) of the iterations and the homotopy curriculum described next, though, as we discuss in Sec. 7, we recommend the W22 potential for efficient, straightforward training, avoiding these complexities altogether. 
+
+Homotopy continuation To help stabilize the FP iterations, we introduce a homotopy curriculum α(i) that gradually increases the correction strength α from 0 to 1 over training iterations. At α = 0 , F0(XT )i = Xbase  
+
+> ti
+
+has LF = 0 and the trivially attractive fixed point XT = Xbase  
+
+> T
+
+. By continuity of JF α in α and the implicit function theorem, there exists a locally unique, smooth solution branch α 7 → XFP  
+
+> T
+
+(α) that remains attractive on any sub-interval where LF < 1. A sufficiently slow continuation in α from 0 to 1 thus allows the training dynamics to track this branch, even when F1 alone may not be globally contractive. The schedule α(i) can be fixed as a hyperparameter, or dynamically adjusted during training — for example, based on the residual ∥Fα(XT ) − XT ∥ — to ensure a sufficiently slow continuation. We find a fixed sigmoid schedule (Fig. 5) sufficient and practical, and ablate this choice in Sec. 6.2. Surprisingly, even for the W22
+
+distance, for which we have a closed-form solution, we find the homotopy curriculum improves the model. 27 Multimarginal flow matching with optimal transport potentials 
+
+E.3. Direct solution of the fixed-point problem for the W22 distance 
+
+As described briefly in Sec. 4.2, for the W22 distance, the fixed-point problem reduces to a linear system of equations that can be solved directly by matrix inversion. We see this by writing out the fixed-point equations for the W22 distance, with 
+
+∇gk(Xtk , t k, B) = Xtk − ψ(Xtk ), where ψ is the static OT transport map between ρtk and μtk :
+
+Xti (x0, x 1, B) = Xbase  
+
+> ti
+
+(x0, x 1) + 
+
+> K
+
+X
+
+> k=1
+
+(Xtk − ψ(Xtk )) 
+
+h
+
+wk
+
+
+
+I(2) [λk] ( t) − I (2) [λk] (1) t
+
+i | {z }
+
+> ≡Ai,k
+
+, ∀i ∈ { 1, ..., K }. (117) Rewriting this in matrix form, with A ∈ RK×K , XT ≡ [Xt1 ... X tK ]T ∈ RK×D and ΨT (XT ) ≡ [ψ(Xt1 ) ... ψ (XtK )] T ∈
+
+RK×D :
+
+XT = Xbase  
+
+> T
+
++ A(XT − ΨT (XT )) 
+
+⇒ (1 − A)XT = Xbase  
+
+> T
+
+− AΨT (XT )
+
+⇒ XT = ( 1 − A)−1  Xbase  
+
+> T
+
+− AΨT (XT ) (118) Thus, the fixed-point problem reduces to inverting and multiplying by a K × K matrix, where the inversion can be precomputed. Though in general each application of this equation may change the map ψ, thereby still leaving us with a complex fixed-point problem that needs to be solved iteratively, when conditioned on single samples from each marginal (as we do in OTP-FM), the map is fixed and a single application of Eq. 118 yields the fixed-point. 28 Multimarginal flow matching with optimal transport potentials 0                                                                                                                             
+
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 1000)
+> Target 1
+> Xtt
+> (t)0
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 1000)
+> Target 1
+> Xtt
+> (t)0
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 1000)
+> Target 1
+> Xtt
+> (t)0
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 1000)
+> Target 1
+> Xtt
+> (t)0
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 1000)
+> Target 1
+> Xtt
+> (t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)
+
+Figure 6. Example OTP-FM trajectories inferred from 1, 2, 5, 10, and 50 steps per marginal (left to right), demonstrating the effectiveness of the MeanFlow consistency model. 
+
+F. Experimental details and studies on synthetic data 
+
+F.1. Architecture 
+
+We use a three-layer MLP for the MeanFlow velocity model with 256 nodes per hidden layer and the SiLU activation function after each hidden layer. As stated in Sec. 4.3, we embed the times t1 and ∆t = t2 − t1 using positional embeddings with 64D each, and the position input with a single embedding layer of 64D as well. 
+
+F.2. Training 
+
+We use the Adam optimizer with a learning rate of 3 · 10 −3 and a batch size of 512 samples per marginal. We use a sigmoid curriculum for the correction strength α(i) with a mean at half the total number of training iterations N and a slope of 
+
+12 /N :
+
+α(i) = 11 + exp − 12 
+
+N
+
+ i − N
+
+2
+
+ , (119) as shown in Fig. 5. The training epochs vary between 10 and 50 for convergence depending on the potential strengths and distance metrics: generally, stronger potentials and distances with harder FP problems (MMD and KLD) require more epochs and/or a slower curriculum. 
+
+F.3. MeanFlow, LSD and few-step inference 
+
+We train with a 0.75 probability of sampling t2 = t1 (i.e., on the ut1,t 2 diagonal) and 0.25 probability of sampling t2 > t 1
+
+according to the joint distribution pt1,t 2 (Eq. 114). We find one or two steps per marginal sufficient for reasonably accurate inference of the intermediate Xtk for the MMD and KLD distances, as illustrated in Fig. 6. We maintain an EMA of the model weights uEMA 
+
+θ for evaluating the Xtk during training as well as for inference, with a decay factor of 0.99. We also compare MeanFlow with the LSD training objective (App. C.1) with the same training settings, and find largely similar performance, leaving a more rigorous comparison to future work. We use 50 steps per marginal for inference in all experiments. 
+
+F.4. Weaknesses of kernel-based distances 
+
+As previously discussed in App. D, MMD with the polynomial kernel is not effective even for the exact solution for 1D Gaussian marginals (Fig. 4). The RBF kernel, on the other hand, is performant for the exact solutions, but is limited with respect to the strength of the potential it is able to enforce for OTP-FM. This is illustrated in Fig. 8, where we see that for high strength potentials, the dynamic OT MMD solution effectively enforces ρtk to match the intermediate marginal, whereas the OTP-FM MMD solution does not. The KLD solution using a KDE for the score estimate faces similar issues. 29 Multimarginal flow matching with optimal transport potentials 0                                                                                                                             
+
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> 3
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 500)
+> Target 1
+> Xtt
+> (t)0
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 500)
+> Target 1
+> Xtt
+> (t)0
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 500)
+> Target 1
+> Xtt
+> (t)0
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 500)
+> Target 1
+> Xtt
+> (t)0
+> 1
+> 2
+> 3
+> 4
+> 5
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 2
+> 1
+> 0
+> 1
+> 2
+> x(t)
+> =W2
+> Source 0
+> 0.5 (w= 500)
+> Target 1
+> Xtt
+> (t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> (t)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> t
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> x(t)
+> =W2
+> Source 0
+> 0.3 (w= 400)
+> 0.7 (w= 500)
+> Target 1
+> Xtt
+> kk(t)
+
+Figure 7. Example OTP-FM trajectories trained with the LSD consistency objective and inferred from 1, 2, 5, 10, and 50 steps per marginal (left to right), demonstrating comparable performance to the MeanFlow model. 
+
+On the other hand, the W22 , W∞
+
+2 , and KLD with a Gaussian score estimator are able to learn this. This suggests that kernel-based estimates of the MMD and KLD ∇g provide too noisy and unstable a training target for the OTP-FM velocity model. 
+
+F.5. Comparing λk(t) shapes and widths 
+
+We experiment with three forms of the time-dependence of the potentials λk(t), with half-width τ :Triangle: λk(t)( τ, t ) = 1
+
+τ max 
+
+
+
+0, 1 − |t − tk|
+
+τ
+
+
+
+, (120) Rectangle: λk(t)( τ, t ) = 12τ θ (τ − | t − tk|) , (121) Gaussian: λk(t)( τ, t ) = 1
+
+τ √2π exp 
+
+
+
+− (t − tk)2
+
+2τ 2
+
+
+
+(122) where θ(x) is the Heaviside step function. Different configurations of shapes and widths are shown in the main text (Fig. 2) and compared directly for the same marginals and potential strengths in Fig. 9. The width of the potential has an intuitive effect on the smoothness of the trajectories, with narrower potentials having sharper kinks (approximating a delta function in the limiting case of τ → 0). We do not observe a significant empirical effect from the shape of the λk(t).
+
+F.6. Comparing loss functions 
+
+Finally, as described in Sec. 4.3, we compare three different variations of the regression loss function: 1) simple squared L2 loss; 2) adaptive weights as described in the main text with p = 1 (Sec. 4.3); and 3) a learnt weighting scheme as proposed in Karras et al. (2024): 
+
+L = E
+
+h
+
+e−w(t) vθ (t1, t 2, x ) − sg( vtgt (t1, t 2, x )) 2 + w(t)
+
+i
+
+, (123) where w(t) is a learnt log-variance predicted by the model. These are motivated by the observation that the flow matching loss is in fact a sum over multiple losses at each time step, each of which may be easier or harder to optimize. While the naive squared L2 loss simply weights each time step equally (for uniform time sampling), the two latter schemes attempt to weight the time steps based on the difficulty, either by simply dividing the squared L2 loss by the magnitude of the loss, or by encouraging the network to learn (and minimize) the log-variance of its own predictions for each time step. We show an example comparison in Fig. 10 and find the adaptive weights with p = 1 to be both most performant and most stable to train in this experiment. 30 Multimarginal flow matching with optimal transport potentials 0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> x(t)
+
+= MMD 2
+
+RBF r( ) = 1
+
+Source 0
+
+0.5 (w = 10) 
+
+Target 1
+
+Xt t
+
+(t)0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> x(t)
+
+= MMD 2RBF 
+
+Source 0
+
+0.5 (w = 1000) 
+
+Target 1
+
+Xt t
+
+(t)0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> x(t)
+
+= KL KDE 
+
+Source 0
+
+0.5 (w = 500) 
+
+Target 1
+
+Xt t
+
+(t)0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> x(t)
+
+= W2
+
+Source 0
+
+0.5 (w = 1000) 
+
+Target 1
+
+Xt t
+
+(t)0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> x(t)
+
+= W2
+
+Source 0
+
+0.5 (w = 300) 
+
+Target 1
+
+Xt t
+
+(t)0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+2
+
+1
+
+0
+
+1
+
+2
+
+> x(t)
+
+= KL Gaussian 
+
+Source 0
+
+0.5 (w = 3) 
+
+Target 1
+
+Xt t
+
+(t)
+
+Figure 8. The exact dynamic OT solution with MMD and the RBF kernel (top left) demonstrates that the intermediate marginal is effectively enforced by the potential. However, kernel-based estimates of the MMD (top center) and KLD (top right) ∇g do not allow OTP-FM to learn the intermediate marginal well (even for very high strength potentials). Finally, the W22 (bottom left), W∞
+
+2 (bottom center), and KLD with a Gaussian score estimator (bottom right) do learn the intermediate marginal. 0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+35 
+
+40 
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+> x(t)
+
+= W2
+
+Source 0 
+
+> 0.3
+
+(w = 400)  
+
+> 0.7
+
+(w = 500) 
+
+Target 1
+
+Xt t 
+
+> kk
+
+(t)0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+1.6 
+
+1.8 
+
+> x(t)
+
+= W2
+
+Source 0
+
+0.3 (w = 400) 
+
+0.7 (w = 500) 
+
+Target 1
+
+Xt t
+
+k k(t)0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+3.5 
+
+4.0 
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+1.6 
+
+1.8 
+
+> x(t)
+
+= W2
+
+Source 0
+
+0.3 (w = 400) 
+
+0.7 (w = 500) 
+
+Target 1
+
+Xt t
+
+k k(t)0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+1.6 
+
+1.8 
+
+> x(t)
+
+= W2
+
+Source 0
+
+0.3 (w = 400) 
+
+0.7 (w = 500) 
+
+Target 1
+
+Xt t
+
+k k(t)0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+1.6 
+
+1.8 
+
+> x(t)
+
+= W2
+
+Source 0 
+
+> 0.3
+
+(w = 400)  
+
+> 0.7
+
+(w = 500) 
+
+Target 1
+
+Xt t 
+
+> kk
+
+(t)0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+3.5 
+
+4.0 
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+1.6 
+
+1.8 
+
+> x(t)
+
+= W2
+
+Source 0
+
+0.3 (w = 400) 
+
+0.7 (w = 500) 
+
+Target 1
+
+Xt t
+
+k k(t)0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+1.6 
+
+1.8 
+
+> x(t)
+
+= W2
+
+Source 0
+
+0.3 (w = 400) 
+
+0.7 (w = 500) 
+
+Target 1
+
+Xt t
+
+k k(t)0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+1.6 
+
+1.8 
+
+> x(t)
+
+= W2
+
+Source 0
+
+0.3 (w = 400) 
+
+0.7 (w = 500) 
+
+Target 1
+
+Xt t
+
+k k(t)
+
+Figure 9. Top: Varying the half-width τ of the λk (t)s, with Gaussian shape, from 0.01, 0.05, 0.1, 0.2, to 0.4 (left to right). Bottom: 
+
+Varying the shape of the λk (t)s, with τ = 0 .1, between Gaussian, triangular, and rectangular (left to right). 
+
+31 Multimarginal flow matching with optimal transport potentials 0 5 10 15 20 25 30 
+
+Epoch 
+
+10 3
+
+10 2
+
+10 1
+
+10 0
+
+10 1
+
+10 2
+
+10 3
+
+> Loss
+
+Train Loss 
+
+Val Loss 
+
+(i)
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> (i)
+
+0 5 10 15 20 25 30 
+
+Epoch 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Loss
+
+Train Loss 
+
+Val Loss 
+
+(i)
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> (i)
+
+0 5 10 15 20 25 30 
+
+Epoch 
+
+2
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+> Loss
+
+Train Loss 
+
+Val Loss 
+
+(i)
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> (i)
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+3.5 
+
+4.0 
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+> x(t)
+
+= W2
+
+Source 0 
+
+> 0.3
+
+(w = 400)  
+
+> 0.7
+
+(w = 500) 
+
+Target 1
+
+Xt t 
+
+> kk
+
+(t)0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+3.5 
+
+4.0 
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+1.6 
+
+1.8 
+
+> x(t)
+
+= W2
+
+Source 0 
+
+> 0.3
+
+(w = 400)  
+
+> 0.7
+
+(w = 500) 
+
+Target 1
+
+Xt t 
+
+> kk
+
+(t)0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+3.5 
+
+4.0 
+
+> (t)
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+t
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+> x(t)
+
+= W2
+
+Source 0 
+
+> 0.3
+
+(w = 400)  
+
+> 0.7
+
+(w = 500) 
+
+Target 1
+
+Xt t 
+
+> kk
+
+(t)
+
+Figure 10. Top: Example loss curves for the three different loss functions: squared L2 (top left, log scale), adaptive weights with p = 1 
+
+(top center), and learnt log-variance (top right). Bottom: The corresponding OTP-FM trajectories for each loss function (for the same marginals and potential strengths). 
+
+32 Multimarginal flow matching with optimal transport potentials 
+
+G. Experimental details and ablation studies on single-cell RNA sequencing datasets 
+
+G.1. Embryoid body scRNA-seq dataset 
+
+We use the preprocessed embryoid body (EB) data provided by Moon et al. (2019), which includes the 100-dimensional PCA representation per cell. The dataset comprises a total of 16,819 cells collected over 27 days across the five discrete time intervals t0 ∈ [0 , 3] , t1 ∈ [6 , 9] , t2 ∈ [12 , 15] , t3 ∈ [18 , 21] , and t4 ∈ [24 , 27] days, with 2,381, 4,163, 3,278, 3,665, and 3,332 cells per interval, respectively. We consider four experimental protocols on this dataset: • EB 5D L1O : training in the 5-dimensional PCA space with one of the intermediate marginals t1, t2, or t3 held out per fold, averaging W1 in the normalized space over the three held-out folds, following Neklyudov et al. (2024); • EB 100D L0O : training in the 100-dimensional PCA space on all five marginals (no held-out marginal), averaging MMD over the four training times after t0, following Persiianov et al. (2026); • EB 100D L1O : same as L1O but in the 100-dimensional PCA space, averaging MMD only at the held-out times in the unnormalized PCA space, following Persiianov et al. (2026); • EB 100D L2O : training in the 100-dimensional PCA space with both t1 and t3 held out (training on {t0, t 2, t 4}), averaging MMD over the four non-source times t1–t4, following Theodoropoulos et al. (2026). Each PC feature is normalized to zero mean and unit variance across the full dataset for training, and evaluation metrics are computed in the original (un-normalized) PCA space, except for EB 5D L1O which evaluates in normalized space following the convention of Neklyudov et al. (2024). For the EB protocols we evaluate on a random subsample of 2,000 cells per time interval. 
+
+G.2. CITE-seq scRNA-seq dataset 
+
+The CITE-seq dataset (Burkhardt et al., 2022) consists of single-cell RNA sequencing measurements of CD34+ hematopoietic stem and progenitor cells (HSPCs) from four human donors, collected on four days, t0—t3, over a 10-day period. We use the pre-computed 50-PC representation provided by Wang et al. (2026), consisting of 31,240 cells distributed across the four time intervals as 7,476, 6,999, 9,511, and 7,254 cells per day, respectively. For training, the PC features are centered and divided by the maximum per-feature standard deviation, following Neklyudov et al. (2024); this normalization preserves the relative scale across PCs. We consider two experimental protocols on this dataset, each with two leave-one-out folds (holding out day 3 and day 4 separately, with the source day 2 and target day 7 always present): • CITE 5D L1O : using the first 5 PCs and averaging W1 in the normalized PCA space over the two held-out folds, following Kapusniak et al. (2024); • CITE 50D L1O : using all 50 PCs and averaging W1 in the original (un-normalized) PCA space over the two held-out folds, following Neklyudov et al. (2024). For both protocols we evaluate on the full set of cells at each time point for an apples-to-apples comparison with the baselines (Neklyudov et al., 2024; Kapusniak et al., 2024, and others). 
+
+G.3. Architecture and training 
+
+For all single-cell experiments we use an MLP velocity network with residual connections every two layers, SiLU activations, LayerNorm, and dropout 0.2, trained with the Adam optimizer at a base learning rate of 3 · 10 −3 and a batch size of 256 samples per marginal. All training runs are performed on a single NVIDIA L40S GPU and final model checkpoints are chosen based on the minimum MMD or W1 scores. We use 64-dimensional positional embeddings for both t1 and 
+
+∆t = t2 − t1, and a 64-dimensional linear embedding for the position input, following the architecture described in App. F. We use eight to ten hidden layers of 768 nodes each (4.9M—6.5M parameters), training each of the W22 , W∞ 
+
+> 2
+
+, MMD, and KLD potentials with the iMF consistency loss (App. C.1), adaptive loss weighting with p = 1 , tuning the potential strengths and λk(t)’s for each dataset (exact configurations are provided in our linked codebase). We use a sigmoid curriculum for 
+
+α(i) with slope 24 and midpoint at iteration 0 (i.e., the schedule starts at α = 0 .5 and quickly saturates to 1). Intermediate potential times {tk} are auto-computed as evenly spaced fractions of the training interval. We train for between 200 and 300 33 Multimarginal flow matching with optimal transport potentials   
+
+> Table 5. Ablation of the consistency model choice and loss function on EB 100D L2O (MMD on held-out times, lower is better). Baseline in bold ; others single-seed.
+
+Consistency MMD ↓
+
+IMF 0.0675 
+
+MeanFlow 0.0690 LSD 0.0696 
+
+Loss function MMD ↓
+
+Adaptive 0.0675 
+
+MSE 0.0698 Weighted 0.0746 epochs depending on the distance metric, with training times shown in Figs. 3 and 12. We use MMD with the RBF kernel of bandwidth 10 and KLD with KDE score estimates of bandwidth 3, both with a maximum of 5 Picard iterations per training iteration. We tested the KLD with a Gaussian score estimator as well but this did not converge. 
+
+G.4. Ablation studies 
+
+Table 5 continues the ablation study from Sec. 6.2, varying the consistency model and loss function on the EB 100D L2O experiment. The baseline model uses the same parameters specified in Sec. 6.2, trained with the iMF formulation and adaptive loss function. Figure 11 shows the ground truth and simulated trajectories on this experiment for the baseline model and different potential parameters. 
+
+G.5. Additional results 
+
+Figure 12 shows additional timing vs. performance plots for the EB 5D, EB 100D L1O, and CITE 50D experiments, and Fig. 13 shows trajectory visualizations for the EB 100D L2O experiment for OTP-FM with different potentials and all baseline models for which we have access to trajectories, either by our own training (as specified in App. G.6) or provided by the authors. 10 
+
+G.6. Benchmarking methods 
+
+Below we describe each baseline method, the codebase and configuration used in our evaluation and timing studies, and the provenance of the results in Table 3, in the order that they appear. All timing measurements (Figs. 3 and 12) were performed on a single cloud VM with one NVIDIA L40S GPU and one AMD EPYC 7R13 processor (8 cores / 16 threads, 32 MiB L3 cache) and 124 GiB RAM. Timings report the wall-clock training time per fold of one held-out marginal configuration (Sec. 6.3), measured on an otherwise idle machine with no concurrent jobs. We use the author-provided configurations whenever available for the respective dataset, otherwise adapting the most similar configuration available in their repository. For methods whose per-fold training time exceeds ten minutes, we measure the time per training iteration (or per epoch) from a ten-minute run and extrapolate by the total iteration count specified in the original configuration; for all other methods the reported value is of the full training run. We exclude evaluation time and precomputation of OT couplings from the timing measurements; for the datasets considered in this work, we measured the OT precomputation time to be between 5–15s and, hence, negligible in comparison to the training time. 
+
+TrajectoryNet TrajectoryNet (Tong et al., 2020) learns a continuous normalizing flow with dynamic OT regularization for trajectory inference. We use the provided code 11 with the authors’ EB 5D configuration; the EB 5D L1O value is taken directly from Tong et al. (2020). We were not able to run the EB 100D and CITE experiments ourselves because of the prohibitively slow training time. For the same reason, timing values for EB 100D, CITE 5D, and CITE 50D are extrapolated from limited-iteration runs using configurations adapted from the EB 5D config. 
+
+NLSB Neural Lagrangian Schr ¨odinger Bridge (NLSB) (Koshizuka & Sato, 2023) models population dynamics via a Lagrangian-regularized neural SDE. We use the provided code 12 with the authors’ EB 5D configuration; the EB 5D L1O value is taken from Koshizuka & Sato (2023), the EB 100D L0O and L1O values from Chen et al. (2023), and we ran the CITE 5D L1O setting ourselves with a configuration adapted from EB 5D. We were not able to complete the EB 100D L2O 
+
+> 10 We thank Panagiotis Theodoropoulos for providing the trajectories for 3MSBM.
+> 11 https://github.com/KrishnaswamyLab/TrajectoryNet
+> 12 https://github.com/take-koshizuka/NLSB
+
+34 Multimarginal flow matching with optimal transport potentials PC 1              
+
+> PC 2
+> Ground Truth
+> PC 1
+> Baseline
+> PC 1
+> w= 10
+> PC 1
+> w= 100
+> PC 1
+> PC 2
+> Box λ(t)
+> PC 1
+> Triangle λ(t)
+> PC 1
+> τ= 0 .2
+> PC 1
+> τ= 0 .5
+> PC 3
+> PC 4
+> Ground Truth
+> PC 3
+> Baseline
+> PC 3
+> w= 10
+> PC 3
+> w= 100
+> PC 3
+> PC 4
+> Box λ(t)
+> PC 3
+> Triangle λ(t)
+> PC 3
+> τ= 0 .2
+> PC 3
+> τ= 0 .5
+> t0
+> t1
+> t2
+> t3
+> t4Time marginal
+
+Figure 11. Ground truth and simulated trajectories for the EB 100D dataset in the leave-two-out setting ( t1 and t3 marginals held out) for different OTP-FM potential parameters. The “baseline” model uses D = W22 with a Gaussian λ(t), with half-width τ = 0 .33 and strength w = 1000 . All other models use the same parameters except for the difference specified. 
+
+and CITE 50D runs because of the prohibitively slow training time. Their timings are extrapolated from ten-minute runs using configurations adapted from the EB 5D config. 
+
+MIOFlow MIOFlow (Huguet et al., 2022) combines a Geodesic Autoencoder (GAGA) with a neural ODE for trajectory inference; crucially it trains the neural ODE by matching predicted and observed marginals under the W22 distance instead of the maximum-likelihood loss used by continuous normalizing flows (CNFs). This sidesteps the instantaneous change-of-variables computation that CNFs require at every integration step, leading to much faster training than conventional simulation-based approaches. We use the provided code 13 . The repository does not provide scRNA-specific configurations matching our benchmark, so we adapt the 5D demo configuration for all four datasets. The CITE 50D L1O values are taken from Huguet et al. (2022), the EB 100D L1O and L0O values from Chen et al. (2023), and we ran the EB 5D L1O, EB 100D L2O, and CITE 5D L1O settings ourselves, bypassing the GAGA encoding and decoding. 
+
+> 13
+
+https://github.com/KrishnaswamyLab/MIOFlow 
+
+35 Multimarginal flow matching with optimal transport potentials 1.00 3 × 10 −1 4 × 10 −1 6 × 10 −1 2 × 10 0                         
+
+> 1 / W1→better
+> 0.0
+> 0.0
+> 0.1
+> 1.0
+> 10.0
+> 1 / Training time (min)  → faster
+> EB 5D (leave-one-out)
+> TrajectoryNet
+> NLSB
+> MIOFlow
+> DMSB
+> DeepRUOT
+> WLF-UOT
+> JKOnet*
+> iJKOnet I-CFM
+> OT-CFM
+> [SF] 2M
+> OT-MFM
+> VGFM
+> MMFM
+> Simulation-based
+> Variational / OT
+> Simulation-free
+> OTP-FM (ours)
+> OTP-FM ( W22)
+> OTP-FM ( W∞
+> 2)1.0 10.0
+> 1 / MMD →better
+> 0.0
+> 0.0
+> 0.1
+> 1.0
+> 10.0
+> 1 / Training time (min)  → faster
+> EB 100D (leave-one-out)
+> NLSB
+> MIOFlow
+> DMSB
+> DeepRUOT WLF-UOT
+> JKOnet*
+> iJKOnet
+> I-CFM
+> OT-CFM
+> [SF] 2MOT-MFM
+> VGFM
+> MMFM
+> Simulation-based
+> Variational / OT
+> Simulation-free
+> OTP-FM (ours)
+> OTP-FM ( W22)
+> OTP-FM ( W∞
+> 2)0.0100
+> 1 / W1→better
+> 0.0
+> 0.0
+> 0.1
+> 1.0
+> 10.0
+> 1 / Training time (min)  → faster
+> CITE 50D (leave-one-out)
+> MIOFlow
+> DMSB DeepRUOT
+> WLF-UOT
+> JKOnet*
+> iJKOnet
+> I-CFM
+> OT-CFM
+> [SF] 2M
+> OT-MFM
+> VGFM
+> MMFM
+> Simulation-based
+> Variational / OT
+> Simulation-free
+> OTP-FM (ours)
+> OTP-FM ( W22)
+> OTP-FM ( W∞
+> 2)
+
+Figure 12. Training time vs. performance of different methods for the EB 5D L1O (left), EB 100D L1O (center), and CITE 50D L1O (right) experiments. Top right is better. 
+
+DMSB DMSB (Chen et al., 2023) is a neural SDE method that lifts multi-marginal Schr ¨odinger bridges to phase space to smooth the dynamics. We use the provided code 14 with the authors’ EB 100D and CITE 50D configurations; the EB 5D L1O value is reported from Chen et al. (2023), the CITE 5D L1O value from Kapusniak et al. (2024), and we ran the EB 100D and CITE 50D L1O settings ourselves. We note that Chen et al. (2023) provides EB 100D L1O + L0O in the z-score 
+
+normalized space while we report unnormalized MMD values; hence, we retrain DMSB to obtain unnormalized values for this setting as well. The EB 5D and CITE 5D timings use configurations adapted from the EB 100D and CITE 50D configs, respectively. 
+
+DeepRUOT DeepRUOT (Zhang et al., 2025) is a neural SDE method that jointly learns velocity, growth, and score networks under a regularized unbalanced OT objective. We use the provided code 15 and adapt the original four-phase EB 5D training schedule for all datasets. The EB 5D L1O, CITE 5D L1O, and CITE 50D L1O values are taken from Zhang et al. (2025), and we ran the EB 100D settings ourselves. Timing values are obtained by extrapolating the per-phase iteration timing measured within 10 minutes per dataset. 
+
+WLF-UOT WLF-UOT (Neklyudov et al., 2024) represents an alternative paradigm for trajectory inference, solving the variational problem directly. We use the provided code 16 with the authors’ EB 5D and CITE 50D unbalanced-OT configurations; the EB 5D L1O value is taken from Neklyudov et al. (2024), the CITE 5D and 50D L1O values from Kapusniak et al. (2024), and we ran the EB 100D settings ourselves with configurations adapted from those provided. For consistency with the other baselines, for evaluation we generate all samples starting from t = 0 . We note that Neklyudov et al. (2024) also report values incorporating potentials based on the held-out marginals, which we do not include for fairness. 
+
+JKOnet* JKOnet (Bunne et al., 2022) interprets diffusion as energy-minimizing trajectories in Wasserstein space, following the work of Jordan, Kinderlehrer, and Otto (JKO) and solves this minimization problem. We experiment with an improved version, JKOnet* (Terpin et al., 2024). We use the provided code 17 with the authors’ EB 5D configuration; the other datasets are run with configurations adapted from the EB 5D config. For EB 5D L1O, EB 100D L2O, CITE 5D L1O, and CITE 50D L1O we ran the method ourselves, while the EB 100D L0O and L1O values are from Persiianov et al. (2026). 
+
+iJKOnet iJKOnet (Persiianov et al., 2026) proposes an alternative, adversarial scheme for the JKO optimization problem above. We use the provided code 18 with the authors’ EB 5D and CITE 50D configurations. For EB 5D L1O, EB 100D L2O, CITE 5D L1O, and CITE 50D L1O we re-ran the method, while the EB 100D L0O and L1O values are from Persiianov et al. (2026). EB 100D and CITE 5D timings use configurations adapted from EB 5D and CITE 50D, respectively. 
+
+3MSBM 3MSBM (Theodoropoulos et al., 2026) extends multi-marginal Schr ¨odinger bridges to phase space via a score-matching-style objective to avoid simulation-based training, with the score targets calculated by solving a dynamic 
+
+> 14
+
+https://github.com/TianrongChen/DMSB 
+
+> 15
+
+https://github.com/zhenyiizhang/DeepRUOT 
+
+> 16
+
+https://github.com/necludov/wl-mechanics 
+
+> 17
+
+https://github.com/antonioterpin/jkonet-star 
+
+> 18
+
+https://github.com/MuXauJl11110/iJKOnet 
+
+36 Multimarginal flow matching with optimal transport potentials 
+
+programming problem during training. We completed one training run of 3MSBM on the EB 100D L2O setting following the code provided 19 and the authors’ EB-specific configuration but it did not converge. We therefore only report results directly from Theodoropoulos et al. (2026) (EB 100D L2O) and include trajectories that are provided by the authors in Fig. 13. 
+
+I-CFM, OT-CFM, and [SF] 2M I-CFM and OT-CFM (Tong et al., 2024) train flow-matching velocity models on independently sampled or OT-aligned pairs of consecutive marginals, respectively, while [SF] 2M (Tong et al., 2023) uses score-matching to learn a Schr ¨odinger bridge between marginals. In all cases, trajectories are stitched together piecewise between consecutive training marginals, as described in App. A.2. We use the provided torchcfm code, 20 with hyperparameters adapted from the single-cell tutorials. For OT-CFM we precompute a single full-dataset EMD coupling per consecutive time pair rather than re-solving per minibatch, for a fair comparison with OTP-FM. The EB 5D L1O value is taken from Tong et al. (2024; 2023), the CITE 5D and 50D L1O values from Kapusniak et al. (2024), and the EB 100D experiments we ran ourselves. 
+
+OT-MFM OT-MFM (Kapusniak et al., 2024) encourages CFM trajectories to follow the data manifold by replacing straight interpolants with approximate geodesics of a data-dependent Riemannian metric. We use the provided code 21 with the authors’ EB 5D, CITE 5D, and CITE 50D LAND-metric configurations; the EB 5D L1O and CITE 5D and 50D L1O values are taken from Kapusniak et al. (2024), and we ran the EB 100D experiments ourselves using a configuration adapted from the EB 5D config. 
+
+VGFM VGFM (Wang et al., 2026) jointly learns velocity and growth fields using a loss derived from semi-relaxed OT on top of the CFM loss. We use the provided code 22 with the authors’ EB 5D, CITE 5D, and CITE 50D notebook configurations (both the “warm-up” and training phases); the EB 5D L1O and CITE 5D and 50D L1O values are taken from Wang et al. (2026), and we ran the EB 100D experiments ourselves with a configuration adapted from the EB 5D notebook. 
+
+MMFM MMFM (Rohbeck et al., 2025) trains CFM between multiple marginals using a cubic-spline interpolation as the conditional velocity regression target. We train MMFM following the code provided, 23 using an identical model architecture to OTP-FM’s for each respective configuration, over 5 training seeds on all five evaluation settings. 
+
+> 19 https://github.com/panostheo98/3MSBM
+> 20 https://github.com/atong01/conditional-flow-matching
+> 21 https://github.com/kksniak/metric-flow-matching
+> 22 https://github.com/DongyiWang-66/VGFM
+> 23 https://github.com/Genentech/MMFM
+
+37 Multimarginal flow matching with optimal transport potentials PC 1 PC 2 
+
+Ground Truth 
+
+PC 1 
+
+MIOFlow 
+
+PC 1 
+
+DMSB 
+
+PC 1 
+
+DeepRUOT 
+
+PC 1 
+
+WLF -UOT 
+
+PC 1 
+
+JKOnet 
+
+PC 3 PC 4 
+
+PC 3 PC 3 PC 3 PC 3 PC 3 
+
+PC 1 PC 2 
+
+iJKOnet 
+
+PC 1 
+
+3MSBM 
+
+PC 1 
+
+I-CFM 
+
+PC 1 
+
+OT -CFM 
+
+PC 1 [SF ]2M
+
+PC 1 
+
+OT -MFM 
+
+PC 3 PC 4 
+
+PC 3 PC 3 PC 3 PC 3 PC 3 
+
+PC 1 PC 2 
+
+VGFM 
+
+PC 1 
+
+MMFM 
+
+PC 1 
+
+OTP -FM (W22 )
+
+PC 1 
+
+OTP -FM (W∞ 
+
+> 2
+
+)
+
+PC 1 
+
+OTP -FM (KL) 
+
+PC 1 
+
+OTP -FM (MMD 2)
+
+PC 3 PC 4 
+
+PC 3 PC 3 PC 3 PC 3 PC 3 
+
+t0
+
+t1
+
+t2
+
+t3
+
+t4 Time marginal 
+
+t0
+
+t1
+
+t2
+
+t3
+
+t4 Time marginal 
+
+t0
+
+t1
+
+t2
+
+t3
+
+t4 Time marginal 
+
+Figure 13. Ground truth and simulated trajectories for the EB 100D dataset in the leave-two-out setting ( t1 and t3 marginals held out) in all four PCs across all five time intervals, comparing OTP-FM with different potentials with baseline models. 
+
+38 Multimarginal flow matching with optimal transport potentials 
+
+Table 6. Per-timepoint results on the GoM dataset, showing the mean and standard deviation across five seeds of the W2 distance to the four held-out marginals and the average distance to the rest (lower is better). 3MSBM results are reported from Theodoropoulos et al. (2026), while MMFM results are from our training runs. The best performing method per timepoint is in bold and the second-best in 
+
+italics .                                                                                                                        
+
+> Method t1W2t3W2t5W2t7W2Rest W2
+> 3MSBM 0.20 ±0.03 0.18 ±0.03 0.07 ±0.02 0.09 ±0.00 0.05 ±0.03
+> MMFM 0.20 ±0.00 0.20 ±0.01 0.08 ±0.01 0.12 ±0.02 0.08 ±0.01
+> OTP-FM ( W22)0.07 ±0.00 0.15 ±0.01 0.09 ±0.01 0.08 ±0.00 0.06 ±0.01
+> OTP-FM ( W∞
+> 2)0.07 ±0.00 0.15 ±0.00 0.11 ±0.00 0.11 ±0.01 0.07 ±0.00
+> OTP-FM (MMD 2)0.15 ±0.02 0.33 ±0.12 0.25 ±0.16 0.15 ±0.05 0.22 ±0.10
+> OTP-FM (KL) 0.13 ±0.01 0.26 ±0.09 0.15 ±0.06 0.10 ±0.02 0.16 ±0.06 MMFM OTP -FM (D=W2,w= 800) OTP -FM (D=W∞
+> 2,w= 800) OTP -FM (D= MMD 2,w= 400) OTP -FM (D= KL, w= 2000)
+> t0
+> t1
+> t2
+> t3
+> t4
+> t5
+> t6
+> t7
+> t8Time marginal
+
+Figure 14. Ground truth and simulated trajectories for the GoM dataset, comparing MMFM and OTP-FM with different potentials. 
+
+H. Experimental details on the Gulf of Mexico dataset 
+
+H.1. Dataset 
+
+This dataset comprises high-resolution bathymetric measurements of the Gulf of Mexico (GoM) in the region between 98 ◦Eand 77 ◦E in longitude and from 18 ◦N to 32 ◦N in latitude. The original dataset was released to the public by the United States Department of Defense and contains hourly observations between January 1st, 2001 and August 31st, 2024 (HYCOM Consortium & Center for Ocean-Atmospheric Prediction Studies (COAPS), 2024). Shen et al. (2025) then extracted the velocity field around a vortex from the June 1st, 2024, 5pm timepoint, which they then used to simulate 1,000 particle trajectories. Finally, these trajectories were each randomly sampled at one of nine time points t0 — t8, such that each particle is only observed at a single time point, yielding 111 samples per marginal. These are the ground truth marginals shown in Fig. 14. 
+
+H.2. Architecture and training 
+
+We use a ten-layer MLP with residual connections every two layers and 128 nodes per hidden layer for the velocity model. We use the Adam optimizer with a learning rate of 10 −3, a batch size of 64 samples per marginal, and the same sigmoid curriculum for α(i) as in the synthetic data experiments. In this case, we find the simple MSE loss to be most performant. We train for a total of 2000 epochs for each distance metric, corresponding to a total training time of 4 minutes for the W22
+
+and W∞ 
+
+> 2
+
+distances and 12 minutes for the MMD and KLD distances on a single NVIDIA L40S GPU. We use MMD with the RBF kernel and KLD with KDEs for the score estimates, both with a bandwidth of 3 and a maximum of 20 Picard iterations per training iteration. The final model checkpoints are chosen based on the average W22 distance over the held-out times. 
+
+H.3. Additional results 
+
+Table 6 shows the per-timepoint results on the GoM dataset, including OTP-FM with the KL and MMD 2 potentials, and Fig. 14 shows the ground truth and simulated trajectories for the GoM dataset, comparing MMFM and OTP-FM with different potentials. 39 Multimarginal flow matching with optimal transport potentials 
+
+Table 7. Per-timepoint results on the Beijing air quality dataset, showing the mean and standard deviation across five seeds of the W2
+
+distance to the four held-out marginals and the average distance to the rest (lower is better). 3MSBM results are reported from Theodor-opoulos et al. (2026), who do not report the training scores, while MMFM results are from our training runs. The best performing method per timepoint is in bold and the second-best in italics .                                                                                                             
+
+> Method t2W2t5W2t8W2t11 W2Rest W2
+> 3MSBM 12 .87 ±1.87 79 .36 ±12 .65 27 .89 ±5.88 32 .26 ±4.15
+> MMFM 23 .80 ±3.58 17 .51 ±3.61 44 .34 ±7.66 69 .91 ±12 .68 11 .88 ±2.81
+> OTP-FM ( W22)12 .02 ±1.35 12 .09 ±1.07 22 .55 ±1.45 21 .10 ±1.46 18 .20 ±0.54
+> OTP-FM ( W∞
+> 2)23 .70 ±11 .97 14 .45 ±3.61 21 .35 ±11 .70 26 .59 ±2.07 24 .50 ±4.61
+> OTP-FM (MMD 2)45 .08 ±0.46 11 .76 ±0.43 22 .28 ±1.19 24 .21 ±0.66 27 .62 ±0.22
+> OTP-FM (KL) 42 .31 ±0.58 5.21 ±0.26 18 .63 ±1.03 26 .31 ±1.57 26 .15 ±0.41
+
+I. Experimental details on the Beijing air quality dataset 
+
+I.1. Dataset 
+
+This final dataset includes hourly measurements of the concentrations of six main air pollutants and six meteorological variables from 12 monitoring sites in Beijing, between 2013 and 2017 (Chen, 2017). We follow the experimental setup of Theodoropoulos et al. (2026), whereby we focus on one station — Dingling’s — measurements of one important pollutant: particulate matter smaller than 2.5 μm, or PM2.5. We aggregate the hourly measurements by month, and sample every other month in the period of March 2013 — March 2015; i.e., 13 total marginals: t0 — t12 . We hold out t2, t5, t8, and t11 from the training to test the interpolation ability of the model, leaving nine marginals (seven intermediate potentials) for training. Each marginal contains around 740 samples. 
+
+I.2. Architecture and training 
+
+We use a four-layer MLP with residual connections every two layers and 128 nodes per hidden layer for the velocity model. We use the Adam optimizer with a learning rate of 3 · 10 −3, a batch size of 128 samples per marginal, and the same sigmoid curriculum for α(i) as in the synthetic data experiments. We find simple MSE to again be most performant. We train for a total of 600 epochs for the W22 and W∞ 
+
+> 2
+
+distances and 100 epochs for the MMD and KLD distances, corresponding to a total training time of 5 minutes for the former and 2 minutes for the latter distances on a single NVIDIA L40S GPU. We use MMD with the RBF kernel of bandwidth 3 and KLD with the Gaussian score estimates, both with a maximum of 5 Picard iterations per training iteration. The final model checkpoints are chosen based on the average W22 distance over the held-out times. 
+
+I.3. Additional results 
+
+Table 7 shows the per-timepoint results on the Beijing air quality dataset, and Fig. 15 shows the ground truth and simulated trajectories for the Beijing air quality dataset, comparing MMFM and OTP-FM. This dataset interestingly highlights a key failure mode of prescribed approaches such as MMFM: as evident from Fig. 15, the cubic spline interpolation assumed in MMFM manifestly does not capture the data. In contrast, the flexibility of the OTP-FM design space allows the data to dictate the optimal interpolation, yielding a better fit to the held-out marginals. 40 Multimarginal flow matching with optimal transport potentials t0
+
+> t1
+> t2 (held-out)
+> t3
+> t4
+> t5 (held-out)
+> t6
+> t7
+> t8 (held-out)
+> t9
+> t10
+> t11  (held-out)
+> t12
+> 0
+> 100
+> 200
+> 300
+> 400
+> PM2.5
+
+(a) Ground Truth 
+
+> t0
+> t1
+> t2 (held-out)
+> t3
+> t4
+> t5 (held-out)
+> t6
+> t7
+> t8 (held-out)
+> t9
+> t10
+> t11  (held-out)
+> t12
+> 0
+> 100
+> 200
+> 300
+> 400
+
+(b) Cubic Spline Interpolation 
+
+> t0
+> t1
+> t2 (held-out)
+> t3
+> t4
+> t5 (held-out)
+> t6
+> t7
+> t8 (held-out)
+> t9
+> t10
+> t11  (held-out)
+> t12
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> PM2.5
+
+(c) MMFM 
+
+> t0
+> t1
+> t2 (held-out)
+> t3
+> t4
+> t5 (held-out)
+> t6
+> t7
+> t8 (held-out)
+> t9
+> t10
+> t11  (held-out)
+> t12
+> 0
+> 100
+> 200
+> 300
+> 400
+
+(d) OTP-FM ( W22)
+
+Figure 15. Visualizing the Beijing PM2.5 air quality dataset. (a) Ground truth marginal distributions as violin plots showing the density at each timepoint, the median, and the interquartile range. The marginals are heavily concentrated at low PM2.5 but with long tails. (b) Cubic spline interpolation through OT-coupled ground-truth samples, excluding held-out marginals; this represents MMFM’s training targets. (c) Trajectories inferred by MMFM. (d) Trajectories inferred by OTP-FM ( W22 potential). 
+
+41

@@ -1,0 +1,307 @@
+Title: SB-RF: Schrödinger Bridge Rectified Flow for One-Step Robust Speech Enhancement
+
+URL Source: https://arxiv.org/pdf/2606.05575v1
+
+Published Time: Fri, 05 Jun 2026 00:28:50 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# SB-RF: Schr¨ odinger Bridge Rectified Flow for One-Step Robust Speech Enhancement 
+
+# Caixia Lu 1, Xueyang Lv 2, Penglong Hu 3, Jiaming Xu 4
+
+# Xiaomi Corporation, Beijing, China 
+
+lucaixia@xiaomi.com 
+
+# Abstract 
+
+Generative models have shown impressive results in speech enhancement but often suffer from multi-step inference. We propose SB-RF, a one-step generative framework integrat-ing Rectified Flow (RF) with Schr¨ odinger Bridge (SB) the-ory. SB-RF constructs a conditional bridge between clean and noisy speech distributions via entropy-regularized optimal transport. By aligning SB trajectories with the optimal trans-port geodesic through the velocity-matching objective of RF, SB-RF enables high-quality enhancement with one-step gen-eration. Experiments demonstrate that SB-RF achieves lead-ing performance among generative methods on the VoiceBank-DEMAND benchmark. Furthermore, to fully assess perfor-mance in challenging real-world scenarios, we evaluate SB-RF on a simulated low signal-to-noise ratio test set using an ex-panded training dataset. Under these conditions, SB-RF ex-hibits strong and competitive robustness with high efficiency, validating its potential for real-world applications. 
+
+Index Terms : speech enhancement, diffusion model, one-step generation, Schr¨ oinger bridge, rectified flow 
+
+# 1. Introduction 
+
+Speech enhancement (SE) aims to recover clean speech from noisy observations, serving as a fundamental preprocessing stage for both human auditory perception (e.g., telecommuni-cations, hearing aids) and downstream tasks (e.g., automatic speech recognition, speaker verification). Classical signal pro-cessing methods such as spectral subtraction and Wiener filter-ing are computationally efficient but often struggle in challeng-ing scenarios. Data-driven approaches include discriminative models that learn a direct mapping from noisy to clean speech signals [1, 2, 3], as well as generative models that learn the clean speech distribution and reconstruct the clean target conditioned on the noisy observation [4, 5, 6, 7]. Although diffusion-based generative models have achieved remarkable performance, their slow inference resulting from the large number of function evaluations (NFE) has been widely criticized. Standard Diffusion Probabilistic Models such as CD-iffuSE [8] formulate SE as an iterative reversal of a stochastic process, requiring 50-200 NFEs. Continuous-time stochastic differential equation (SDE) approaches, such as SGMSE+ [9] and BBED [10], reduce NFEs to 10-30. To further acceler-ate inference speed, Flow Matching (FM) and Rectified Flow (RF) learn a deterministic velocity vector defined via an ordi-nary differential equation (ODE), achieving competitive results with about 5 NFEs [11]. Recently, one-step FM methods have emerged [12, 13, 14, 15]. Among these, MeanFlowSE [16] stands out as a strong recent approach. However, its perfor-mance relies heavily on large-scale pretrained encoders (e.g., WavLM-Large), leading to significantly higher computational and memory costs that limit on-device deployment. On the other hand, standard RF constructs a straight-line interpolation path between clean and noisy speech. We argue that such a rigid deterministic constraint forces the model to learn a sin-gle trajectory, which is suboptimal for the highly stochastic and multimodal SE task. In this work, we propose SB-RF, a standalone, high-fidelity one-step generative framework that couples Schr¨ odinger Bridge (SB) theory with RF. Theoretically, standard RF can be viewed as a degenerate Brownian Bridge with zero diffusion coeffi-cient. Motivated by this isomorphism, we reintroduce stochas-ticity during training. This effectively relaxes the rigid point-to-point constraint into a robust ”probability tube”, smoothing the learned velocity vector and improving robustness. How-ever, heuristic noise injection alone is insufficient for precise convergence to the target distribution. We therefore ground the framework in SB theory, treating the generative process as an entropy-regularized optimal transport problem. The result-ing SB yields data-adaptive time marginals and geometry-aware trajectories for the perturbed signal xt, enhancing stability and sample quality. Crucially, in the vanishing regularization limit, SB converges to the optimal transport geodesic, resulting in a constant-velocity trajectory. To approximate these dynamics, we leverage the velocity-matching objective of RF, enabling high-fidelity speech reconstruction in a single step without re-lying on external pretrained models. While VoiceBank-DEMAND (VB-DMD) is widely used, its limited scale and diversity may not fully reflect real-world performance. We therefore evaluate the proposed methods un-der two settings: (1) the standard VB-DMD dataset, and (2) an expanded setting with richer training data and challenging low-SNR test sets to assess robustness and generalization. Ex-periments demonstrate that SB-RF achieves competitive perfor-mance on the standard benchmark and outperforms baselines in challenging low-SNR conditions with NFE = 1, marking a sig-nificant step toward the practical deployment of one-step gener-ative SE. 
+
+# 2. Background 
+
+The SE task is formulated in the Short-Time Fourier Transform (STFT) domain. Let y(f, k ) denote the observed noisy speech spectrogram sampled from the distribution πy and x(f, k ) de-note the clean speech spectrogram sampled from the distribu-tion πx, where f ∈ { 1, . . . , F } and k ∈ { 1, . . . , K } are the frequency bin and time frame index, respectively. The observa-tion signal in the single-channel setting is given by: 
+
+y (f, k ) = x (f, k ) + n (f, k ) , (1) 
+
+> arXiv:2606.05575v1 [cs.SD] 4 Jun 2026
+
+where n(f, k ) denotes the noise signals. Generative methods formulate the SE task from a generative perspective, yielding better perceptual quality under diverse noise conditions. 
+
+2.1. Rectified Flow SE 
+
+RF is a transport-based generative framework that learns an ODE-driven velocity vector to transport samples between two distributions [11]. Let xt denote the perturbed signal at contin-uous time t ∈ [0 , 1] . Its evolution is governed by: 
+
+dxt
+
+dt = vθ (xt, t, y), x0 = x, x1 = y (2) where vθ is a neural velocity vector conditioned on y, t and 
+
+xt. RF constructs a deterministic trajectory by enforcing linear interpolation between x ∼ πx and y ∼ πy :
+
+xt = ty + (1 − t)x. (3) The velocity vector vθ is trained to minimize the flow matching objective: 
+
+Lv (θ) = 
+
+Z 10
+
+E(x,y,xt)
+
+∥(y − x) − vθ (xt, t, y)∥22
+
+ dt. (4) Although the straight-line assumption reduces the NFE required at inference, it ignores the complexity of the speech manifold and the multimodal posterior p(x|y) in SE. This often leads to residual curvature in the learned velocity vector, introducing discretization errors during few-step sampling. 
+
+2.2. Schr¨ odinger Bridge 
+
+While RF enforces a pre-defined linear path, the SB formulation seeks the entropic optimal transport solution between two prob-ability distributions governed by stochastic dynamics [17, 18]. The primary goal of SB is to find a path measure p bridging the clean distribution πx and the noisy distribution πy that min-imizes the Kullback-Leibler (KL) divergence with respect to a reference path measure pref [17, 18, 19, 20]: 
+
+min  
+
+> p∈P [0 ,T ]
+
+DKL (p ∥pref ) s.t. p0 = πx, p T = πy (5) where P[0 ,T ] denotes the space of path measures on [0 , T ].Equation (5) theoretically guarantees that the learned path re-spects the underlying physics of the reference process pref .The reference process pref is typically a standard diffusion pro-cess governed by a drift f (x, t ) and diffusion coefficient g(t).The optimal solution to (5) satisfies a pair of forward-backward SDEs [19]: 
+
+dxt = f + g2(t)∇ log Ψ t
+
+ dt + g(t)d wt, x0 ∼ πx, (6a) 
+
+dxt = f − g2(t)∇ log ¯Ψt
+
+ dt + g(t)d ¯ wt, xT ∼ πy , (6b) where wt and ¯wt are standard Wiener processes, Ψt and ¯Ψt are the optimal forward and reverse drifts. While directly solving SB is generally intractable, closed-form solutions exist for spe-cial cases. Assuming Gaussian boundary conditions [21], the marginal distribution pt(x) = Ψ t(x) ¯Ψt(x) follows: 
+
+pt(x) = NC
+
+ μx(t), σ 2
+
+> x
+
+(t)I (7) where NC denotes a complex Gaussian distribution. The mean 
+
+μx(t) and variance σ2
+
+> x
+
+(t) in (7) are defined as: 
+
+μx(t) = wx(t)x + wy (t)y, σ2
+
+> x
+
+(t) = α2 
+
+> t
+
+¯σ2 
+
+> t
+
+σ2
+
+> t
+
+σ2
+
+> T
+
+(8) where wx(t) = αt ¯σ2 
+
+> t
+
+/σ 2 
+
+> T
+
+and wy (t) = ¯ αtσ2 
+
+> t
+
+/σ 2 
+
+> T
+
+are weight-ing factors derived from the noise schedule. Specifically, the schedule parameters are defined as αt = eR t    
+
+> 0f(τ) d τ
+
+, σ2 
+
+> t
+
+=
+
+R t 
+
+> 0
+> g2(τ)
+> α2
+> τ
+
+dτ , ¯αt = αtα−1 
+
+> T
+
+and ¯σ2 
+
+> t
+
+= σ2 
+
+> T
+
+− σ2 
+
+> t
+
+. This solution introduces a stochastic diffusion term, allowing the trajectory to explore a ”probability tube” around the straight-line path con-sistent with the multimodal posterior distribution, while the drift term ensures the trajectory successfully bridges x and y.
+
+# 3. Proposed method 
+
+In this section, we propose SB-RF, a stochastic extension of RF that integrates the optimal transport principles of the SB. While standard RF relies on deterministic interpolation, our method formulates speech enhancement as an entropic optimal trans-port problem. By combining the geometry-aware prior of SB with the straight-line path enforcing objective of RF, SB-RF preserves the high-efficiency inference (NFE = 1) while signif-icantly enhancing robustness against discretization errors and complex noisy conditions. 
+
+3.1. Brownian Bridge-based Rectified Flow 
+
+Standard RF learns a deterministic ODE trajectory to connect distributions [11]. However, this deterministic assumption of-ten limits flexibility in capturing the complex, multimodal pos-terior distributions of clean speech. To introduce stochasticity for robust generation, we first analyze the relationship between the Brownian Bridge (BB) solution and RF. Consider the BB process used in generative speech en-hancement (e.g., BBED [10]), where the perturbed signal xt
+
+at time t follows: 
+
+xt = (1 − t)x + ty + σtz (9) where z ∼ N C (0 , I), and σt represents the exploding variance that exhibits one peak and vanishes for t = 0 and t = 1 . We adopt the specific variance parameterization derived from the Ornstein-Uhlenbeck process as detailed in [10]. The dynamics of this process follow a standard SDE for-mulation where the drift term is f (t) = ( y − xt)/(1 − t) and the diffusion term is g(t) = √ck t. Here σmax = kσ min and 
+
+c = σ2 
+
+> min
+
+· 2 log 
+
+ σmax 
+
+> σmin
+
+
+
+are hyperparameters adopted from [10]. Crucially, as the variance σ2(t) → 0, the stochastic term van-ishes, and the perturbed signal xt converges to the deterministic mean path (1 −t)x+ty. Consequently, the drift term simplifies to: 
+
+lim 
+
+> σ→0
+
+y − xt
+
+1 − t = y − x. (10) From (10), we recover the velocity vector v(xt, t ) = d xt/dt =
+
+y−x, which is exactly the learning objective of RF. This reveals that RF can be viewed as the deterministic ODE limit of a BB solution with vanishing variance. However, training exclusively on this ideal limit prevents the model from being exposed to perturbed states, reducing its tolerance to off-path inputs during inference. To address this, we propose BB-RF, which reintroduces the calibrated diffusion term from (9) during training to restore the robustness of the SDE formulation. The training objective is to minimize the Mean Squared Error (MSE) between the predicted velocity vθ
+
+and the target drift y − x, which is consistent with (4). 3.2. Schr¨ odinger Bridge-based Rectified Flow 
+
+While introducing BB-based stochasticity to RF improves ro-bustness, it fundamentally relies on the linear mean trajectory defined in (9). However, speech signals inherently exhibit di-versity and reside on a complex, nonlinear manifold. The relationship between observed noisy spectrograms and their corresponding clean targets is highly dynamic and context-dependent, varying greatly across diverse signal-to-noise ratios (SNRs) and noise types. Consequently, a simple linear interpo-lation for xt fails to capture these complicated, data-dependent dependencies. This geometric mismatch makes the network learn an inefficient transport path, imposing a heavy burden on the model capacity to compensate for the errors arising from such rigid assumptions. To overcome this, we propose SB-RF, which replaces the fixed linear prior with a learnable, geometry-aware trajectory formulated via SB. Specifically, we replace the BB kernel with the SB process defined in (7) to generate the perturbed signal 
+
+xt during training. By minimizing the KL divergence to a cho-sen reference process under endpoint constraints connecting the noisy distribution πy and the clean distribution πx, SB naturally discovers the most probable transport path that respects the in-trinsic manifold of the speech data. Consequently, the result-ing mean and variance schedules for xt are dynamically gov-erned by the Schr¨ odinger potentials, enabling the SB solution to adaptively model the complex dependencies between noisy and clean speech. Standard SB paths are inherently stochastic and curved due to the diffusion term arising from entropy regularization. How-ever, in the limit of vanishing regularization, the entropic in-terpolation converges to the optimal transport geodesic. Cru-cially, under quadratic Euclidean cost, these optimal transport geodesics are deterministic straight lines traversed at constant speed [22, 23]. To align with this theoretical optimum, we adopt the velocity-matching objective of RF. The learned vec-tor vθ (xt, t ) is trained to match the linear target y − x, thereby approximating constant-velocity dynamics along the transport path. Our method effectively reduces the local truncation error of the Euler solver, facilitating high-quality inference even with one-step generation. 
+
+3.3. Training and Inference 
+
+Let (x, y) ∼ (πclean , π noisy ) denote pairs of clean and noisy STFT spectrograms sampled from their respective distributions. During training, the timestep t is sampled uniformly from [ϵ, T ],where ϵ > 0 is a small constant for numerical stability and 
+
+T represents the maximum diffusion time. The perturbed sig-nal xt is sampled following the SB-derived marginal distribu-tion defined in (7). Furthermore, a variance-exploding noise schedule σ2 
+
+> t
+
+= c  k2t − 1/2 log( k) with αt = 1 is adopted to parameterize the SB process, which has been shown to yield superior performance in SB solutions [19]. We employ NCSN++ [9] as the backbone to parameterize the velocity vec-tor vθ (xt, t, y). The neural network is trained to minimize the following composite loss: 
+
+L(θ) = Lv (θ) + λ1Lmel (θ) + λ2Lpesq (θ) (11) Here, Lv (θ) represents the velocity matching loss guided by RF in (4). To further improve reconstruction fidelity and perceptual quality, we incorporate the multi-resolution Mel-spectrogram loss Lmel (θ) [24] and the PESQ loss Lpesq (θ), weighted by hyperparameters λ1 and λ2, respectively. Since vθ predicts the flow direction, the estimated clean speech ˆx used in Lmel (θ)
+
+and Lpesq (θ) is calculated under the linear-path trajectory as-sumption: ˆx = xt − (t − ϵ) · vθ (xt, t, y).For inference, we use the Euler ODE solver to recover the clean speech. Starting from xT = y and t = T , the iterative update rule is given by: 
+
+xt−∆t = xt − vθ (xt, t, y)∆ t, (12) where ∆t = ( T − ϵ)/N , and N denotes the number of infer-ence steps. Notably, our proposed SB-RF supports high-fidelity reconstruction in a single step ( N = 1 ). Finally, we reconstruct the enhanced speech via inverse STFT using the estimated com-plex spectrogram. 
+
+# 4. Experiments 
+
+4.1. Datasets and Evaluation Metrics 
+
+4.1.1. Datasets 
+
+To comprehensively evaluate both standard denoising perfor-mance and generative robustness, we organize our experiments into two tracks. Track A follows the standard VB-DMD bench-mark for comparison with prior work. Track B focuses on the generative capacity under complex real-world conditions. This track introduces an expanded training set, since limited datasets may constrain the inherent potential of generative methods in complex environments. Furthermore, we generate a simulated low-SNR test set, as the robustness of denoising under such con-ditions remains a critical challenge for real-world applications. • Standard setting (VB-DMD) The VB-DMD training set comprises 11,572 utterances, generated by mixing clean speech from the VCTK dataset [25] with DEMAND noise signals [26] and two artificial noises (babble and speech-shaped) at SNRs of 0, 5, 10, 15 dB. The test set con-tains 824 utterances with SNRs of 2.5, 7.5, 12.5, 17.5 dB. • Low-SNR robustness setting: For training, we randomly sampled 1000 hours of clean speech from WenetSpeech4TTS (Premium subset) [27] and DNS-4 [28] (500 hours each). The noise set includes DNS-4 and MUSAN [29]. Mixtures are generated on-the-fly with SNRs uniformly sampled from -10 to 15 dB. For evaluation, we randomly selected 10,000 utterances of clean speech from AISHELL-1 [30] and Lib-riSpeech [31], mixed with noise clips from WHAM! [32] at SNRs uniformly sampled from -10 to 0 dB. Crucially, we strictly ensure no overlap in speakers, utterances or noise clips between the training and test sets. 
+
+4.1.2. Evaluation Metrics 
+
+The performance is evaluated in terms of perceptual evaluation of speech quality (PESQ) [33] for perceived quality, extended short-term objective intelligibility (ESTOI) [34] for intelligibil-ity, scale-invariant measures SI-SDR, SI-SIR, and SI-SAR [35] and non-intrusive measures via DNSMOS P.808 [36]. We also report the NFE to assess efficiency. 
+
+4.2. Implementation Details Experimental Setup. All speech signals are resampled to 16 kHz, and then transformed into the complex STFT representa-tion with a window size of 510 and a hop size of 128. We obtain 
+
+F = 256 frequency bins and concatenate K = 256 consecu-tive frames to form the model input X ∈ RF ×K . An amplitude transformation ˜c = β |c|α ej∠c is applied to compensate for the heavy-tailed distribution of all complex STFT coefficients c
+
+with α = 0 .5 and β = 0 .33 [37, 38]. For the bridge process, the time boundaries are set to ϵ = 0 .03 and T = 0 .97 .We adopt NCSN++ as the backbone with 65.6M parameters and 265 GMACs [9]. The weighting hyperparameters are set to 
+
+λ1 = 33 and λ2 = 3 , and the multi-scale Mel-spectrogram loss follows the configuration in [24]. We use the Adam optimizer with an initial learning rate of 0.0001 and an exponential de-cay of 0.999 per epoch. The batch size is set to 16 per GPU. All models are trained from scratch with random initialization. Training is conducted on 8 NVIDIA RTX A800 GPUs. 
+
+Baseline Systems. The proposed SB-RF is compared against representative baselines. MP-SENet [2] is a representative discriminative method. SGMSE+ [9] and BBED [10] are score-based generative methods. SB-VE [19] is a genera-tive method that directly predicts the clean signal based on SB theory. CFM [39], LARF [11] and COSE [15] belong to velocity-matching generative methods, where LARF (modified RF) and COSE (MeanFlow) are representative one-step gener-ation benchmarks. 
+
+Evaluation Setup. For Track A, the proposed methods are trained and evaluated solely on VB-DMD, and all baselines adopt official results from the original paper or author-released checkpoints are used when available. As for Track B, we retrain selected baselines and the proposed methods on the expanded training set. All baselines are implemented with officially re-leased code and recommended configurations. 
+
+4.3. Experimental Results 
+
+Table 1 compares the performance of different methods on the VB-DMD Track A test set. With one-step generation, the pro-posed SB-RF achieves leading performance among generative SE approaches, recording the highest PESQ of 3.39, SI-SDR of 19.5 dB, and the best ESTOI of 0.88. It significantly out-performs conventional diffusion baselines such as SGMSE+, BBED and SB-VE, which suffer from high inference latency (15 to 60 NFEs). When compared to the conditional flow matching (CFM) method designed for fast inference (typically requiring 5 NFEs), SB-RF yields significantly higher PESQ and SI-SDR with NFE = 1. Furthermore, SB-RF outperforms one-step generative baselines such as LARF and COSE by a large margin (e.g., +0.37 PESQ over COSE), verifying that the pro-posed integration of the SB prior with the RF objective provides superior performance with high efficiency. Table 1: Speech enhancement results on Track A test set 
+
+Method NFE PESQ ESTOI SI-SDR SI-SIR SI-SAR 
+
+noisy 1 1.97 0.79 8.4 8.4 −
+
+SGMSE+ 15 2.80 0.86 17 .2 26 .9 17 .9
+
+BBED 60 3.09 0.88 18 .8 30 .1 19 .4
+
+SB-VE 50 2.91 0.88 19 .4 − −
+
+CFM 5 3.12 0.88 19 .0 32.2 19 .4
+
+COSE 1 3.02 0.87 19 .3 31 .7 19 .8
+
+LARF 1 2.97 0.87 19 .2 26 .4 20.7 
+
+BB-RF 1 3.28 0.87 18 .9 28 .7 19 .9
+
+SB-RF 1 3.39 0.88 19.5 30 .0 20 .1
+
+Table 2 presents generalization performance on the simu-lated low-SNR test set for Track B. In this adverse setting, SB-RF demonstrates strong robustness, achieving the highest PESQ Table 2: Speech enhancement results on Track B test set 
+
+Method NFE PESQ ESTOI SI-SDR DNSMOS 
+
+noisy 1 1.12 0.36 −5.4 2.42 
+
+MP-SENet 1 2.09 0.66 10 .5 3.29 
+
+BBED 60 1.83 0.62 7.8 3.49 
+
+SB-VE 50 2.07 0.66 9.1 3.42 
+
+BB-RF 1 2.43 0.66 9.1 3.36 
+
+SB-RF 1 2.56 0.70 10 .4 3.41 
+
+SB-RF 5 2.46 0.70 10.7 3.42 
+
+SB-RF 10 2.44 0.70 10.7 3.43 
+
+(2.56) and ESTOI (0.70) among all baselines. Under unseen low-SNR conditions, SB-RF outperforms the representative dis-criminative baseline MP-SENet in terms of perceptual metrics (+0.47 PESQ, +0.05 ESTOI, +0.21 DNSMOS) while maintain-ing a comparable SI-SDR (10.4 dB vs. 10.5 dB). This obser-vation suggests that our generative approach effectively recon-structs speech structures that are often suppressed by discrim-inative masks in low-SNR scenarios. While BBED achieves the highest DNSMOS (3.49) among all methods, SB-RF is marginally lower (3.41). However, given that BBED requires 60 NFEs, SB-RF offers a far more favorable trade-off between inference latency and perceptual quality. We further evaluate the performance of SB-RF across NFE settings (1, 5, 10) in Table 2. Notably, NFE = 1 yields the high-est PESQ score. Although increasing the NFE to 5 or 10 leads to a slight improvement in signal fidelity metrics (SI-SDR rises from 10.4 to 10.7 dB) and marginal gains in DNSMOS, ES-TOI remains stable at 0.70 while PESQ shows a degradation of up to 0.12. This phenomenon aligns with our theoretical mo-tivation: the rectified flow objective encourages a near-straight trajectory, allowing the ODE solver to approximate the optimal solution in a single step. Given that increasing NFE introduces approximately a linear increase in computational costs without yielding substantial performance gains, NFE = 1 offers the op-timal trade-off between efficiency and quality. Finally, we highlight the critical advantage of the proposed informative prior by comparing SB-RF with BB-RF. As evi-denced in both tables, SB-RF consistently outperforms BB-RF across all key metrics (e.g., +0.13 PESQ in Track B). This em-pirically validates that initializing the flow with a Schr¨ odinger Bridge prior facilitates a more efficient transport trajectory, par-ticularly in challenging acoustic environments. 
+
+# 5. Conclusion 
+
+In this paper, we present SB-RF, an SB-guided RF frame-work that leverages the RF velocity-matching objective to straighten SB trajectories toward constant-velocity optimal transport geodesics, enabling high-fidelity speech reconstruc-tion with one-step generation. Experimental results demon-strate that SB-RF not only delivers leading performance on the standard VB-DMD benchmark among generative methods, but also maintains strong and competitive robustness under chal-lenging low-SNR conditions even with only one-step sampling (NFE = 1). Future work will focus on refining the network back-bone and exploring low-latency streaming implementations. 6. References 
+
+[1] Y. Luo and N. Mesgarani, “Conv-TasNet: Surpassing Ideal Time-Frequency Magnitude Masking for Speech Separation,” 
+
+IEEE/ACM Transactions on Audio, Speech, and Language Pro-cessing , vol. 27, no. 8, pp. 1256–1266, 2019. [2] Y.-X. Lu, Y. Ai, and Z.-H. Ling, “MP-SENet: A Speech Enhance-ment Model with Parallel Denoising of Magnitude and Phase Spectra,” in Proc. INTERSPEECH 2023 – 24 th Annual Confer-ence of the International Speech Communication Association ,Dublin, Ireland, Aug. 2023, pp. 3834–3838. [3] D. S. Williamson and D. Wang, “Time-Frequency Masking in the Complex Domain for Speech Dereverberation and Denoising,” 
+
+IEEE/ACM Transactions on Audio, Speech, and Language Pro-cessing , vol. 25, no. 7, pp. 1492–1501, 2017. [4] S. Pascual, A. Bonafonte, and J. Serr` a, “SEGAN: Speech En-hancement Generative Adversarial Network,” in Proc. INTER-SPEECH 2017 – 18 rd Annual Conference of the International Speech Communication Association , Stockholm, Sweden, Aug. 2017, pp. 3642–3646. [5] D. Baby and S. Verhulst, “SERGAN: Speech Enhancement Us-ing Relativistic Generative Adversarial Networks with Gradient Penalty,” in IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) . IEEE, 2019, pp. 106–110. [6] H. Fang, G. Carbajal, S. Wermter, and T. Gerkmann, “Variational Autoencoder for Speech Enhancement with a Noise-Aware En-coder,” in IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) . IEEE, 2021, pp. 670–680. [7] S. Leglaive, L. Girin, and R. Horaud, “A Variance Modeling Framework Based on Variational Autoencoders for Speech En-hancement,” in Proc. International Workshop on Machine Learn-ing for Signal Processing (MLSP) . IEEE, 2018, pp. 1–6. [8] Y.-J. Lu, Z.-Q. Wang, S. Watanabe, A. Richard, C. Yu, and Y. Tsao, “Conditional Diffusion Probabilistic Model for Speech Enhancement,” in IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) . IEEE, 2022, pp. 7402– 7406. [9] J. Richter, S. Welker, J.-M. Lemercier, B. Lay, and T. Gerkmann, “Speech Enhancement and Dereverberation with Diffusion-based Generative Models,” IEEE/ACM Transactions on Audio, Speech, and Language Processing , vol. 31, pp. 2351–2364, 2023. [10] B. Lay, S. Welker, J. Richter, and T. Gerkmann, “Reducing the prior mismatch of stochastic differential equations for diffusion-based speech enhancement,” in Proc. INTERSPEECH 2023 – 24 th 
+
+Annual Conference of the International Speech Communication Association , Dublin, Ireland, Aug. 2023, pp. 3809–3813. [11] Z.-X. Li and N. Inoue, “Locally Aligned Rectified Flow Model for Speech Enhancement Toward Single-Step Diffusion,” in Proc. IN-TERSPEECH 2024 – 25 th Annual Conference of the International Speech Communication Association , Kos, Greece, Sep. 2024, pp. 2195–2199. [12] Kirdey, Stanislav, “VoiceRestore: Flow-Matching Transformers for Speech Recording Quality Restoration,” 2025. [Online]. Available: https://arxiv.org/abs/2501.00794 [13] M. Cross and A. Ragni, “Flowing Straighter with Conditional Flow Matching for Accurate Speech Enhancement,” 2025. [Online]. Available: https://arxiv.org/abs/2508.20584 [14] S. Welker, B. Lay, M. Hillemann, T. Peer, and T. Gerkmann, “Real-Time Streamable Generative Speech Restoration with Flow Matching,” 2025. [Online]. Available: https://arxiv.org/abs/2512. 19442 [15] Yang, Gang and Lei, Yue and Tai, Wenxin and Wu, Jin and Chen, Jia, “COMPOSE YOURSELF: Average-Velocity Flow Matching for One-Step Speech Enhancement,” 2025. [Online]. Available: https://arxiv.org/abs/2509.15952 [16] Y. Zhu, B. Kang, Z. Wang, X. Li, Z. Zhang, W. Li, L. Xiao, W. Xue, and L. Xie, “MeanFlowSE: One-Step Generative Speech Enhancement via MeanFlow,” 2025. [Online]. Available: https://arxiv.org/abs/2509.23299 [17] V. De Bortoli, J. Thornton, J. Heng, and A. Doucet, “Diffusion Schr¨ odinger Bridge with Applications to Score-Based Generative Modeling,” in Advances in Neural Information Processing Sys-tems (NeurIPS) , vol. 34, 2021, pp. 17 695–17 709. [18] C. Bunne, Y.-P. Hsieh, M. Cuturi, and A. Krause, “The Schr¨ odinger bridge between Gaussian measures has a closed form,” in Proc. International Conference on Artificial Intelligence and Statistics (AISTATS) . PMLR, 2023, pp. 5802–5833. [19] A. Juki´ c, R. Korostik, J. Balam, and B. Ginsburg, “Schr¨ odinger bridge for generative speech enhancement,” in Proc. INTER-SPEECH 2024 – 25 rd Annual Conference of the International Speech Communication Association , Kos, Greece, Sep. 2024, pp. 1175–1179. [20] T. Chen, G.-H. Liu, and E. A. Theodorou, “Likelihood Training of Schr¨ odinger Bridge Using Forward-Backward SDEs Theory,” 2021. [Online]. Available: https://arxiv.org/abs/2110.11291 [21] Z. Chen, G. He, K. Zheng, X. Tan, and J. Zhu, “Schr¨ odinger Bridges Beat Diffusion Models on Text-to-Speech Synthesis,” 2023. [Online]. Available: https://arxiv.org/abs/2312.03491 [22] C. L´ eonard, “From the Schr¨ odinger problem to the Monge-Kantorovich problem,” Journal of Functional Analysis , pp. 1879– 1920, 2012. [23] Filippo Santambrogio, Optimal Transport for Applied Mathemati-cians – Calculus of Variations, PDEs, and Modeling . Cham: Birkh¨ auser, 2015. [24] R. Kumar, P. Seetharaman, A. Luebs, I. Kumar, and K. Kumar, “High-Fidelity Audio Compression with Improved RVQGAN,” in 
+
+Advances in Neural Information Processing Systems (NeurIPS) ,vol. 36, 2023, pp. 27 980–27 993. [25] J. Yamagishi, C. Veaux, and K. MacDonald, “CSTR VCTK cor-pus: English multi-speaker corpus for CSTR voice cloning toolkit (version 0.92),” University of Edinburgh. The Centre for Speech Technology Research (CSTR), pp. 271–350, 2019. [26] J. Thiemann, N. Ito, and E. Vincent, “The Diverse Environments Multi-channel Acoustic Noise Database (DEMAND): A database of multichannel environmental noise recordings,” in Proceedings of Meetings on Acoustics , vol. 19, no. 1, 2013. [27] L. Ma, D. Guo, K. Song, Y. Jiang, S. Wang, L. Xue, W. Xu, H. Zhao, B. Zhang, and L. Xie, “WenetSpeech4TTS: A 12,800-hour Mandarin TTS Corpus for Large Speech Generation Model Benchmark,” in Proc. INTERSPEECH 2024 – 25 rd Annual Con-ference of the International Speech Communication Association ,2024, pp. 1840–1844. [28] H. Dubey, V. Gopal, R. Cutler, A. Aazami, S. Matusevych, S. Braun, S. E. Eskimez, M. Thakker, T. Yoshioka, H. Gamper, and R. Aichner, “ICASSP 2022 Deep Noise Suppression Chal-lenge,” in IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) . IEEE, May 2022, pp. 9271– 9275. [29] D. Snyder, G. Chen, and D. Povey, “MUSAN: A Music, Speech, and Noise Corpus,” 2015. [Online]. Available: https: //arxiv.org/abs/1510.08484 [30] H. Bu, J. Du, X. Na, B. Wu, and H. Zheng, “AISHELL-1: An Open-Source Mandarin Speech Corpus and A Speech Recogni-tion Baseline,” in 2017 Conference of The Oriental Chapter of International Committee for Coordination and Standardization of Speech Databases and Assessment Technique(O-COCOSDA) ,2017. [31] V. Panayotov, G. Chen, D. Povey, and S. Khudanpur, “Lib-riSpeech: An ASR Corpus Based on Public Domain Audio Books,” in IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) . IEEE, 2015, pp. 5206–5210. [32] G. Wichern, J. Antognini, M. Flynn, L. R. Zhu, E. McQuinn, D. Crow, E. Manilow, and J. Le Roux, “WHAM!: Extending Speech Separation to Noisy Environments,” in Proc. INTER-SPEECH 2019 – 20 rd Annual Conference of the International Speech Communication Association , 2019, pp. 1368–1372. [33] A. W. Rix, J. G. Beerends, M. P. Hollier, and A. P. Hekstra, “Per-ceptual Evaluation of Speech Quality (PESQ) - A New Method for Speech Quality Assessment of Telephone Networks and Codecs,” in Proc. IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , 2001, pp. 749–752. [34] J. Jensen and C. H. Taal, “An Algorithm for Predicting the In-telligibility of Speech Masked by Modulated Noise Maskers,” 
+
+IEEE/ACM Transactions on Audio, Speech, and Language Pro-cessing , vol. 24, no. 11, pp. 2009–2022, 2016. [35] J. Le Roux, S. Wisdom, H. Erdogan, and J. R. Hershey, “SDR – Half-Baked or Well Done?” in IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) . IEEE, May 2019, pp. 626–630. [36] C. K. A. Reddy, V. Gopal, and R. Cutler, “DNSMOS: A Non-Intrusive Perceptual Objective Speech Quality Metric to Evaluate Noise Suppressors,” in IEEE International Conference on Acous-tics, Speech and Signal Processing (ICASSP) . IEEE, 2021, pp. 6493–6497. [37] T. Gerkmann and R. Martin, “Empirical Distributions of DFT-Domain Speech Coefficients Based on Estimated Speech Vari-ances,” in Proc. International Workshop on Acoustic Echo and Noise Control (IWAENC) , 2010, pp. 1–4. [38] S. Braun and I. Tashev, “A Consolidated View of Loss Functions for Supervised Deep Learning-Based Speech Enhancement,” in 
+
+Proc. International Conference on Telecommunications and Sig-nal Processing (TSP) , 2021, pp. 72–76. [39] S. Lee, S. Cheong, S. Han, and J. W. Shin, “FlowSE: Flow Matching-based Speech Enhancement,” in IEEE Interna-tional Conference on Acoustics, Speech and Signal Processing (ICASSP) . IEEE, 2025, pp. 1–5.

@@ -1,0 +1,2161 @@
+Title: Accelerating Sinkhorn for Entropy-Regularized Optimal Transport
+
+URL Source: https://arxiv.org/pdf/2605.30267v2
+
+Published Time: Wed, 03 Jun 2026 00:09:09 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# Accelerating Sinkhorn for Entropy-Regularized Optimal Transport 
+
+Zeyi Xu 
+
+Department of Mathematics University of California, Irvine Irvine, CA 92697 
+
+zeyix1@uci.edu 
+
+Long Chen 
+
+Department of Mathematics University of California, Irvine Irvine, CA 92697 
+
+chenlong@math.uci.edu 
+
+## Abstract 
+
+We propose Acc-Sinkhorn, a simple accelerated variant of Sinkhorn for entropy-regularized optimal transport (EOT). The method is derived from a bilevel optimiza-tion view: Sinkhorn row scaling solves the inner variable u exactly and defines the reduced dual objective f (v) = min u F (u, v ), while the remaining column scaling is a unit-step dual mirror descent step in v. This structure yields a Hessian-driven Nesterov acceleration that keeps Sinkhorn’s scaling form and per-iteration cost, using only extrapolated combinations of Sinkhorn iterates. We prove an O(1 /k 2)
+
+rate under a verifiable stability condition. For an ε-approximation of unregularized OT, the resulting complexity is eO(n2/ε ), improved from eO(n2/ε 2) for Sinkhorn. On synthetic problems, color transfer, and word alignment, Acc-Sinkhorn gives a 
+
+10 ×–30 × speedup over Sinkhorn at small regularization. 
+
+## 1 Introduction 
+
+Entropic optimal transport. Given two discrete distributions a ∈ Rn 
+
+> +
+
+and b ∈ Rm 
+
+> +
+
+, the entropy-regularized optimal transport (EOT) problem is 
+
+min  
+
+> P∈Π( a,b )
+
+⟨C, P ⟩ + ε X
+
+> i,j
+
+Pij (log Pij − 1) , (1) where C ∈ Rn×m 
+
+> +
+
+is a cost matrix, ε > 0 controls the strength of the entropic regularization, and 
+
+Π( a, b ) := 
+
+n
+
+P ∈ Rn×m 
+
+> +
+
+: X
+
+> j
+
+Pij = ai, i = 1 , . . . , n, X
+
+> i
+
+Pij = bj , j = 1 , . . . , m 
+
+o
+
+is the transportation polytope. Since its introduction to machine learning by Cuturi [14] , EOT has become a standard tool in generative modeling, domain adaptation, image processing, computer vision, and natural language processing [19, 13, 30, 32, 2]. The original OT problem 
+
+min  
+
+> P∈Π( a,b )
+
+⟨C, P ⟩ (2) is a linear program and can be solved by standard LP methods, including simplex and interior-point methods [ 25 ]. These methods scale poorly for large problems: P has nm entries, interior-point methods require large KKT solves, and simplex-type methods may need many pivots on degenerate transport polytopes. In contrast, EOT has a unique positive minimizer and admits simple O(nm )-per-iteration algorithms that exploit the transport structure and are easy to parallelize on GPUs. 
+
+> Preprint.
+> arXiv:2605.30267v2 [math.OC] 1 Jun 2026
+
+Sinkhorn algorithm. The Sinkhorn algorithm [ 29 ] alternately rescales the rows and columns of the kernel matrix K = exp( −C/ε ) to enforce the marginal constraints. Each iteration costs O(nm )
+
+and is easy to parallelize. Its convergence has been studied through Hilbert’s projective metric, block coordinate descent, sharp ε-dependent estimates, and mirror descent in continuous and discrete time [17, 5, 20, 10, 27, 24, 21, 3, 11]. Despite these advances, a central question remains: can Sinkhorn be accelerated to improve its accuracy dependence without losing its simplicity? 
+
+Related Work. We call a method accelerated if its error decays as O(1 /k 2) rather than the O(1 /k )
+
+rate of Sinkhorn, where k is the number of full Sinkhorn-type iterations. For simplicity, we discuss complexity for m = n. For an ε-approximation of the original OT problem, the total cost is often 
+
+O(np/ε q ) for positive p and q. Existing acceleration methods fall into three broad categories. 
+
+(i) Coordinate-wise and stochastic methods. Coordinate-wise and stochastic variants, such as Greenkhorn, reduce the cost of each iteration by updating only part of the variables or by using stochastic estimates [ 1, 22 , 18 ]. These methods can improve practical efficiency, but they retain the 
+
+O(1 /k ) convergence behavior of Sinkhorn and thus do not improve its dependence on ε.
+
+(ii) Nesterov acceleration and primal-dual methods. Accelerated primal-dual methods, such as APDAGD, improve the ε-dependence of Sinkhorn by applying Nesterov-type acceleration or accelerated mirror descent to the EOT dual problem [ 15 , 22 ]. However, they typically require line search or adaptation to local smoothness and are more complex to implement than Sinkhorn. 
+
+(iii) Sinkhorn variants with modified update rules. Sinkhorn variants with modified update rules, such as overrelaxed Sinkhorn and annealed Sinkhorn, keep the scaling structure of Sinkhorn while changing the update or regularization schedule [ 31 , 8]. They can improve local convergence or practical behavior, but they do not give a global O(1 /k 2) acceleration with a parameter-free update. In short, existing methods do not simultaneously achieve an accelerated O(1 /k 2) rate, O(n2/ε )
+
+complexity, and a parameter-free simple implementation; see Table 1. Table 1: Comparison of algorithms for entropy-regularized optimal transport ( n = m). 
+
+Method Rate Total complexity Parameters L, μ 
+
+Sinkhorn [14, 1] O(1 /k ) eO(n2/ε 2) free Greenkhorn [1, 22] O(1 /k ) eO(n2/ε 2) free Overrelaxed Sinkhorn [31] O(ρk) (local) eO(n2/ε ) (local) spectral parameter APDAGD [15, 22] O(1 /k 2) eO(n5/2/ε ) linesearch for L
+
+APDAMD [22] O(1 /k 2) eO(n2√δ/ε ) linesearch for L
+
+Annealed Sinkhorn [8] O(1 /√k) heuristic schedule 
+
+Acc-Sinkhorn (ours) O(1 /k 2) eO(n2/ε ) L = 1 ; homotopy μ
+
+Our contribution. The main contribution of this paper is Acc-Sinkhorn , a simple accelerated variant of Sinkhorn that keeps the O(nm ) per-iteration cost of Sinkhorn while improving the convergence rate from O(1 /k ) to O(1 /k 2). As shown in Table 1, Acc-Sinkhorn is the only method in the table that combines accelerated convergence, Sinkhorn-level per-iteration cost, and a simple update rule without line search. Its smoothness parameter is fixed by the geometry, namely L = 1 , and the strong-convexity parameter μ is handled by a homotopy schedule rather than by manual tuning. Numerically, Acc-Sinkhorn achieves a 10 ×–30 × speedup over Sinkhorn on synthetic datasets, color transfer, and word alignment at small ε.The acceleration is built on a bilevel view of Sinkhorn. Let F (u, v ) be the dual objective of (1) , where 
+
+(u, v ) are the Lagrange multipliers for the marginal constraints. For each fixed v, the inner problem 
+
+u(v) = arg min  
+
+> u
+
+F (u, v )
+
+2is exactly the row-scaling step of Sinkhorn. This defines the reduced outer objective 
+
+f (v) = F (u(v), v ) = min  
+
+> u
+
+F (u, v ),
+
+and Sinkhorn can be viewed as an exact inner solve in u followed by an outer descent step in v.With the mirror function ϕ(v) = P 
+
+> j
+
+bj (evj − vj ), the outer Sinkhorn step can be written as the unit-step dual mirror descent update 
+
+vk+1 = vk − ∇ ϕ∗(∇f (vk)) . (3) Moreover, the dual relative smoothness constant is L = 1 :
+
+∇2ϕ∗(∇f (v)) ⪯ ∇ 2f ∗(∇f (v)) .
+
+Using this bilevel structure, Acc-Sinkhorn (Algorithm 1) applies a Hessian-driven Nesterov accelera-tion gradient flow [ 6] with nonlinear preconditioning to the reduced outer problem. The method keeps two sequences (xk, y k) and uses essentially one Sinkhorn step per iteration; the extra cost is only a few vector operations. A homotopy outer loop (Algorithm 2) decreases the unknown strong-convexity parameter μ by a predefined schedule and gives an accelerated O(1 /k 2) rate. Acc-Sinkhorn needs 
+
+O(τ −1/2) Sinkhorn steps to reach accuracy τ , whereas Sinkhorn needs O(τ −1) steps. For the unregularized OT problem, this inner complexity is combined with the standard entropic approximation error O(ε log n). Balancing optimization and regularization errors by setting τ = ε2
+
+gives an overall complexity of order O(n2/ε ) for an ε-approximation of the OT cost. 
+
+Limitations. In our experiments, Acc-Sinkhorn uses the step size α = √2μ and shows stable accelerated behavior. The current proof is more conservative: it gives the full accelerated guarantee under a stability condition, which holds for sufficiently small α and can be enforced by linesearch. The gap comes from controlling the metric-variation term ∥yk − x⋆∥2 
+
+> Dk+1 −D k
+
+, which is small in practice but hard to bound uniformly. Removing this condition and justifying the step size α = √2μ
+
+remain future work. 
+
+## 2 Preliminaries 
+
+Notations. For two vectors x, y ∈ Rn, we write x./y and x. ∗ y for entrywise division and multiplication, and exp( x) and log( x) for the entrywise exponential and logarithm. For a vector 
+
+x ∈ Rn, diag( x) ∈ Rn×n denotes the diagonal matrix with diagonal x. For a positive definite matrix 
+
+A, we write ∥x∥A := ( x⊤Ax )1/2 for the A-weighted norm. We write 1n ∈ Rn for the all-ones vector, dropping the subscript when the dimension is clear from context. Let N = span {1n}, and N ⊥ be its orthogonal complement, then N ⊥ = {x ∈ Rn :
+
+⟨x, 1n⟩ = 0 }. Let PN = 1n1⊤ 
+
+> n
+
+/n be the orthogonal projection onto N , and PN ⊥ = I − PN be the projection onto N ⊥.For a convex function ϕ, we write ϕ∗ for its Fenchel conjugate, ∇ϕ for its gradient, ∇2ϕ for its Hessian when exists, and the induced Bregman divergence 
+
+Dϕ(x, y ) := ϕ(x) − ϕ(y) − ⟨∇ ϕ(y), x − y⟩ ≥ 0.
+
+When ϕ is of Legendre type, the maps ∇ϕ and ∇ϕ∗ are inverses of each other. In particular, 
+
+∇ϕ∗(∇ϕ(x)) = x, ∇ϕ(∇ϕ∗(ξ)) = ξ. 
+
+Therefore, whenever ∇f (x) lies in the domain of ∇ϕ∗, we have 
+
+∇ϕ(∇ϕ∗(∇f (x))) = ∇f (x). (4) 
+
+Dual Formulation. First, note that the minimizer of (1) is unchanged if we divide the cost matrix 
+
+C by ε. We therefore assume ε = 1 in (1) for simplicity and numerical stability. The complexity bounds, however, depend on this rescaling and will be discussed later. Introducing Lagrange multipliers u ∈ Rn and v ∈ Rm for the row and column marginal constraints, we write the Lagrangian as 
+
+L(P, u, v ) = ⟨C, P ⟩ + X
+
+> i,j
+
+Pij (log Pij − 1) + ⟨u, a − P 1m⟩ + ⟨v, b − P ⊤1n⟩.
+
+3Solving the stationarity condition ∂P L(P, u, v ) = 0 gives 
+
+Pij (u, v ) = exp 
+
+
+
+ui + vj − Cij 
+
+
+
+. (5) Substituting (5) into L yields the dual objective 
+
+F (u, v ) := −L (P (u, v ), u, v ) = X
+
+> i,j
+
+exp( ui + vj − Cij ) − ⟨ u, a ⟩ − ⟨ v, b ⟩, (6) so EOT (1) is equivalent to the unconstrained dual minimization problem 
+
+min  
+
+> u∈Rn, v ∈Rm
+
+F (u, v ). (7) By the chain rule and the stationarity condition ∂P L(P (u, v ), u, v ) = 0 , the dependence of P (u, v )
+
+drops out when differentiating the reduced Lagrangian L(P (u, v ), u, v ). Thus 
+
+∂uF (u, v ) = rP (u, v ) − a, ∂v F (u, v ) = cP (u, v ) − b, (8) where rP (u, v ) and cP (u, v ) are row-sum and column-sum vectors of P . Hence ∇F (u, v ) = 0 is exactly the marginal-matching condition. Since 1⊤a = 1⊤b = 1 , for any c ∈ R we have 
+
+F (u + c1n, v − c1m) = F (u, v ) + c 1⊤a − c 1⊤b = F (u, v ). (9) This is the only ambiguity. Hence, after fixing a gauge, for example by imposing ⟨u, 1n⟩ =0, ⟨v, 1m⟩ = 0 , the minimizer of (7) is unique. 
+
+Sinkhorn as Exact Coordinate Minimization A key property of F is that it is separable in each block. For fixed v, the function F (·, v ) is strictly convex in u, and its minimizer is available in closed form. Indeed, fixing v and setting ∂uF (u, v ) = 0 gives 
+
+rP (u, v ) = a ⇐⇒ exp( ui) X
+
+> j
+
+exp( vj − Cij ) = ai ⇐⇒ ui = log ai − log  K exp( v)
+
+> i
+
+,
+
+where K := exp( −C), and K exp( v) is a matrix-vector product. Rewriting this minimizer in iterative form gives 
+
+uk+1 = uk + log( a ./ r P (uk, v k)) . (10) The same argument, applied to the v-block, gives the exact minimizer of F (u, ·) for fixed u:
+
+vk+1 = vk + log( b ./ c P (uk+1 , v k)) . (11) Equations (10) – (11) are exactly the Sinkhorn algorithm: alternating exact minimization of the dual objective F (u, v ) over the two blocks u and v.
+
+## 3 Sinkhorn as Dual Mirror Descent 
+
+In this section, we interpret Sinkhorn as dual mirror descent in the variable v, which provides the basis for the acceleration scheme in Section 4. This geometric view also gives sublinear and linear convergence of Sinkhorn; the details are deferred to Appendix A as our focus is acceleration. We first rewrite the dual problem from a bilevel point of view. The variable u is the inner variable and v is the outer variable. For each fixed v, the inner problem 
+
+u(v) = arg min  
+
+> u
+
+F (u, v )
+
+has a closed-form solution, and its optimality condition ∂uF  u(v), v  = 0 is exactly the u-update (10). This defines the reduced outer objective 
+
+f (v) := F  u(v), v  = min  
+
+> u
+
+F (u, v ). (12) Thus Sinkhorn solves the inner problem in u exactly and then updates the outer variable v by a gradient-type iteration. Since ∂uF  u(v), v  = 0 , the chain rule gives 
+
+∇f (v) = ∂uF  u(v), v  ∂v u(v) + ∇v F  u(v), v  = ∇v F  u(v), v  = cP
+
+ u(v), v  − b. (13) 4Hence ∇f (v) is the column marginal residual after the row marginal has been matched exactly. We now show that the outer Sinkhorn update is a dual mirror descent step on f . The Hessian of f
+
+has the Schur-complement form 
+
+∇2f (v) = diag( cP ) − P ⊤diag( rP )−1P ⪯ diag( cP ). (14) Let ξ = ∇f (v) = cP − b. We define the mirror geometry by 
+
+∇2ϕ∗(ξ) := diag( b + ξ)−1.
+
+Since b + ξ = cP , (14) gives 
+
+∇2ϕ∗(∇f (v)) = diag( cP )−1 ⪯ ∇ 2f (v)−1 = ∇2f ∗(∇f (v)) .
+
+Thus the dual relative smoothness inequality holds with constant L = 1 [23]; equivalently, 
+
+Dϕ∗ (ξ, η ) ≤ Df ∗ (ξ, η )
+
+for all admissible ξ, η . Integrating ∇2ϕ∗ with ∇ϕ∗(0) = 0 gives 
+
+∇ϕ∗(ξ) = log( 1 + ξ./b ), ϕ(v) = 
+
+> m
+
+X
+
+> j=1
+
+bj (evj − vj ).
+
+Therefore, unit-step dual mirror descent gives 
+
+vk+1 = vk − ∇ ϕ∗(∇f (vk)) = vk + log 
+
+
+
+b./c P (uk+1 , v k)
+
+
+
+, (15) which is exactly the Sinkhorn v-update (11) . This immediately implies the standard O(1 /k ) sublinear convergence of Sinkhorn [23]. Linear convergence is more subtle. The shift invariance of f follows from the corresponding invariance of the full dual objective (9): 
+
+f (v + c1) = min  
+
+> u
+
+F (u, v + c1) = min  
+
+> u
+
+F (u + c1, v ) = f (v).
+
+Hence f is not strongly convex. We remove this degeneracy by the normalized Sinkhorn iteration 
+
+v0 ∈ N ⊥, vk+1 = Sinkhorn (vk) := vk − PN ⊥ ∇ϕ∗ PN ⊥ ∇f (vk). (16) It differs from the plain Sinkhorn iteration only by an additive multiple of 1, and therefore gives the same primal update P k. The normalized iterates are uniformly bounded [ 5]. After the normalization, one proves a Polyak–Łojasiewicz inequality and obtain linear convergence; see Appendix A. 
+
+## 4 Accelerating Sinkhorn 
+
+Motivated by Hessian-driven Nesterov accelerated gradient (HNAG) [ 6 ], we propose the following accelerated dual mirror descent scheme for minimizing f :
+
+xk+1 − xk
+
+α = yk − xk+1 − 1
+
+α ∇ϕ∗(∇f (xk)) ,yk+1 − yk
+
+α = xk+1 − yk+1 − 1
+
+μ ∇ϕ∗(∇f (xk+1 )) .
+
+(17) Here xk is the main iterate, corresponding to vk in Sinkhorn, yk is an auxiliary iterate. Following Chen and Xu [7] , we set α = √2μ and introduce wk := αy k. This gives the equivalent simplified updates in Algorithm 1. We also give a practical homotopy version in Algorithm 2, where 
+
+μ is decreased to 0 by a prescribed schedule. The Sinkhorn step computed in the update of wk+1 is reused in the next update of xk+2 . Therefore, each iteration requires only one normalized Sinkhorn step. The extra cost is negligible, since it consists only of vector additions and scalar multiplications. 5Algorithm 1 Accelerated Dual Mirror Descent for Sinkhorn (Acc-Sinkhorn)  
+
+> 1:
+
+Input: x0 ∈ N ⊥, w0 ∈ N ⊥, 0 < μ < 1, and m ≥ 1 
+
+> 2:
+
+Set α = √2μ 
+
+> 3:
+
+for k = 0 , 1, . . . , m − 1 do  
+
+> 4:
+
+xk+1 = 11+ α (wk + Sinkhorn (xk))  
+
+> 5:
+
+wk+1 = 11+ α
+
+ wk + ( α2 − 2) xk+1 + 2 Sinkhorn (xk+1 ) 
+
+> 6:
+
+end for  
+
+> 7:
+
+Output: (xm, w m)
+
+Algorithm 2 Acc-Sinkhorn with Homotopy  
+
+> 1:
+
+Input: x0 ∈ Rn, w0 ∈ Rn, 0 < μ 0 < 1, m0 ≥ 1, and maxIt  
+
+> 2:
+
+for k = 0 , 1, . . . , maxIt do  
+
+> 3:
+
+(xk+1 , w k+1 ) = Acc-Sinkhorn (xk, w k, μ k, m k) 
+
+> 4:
+
+μk+1 = μk/2, mk+1 = ⌊√2 mk⌋ + 1  
+
+> 5:
+
+end for Convergence Analysis. We analyze the convergence of (17) through its continuous-time flow and discretization effects. Define the Lyapunov function 
+
+E(x, y ; μ, D ) := f (x) − f (x⋆) + μ
+
+2 ∥y − x⋆∥2
+
+> D(p(x))
+
+, p(x) := ∇ϕ∗(∇f (x)) , (18) where x⋆ ∈ N ⊥ is the optimal solution. The diagonal matrix D(z) is 
+
+D(z) := diag( b. ∗ (exp( z) − 1)./z ) , (19) where the quotient is entrywise and is understood by continuous extension at z = 0 , with D(0) = 
+
+∇2ϕ(0) . Equivalently, D(z)z = ∇ϕ(z).
+
+Lemma 1. There exists R > 0 such that, for all iterates (xk, y k) of (17) with α sufficiently small, 
+
+∥xk − x⋆∥D(p(xk )) ≤ R, ∥yk − x⋆∥ ≤ R, k ≥ 0. (20) The proof is given in Appendix B.2, using a different Lyapunov function. Although the boundedness can be established for α < √2μ, in practice, we choose the exact upper bound α = 2 √μ, and the iterates are always observed to be bounded in our experiments. Under Lemma 1, our main result is as follows. 
+
+Theorem 1. Choose (x0, y 0) and μ0 such that 
+
+E(x0, y 0; μ0, D (p(x0))) ≤ (R2 + 1) μ0.
+
+Let (xk, y k, μ k) be generated by Algorithm 2 and assume (20) holds. Then 
+
+E(xk, y k; μk, D (p(xk))) ≤ (R2 + 1) μk, ∀ k ≥ 0. (21) 
+
+Moreover, let Mk := Pki=0 mi be the total number of inner iterations after the kth outer loop, and 
+
+C∗ := √2−1(√2LF +√2μ0) ln 
+
+ 2( R2+1) 
+
+ be a constant. Then 
+
+E(xk, y k; μk, D (p(xk))) ≤ R2 + 1 
+
+ C∗Mk + μ−1/20
+
+2 ∀ k ≥ 0. (22) 
+
+In particular, it takes Mk = O(τ −1/2) iterations to reach accuracy E(xk, y k; μk, D (p(xk))) ≤ Cτ. 
+
+We give an outline of the proof in the rest of this section and leave details to Appendix C. 
+
+Continuous-time ODE We first consider the continuous-time ODE of the scheme (17) 
+
+x′ = y − x − β∇ϕ∗(∇f (x)) , y′ = x − y − 1
+
+μ ∇ϕ∗(∇f (x)) , (23) 6where β > 0 is a parameter. The parameter μ is omited in the Lyapunov function when it is fixed and clear from the context. Let z = ( x, y ) and let G(z) denote the right-hand side of the ODE. We have the following identity for the time derivative of the Lyapunov function along the trajectory of the ODE. The decay is exponential up to positive perturbation terms. 
+
+Lemma 2. Let z(t) = ( x(t), y (t)) be a trajectory of z′ = G(z). Define D(t) := D(p(x(t))) , where 
+
+D(·) is the diagonal map (19) . Then, for all t ≥ 0, the following identity holds: 
+
+ddt E(x(t), y (t); D(t)) = − E (x, y ; D) − Df (x⋆, x ) − β∥p(x)∥2 
+
+> D(t)
+
+− μ
+
+2 ∥x − y∥2
+
+> D(t)
+
++ μ
+
+2 ∥x − x⋆∥2 
+
+> D(t)
+
++ μ
+
+2 ∥y − x⋆∥2
+
+> D′(t)
+
+.
+
+Discretization and convergence analysis We define this discrete metric by 
+
+pk := ∇ϕ∗(∇f (xk)) , Dk := D(pk),
+
+where D(·) is the diagonal map defined in (19). 
+
+Lemma 3. Let zk = ( xk, y k) be the iterates generated by (17) and assume (20) holds. Then 
+
+E(zk+1 ; Dk+1 ) − E (zk; Dk+1 ) ≤ − αE(zk+1 ; Dk+1 ) + αμ 
+
+2 R2 − Dϕ∗ (0 , ∇f (xk)) + α2
+
+2μ ∥∇ ϕ∗(∇f (xk+1 )) ∥2 
+
+> Dk+1
+
+− Dϕ∗ (∇f (xk+1 ), 0) .
+
+We next bound the change of the Lyapunov function induced by the change of the metric D.
+
+Lemma 4. Let zk = ( xk, y k) be the iterates generated by (17) and assume (20) holds. Then there exists a constant C > 0 such that for any k ≥ 1,
+
+E(zk; Dk+1 ) − E (zk; Dk) = μ
+
+2 ∥yk − x⋆∥2 
+
+> Dk+1 −D k
+
+≤ C μ
+
+2 R2.
+
+Combining the above results, we conclude that the Lyapunov function decays geometrically up to a bounded perturbation term of order μR 2.
+
+Theorem 2 (Perturbed exponential decay of the Lyapunov function) . Let zk = ( xk, y k) be the iterates generated by (17) and assume (20) holds. Then there exists a constant C > 0 such that for any k ≥ 1,
+
+E(xk+1 , y k+1 ; Dk+1 ) ≤
+
+ 11 + α
+
+k+1 
+
+E(x0, y 0; D0) + CμR 2.
+
+Then using homotopy argument, we can obtain Theorem 1. 
+
+Discussion on Complexity Let P ⋆ be the solution of the unregularized optimal transport problem (2). The solution P ε of the ε-regularized optimal transport problem (1) satisfies [25] 
+
+⟨C, P ε⟩ − ⟨ C, P ⋆⟩ ≤ ε log nm, 
+
+where P ⋆ is the unregularized solution. The suboptimality of the Acc-Sinkhorn iterate Pk =
+
+P (u(vk), v k) is composed of two parts: optimization error ⟨C, P k⟩ − ⟨ C, P ε⟩ and regularization bias 
+
+⟨C, P ε − P ⋆⟩. More precisely, 
+
+⟨C, P k⟩ − ⟨ C, P ⋆⟩ = ⟨C, P k − P ε⟩ + ⟨C, P ε − P ⋆⟩ ≤ ∥ Pk − P ε∥1∥C∥∞ + ε log nm. 
+
+To reach accuracy τ , we set ε = O(τ / log nm ) and run Acc-Sinkhorn until ∥Pk − P ε∥1 ≲ τ / ∥C∥∞.Because ∥Pk − P ε∥1 = ∥P ⊤ 
+
+> k
+
+1 − b∥1 = ∥∇ f (vk)∥1, the convergence rate of Acc-Sinkhorn shows this takes O(∥C∥∞/τ ) iterations. The total complexity is O(n2/τ ), a large improvement over the 
+
+O(n2/τ 2) iterations of Sinkhorn. Since each iteration of Acc-Sinkhorn has a similar cost to Sinkhorn, the total complexity is also better. 
+
+## 5 Numerical Experiments 
+
+All experiments were run in MATLAB R2025b on an Apple M4 laptop with 24 GB of memory. Random seeds were fixed, and the code is publicly available. 7Synthetic Datasets We first test Algorithm 2 on synthetic datasets. We generate two discrete distributions a ∈ Rn
+
++ and b ∈ Rm
+
++ by sampling each entry independently from [0 , 1] and then normalizing each vector to have unit sum. We generate the cost matrix C in the same way, with entries sampled independently from [0 , 1] and then rescaled so that P
+
+i,j Cij = 1 . We compare Acc-Sinkhorn with Sinkhorn for several values of n, m, and ε.Figure 1 shows the error decay with respect to running time. The re-sults show that Algorithm 2 con-verges more than 10 × faster than Sinkhorn on these synthetic prob-lems, while keeping a similar per-iteration running time. The method is also stable with respect to the choices of μ0 and m0. These re-sults support the practical efficiency of the proposed method for high-accuracy EOT computation. (a) n = 100 , m = 50 , ε = 10 −8.0 1000 2000 3000 4000 5000                   
+
+> Gradient Evaluations
+> 10 -6
+> 10 -5
+> 10 -4
+> 10 -3
+> 10 -2
+> 10 -1
+> 10 0
+> Relative Function Gap
+> Convergence vs Gradient Evaluations, n=100, m=100, eps=1.00e-08
+> Acc: 70=1.2e-01, m 0=5
+> Acc: 70=1.2e-01, m 0=10
+> Acc: 70=6.2e-02, m 0=5
+> Acc: 70=6.2e-02, m 0=10
+> Acc: 70=3.1e-02, m 0=5
+> Acc: 70=3.1e-02, m 0=10
+> Sinkhorn
+> 00.1 0.2 0.3 0.4 0.5
+> Running Time
+> 10 -6
+> 10 -5
+> 10 -4
+> 10 -3
+> 10 -2
+> 10 -1
+> 10 0
+> Relative Function Gap
+> Convergence vs Time, n=100, m=100, eps=1.00e-08
+> Acc: 70=1.2e-01, m 0=5
+> Acc: 70=1.2e-01, m 0=10
+> Acc: 70=6.2e-02, m 0=5
+> Acc: 70=6.2e-02, m 0=10
+> Acc: 70=3.1e-02, m 0=5
+> Acc: 70=3.1e-02, m 0=10
+> Sinkhorn
+
+(b) n = m = 100 , ε = 10 −8.
+
+Figure 1: Synthetic dataset results. 
+
+Color Transfer We evaluate the proposed Acc-Sinkhorn algorithm on a color transfer task between two images, which serves as a canonical application of optimal transport in image processing [ 26 , 16 ]. We use two RGB images: a source image of size 1000 × 669 pixels (providing the target color palette) and a content image of size 1000 × 750 pixels (whose structure is to be preserved). From each image we uniformly subsample n = 1000 pixels at random, yielding source and target point clouds {xi}ni=1 
+
+and {yj }nj=1 , where each point represents an RGB color value normalized to [0 , 1] 3.The cost matrix is defined as the squared Euclidean distance in RGB color space: 
+
+Cij = ∥xi − yj ∥22, i, j ∈ [n], (24) normalized by its maximum entry so that C ∈ [0 , 1] n×n. Both marginals are set to the uniform distribution: ai = bj = 1 /n .We compare the proposed accelerated Sinkhorn algorithm against the standard Sinkhorn algorithm, both implemented in the log-domain for numerical stability [ 9 ]. All solvers are initialized at the zero dual variable v0 = 0 ∈ R2n and are terminated when the marginal violation satisfies 
+
+∥P 1 − a∥1 + ∥P ⊤1 − b∥1 < τ. (25) We use the ℓ1 norm because it gives a direct measure of total feasibility error in the row and column marginals. The threshold τ = 2 /n means that the average absolute error is about 1/n for each marginal vector, which matches the natural scale of the problem when the marginals are normalized probability vectors. Given the converged transport plan P ∗, we use barycentric projection to assign a transferred color to each sampled target pixel. These colors are then propagated to all 750 ,000 full-resolution target pixels by nearest-neighbor lookup, and the final image is clipped to [0 , 1] 3.Table 2 reports the solver statistics. For small regularization parameters, Acc-Sinkhorn is more than 
+
+10 × faster than Sinkhorn. Figure 2 shows the transferred colors as ε decreases. Smaller ε gives a sharper transport plan and better matches the source palette, but it also makes Sinkhorn much slower. Acc-Sinkhorn computes this sharper regime more efficiently. 
+
+Word Embedding Alignment We test Acc-Sinkhorn on bilingual word embedding alignment, where a sharp, near-permutation transport plan is needed and small ε is important. We use the aligned multilingual word vectors of Conneau et al. [12] , trained on Wikipedia with fastText [ 4 ]. We take the top n = 500 English and French words, giving normalized embeddings 
+
+{xi}ni=1 , {yj }nj=1 ⊂ R300 . Ground-truth pairs are taken from the MUSE bilingual dictionary [ 12 ]; we keep only pairs that appear in both vocabularies and remove duplicates. 8Table 2: Color transfer ( n = 1000 ). Acc-Sinkhorn Sinkhorn                              
+
+> εTol It Time It Time
+> 12e-3 30.037 10.013
+> 10 −12e-3 50.063 40.049
+> 10 −22e-3 18 0.217 37 0.436
+> 10 −32e-3 46 0.539 359 4.232
+> 10 −42e-3 239 3.244 3507 49.691
+
+Table 3: Word alignment (En–Fr, n = 500 ). Acc-Sinkhorn Sinkhorn                                             
+
+> εTop 1/5 It Time It Time
+> 176.7/94.0 40.013 10.003
+> 10 −178.0/94.8 60.019 40.012
+> 10 −282.8/95.3 234 0.638 5085 13.745
+> 10 −381.9/95.7 268 0.756 8254 22.993
+> 10 −482.8/94.8 667 1.494 20320 49.360
+> (a) Source (b) Target (content)
+> (c) ε= 1 (d) ε= 10 −1(e) ε= 10 −2(f) ε= 10 −3(g) ε= 10 −4
+
+Figure 2: Color transfer results for decreasing regularization parameter ε by Acc-Sinkhorn. The source image (top left) provides the color palette and the target image (top right) provides the content. As ε decreases, the transport plan becomes sharper and the transferred colors more faithfully reproduce the source palette, at the cost of increased computation. The cost is the cosine distance 
+
+Cij = 1 − ⟨ xi, y j ⟩, i, j ∈ [n], (26) with C normalized to [0 , 1] n×n. Both marginals are uniform: ai = bj = 1 /n .We compare Acc-Sinkhorn with Sinkhorn, both implemented in the log domain for numerical stability at small ε [9]. All solvers start from v0 = 0 ∈ R2n and stop when the marginal violation (25) holds with τ = 0 .01 × 2/n , corresponding to a 1% average marginal error. Given the converged plan P ∗, we predict the French translation of English word i by 
+
+ˆj(i) = arg max  
+
+> j∈[n]
+
+P ∗ 
+
+> ij
+
+. (27) We report top-1 and top-5 accuracy over valid evaluation pairs. Table 3 reports accuracy and solver statistics. Acc-Sinkhorn is up to 30 × faster than Sinkhorn, with larger gains at smaller ε, where Sinkhorn requires many more iterations. 
+
+## 6 Conclusion 
+
+This paper presents a simple and efficient accelerated Sinkhorn algorithm for computing entropy-regularized optimal transport that maintains the per-iteration cost of Sinkhorn while achieving a 
+
+10 ×–30 × speedup in the small ε regime. Lyapunov convergence analysis proves the O(1 /k 2) rate under a verifiable stability condition and suggests the overall complexity eO(n2/ε ), compared to 
+
+O(1 /k ) and eO(n2/ε 2) for Sinkhorn. Numerical experiments on synthetic and real datasets support the practical efficiency of the method. Removing the stability condition and proving the limit step size α = √2μ directly remain important directions for future work. 9References 
+
+[1] Jason Altschuler, Jonathan Niles-Weed, and Philippe Rigollet. Near-linear time approxima-tion algorithms for optimal transport via sinkhorn iteration. Advances in neural information processing systems , 30, 2017. [2] David Alvarez-Melis, Youssef Mroueh, and Tommi Jaakkola. Unsupervised hierarchy match-ing with optimal transport over hyperbolic spaces. In International Conference on Artificial Intelligence and Statistics , pages 1606–1617. PMLR, 2020. [3] Pierre-Cyril Aubin-Frankowski, Anna Korba, and Flavien Léger. Mirror descent with relative smoothness in measure spaces, with application to sinkhorn and em. Advances in Neural Information Processing Systems , 35:17263–17275, 2022. [4] Piotr Bojanowski, Edouard Grave, Armand Joulin, and Tomas Mikolov. Enriching word vectors with subword information. Transactions of the Association for Computational Linguistics , 5: 135–146, 2017. [5] Guillaume Carlier. On the linear convergence of the multimarginal sinkhorn algorithm. SIAM Journal on Optimization , 32(2):786–794, 2022. doi: 10.1137/21M1410634. URL https: //doi.org/10.1137/21M1410634 .[6] Long Chen and Hao Luo. First order optimization methods based on hessian-driven nesterov accelerated gradient flow, 2019. URL https://arxiv.org/abs/1912.09276 .[7] Long Chen and Zeyi Xu. Hnag++: A super-fast accelerated gradient method for strongly convex optimization, 2025. URL https://arxiv.org/abs/2510.16680 .[8] Lénaïc Chizat. Annealed sinkhorn for optimal transport: convergence, regularization path and debiasing. arXiv preprint arXiv:2408.11620 , 2024. [9] Lénaïc Chizat, Gabriel Peyré, Bernhard Schmitzer, and François-Xavier Vialard. Scaling algorithms for unbalanced optimal transport problems. Mathematics of Computation , 87(314): 2563–2609, 2018. [10] Lénaïc Chizat, Alex Delalande, and Tomas Vaškeviˇ cius. Sharper exponential convergence rates for sinkhorn’s algorithm in continuous settings: L. chizat et al. Mathematical Programming ,215(1):809–858, 2026. [11] Nicolas Chopin, Francesca Crucinio, and Anna Korba. A connection between tempering and entropic mirror descent. In Ruslan Salakhutdinov, Zico Kolter, Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix Berkenkamp, editors, Proceedings of the 41st International Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research , pages 8782–8800. PMLR, 21–27 Jul 2024. URL https://proceedings. mlr.press/v235/chopin24a.html .[12] Alexis Conneau, Guillaume Lample, Marc’Aurelio Ranzato, Ludovic Denoyer, and Hervé Jégou. Word translation without parallel data. In International Conference on Learning Representations (ICLR) , 2018. [13] Nicolas Courty, Rémi Flamary, Amaury Habrard, and Alain Rakotomamonjy. Joint distribution optimal transportation for domain adaptation. Advances in Neural Information Processing Systems , 30, 2017. [14] Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. Advances in neural information processing systems , 26, 2013. [15] Pavel Dvurechensky, Alexander Gasnikov, and Alexey Kroshnin. Computational optimal transport: Complexity by accelerated gradient descent is better than by sinkhorn’s algorithm. In 
+
+International conference on machine learning , pages 1367–1376. PMLR, 2018. [16] Sira Ferradans, Nicolas Papadakis, Gabriel Peyré, and Jean-François Aujol. Regularized discrete optimal transport. SIAM Journal on Imaging Sciences , 7(3):1853–1882, 2014. 10 [17] Joel Franklin and Jens Lorenz. On the scaling of multidimensional matrices. Linear Al-gebra and its Applications , 114-115:717–735, 1989. ISSN 0024-3795. doi: https://doi. org/10.1016/0024-3795(89)90490-4. URL https://www.sciencedirect.com/science/ article/pii/0024379589904904 .[18] Aude Genevay, Marco Cuturi, Gabriel Peyré, and Francis Bach. Stochastic optimization for large-scale optimal transport. Advances in neural information processing systems , 29, 2016. [19] Aude Genevay, Gabriel Peyré, and Marco Cuturi. Learning generative models with sinkhorn divergences. In International Conference on Artificial Intelligence and Statistics , pages 1608– 1617. PMLR, 2018. [20] Promit Ghosal and Marcel Nutz. On the convergence rate of sinkhorn’s algorithm. Mathematics of Operations Research , 2025. [21] Flavien Léger. A gradient descent perspective on sinkhorn. Applied Mathematics & Optimiza-tion , 84(2):1843–1855, 2021. [22] Tianyi Lin, Nhat Ho, and Michael Jordan. On efficient optimal transport: An analysis of greedy and accelerated mirror descent algorithms. In International conference on machine learning ,pages 3982–3991. PMLR, 2019. [23] Chris J Maddison, Daniel Paulin, Yee Whye Teh, and Arnaud Doucet. Dual space precondition-ing for gradient descent. SIAM Journal on Optimization , 31(1):991–1016, 2021. [24] Konstantin Mishchenko. Sinkhorn algorithm as a special case of stochastic mirror descent. 
+
+arXiv preprint arXiv:1909.06918 , 2019. [25] Gabriel Peyré and Marco Cuturi. Computational Optimal Transport , volume 11. Foundations and Trends in Machine Learning, 2019. [26] Erik Reinhard, Michael Adhikhmin, Bruce Gooch, and Peter Shirley. Color transfer between images. IEEE Computer Graphics and Applications , 21(5):34–41, 2001. [27] Mohammad Reza Karimi, Ya-Ping Hsieh, and Andreas Krause. Sinkhorn flow as mirror flow: A continuous-time framework for generalizing the Sinkhorn algorithm. In Sanjoy Dasgupta, Stephan Mandt, and Yingzhen Li, editors, Proceedings of The 27th International Conference on Artificial Intelligence and Statistics , volume 238 of Proceedings of Machine Learning Research , pages 4186–4194. PMLR, 02–04 May 2024. URL https://proceedings.mlr. press/v238/reza-karimi24a.html .[28] R Tyrrell Rockafellar. Convex analysis , volume 28. Princeton university press, 1997. [29] Richard Sinkhorn. A relationship between arbitrary positive matrices and doubly stochastic matrices. The Annals of Mathematical Statistics , 35(2):876–879, 1964. [30] Justin Solomon, Fernando de Goes, Gabriel Peyré, Marco Cuturi, Adrian Butscher, Andy Nguyen, Tao Du, and Leonidas Guibas. Convolutional wasserstein distances: efficient optimal transportation on geometric domains. ACM Trans. Graph. , 34(4), July 2015. ISSN 0730-0301. doi: 10.1145/2766963. URL https://doi.org/10.1145/2766963 .[31] Alexis Thibault, L’enaic Chizat, Charles Dossal, and Nicolas Papadakis. Overrelaxed sinkhorn-knopp algorithm for regularized optimal transport. Algorithms , 14:143, 2017. URL https: //api.semanticscholar.org/CorpusID:53997178 .[32] Lin Xu, Han Sun, and Yuai Liu. Learning with batch-wise optimal transport loss for 3d shape recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 3333–3342, 2019. 11 A Proofs for Section 3 
+
+A.1 Hessian of the reduced objective f
+
+First, we have the following lemma that relates the Hessians of a convex function and its conjugate, which is a standard result in convex analysis; see for example [28]. 
+
+Lemma 5 (Inverse Hessian identity) . Let f be C2 and strictly convex, and let v be such that 
+
+ξ = ∇f (v) is well defined. Then 
+
+∇2f ∗(ξ) = ∇2f (v)−1.
+
+The following lemma gives the closed-form expression of ∇2f .
+
+Lemma 6 (Hessian of f ). The Hessian of f is given by the Schur-complement formula 
+
+∇2f (v) = diag( cP ) − P ⊤diag( rP )−1P. (28) 
+
+Proof. First, (13) gives ∇f (v) = cP − b. Differentiating with respect to v gives 
+
+∇2f (v) = ddv cP (u(v), v ) = ∂c P
+
+∂u du dv + ∂c P
+
+∂v . (29) Since Pij = exp( ui + vj − Cij ), we have 
+
+∂P ij 
+
+∂u i′
+
+= δii ′ Pij , ∂P ij 
+
+∂v j′
+
+= δjj ′ Pij .
+
+Therefore, for rP ∈ Rn and cP ∈ Rm,
+
+∂r P
+
+∂u = diag( rP ), ∂r P
+
+∂v = P, 
+
+and ∂c P
+
+∂u = P ⊤, ∂c P
+
+∂v = diag( cP ).
+
+By the implicit function theorem, differentiating rP (u(v), v ) = a with respect to v gives 
+
+du
+
+dv = −
+
+ ∂r P
+
+∂u 
+
+−1  ∂r P
+
+∂v 
+
+
+
+= −diag( rP )−1P. 
+
+Substituting into (29) yields 
+
+∇2f (v) = P ⊤ −diag( rP )−1P  + diag( cP ) = diag( cP ) − P ⊤diag( rP )−1P, 
+
+which is the claimed formula. 
+
+A.2 Sublinear Convergence rate of the Sinkhorn algorithm 
+
+In this section, we show that the dual relative smoothness inequality holds with constant L = 1 ,which gives a sublinear convergence rate of O(1 /k ) for the original Sinkhorn iteration. 
+
+Lemma 7 (1-smoothness) . Let vk be the sequence generated by the Sinkhorn iteration (15) . Then f
+
+is dual relatively smooth with respect to ϕ with constant L = 1 .Proof. Since ∇ϕ(v) = b. ∗ exp( v) − b, differentiating componentwise gives 
+
+∇2ϕ(v) = diag  b. ∗ exp( v).
+
+Using ∇2ϕ∗(η) = ∇2ϕ ∇ϕ∗(η)−1 and ∇ϕ∗(η) = log( 1 + η./b ), we obtain 
+
+∇2ϕ∗(η) = diag 
+
+
+
+b. ∗ exp  log( 1 + η./b )−1
+
+= diag( b + η)−1, η > −b. 
+
+Let ξ = ∇f (v) = cP − b. Then b + ξ = cP , and hence 
+
+∇2ϕ∗(ξ) = diag( cP )−1.
+
+12 On the other hand, 
+
+∇2f ∗(ξ) = ∇2f (v)−1, ∇2f (v) = diag( cP ) − P ⊤diag( rP )−1P. 
+
+Since P ⊤diag( rP )−1P ⪰ 0, we have 
+
+∇2ϕ∗(∇f (v)) = diag( cP )−1 ⪯ ∇ 2f (v)−1 = ∇2f ∗(∇f (v)) ,
+
+so the dual relative smoothness inequality holds with L = 1 .
+
+Theorem 3 (Theorem 3.9, [ 23 ]) . Let f, ϕ ∗ : Rd → R ∪ {∞} satisfy dual relative smoothness with constant L. If x0 ∈ int(dom f ), then for all i > 0 the iterates of Algorithm 1.1 satisfy 
+
+ϕ∗(∇f (xi)) − ϕ∗(0) ≤ Li
+
+ f (x0) − f (xmin ). (30) Therefore, Sinkhorn iteration (31) converges with rate O(1 /k ): ϕ∗(∇f (vk)) − ϕ∗(0) = O(1 /k ).
+
+A.3 Normalized Sinkhorn and linear convergence 
+
+In this section, we show the normalized Sinkhorn iteration (16) converges linearly. First, we have the following lemma for the Sinkhorn update. 
+
+Lemma 8. Let v+ := v − ∇ ϕ∗(∇f (v)) be the Sinkhorn update. Then 
+
+f (v+) − f (v) ≤ − Dϕ∗ (0 , ∇f (v)) − Dϕ∗ (∇f (v+), 0) . (31) 
+
+Proof. Let g := ∇f (v) and g+ := ∇f (v+). Since v − v+ = ∇ϕ∗(g) − ∇ ϕ∗(0) , expansion at v+
+
+and Bregman duality give 
+
+f (v+) − f (v) = ⟨g+, v + − v⟩ − Df (v, v +) = −⟨ g+, ∇ϕ∗(g) − ∇ ϕ∗(0) ⟩ − Df ∗ (g+, g ).
+
+By the three-point identity, 
+
+−⟨ g+ − 0, ∇ϕ∗(g) − ∇ ϕ∗(0) ⟩ = −Dϕ∗ (g+, 0) − Dϕ∗ (0 , g ) + Dϕ∗ (g+, g ).
+
+Using dual relative smoothness, Dϕ∗ (g+, g ) ≤ Df ∗ (g+, g ), we obtain (31). Then, we show that f is coercive on the subspace N ⊥.
+
+Lemma 9. f (v) → +∞ as ∥v∥ → ∞ along N ⊥.Proof. The minimizer u(v) satisfies ∂uF = 0 , i.e. P 
+
+> j
+
+eui(v)+ vj −Cij = ai for all i, giving ui(v) = log ai − log( Ke v )i where (Ke v )i := P 
+
+> j
+
+evj −Cij . Summing over i shows P 
+
+> i,j
+
+eui(v)+ vj −Cij =
+
+1⊤a = 1 , so substituting u(v) into F gives 
+
+f (v) = 1 − ⟨ u(v), a ⟩ − ⟨ v, b ⟩ = 1 − X
+
+> i
+
+ai log ai + X
+
+> i
+
+ai log( Ke v )i − ⟨ v, b ⟩.
+
+Since (Ke v )i ≥ evj −Cij for every j, taking j∗ = arg max j vj gives log( Ke v )i ≥ max j vj −Cij ∗ ≥
+
+max j vj − ∥ C∥∞. Summing over i with weights ai:
+
+f (v) ≥ 1 − X
+
+> i
+
+ai log ai − ∥ C∥∞ + max  
+
+> j
+
+vj − ⟨ v, b ⟩. (32) Since b > 0 and 1⊤b = 1 , a weighted average cannot exceed its maximum: ⟨v, b ⟩ = P 
+
+> j
+
+bj vj ≤
+
+max j vj , with equality if and only if all vj are equal, i.e. v ∈ N := span {1}. Hence g(v) ≥ 0, with 
+
+g(v) = 0 only on N . On N ⊥ \ { 0} we thus have g(v) > 0. Since g is continuous and positively 
+
+1-homogeneous, compactness of {v ∈ N ⊥ : ∥v∥ = 1 } yields c > 0 with g(v) ≥ c∥v∥ for all 
+
+v ∈ N ⊥.Therefore, every sublevel set of f |N ⊥ is bounded, thus compact. The next lemma shows that the function f satisfies the Polyak–Łojasiewicz (P-L) inequality on sublevel sets of f |PN ⊥ .13 Lemma 10. For every sublevel set S ⊂ N ⊥, there exists 0 < μ < 1 such that 
+
+f (v) − f (v∗) ≤ 1
+
+μ Dϕ∗ (0 , ∇f (v)) , v ∈ S . (33) 
+
+Proof. It follows from (14) that 
+
+ker ∇2f (v) = span {1}.
+
+Indeed, for any h ∈ Rn,
+
+h⊤∇2f (v)h = X
+
+> j
+
+cP,j h2 
+
+> j
+
+− X
+
+> i
+
+1
+
+rP,i 
+
+X 
+
+> j
+
+Pij hj
+
+2
+
+.
+
+By Cauchy–Schwarz, X 
+
+> j
+
+Pij hj
+
+2
+
+≤ rP,i 
+
+X
+
+> j
+
+Pij h2 
+
+> j
+
+,
+
+with equality iff hj is constant on the support of the i-th row of P . Since Pij > 0, equality holds iff 
+
+h is constant. Therefore ∇2f (v) is positive definite on N ⊥.Since f is C2, its Hessian satisfies 
+
+∇2f (v) ≻ 0 on N ⊥.
+
+By continuity of ∇2f and compactness of the sublevel set S, there exists λmin > 0 such that 
+
+h⊤∇2f (v)h ≥ λmin ∥h∥2, v ∈ S , h ∈ N ⊥.
+
+Hence f is strongly convex on S ⊂ N ⊥, and the standard Polyak–Łojasiewicz inequality gives 
+
+f (v) − f (v∗) ≤ 12λmin 
+
+∥∇ f (v)∥2. (34) Next, recall 
+
+∇2ϕ∗(ξ) = diag( b + ξ)−1.
+
+Since 
+
+b + ξ = cP ,
+
+and v ∈ S , the coordinates of cP are uniformly bounded above on S. Therefore there exists Mϕ > 0
+
+such that 
+
+∇2ϕ∗(ξ) ⪰ 1
+
+Mϕ
+
+I. 
+
+By Taylor expansion of the Bregman divergence, 
+
+Dϕ∗ (0 , ξ ) = 12 ξ⊤∇2ϕ∗( ˜ξ)ξ ≥ 12Mϕ
+
+∥ξ∥2,
+
+for some ˜ξ on the segment joining 0 and ξ. Substituting ξ = ∇f (v) yields 
+
+∥∇ f (v)∥2 ≤ 2MϕDϕ∗ (0 , ∇f (v)) .
+
+Combining with (34) gives 
+
+f (v) − f (v∗) ≤ Mϕ
+
+λmin 
+
+Dϕ∗ (0 , ∇f (v)) .
+
+Absorbing constants proves (33). Combining the above results gives a linear convergence rate for the normalized Sinkhorn iteration (16), and hence for the original Sinkhorn iteration (15). 
+
+Theorem 4. Let vk be the sequence generated by the Sinkhorn iteration (15) . Then the function f
+
+converges with rate 
+
+f (vk) − f (v∗) ≤ (1 − μ)k(f (v0) − f (v∗)) .
+
+14 Proof. By Lemma 8 and Lemma 9, the sequence of iterates {vk} remain in the bounded sublevel set 
+
+S = {v : f (v) ≤ f (v0)}. By Proposition 10, there exists μ > 0 such that 
+
+f (v) − f (v∗) ≤ 1
+
+μ Dϕ∗ (0 , ∇f (v)) , v ∈ S .
+
+By Lemma 8, 
+
+f (vk+1 ) − f (vk) ≤ − Dϕ∗ (0 , ∇f (vk)) .
+
+Combining the two inequalities gives 
+
+f (vk+1 ) − f (v∗) ≤ (1 − μ)( f (vk) − f (v∗)) .
+
+Iterating this inequality yields the claimed linear convergence rate. 
+
+## B Discussion on Lemma 1 
+
+B.1 Sufficient conditions for the x-part 
+
+The x-part of Lemma 1 follows from more standard uniform bounds on the iterates and gradients. 
+
+Lemma 11. suppose there exists a constant C > 0 such that 
+
+∥xk − x⋆∥2 ≤ C, ∥∇ f (xk)∥∞ ≤ C for all k, 
+
+then the x-part of Lemma 1 holds. Proof. We have 
+
+∥xk − x⋆∥2  
+
+> D(xϕk)
+
+≤ λmax (D(xϕk )) ∥xk − x⋆∥22 ≤ C2 λmax (D(xϕk )) .
+
+Since 
+
+∇ϕ(z) = b. ∗ ez − b, 
+
+the matrix D(z) is given by 
+
+D(z) = diag 
+
+
+
+b. ∗ ez − 1
+
+z
+
+
+
+,
+
+with the continuous extension at zi = 0 . Substituting z = xϕk = ∇ϕ∗(∇f (xk)) yields 
+
+xϕk = log  1 + ∇f (xk)./b ,
+
+and hence 
+
+D(xϕk ) = diag b. ∗ exϕk − 1
+
+xϕk
+
+!
+
+= diag 
+
+ ∇f (xk)log(1 + ∇f (xk)./b )
+
+
+
+.
+
+If ∥∇ f (xk)∥∞ ≤ C, then each coordinate of xϕk lies in a bounded interval, provided bi is bounded away from 0. Since the scalar function 
+
+h(t) := et − 1
+
+t
+
+extends continuously to t = 0 with h(0) = 1 and is bounded on every bounded interval, there exists a constant CD > 0 such that 
+
+λmax (D(xϕk )) ≤ CD for all k. 
+
+Therefore, 
+
+∥xk − x⋆∥2  
+
+> D(xϕk)
+
+≤ C2CD ,
+
+so Lemma 1 holds with R = C√CD .In this sense, the assumption is mild once the iterates stay in a bounded region and the gradient remains uniformly bounded. 15 B.2 Sufficient conditions of Lemma 1 
+
+In this section, we verify that the iterates of Acc-Sinkhorn remain bounded under certain mild, verifiable conditions. Consider the Acc-Sinkhorn scheme 
+
+xk+1 − xk = α(yk − xk+1 ) − 1
+
+α ∇ϕ∗(∇f (xk)) ,yk+1 − yk = α(xk+1 − yk+1 ) − αμ ∇ϕ∗(∇f (xk+1 )) 
+
+with α = √cμ for some c > 0, and μ > 0. We have the following result on the boundedness of the iterates. 
+
+Theorem 5. Assume α2 = μ/L , then Lemma 1 holds if the following conditions hold for all k:
+
+∥∇ f (xk)∥2 
+
+> D−1
+> kDk+1 D−1
+> k
+
+< 4 − α2 − 2α1/2
+
+2α(1 + α)2 Dϕ∗ (0 , ∇f (xk)) 
+
+∥vk∥Dk+1 −Dk < α 3/4∥vk+1 ∥Dk+1 .
+
+(35) Several remarks are in order. 
+
+Remark. Both conditions are easy to verify, as they only require the knowledge of the iterates and the gradients. 
+
+Remark. Condition 1 is satisfied when α is sufficiently small, since the left-hand side approaches 
+
+∥∇ f (xk)∥2
+
+> D−1
+> k
+
+while the right-hand side scales as O(1 /α ) as α → 0. Condition 2 is also satisfied when α is sufficiently small. This is because the left-hand side scales as O(α) while the right-hand side scales as O(α3/4) as α → 0. Therefore, Lemma 1 holds, under a backtracking line search procedure to choose α. This implies the boundedness of the iterates. 
+
+Remark. In general, for any c ∈ [1 , 2) , the conditions can be similaring derived, with a different choice of ξ. In practice, we simply choose the limiting case c = 2 .
+
+B.3 Proof sketch of Theorem 5 
+
+Below is a concise proof sketch for an intuitive understanding. The full proof is deferred after that. 
+
+Proof sketch. Set vk := yk − xk, β := 1 /α and ˜α := α/ (1 + α). Eliminating yk from the scheme, 
+
+xk+1 − xk = ˜ α vk − β∇ϕ∗(∇f (xk)) , (36) 
+
+vk+1 − vk = −α(α + 2) vk+1 + αβ ∇ϕ∗(∇f (xk)) − α(1+ α) 
+
+> μ
+
+∇ϕ∗(∇f (xk+1 )) . (37) Define the shifted Lyapunov function 
+
+eEk :=  f (xk) − f (x⋆)| {z }
+
+> potential
+
++ μ 
+
+> 2
+
+∥vk∥2
+
+> Dk
+
+| {z }
+
+> kinetic
+
+− θ 
+
+> ˜L
+
+Dϕ∗ (0 , ∇f (xk)) ,
+
+where ˜L = L(1 + α), Dk := D(p(xk)) , and θ ∈ (0 , 1] is a free parameter. The subtracted Bregman term keeps eEk equivalent to Ek up to constants (using f (x) − f (x⋆) ≥ 1 
+
+> L
+
+Dϕ∗ (0 , ∇f (x)) ) while allowing a larger step size α.
+
+One-step decrease. Using dual L-smoothness, the three-point Bregman identity, and the kinetic energy update (37), one computes 
+
+eEk+1 − eEk ≤ − 
+
+h
+
+μα (α + 2) − δ2
+
+> 2η
+
+i
+
+∥vk+1 ∥2 
+
+> Dk+1
+
+− 1−θ 
+
+> ˜L
+
+Dϕ∗ (0 , ∇f (xk)) + Rk,
+
+where δ := α2(α + 2) /(1 + α), η > 0 is a free parameter from Young’s inequality, and Rk collects the two remainder terms 
+
+Rk := μL ⟨Dk+1 vk+1 , ∇ϕ∗(∇f (xk)) ⟩ + μ 
+
+> 2
+
+∥vk∥2 
+
+> Dk+1 −Dk
+
+.
+
+Setting α2 = μ/L and choosing η = 2 α/ [L(1 + α)2], θ = (1 /2 + α)/(1 + α) annihilates the 
+
+∥∇ f (xk+1 )∥2 coefficient and makes the kinetic and potential damping terms explicitly negative. 16 Reduction to two verifiable conditions. A final application of Young’s inequality to Rk shows that 
+
+eEk+1 − eEk ≤ 0 follows from 
+
+∥∇ f (xk)∥2 
+
+> D−1
+> kDk+1 D−1
+> k
+
+≤ ξ 4(1 −c/ 2) 1+ α Dϕ∗ (0 , ∇f (xk)) ,
+
+∥vk∥2 
+
+> Dk+1 −Dk
+
+≤ κ(α, c, ξ ) ∥vk+1 ∥2 
+
+> Dk+1
+
+.
+
+where c = 1 and κ(α, c, ξ ) > 0 for sufficiently small α. Both conditions measure how much the metric Dk changes between steps; they hold whenever the iterates and gradients remain uniformly bounded, which is the case when α is small enough. Since eEk is equivalent to Ek and eEk+1 ≤ eEk,the sequence {Ek} is non-increasing, yielding the claimed boundedness ∥xk − x⋆∥D(p(xk )) ≤ R and 
+
+∥yk − x⋆∥ ≤ R.
+
+B.4 Full proof of Theorem 5 
+
+Proof. To prove this theorem, we reformulate the Acc-Sinkhorn scheme using a different set of variables (x, v ), and then analyze the difference of the a new Lyapunov function ˜Ek. The two conditions are derived by ensuring ˜Ek+1 − ˜Ek is nonpositive, which implies the boundedness of the iterates. 
+
+Reformulation. Introduce 
+
+vk := yk − xk.
+
+From the first equation, 
+
+xk+1 − xk = α(yk − xk) − (xk+1 − xk) − αβ ∇ϕ∗(∇f (xk)) ,
+
+hence 
+
+(1 + α)( xk+1 − xk) = αv k − αβ ∇ϕ∗(∇f (xk)) .
+
+Therefore 
+
+xk+1 − xk = ˜ α vk − β∇ϕ∗(∇f (xk)) , ˜α := α
+
+1 + α .
+
+The second equation becomes 
+
+yk+1 − yk = −αv k+1 − αμ ∇ϕ∗(∇f (xk+1 )) .
+
+Hence 
+
+vk+1 −vk = ( yk+1 −yk)−(xk+1 −xk) = −αv k+1 − αμ ∇ϕ∗(∇f (xk+1 )) − ˜α vk −β∇ϕ∗(∇f (xk)) .
+
+Using 
+
+vk = vk+1 − (vk+1 − vk),
+
+we obtain 
+
+(1 − ˜α)( vk+1 − vk) = −(α + ˜ α)vk+1 + ˜ αβ ∇ϕ∗(∇f (xk)) − αμ ∇ϕ∗(∇f (xk+1 )) .
+
+Since 
+
+˜α = α
+
+1 + α , 1 − ˜α = 11 + α ,
+
+it follows that 
+
+vk+1 − vk = −α(α + 2) vk+1 + αβ ∇ϕ∗(∇f (xk)) − α(1 + α)
+
+μ ∇ϕ∗(∇f (xk+1 )) . (38) 17 Difference of potential energy. Using the L-dual smoothness and convexity of f give 
+
+f (xk+1 )−f (xk) ≤ ˜α⟨∇ f (xk+1 ), v k⟩− ˜αβ ⟨∇ f (xk+1 ), ∇ϕ∗(∇f (xk)) ⟩− 1
+
+L Dϕ∗ (∇f (xk+1 ), ∇f (xk)) .
+
+Now assume 
+
+αβ = 1
+
+L , ˜αβ = 1˜L ≤ 1
+
+L , ˜L = L(1 + α).
+
+Using the three -point identity 
+
+Dϕ∗ (a, b ) + Dϕ∗ (b, c ) − Dϕ∗ (a, c ) = ⟨a − b, ∇ϕ∗(c) − ∇ ϕ∗(b)⟩,
+
+we obtain 
+
+−˜αβ ⟨∇ f (xk+1 ), ∇ϕ∗(∇f (xk)) ⟩− 12L Dϕ∗ (∇f (xk+1 ), ∇f (xk)) ≤ − 1˜L Dϕ∗ (∇f (xk+1 ), 0) − 1˜L Dϕ∗ (0 , ∇f (xk)) .
+
+Therefore, 
+
+f (xk+1 ) − f (xk) ≤ ˜α⟨∇ f (xk+1 ), v k⟩ − 1˜L Dϕ∗ (∇f (xk+1 ), 0) − 1˜L Dϕ∗ (0 , ∇f (xk)) . (39) 
+
+Difference of kinetic energy. Also, 
+
+μ
+
+2 ∥vk+1 ∥2 
+
+> Dk+1
+
+− μ
+
+2 ∥vk∥2 
+
+> Dk+1
+
+= μ⟨Dk+1 vk+1 , v k+1 − vk⟩ − μ
+
+2 ∥vk+1 − vk∥2 
+
+> Dk+1
+
+.
+
+Substituting (37), we obtain 
+
+μ
+
+2 ∥vk+1 ∥2 
+
+> Dk+1
+
+− μ
+
+2 ∥vk∥2 
+
+> Dk+1
+
+= −μα (α + 2) ∥vk+1 ∥2 
+
+> Dk+1
+
++ μαβ ⟨Dk+1 vk+1 , ∇ϕ∗(∇f (xk)) ⟩− α(1 + α)⟨vk+1 , ∇f (xk+1 )⟩ − μ
+
+2 ∥vk+1 − vk∥2 
+
+> Dk+1
+
+. (40) 
+
+Cancellation. Let 
+
+∆vk := vk+1 − vk, vk = vk+1 − ∆vk.
+
+Then 
+
+˜α⟨∇ f (xk+1 ), v k⟩ − α(1 + α)⟨vk+1 , ∇f (xk+1 )⟩
+
+= −˜α⟨∇ f (xk+1 ), ∆vk⟩ − δ⟨∇ f (xk+1 ), v k+1 ⟩,
+
+where 
+
+δ := α(1 + α) − ˜α = α2(α + 2) 1 + α .
+
+Larger step size. Introduce the shifted energy 
+
+eEk := Ek − θ
+
+˜L Dϕ∗ (0 , ∇f (xk)) .
+
+Since 
+
+f (x) − f ∗ ≥ 1
+
+L Dϕ∗ (0 , ∇f (x)) ,
+
+we have for all θ ∈ (0 , 1 + α),
+
+eEk ≥ c(θ)∥∇ f (x)∥2.
+
+Moreover, 
+
+eEk+1 − eEk ≤ − μα (α + 2) ∥vk+1 ∥2 
+
+> Dk+1
+
++ μL ⟨Dk+1 vk+1 , ∇ϕ∗(∇f (xk)) ⟩− δ⟨∇ f (xk+1 ), v k+1 ⟩ − ˜α⟨∇ f (xk+1 ), ∆vk⟩− μ
+
+2 ∥∆vk∥2 
+
+> Dk+1
+
+− 1 − θ
+
+˜L Dϕ∗ (0 , ∇f (xk)) − 1˜L Dϕ∗ (∇f (xk+1 ), 0) − θ
+
+˜L Dϕ∗ (0 , ∇f (xk+1 )) .
+
+Using Young’s inequality again, 
+
+−˜α ⟨∇ f (xk+1 ), ∆vk⟩ ≤ ˜α2
+
+2μ ∥∇ f (xk+1 )∥2
+
+> D−1
+> k+1
+
++ μ
+
+2 ∥∆vk∥2 
+
+> Dk+1
+
+,
+
+18 and 
+
+−δ⟨∇ f (xk+1 ), v k+1 ⟩ ≤ η
+
+2 ∥∇ f (xk+1 )∥2
+
+> D−1
+> k+1
+
++ δ2
+
+2η ∥vk+1 ∥2 
+
+> Dk+1
+
+.
+
+Therefore 
+
+eEk+1 − eEk ≤ − 
+
+
+
+μα (α + 2) − δ2
+
+2η
+
+
+
+∥vk+1 ∥2
+
+> Dk+1
+
+− 1˜L Dϕ∗ (∇f (xk+1 ), 0) − θ
+
+˜L Dϕ∗ (0 , ∇f (xk+1 )) + 
+
+ ˜α2
+
+2μ + η
+
+2
+
+
+
+∥∇ f (xk+1 )∥2
+
+> D−1
+> k+1
+
+− 1 − θ
+
+˜L Dϕ∗ (0 , ∇f (xk)) + μL ⟨Dk+1 vk+1 , ∇ϕ∗(∇f (xk)) ⟩ + μ
+
+2 ∥vk∥2 
+
+> Dk+1 −Dk
+
+.
+
+(41) Now choose 
+
+α2 = c μL , c ∈ [1 , 2] , equivalently μ = Lα 2/c. 
+
+Then 
+
+˜α2
+
+2μ = α2
+
+2μ(1 + α)2 = c
+
+21
+
+L(1 + α)2 .
+
+Hence the second line of equation 41 becomes less than or equal to 
+
+− min(1 , θ ) 1˜L (Dϕ∗ (0 , ∇f (xk+1 )) + Dϕ∗ (∇f (xk+1 ), 0))+ 
+
+ c
+
+21
+
+L(1 + α)2 + η
+
+2
+
+
+
+∥∇ f (xk+1 )∥2
+
+> D−1
+> k+1
+
+.
+
+To eliminate this term, we assume θ ≤ 1, and choose η such that 
+
+η
+
+2 ≤ θ
+
+˜L − c
+
+21
+
+L(1 + α)2 = θ(1 + α) − c/ 2
+
+L(1 + α)2 .
+
+which is positive for every θ ∈ ( 11+ α , 1] . For simplicity, we choose η = 2 αL(1+ α)2 , and θ such that the equality holds above. Then θ = c/ 2+ α 
+
+> 1+ α
+
+. When c < 2, θ < 1. And the coefficient of 
+
+∥∇ f (xk+1 )∥2
+
+> D−1
+> k+1
+
+is 0.Using 
+
+μ = Lα 2/c, η = 2 αL(1 + α)2 , δ := α(1 + α) − ˜α = α2(α + 2) 1 + α ,
+
+we obtain the coefficient of −∥ vk+1 ∥2 
+
+> Dk+1
+
+is 
+
+μα (α + 2) − δ2
+
+2η
+
+= 1
+
+c Lα 3(α + 2) − 12
+
+L(1 + α)2
+
+2α · α4(α + 2) 2
+
+(1 + α)2
+
+= 1
+
+c Lα 3(α + 2) − 14 Lα 3(α + 2) 2 = 14 Lα 3(α + 2) 
+
+ 4
+
+c − (α + 2) 
+
+
+
+.
+
+To make this coefficient positive, we need 
+
+c < 4
+
+α + 2 .
+
+Since α2 = cμ/L , this is equivalent to 
+
+α2 < 4
+
+α + 2 
+
+μL .
+
+This condition is satisfied for sufficiently small α. In particular, if c = 1 , then α2 = μ/L < 4/(α + 2) 
+
+is satisfied for all α ∈ (0 , 1) .19 Therefore, the change of the shifted energy is as follows: 
+
+eEk+1 − eEk ≤ μL ⟨Dk+1 vk+1 , ∇ϕ∗(∇f (xk)) ⟩ + μ
+
+2 ∥vk∥2
+
+> Dk+1 −Dk
+
+− 1 − c/ 2
+
+L(1 + α)2 Dϕ∗ (0 , ∇f (xk)) + 
+
+
+
+α + 2 − 4
+
+c
+
+ 14 Lα 3(α + 2) ∥vk+1 ∥2 
+
+> Dk+1
+
+.
+
+Use Young’s inequality again to bound the cross term on the right-hand side: 
+
+μL ⟨Dk+1 vk+1 , ∇ϕ∗(∇f (xk)) ⟩ ≤ 14 ˜Lξ ∥∇ ϕ∗(∇f (xk)) ∥2 
+
+> Dk+1
+
++ ξ μ2(1 + α)
+
+L ∥vk+1 ∥2 
+
+> Dk+1
+
+.
+
+The first term on the right-hand side can be written as 
+
+14 ˜Lξ ∥∇ ϕ∗(∇f (xk)) ∥2 
+
+> Dk+1
+
+= 14 ˜Lξ ∥∇ f (xk)∥2 
+
+> D−1
+> kDk+1 D−1
+> k
+
+.
+
+Wrapping up, we have 
+
+eEk+1 − eEk ≤ 14 ˜Lξ ∥∇ f (xk)∥2 
+
+> D−1
+> kDk+1 D−1
+> k
+
++ μ
+
+2 ∥vk∥2
+
+> Dk+1 −Dk
+
++ c/ 2 − 1
+
+L(1 + α)2 Dϕ∗ (0 , ∇f (xk)) + 
+
+ 
+
+α + 2 − 4
+
+c
+
+ 14 Lα 3(α + 2) + ξ μ2(1 + α)
+
+L
+
+
+
+∥vk+1 ∥2 
+
+> Dk+1
+
+.
+
+Then, the boundeness is reduced to the following conditions on the sequences {xk}, {yk}:1. 14 ˜Lξ ∥∇ f (xk)∥2 
+
+> D−1
+> kDk+1 D−1
+> k
+
+< 1 − c/ 2
+
+L(1 + α)2 Dϕ∗ (0 , ∇f (xk)) 
+
+2. 
+
+μ
+
+2 ∥vk∥2 
+
+> Dk+1 −Dk
+
+< −
+
+ 
+
+α + 2 − 4
+
+c
+
+ 14 Lα 3(α + 2) + ξ μ2(1 + α)
+
+L
+
+
+
+∥vk+1 ∥2 
+
+> Dk+1
+
+.
+
+Simplifying the conditions gives 1. 
+
+∥∇ f (xk)∥2 
+
+> D−1
+> kDk+1 D−1
+> k
+
+< ξ 4(1 − c/ 2) 1 + α Dϕ∗ (0 , ∇f (xk)) 
+
+2. 
+
+∥vk∥2 
+
+> Dk+1 −Dk
+
+< − α
+
+2c
+
+(c2 + 4 ξ) α2 + 4( c2 − c + ξ) α + 4 c(c − 2)  ∥vk+1 ∥2 
+
+> Dk+1
+
+.
+
+Note that both conditions are verifiable. They are satisfied when the step size α is sufficiently small, under appropriate choices of ξ and c.Lastly, choose c = 1 , and set 
+
+ξ = 4 − α2 − 2α1/2
+
+4α(α + 1) .
+
+In the small α regime, ξ is positive, and it scales as 1/α − 1/(2 √α) + O(α) as α → 0.
+
+## C Proofs for Section 4 
+
+Lemma (Restatement of Lemma 2) . Let z(t) = ( x(t), y (t)) be a trajectory of z′ = G(z). Define 
+
+p(x(t)) := ∇ϕ∗(∇f (x(t))) , D(t) := D(p(x(t))) ,
+
+where D(·) is the diagonal map satisfying D(s) s = ∇ϕ(s). Then, for all t ≥ 0, the following identity holds: 
+
+E′(x, y ; D) = ⟨∇E (x, y ; D), G(z)⟩
+
+= − E (x, y ; D) − Df (x⋆, x ) − β∥p(x)∥2 
+
+> D(t)
+
+− μ
+
+2 ∥x − y∥2
+
+> D(t)
+
++ μ
+
+2 ∥x − x⋆∥2 
+
+> D(t)
+
++ μ
+
+2 ∥y − x⋆∥2
+
+> D′(t)
+
+.
+
+20 Proof. Since D = D(t) varies with t, differentiating the Lyapunov function along the trajectory gives 
+
+E′(x, y ; D) = ⟨∇ f (x), x ′⟩ + μ⟨y − x⋆, y ′⟩D(t) + μ
+
+2 ∥y − x⋆∥2
+
+> D′(t)
+
+.
+
+Substituting x′ = y − x − βp (x) and y′ = x − y − 1 
+
+> μ
+
+p(x), we obtain 
+
+⟨∇ f (x), y − x − βp (x)⟩ + μ⟨y − x⋆, x − y − 1 
+
+> μ
+
+p(x)⟩D(t)
+
+= ⟨∇ f (x), y − x⟩ − β⟨∇ f (x), p (x)⟩ + μ⟨y − x⋆, x − y⟩D(t) − ⟨ y − x⋆, D(t)p(x)⟩.
+
+By definition of D(·) and p(x) = ∇ϕ∗(∇f (x)) , we have 
+
+D(t)p(x(t)) = D(p(x(t))) p(x(t))) = ∇ϕ(p(x(t))) = ∇ϕ ∇ϕ∗(∇f (x(t)))  = ∇f (x(t)) ,
+
+and hence 
+
+⟨∇ f (x), y − x⟩ − β⟨∇ f (x), p (x)⟩ − ⟨ y − x⋆, D(t)p(x)⟩ = −β∥p(x)∥2 
+
+> D(t)
+
+− ⟨∇ f (x), x − x⋆⟩.
+
+Moreover, the polarization identity yields 
+
+μ⟨y − x⋆, x − y⟩D(t) = − μ
+
+2 ∥y − x⋆∥2 
+
+> D(t)
+
+− μ
+
+2 ∥x − y∥2 
+
+> D(t)
+
++ μ
+
+2 ∥x − x⋆∥2
+
+> D(t)
+
+.
+
+Using 
+
+⟨∇ f (x), x − x⋆⟩ = f (x) − f (x⋆) + Df (x⋆, x ),
+
+and recalling E(x, y ; D) = f (x) − f (x⋆) + μ 
+
+> 2
+
+∥y − x⋆∥2
+
+> D(t)
+
+, we conclude the claim. 
+
+C.1 Discretization and convergence analysis 
+
+The continuous-time dynamics show that the Lyapunov function E decays exponentially, up to a positive perturbation term μ 
+
+> 2
+
+∥x − x⋆∥2 
+
+> D
+
+and a negative term β∥p(x)∥2 
+
+> D
+
+. To control the positive perturbation term, we impose Assumption 1. 
+
+Theorem (Restatement of Theorem 3) . Let zk = ( xk, y k) be the iterates generated by Algorithm 1 with αβ = 1 . Assume that Assumption 1 holds. Then 
+
+E(zk+1 ; Dk+1 ) − E (zk; Dk+1 ) ≤ − αE(zk+1 ; Dk+1 ) + αμ 
+
+2 R2 − Dϕ∗ (0 , ∇f (xk)) + α2
+
+2μ ∥∇ ϕ∗(∇f (xk+1 )) ∥2 
+
+> Dk+1
+
+− Dϕ∗ (∇f (xk+1 ), 0) .
+
+Proof. First, consider the implicit Euler scheme 
+
+zk+1 − zk
+
+α = G(zk+1 ). (42) Expanding the Lyapunov difference at z = zk+1 yields 
+
+E(zk+1 ; Dk+1 ) − E (zk; Dk+1 ) = ⟨∇E (zk+1 ; Dk+1 ), z k+1 − zk⟩ − DE (zk, z k+1 ; Dk+1 )= α⟨∇E (zk+1 ; Dk+1 ), G(zk+1 )⟩ − Df (xk, x k+1 ) − μ
+
+2 ∥yk+1 − yk∥2 
+
+> Dk+1
+
+.
+
+Comparing (42) with the actual scheme (17) , the x-update differs by two terms. This produces additional error terms in the Lyapunov difference: 
+
+E(zk+1 ; Dk+1 ) − E (zk; Dk+1 ) ≤ α⟨∇E (zk+1 ; Dk+1 ), G(zk+1 )⟩ − Df (xk, x k+1 ) − μ
+
+2 ∥yk+1 − yk∥2
+
+> Dk+1
+
++ α⟨∇ f (xk+1 ), y k − yk+1 ⟩ + αβ ⟨∇ f (xk+1 ), ∇ϕ∗(∇f (xk+1 )) − ∇ ϕ∗(∇f (xk)) ⟩.
+
+By the continuous-time analysis, 
+
+⟨∇E (zk+1 ; Dk+1 ), G(zk+1 )⟩ ≤ −E (zk+1 ; Dk+1 ) + μ
+
+2 R2 − β∥∇ ϕ∗(∇f (xk+1 )) ∥2 
+
+> Dk+1
+
+.
+
+For the first cross term, the Cauchy–Schwarz and Young inequalities give 
+
+α⟨∇ f (xk+1 ), y k − yk+1 ⟩ ≤ α
+
+√μ ∥∇ f (xk+1 )∥D−1
+
+> k+1
+
+· √μ∥yk − yk+1 ∥Dk+1 
+
+≤ α2
+
+2μ ∥∇ f (xk+1 )∥2
+
+> D−1
+> k+1
+
++ μ
+
+2 ∥yk − yk+1 ∥2 
+
+> Dk+1
+
+.
+
+21 Since Dk+1 ∇ϕ∗(∇f (xk+1 )) = ∇ϕ(∇ϕ∗(∇f (xk+1 ))) = ∇f (xk+1 ), we have 
+
+∥∇ f (xk+1 )∥2
+
+> D−1
+> k+1
+
+= ∥∇ ϕ∗(∇f (xk+1 )) ∥2 
+
+> Dk+1
+
+.
+
+For the second cross term, the three-point identity for the Bregman divergence yields 
+
+⟨∇ f (xk+1 ), ∇ϕ∗(∇f (xk+1 )) − ∇ ϕ∗(∇f (xk)) ⟩
+
+= Dϕ∗ (∇f (xk+1 ), ∇f (xk)) − Dϕ∗ (∇f (xk+1 ), 0) − Dϕ∗ (0 , ∇f (xk)) .
+
+Using ϕ∗(0) = 0 and the definition of the Bregman divergence, 
+
+Dϕ∗ (∇f (xk+1 ), 0) = ϕ∗(∇f (xk+1 )) − ⟨∇ f (xk+1 ), 0⟩ − ϕ∗(0) = ϕ∗(∇f (xk+1 )) .
+
+Combining the above bounds gives 
+
+E(zk+1 ; Dk+1 ) − E (zk; Dk+1 ) ≤ − αE(zk+1 ; Dk+1 ) + αμ 
+
+2 R2 − αβD ϕ∗ (0 , ∇f (xk)) + α2
+
+2μ ∥∇ ϕ∗(∇f (xk+1 )) ∥2 
+
+> Dk+1
+
+− αβD ϕ∗ (∇f (xk+1 ), 0) + αβD ϕ∗ (∇f (xk+1 ), ∇f (xk)) − Df (xk, x k+1 ).
+
+By dual relative smoothness, Dϕ∗ (∇f (xk+1 ), ∇f (xk)) ≤ Df (xk, x k+1 ). Therefore, it suffices to choose α and β such that αβ = 1 .We next bound the change of the Lyapunov function induced by the change of the metric D.
+
+Lemma (Restatement of Lemma 4) . Assume that Assumption 1 holds. Then there exists a constant 
+
+C > 0 such that for any k ≥ 1,
+
+E(zk; Dk+1 ) − E (zk; Dk) = μ
+
+2 ∥yk − x⋆∥2 
+
+> Dk+1 −Dk
+
+≤ C μ
+
+2 R2.
+
+Proof. By the definition of E,
+
+E(zk; Dk+1 ) − E (zk; Dk) = μ
+
+2 ∥yk − x⋆∥2 
+
+> Dk+1 −Dk
+
+.
+
+Since Dk is diagonal, we have 
+
+∥yk − x⋆∥2 
+
+> Dk+1 −Dk
+
+≤ ∥ yk − x⋆∥2 ∥Dk+1 − Dk∥.
+
+It remains to bound ∥Dk+1 − Dk∥. Recall that D(s) s = ∇ϕ(s) and ∇ϕ(s) = b. ∗ exp( s) − b. For 
+
+s ∈ Rm,
+
+D(s) = diag 
+
+
+
+b. ∗ exp( s) − 1
+
+s
+
+
+
+,
+
+where the fraction is entrywise (with the continuous extension at sj = 0 ). Moreover, with s =
+
+p(x) = ∇ϕ∗(∇f (x)) and ∇ϕ∗(η) = log( 1 + η./b ), we have 
+
+s = log( cP ./b ), exp( s) − 1
+
+s = cP ./b − 1
+
+log( cP ./b ) .
+
+Define h(g) := g./ log( g + 1) for g > 0 (componentwise). Then 
+
+Dk = diag  b. ∗ h(cPk ./b − 1).
+
+Under Assumption 1, the marginal deviation cPk ./b − 1 is componentwise uniformly bounded, i.e., there exists M > m > 0 s.t. cPk ./b − 1 ∈ [m, M ]. Since h is Lipschitz on any compact domain, there exists L = L(m, M ) > 0 such that 
+
+∥Dk+1 − Dk∥ ≤ L max  
+
+> j
+
+bj cPk+1 ./b − cPk ./b ∞ ≤ 2L(M − m),
+
+where the last inequality uses cPk ./b 1 ∈ [m, M ] for all k. Therefore, 
+
+E(zk; Dk+1 ) − E (zk; Dk) ≤ μ
+
+2 ∥yk − x⋆∥2 ∥Dk+1 − Dk∥≤ μ
+
+2 R2 · 2L(M − m).
+
+Setting C := 2 L(M − m) gives the claim. 22 Combining the above results, we conclude that the Lyapunov function decays geometrically up to a bounded perturbation term of order μR 2.
+
+Theorem (Restatement of Theorem 2) . Let zk = ( xk, y k) be the iterates generated by Algorithm 1. Assume that Assumption 1 holds. Then there exists C > 0 such that 
+
+E(xk+1 , y k+1 ; Dk+1 ) ≤
+
+ 11 + α
+
+k+1 
+
+E(xk, y k; Dk) + CμR 2.
+
+Proof. By Theorem 3 and Lemma 4, there exists C > 0 such that for all k,
+
+(1 + α)E(zk+1 ; Dk+1 ) ≤ E (zk; Dk) + CμR 2 − Dϕ∗ (0 , ∇f (xk)) + α2
+
+2μ ∥∇ ϕ∗(∇f (xk+1 )) ∥2 
+
+> Dk+1
+
+− Dϕ∗ (∇f (xk+1 ), 0) .
+
+Take a towering sum and then re-arrange the items, and we have 
+
+(1 + α)k+1 E(zk+1 ; Dk+1 )
+
+≤ E (z0; D0) + 
+
+> k
+
+X
+
+> i=0
+
+(1 + α)i CμR 2 + α2
+
+2μ ∥∇ ϕ∗(xk+1 )∥2 
+
+> Dk+1
+
+− Dϕ∗ (∇f (xk+1 ), 0) − (1 + α)kDϕ∗ (0 , ∇f (x0)) +
+
+> k
+
+X
+
+> i=1
+
+(1 + α)i−1
+
+ α2
+
+2μ ∥∇ ϕ∗(∇f (xi)) ∥2 
+
+> Di
+
+− Dϕ∗ (∇f (xi), 0) − (1 + α)Dϕ∗ (0 , ∇f (xi)) 
+
+
+
+.
+
+As for all i,
+
+∥∇ ϕ∗(∇f (xi)) ∥2 
+
+> Di
+
+= Dϕ∗ (∇f (xi), 0) + Dϕ∗ (0 , ∇f (xi)) ,
+
+choosing α = √2μ makes α2/(2 μ) = 1 , so the intermediate terms are all non-positive. The conclusion follows from the fact that Pki=0 (1 + α)i/(1 + α)k+1 is finite. Finally, we can analyze the convergence of Algorithm 2. We adopt the notation 
+
+E(x, y, μ ; D) := f (x) − f (x⋆) + μ
+
+2 ∥y − x∥2
+
+> D
+
+to explicitly indicate the dependence of E on μ.
+
+Theorem 6 (Restatement of Theorem 1) . Choose (x0, y 0) and μ0 such that 
+
+E(x0, y 0; μ0, D ) ≤ (R2 + 1) μ0.
+
+Let (xk, y k, μ k) be generated by Algorithm 2. Assume that Assumption 1 holds. Then 
+
+E(xk, y k; μk, D ) ≤ (R2 + 1) μk, ∀ k ≥ 0. (43) 
+
+Moreover, let Mk := Pki=0 mi be the total number of inner iterations after the kth outer loop, and 
+
+C∗ := √2−1(√2LF +√2μ0) ln 
+
+ 2( R2+1) 
+
+ be a constant. Then 
+
+E(xk, y k; μk, D ) ≤ R2 + 1 
+
+ C∗Mk + μ−1/20
+
+2 ∀ k ≥ 0. (44) 
+
+In particular, it takes Mk = O(μ−1/2) iterations to reach accuracy E(xk, y k; μk, D ) = O(μ).
+
+Proof of Theorem 1. The proof uses the one-step sufficient decay estimate established earlier for the Sinkhorn map, together with the discrete Lyapunov estimate for the accelerated scheme. For a fixed value of μ, the inner iteration satisfies a perturbed contraction of the form 
+
+(1 + α)E(xj+1 , y j+1 ; μ, D ) ≤ E (xj , y j ; μ, D ) + μR 2, α = p2μ. (45) Here the negative term coming from the Sinkhorn step is controlled by the sufficient decay lemma, while Assumption 1 bounds the perturbation term generated by the weighted norm in the Lyapunov function. 23 Iterating (45) for mk inner steps gives 
+
+Ek+1 ≤ (1 + αk)−mk Ek + μk+1 R2, (46) where Ek := E(xk, y k; μk, D ). The choice of mk in Algorithm 2 ensures that 
+
+(1 + αk)−mk ≤ 12( R2 + 1) .
+
+Therefore, 
+
+Ek+1 ≤ 12( R2 + 1) Ek + μk+1 R2.
+
+Assume inductively that 
+
+Ek ≤ (R2 + 1) μk.
+
+Since μk+1 = μk/2, we obtain 
+
+Ek+1 ≤ 12 μk + μk+1 R2 = ( R2 + 1) μk+1 ,
+
+which proves (21). It remains to express μk in terms of the total number Mk of inner steps. Since 
+
+μk = μ0 2−k, αk = p2μk,
+
+and mk is chosen proportional to μ−1/2 
+
+> k
+
+, summing the geometric progression yields 
+
+Mk ≍
+
+> k
+
+X
+
+> i=0
+
+μ−1/2 
+
+> i
+
+≍ μ−1/2 
+
+> k
+
+− μ−1/20 .
+
+Equivalently, 
+
+μk ≍ 1
+
+ C∗Mk + μ−1/20
+
+2 ,
+
+for the constant C∗ defined above. Substituting this relation into (21) gives (44) . The final complexity bound follows immediately. 24
