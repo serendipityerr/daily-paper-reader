@@ -6,32 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-05
-- 运行时间：2026-06-05 20:41:40 UTC
+- 最新运行日期：2026-06-06
+- 运行时间：2026-06-06 20:36:26 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：2
-- 速读区：2
+- 本次总论文数：1
+- 精读区：0
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读2篇、速读2篇，聚焦流匹配与最优传输在语音增强和扩散模型中的前沿应用。最值得关注的是SB-RF实现一步鲁棒语音增强（9.0分）及多边缘流匹配的最优传输势（8.0分）。建议从SB-RF入手，理解如何用最优传输提升语音增强的鲁棒性与效率。
-- 详情：[/202606/05/README](/202606/05/README)
+今日聚焦1篇高分研究，探索扩散过程边界不可达的贝叶斯推断新方法。  
+该论文利用神经Galerkin标准化流解决了复杂扩散模型的推断难题，值得关注其在不完全观测场景下的潜力。  
+建议普通读者可进一步了解标准化流在贝叶斯计算中的扩展应用，或对比传统MCMC方法的效率差异。
+- 详情：[/202606/06/README](/202606/06/README)
 
 ### 精读区论文标签
-1. [SB-RF: Schrödinger Bridge Rectified Flow for One-Step Robust Speech Enhancement](/202606/05/2606.05575v1-sb-rf-schrdinger-bridge-rectified-flow-for-one-step-robust-speech-enhancement)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：薛定谔桥整流流用于语音增强
-2. [Multimarginal flow matching with optimal transport potentials](/202606/05/2606.05327v1-multimarginal-flow-matching-with-optimal-transport-potentials)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：使用最优传输势的流匹配连接分布
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [The Score Hamiltonian: Mapping Diffusion Models to Adiabatic Transport](/202606/05/2606.05217v1-the-score-hamiltonian-mapping-diffusion-models-to-adiabatic-transport)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：将扩散模型映射到绝热输运,使用得分哈密顿量,与扩散桥相关
-2. [Accelerating Sinkhorn for Entropy-Regularized Optimal Transport](/202606/05/2605.30267v2-accelerating-sinkhorn-for-entropy-regularized-optimal-transport)  
+1. [Neural Galerkin Normalizing Flows for Bayesian Inference of Diffusions with Inaccessible Boundaries](/202606/06/2606.04324v1-neural-galerkin-normalizing-flows-for-bayesian-inference-of-diffusions-with-inaccessible-boundaries)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：加速熵正则最优传输的Sinkhorn算法
+   evidence：学习扩散过程的转移密度，通过Fokker-Planck方程连接两个分布
 
 
 <div class="dpr-home-promo-card">
