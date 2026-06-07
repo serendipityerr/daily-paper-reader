@@ -1,0 +1,4428 @@
+Title: Are we really tilting? The mechanics of reward guidance in flow and diffusion models
+
+URL Source: https://arxiv.org/pdf/2606.02884v1
+
+Published Time: Wed, 03 Jun 2026 00:24:56 GMT
+
+Number of Pages: 41
+
+Markdown Content:
+# Are we really tilting? 
+
+# The mechanics of reward guidance in flow and diffusion models 
+
+Sanjit Dandapanthula and Nicholas M. Boffi 
+
+Carnegie Mellon University Reward guidance algorithms steer a learned generative process toward the reward-tilted measure at inference time. While empirically powerful, these methods are prone to reward hacking : the guided model over-optimizes the reward at the cost of fidelity to the learned distribution. Prior work has attributed this to the complexity of neural reward functions or implicit biases in diffusion training, but its fundamental origins remain poorly understood. We show that reward hacking arises from an approximation made in most practical implementations of reward-guided diffusion—finite-particle 
+
+plug-in estimation of the Doob h-function—even in the simplest non-trivial settings of Gaussian and Gaussian mixture targets with quadratic rewards. In closed form, we isolate two distinct failure modes of the plug-in estimator: it leads to reward hacking within each mode and it 
+
+cannot select high-reward modes . We propose a closed-form reward damping schedule that corrects the within-mode bias with no additional compute, and clarify the role of best-of-n sampling in compensating for the mode selection failure. Experiments on Gaussian mixture targets, a 2D checkerboard, and FLUX.1 text-to-image generation confirm that our theoretical insights carry over to practical settings. 
+
+Correspondence: Sanjit Dandapanthula at sanjitd@cmu.edu .Unguided Guided Damped (ours) Unguided Guided Damped (ours) 
+
+> “line of dogs of different breeds, with each dog taking on a color of the rainbow to form a technicolor gradient” “stylized stop-motion scene of paper astronauts repairing a torn moon backdrop” “renaissance painting of a sculptor in an open-air studio working on a headless statue” “editorial photo of a skyscraper under construction, missing its middle third” “brass automaton praying to a human child in an abandoned temple” “koi pond full of vibrant fish, with the surface reflecting a mother and daughter looking down”
+
+Figure 1: Reward damping. We introduce reward damping , a simple and principled guidance schedule to mitigate reward hacking. Base FLUX.1 [ 1 ] samples guided with ImageReward [ 2 ]; further experimental details in Appendix D.4. 
+
+1
+
+> arXiv:2606.02884v1 [cs.LG] 1 Jun 2026
+
+Base target Analytic reward tilting Practical guidance Damping + best-of-n          
+
+> Samples from a mixture of several modes
+> Selects correct mode and optimizes reward
+> Overconcentrates and
+> overshoots the mean
+> Recovers similar behavior to analytic tilting
+> base target base samples tilted samples guided samples our proposal reward maximizer
+> Figure 2: Overview. Compared to analytic reward tilting, practical guidance algorithms over-concentrate within each mode and fail to select high-reward modes. We propose a damped reward scale to mitigate within-mode reward hacking and clarify the role of best-of-nin mode selection; combining these two methods often enables us to approximately recover the reward tilt.
+
+# 1 Introduction 
+
+Flow and diffusion-based generative models have become the dominant paradigm for high-quality sample generation across diverse domains, powering state-of-the-art systems for text-to-image synthesis [ 1, 3 –5], molecular design [ 6– 9], and protein structure prediction [ 10 –13 ]. In many applications, however, sampling from the learned distribution ρ1(x) is not the end goal—we often want samples from the reward-tilted measure 
+
+˜ρ1(x) ∝ ρ1(x) eλr (x) given a reward function r and inverse temperature λ. For instance, practitioners may desire images that better match a text prompt [ 2, 14 –17 ], molecules with higher binding affinity to a target protein pocket [ 18 –20 ], or proteins with improved stability [ 10 , 12 , 21 ]. This is the problem of reward-guided generation . Widely used methods such as classifier guidance [ 22 ] and classifier-free guidance [ 23 ] can be understood as instances of reward guidance for particular choices of reward function, and more general value function approaches have been developed in Uehara et al. [24, 25]. Despite widespread empirical use, these methods are often prone to reward hacking : as the guidance scale increases, generated samples over-optimize the reward at the expense of fidelity to the learned distribution, producing unrealistic or degenerate outputs [ 26 ]. While prior experimental work has attributed reward hacking to the complexity of neural reward functions [ 26 –28 ] or implicit biases in generative model training [ 29 ], the fundamental origins of reward hacking still remain poorly understood. Similarly, it has been empirically observed that taking the highest-reward option out of n guided samples ( best-of-n) significantly improves the performance of guidance in generative models in many settings, but the precise mechanism underlying the improvement from best-of-n is not well understood. This motivates the primary question that we study in this work: 
+
+Why does guidance fail to sample from the reward tilt, and how can we mitigate this bias? 
+
+Altogether, our main contributions are (visually summarized in Figure 2): 1. We prove in Gaussian settings that significant within-mode reward hacking arises from the finite-particle plug-in estimation in most implementations of reward-guided diffusion. 2. We show in Gaussian mixture settings that guidance using plug-in estimation fails to select between modes and has no mechanism for accurately weighting distant high-reward modes. 3. We propose a simple closed form damped reward schedule λt to mitigate within-mode reward hacking and clarify the role of best-of-n sampling in performing mode selection. 24. We demonstrate the effectiveness of our damped reward schedule and showcase the role of best-of-n
+
+sampling through a diverse set of experiments on Gaussian mixture targets, a 2D checkerboard, and FLUX.1 text-to-image generation. 
+
+# 2 Background on reward guidance 
+
+We begin by reviewing the general theoretical framework for reward guidance in generative models through stochastic interpolants and the Doob h-transform. 
+
+## 2.1 Stochastic interpolants and flow matching 
+
+We assume access to a pre-trained flow model b : [0 , 1] × Rd → Rd, and samples from the data distribution 
+
+ρ1 ∈ P (Rd) are drawn by numerically integrating the probability flow ODE 
+
+˙xt = bt(xt)
+
+starting from noise x0 ∼ N (0 , I d) until t = 1 . Such a model bt can be obtained by minimizing the flow matching objective [30, 31]. To facilitate our analysis, we consider the case bt := E[ ˙It | It = x], where 
+
+It := (1 − t)I0 + tI 1 (1) is the linear interpolant for I0 ∼ N (0 , I d) and I1 ∼ ρ1 independent. Furthermore, if σt ∈ Rd×ℓ is any fixed noise schedule and ρt denotes the density of xt, the solution of the SDE 
+
+dX t =
+
+
+
+bt(Xt) + 12 (σtσ⊤ 
+
+> t
+
+)∇ log ρt(Xt)
+
+
+
+dt + σt dB t (2) also shares the same time-marginal distribution as xt (Appendix A.1). 
+
+## 2.2 Reward guidance and plug-in estimation 
+
+The problem of reward-guided generation is often formulated as steering a trained generative model at inference-time (without additional fine-tuning) to obtain samples from the reward-tilted measure 
+
+˜ρ1(x) ∝ ρ1(x) eλr (x) (3) for a reward function r : Rd → R and inverse temperature λ > 0. The reward-tilted measure (3) commonly arises in reinforcement learning [ 25 ] as the solution to a KL-regularized variational optimization problem (Appendix A.2). 
+
+Doob h-transform, The Doob h-transform (e.g., [ 32 ]) provides a principled framework to solve the reward guidance problem by modifying the drift of the unguided SDE (2) to steer the terminal distribution toward the reward-tilted measure (3) . Defining the Doob h-function ht(x) := E[eλr (X1) | Xt = x], the Doob h-transform 
+
+follows the guided ODE 
+
+˙˜xt = bt(˜ xt) + 12 (σtσ⊤ 
+
+> t
+
+)∇ log ht(˜ xt) (4) from ˜x0 = x0 yields a sample ˜x1 ∼ ˜ρ1 from the reward tilt as long as X0 ⊥⊥ X1. To satisfy this constraint and ensure validity of the Doob h-transform, Domingo-Enrich et al. [33] demonstrates that choosing the 
+
+memoryless noise schedule σt = p2(1 − t)/t I d ensures that X0 ⊥⊥ X1.
+
+Plug-in estimation. The Doob h-function ht(x) = E[eλr (X1) | Xt = x] in Theorem 12 is intractable in general, so practitioners usually approximate it with a k-particle plug-in estimator 
+
+ˆh(k) 
+
+> t
+
+(x) = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+eλr (X(i)1 ), (5) where X(1) 1 , . . . , X (k)1 ∼ p1|t(· | x) are independent samples ( p1|t denotes the law of (X1 | Xt = x)). In practice, 
+
+k is often chosen to be small due to computational constraints [34–36], introducing finite-sample bias. 33 Related work 
+
+In this section, we briefly review related work on reward guidance for generative models. 
+
+Applications of reward guidance. Reward guidance has become a central ingredient in aligning generative models with downstream objectives across several domains. In text-to-image generation, learned human-preference reward models such as ImageReward [ 2], PickScore [ 14 ], and HPSv2 [ 37 ] are routinely used to fine-tune and steer state-of-the-art diffusion and flow-matching models. In structure-based drug design, reward guidance is used to bias diffusion-generated ligands toward target pockets and higher predicted binding affinity [ 18 – 20 ]. In protein design, classifier-guided and fine-tuned diffusion models are used to generate sequences and structures optimized for stability, binding, and other functional properties [10, 12, 21, 24]. 
+
+Practical approaches to reward guidance. The stochastic interpolant framework [ 31 , 38 ] provides a flexible formulation of diffusion and flow-matching generative models, and underpins many modern reward-alignment algorithms. Within this framework, GLASS flows [ 34 ] implement the Doob h-transform by approximating the intractable value function ht(x) = E[eλr (X1) | Xt = x] with a k-particle plug-in estimator, where each particle is obtained by simulating an inner ODE starting from fresh Gaussian noise. This inner ODE simulation is expensive, motivating the development of stochastic flow map frameworks that sample the posterior (X1 | Xt) in a single step [ 35 , 36 ]. A different deterministic approach is flow map reward guidance 
+
+[39 ], which backpropagates the reward gradient through the unguided probability flow ODE from Xt to X1.A complementary line of work [ 24 , 25 , 33 ] casts reward-guided generation as a reinforcement learning or stochastic optimal control problem and fine-tunes the generative model via policy-gradient or value-function learning; we discuss the connection to stochastic optimal control in Appendix A.3. 
+
+Theoretical results for guidance. Several recent works have studied guidance in simplified settings. Chidambaram et al. [40] analyzed classifier-free guidance for Gaussian mixtures, showing it can amplify the signal-to-noise ratio but distort mode weights. Wu et al. [41] provided theoretical insights under classifier guidance, while Pavasovic et al. [42] and Ventura et al. [43] study classifier-free guidance from a high-dimensional perspective. Wang et al. [44] finds that monotonic schedulers perform well for classifier-free guidance in practice, and our reward damping schedule in Section 4.1.2 is a principled choice for such a monotonic schedule. These works focus on specific guidance schemes; in contrast, we study the bias introduced by practical approximations to the general reward-guided Doob h-transform framework. Closest to our setting, Potaptchik et al. [35] prove that the k-particle plug-in estimator of the Doob h-transform converges to exact guidance in the limit as k → ∞ ; we complement this asymptotic guarantee by characterizing the bias induced by a finite k and showing that it systematically produces overly aggressive guidance. A recent line of work also proves computational hardness results for reward-guided diffusion models [ 45 , 46 ], showing that exact reward tilting is NP-hard even with certain quadratic rewards. 
+
+# 4 Theoretical results 
+
+## 4.1 Within-mode reward hacking 
+
+We now show that the plug-in approximation (5) leads to reward hacking within a single mode; we consider a Gaussian target N (μ, Σ) and a quadratic reward r(x) = −∥ x − a∥22 for a target point a ∈ Rd. We will compare the plug-in guidance to the analytic guidance framework described in Appendix B.1, which provides the benchmark for exact reward guidance. Throughout this section, we use the notation of Section 2 and assume noise schedule σt = ηtId for some ηt > 0. We let μt = tμ and Σt = (1 − t)2Id + t2Σ denote the mean and covariance of Xt, and let 
+
+μ1|t(x) = μ + Σ 1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(x − μt), Σ1|t = Σ( Id − Ψt),
+
+denote the mean and covariance of the Gaussian distribution (X1 | Xt = x), where Ψt := exp 
+
+
+
+− R 1 
+
+> t
+
+η2 
+
+> v
+
+Σ−1 
+
+> v
+
+dv 
+
+
+
+(see Appendix B.2 for the derivation). 44.1.1 Plug-in estimation bias 
+
+In this section, we analyze the bias due to the k-particle plug-in estimator (5) in the limit as the step size in the numerical ODE solver goes to zero; we call this the plug-in flow . Defining u(k) 
+
+> t
+
+(x) = E[∇ log ˆh(k) 
+
+> t
+
+(Xt) | Xt = x]
+
+(where the expectation is taken over the k particle draws), we obtain the following result. 
+
+Proposition 1 (Convergence to plug-in flow, informal) . Under appropriate regularity conditions, the Euler trajectory ¯xt obtained by running the guided ODE with the plug-in estimator converges uniformly in probability as the step size in the solver goes to zero: 
+
+sup 
+
+> t∈[0 ,1]
+
+∥¯xt − ˜xt∥2
+
+> p
+
+−→ 0.
+
+where the limiting trajectory starts at ˜x0 = X0 and follows the plug-in flow defined by 
+
+˙˜xt = bt(˜ xt) + 12 (σtσ⊤ 
+
+> t
+
+) u(k) 
+
+> t
+
+(˜ xt). (6) 
+
+Intuitively, this result means that the Monte Carlo error of the particles in the plug-in estimator vanishes as the step size goes to zero, so the plug-in estimator behaves like its expectation u(k) 
+
+> t
+
+(x) in the limit; note that each k produces a different biased plug-in flow as the step size vanishes ( k → ∞ recovers the analytic guidance). We defer the formal statement to Proposition 14 in Appendix C.3, whose proof relies on Grönwall’s inequality along with Doob’s L2 maximal inequality, and study the bias induced by the plug-in flow directly. We first characterize the plug-in flow with k = 1 particle for a Gaussian target under the memoryless schedule; the corresponding result for an arbitrary noise schedule is deferred to Theorem 15 in Appendix C.4. 
+
+Theorem 2 (Plug-in flow for Gaussian target) . Under the memoryless schedule, the guidance term for the 
+
+k = 1 plug-in flow is given by 
+
+u(1)  
+
+> t
+
+(x) = −2λt ΣΣ −1 
+
+> t
+
+(μ1|t(x) − a),
+
+and the terminal distribution of the plug-in flow is ˜x1 ∼ N (μ(1) , Σ(1) ), where 
+
+μ(1) := μ − T (1) pull (μ − a), T (1) pull := √π (λΣ) 1/2 exp( −λΣ) erfi 
+
+
+
+(λΣ) 1/2
+
+,
+
+Σ(1) := Σ exp( −2λΣ) .
+
+The proof is in Appendix C.5 and follows by the reparameterization trick and solving ODEs for the mean and covariance of the plug-in flow in closed form. Since T (1) pull and Σ(1) are matrix functions of Σ, all operators simultaneously diagonalize. Along an eigendirection v with Σ having eigenvalue σ > 0, let x := λσ . The eigenvalues of T (1) pull and Tpull along v are 
+
+λv (T (1) pull ) = √πx e −x erfi  √x , λv (Tpull ) = 2x
+
+1 + 2 x .
+
+Note that the eigenvalues of T (1) pull overshoot 1 around x ≈ 0.854 before decaying back down to 1, while the eigenvalue of the true Tpull increases to 1 at a rational rate. Therefore, the mean of the plug-in target will overshoot in the direction of the reward maximizer a compared to the analytic tilt. Similarly, the eigenvalues of Σ(1) and ˜Σ along v are 
+
+λv (Σ (1) ) = σe −2x, λv ( ˜Σ) = σ
+
+1 + 2 x .
+
+This implies that the plug-in estimator leads to exponentially fast contraction in the covariance of the guided samples. This mean overshoot and covariance contraction demonstrates that significant reward hacking arises from the k = 1 plug-in estimator, even in a simple Gaussian setting (panel (B) of Figure 3). Although this result holds for k = 1 particle, we prove next that exponentially many particles are required to resolve reward hacking within a single mode. Recall that W∞(μ, ν ) ≥ Wp(μ, ν ) for all p ≥ 1.5−3 0 3                 
+
+> −2024
+> A
+> Exact guidance
+> −303
+> B
+> Plug-in ( k= 1 )
+> −303
+> C
+> Plug-in ( k= 8 )
+> −303
+> D
+> Plug-in (damped)
+> Analytic tilt Guided samples Reward target Figure 3: Reward hacking for Gaussian mixtures. Exact guidance (A) faithfully samples the tilted distribution
+> ˜ρ1. The k= 1 plug-in estimator (B) overshoots the mean and shrinks covariance; reward damping (D) corrects the collapse better than k= 8 (C) with 8×less computational cost.
+
+Theorem 3 (∞-Wasserstein bound) . Assuming that ρ1 = N (μ, Σ) and r(x) = −∥ x − a∥22, let ˜ρ(k)1 denote the terminal distribution of the plug-in flow (6) with k particles. Then, the density ˜ρ(k)1 is close to the density 
+
+˜ρ(1) 1 in the ∞-Wasserstein distance: 
+
+W∞(˜ ρ(k)1 , ˜ρ(1) 1 ) ≲ plog k. 
+
+The constant in this corollary does not depend on dimension. The proof, given in Appendix C.7, follows from the reparameterization trick, Gaussian concentration inequality, and Grönwall’s inequality applied to the coupled ODE trajectories. Thus, increasing k can only logarithmically mitigate the reward hacking from the 
+
+k = 1 plug-in flow (panel (C) of Figure 3). In Appendix E, we compare flow map reward guidance (FMRG) [39] to the plug-in flow and show that their behavior is qualitatively similar. 
+
+4.1.2 Reward scale damping for bias correction 
+
+In this section, we propose a simple practical method to correct the plug-in bias. 
+
+Proposition 4 (Reward damping schedule) . Assuming an isotropic Gaussian target ρ1 = N (μ, σ 2Id), we can recover the correct guidance by replacing the reward scale λ with the reward damping schedule 
+
+λt := λ
+
+1 + 2 λσ 21|t
+
+, σ21|t = σ2(1 − t)2
+
+(1 − t)2 + t2σ2 . (7) 
+
+In practice, although the target may be non-isotropic with unknown covariance, we propose treating σ > 0 as a tunable hyperparameter ( σ = 0 recovers constant λ and increasing σ corresponds to damping the guidance). This method is computationally free compared to a k-fold increase in the cost from using k > 1 particles. We visualize the effect of damping in Figure 3 for a symmetric isotropic 2-component Gaussian mixture with quadratic reward r(x) = −∥ x − a∥22; experimental details and additional ablations are provided in Appendix D.2. We verify our theory in Appendix D.1, and in Section 5.1, we further demonstrate that these considerations extend to high-dimensional text-to-image settings. Two natural alternatives to the reward damping schedule fail to sample from the reward-tilted measure, even for isotropic Gaussians. We show in Appendix B.2 that non-memoryless schedules do under-correct the mean and inflate the variance, but no practical choice of non-memoryless schedule can match the analytic tilt. It also follows from Theorem 2 that using a smaller reward scale λ′ < λ similarly fails to recover the analytic tilt. 64.2 Mode selection: the role of the initial seed 
+
+Throughout this section, we consider a Gaussian mixture target I1 ∼ Pmi=1 πi N (· | μi, Σi) under the memory-less noise schedule σt = p2(1 − t)/t I d. Let ρit = N (· | tμ i, (1 − t)2Id + t2Σi) denote the unguided marginal density of the ith component, ρt = Pmi=1 πi ρit the unguided density, and hit the Doob h-function for the ith component (given by Proposition 10 with μi, Σi in place of μ, Σ). 
+
+4.2.1 Plug-in guidance cannot select modes 
+
+We now extend the analysis of Section 4.1 from Gaussian targets to Gaussian mixtures. The exact Doob 
+
+h-transform performs long-range mode selection, while the k = 1 plug-in flow does not. In Appendix C.8, we show that the overall analytic guidance term for a Gaussian mixture is given by a weighted sum of the component-wise guidance terms Pmi=1 wit ∇ log hit , where wit ∝ πi ρit (x) hit (x). Evaluating the Gaussian integral for hit , one finds 
+
+hit (x) ∝ exp  −λ (μi, 1|t(x) − a)⊤(Id + 2 λΣi, 1|t)−1(μi, 1|t(x) − a) ,
+
+so a mode i far from the current location can still exert exponentially large guidance if its reward is high. This long-range mode attraction is a special feature of the exact h-transform; we now show that the plug-in estimator does not share this property. 
+
+Theorem 5 (Plug-in flow for Gaussian mixture target) . Fixing t ∈ [0 , 1] , let ¯X1(x) denote a sample from 
+
+p1|t(· | x). Then, the guidance term for the plug-in flow with k = 1 particle is given by 
+
+u(1)  
+
+> t
+
+(x) = −2λ E∇ ¯X1(x)⊤( ¯X1(x) − a) . (8) The proof (Appendix C.9) follows from applying the chain rule. In Appendix C.9, we additionally provide a variational equation using GLASS flows (Theorem 9) which can be solved to obtain the Jacobian term 
+
+∇ ¯X1(x). In (8) , the reward enters only through the term ( ¯X1(x) − a). Since the sample from p1|t(· | x)
+
+typically remains in the same mode as x, a far-away mode contributes negligibly to E[∇ ¯X1(x)⊤( ¯X1(x) − a)] 
+
+regardless of how large its reward is. This is in contrast to the exact h-transform, which attracts trajectories toward high-reward modes exponentially through the weights hit (x). In this sense, the k = 1 plug-in flow cannot select high-reward modes from a distance. 
+
+4.2.2 Best-of-n can select modes 
+
+We now show through a simple representative example that plug-in guidance with any finite number of particles fundamentally cannot select between well-separated modes with poor reward gradients, while best-of-n
+
+sampling compensates for this failure. In the following theorem, we let ρ1(x) = 12 N (x | μ, σ 2) + 12 N (x | − μ, σ 2)
+
+for μ > 0, use the reward r(x) = −R 1x< 0 for R > 0, and assume the memoryless noise schedule (Theorem 13). Define the correct mode probability as the probability that the final sample is nonnegative. 
+
+Theorem 6 (Best-of-n for mode selection) . In the above setting, we have: (i) (Analytic guidance) Under the tilted measure, the correct mode probability is ˜p = (1 + e−λR )−1 → 1
+
+exponentially as R → ∞ .(ii) (Plug-in guidance) Under the k-particle plug-in flow with any finite k ≥ 1, the correct mode probability is ˜p(k)1 = 1 /2.(iii) (Best-of-n) Running n independent finite-k plug-in trajectories and selecting the highest-reward output yields ˜p(k) 
+
+> n
+
+= 1 − 2−n.
+
+The proof is given in Appendix C.10. Part (ii) holds because the indicator reward has zero gradient Lebesgue-a.e., so the plug-in guidance vanishes and the guided flow coincides with the unguided flow, which is symmetric. Figure 4 illustrates this empirically on the setting above; we defer a similar demonstration with a Gaussian reward (deviating from the theory) as well as further experiments to Appendix D.7. In Section 5.2, we demonstrate that this phenomenon arises in a 2D checkerboard setting as well as in a realistic text-to-image setting with a VLM reward. 7−6 −3 0 3 6
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> Density A
+
+Analytic tilt ˜ρ1    
+
+> −6−3036
+> B
+
+Plug-in ( k = 1 )    
+
+> −6−3036
+> C
+
+Best-of-4    
+
+> −6−3036
+> D
+
+Best-of-16   
+
+> Unguided ρ1
+> Analytic tilt ˜ρ1
+> Guided samples
+
+Figure 4: Mode selection for Gaussian mixture. Best-of-n increases the correct mode probability compared to 
+
+k = 1 guidance, better matching the analytic tilt. 
+
+# 5 Experiments 
+
+All code to reproduce these experiments is available in the following GitHub repository: 
+
+https://github.com/sanjitdp/reward-guidance .All experiments run on a single NVIDIA RTX A6000 or L40S GPU, and each image takes less than 1.5 minutes to generate; see Appendix D.5 for further descriptions of the compute used. Unguided Guided Guided (lower λ) Guided ( k = 8 ) Guided (damped) 
+
+> “Photorealistic worm’s-eye view of a welder mid-spark inside a rusted ship hull, sweat, smoke, orange backlight”
+
+Figure 5: Masked intensity reward. The reward is the mean pixel intensity inside a top-right circular mask minus the mean intensity outside. Naive guidance maximizes the masked-region brightness by removing the welder from the frame; reward damping obtains a high-reward sample including the welder. 
+
+85.1 Within-mode reward hacking (FLUX.1: text-to-image) 
+
+We apply guidance to FLUX.1-dev [ 1], a state-of-the-art 12-billion-parameter text-to-image diffusion trans-former using Diamond maps [ 36 ] for lookahead; further details are provided in Appendix D.4. Across our experiments, damped guidance (Section 4.1) matches or exceeds the reward hacking mitigation of plug-in with k = 8 particles using 8× less compute per step. Figure 5 contains an experiment with a masked-intensity reward, Figures 6 and 7 contain experiments with a blueness reward, and Figures 8 to 10 contain experiments with ImageReward [2], a learned human-preference reward. 
+
+Base model. All FLUX experiments use the pretrained black-forest-labs/FLUX.1-dev checkpoint at 
+
+512 × 512 resolution with 28 inference steps, the standard FLUX guidance scalar 3.5, and the FLUX flow-matching schedule. The posterior sampling from the law of (X1 | Xt = x) is computed with a Diamond map Unguided Guided Guided (lower λ) Guided ( k = 8 ) Guided (damped) 
+
+> “Artist painting in the center of a cluttered room lit by candlelight, rococo”
+
+Figure 6: Blueness reward (artist). The reward is the mean blue channel minus the mean of the red and green channels. Naive guidance produces blue images that forget the artist or candles, while reward damping produces a very blue image that retains the artist and shows the warm candlelight. Unguided Guided Guided (lower λ) Guided ( k = 8 ) Guided (damped) 
+
+> “a baby fox wearing a cozy knitted sweater”
+
+Figure 7: Blueness reward (fox). Naive guidance creates overwhelmingly blue outputs that wash out the fox’s orange fur; reward damping recognizes that the fox should remain orange while the sweater and background turn blue. 
+
+9Unguided Guided Guided (lower λ) Guided ( k = 8 ) Guided (damped) 
+
+> “Photorealistic close-up of an archaeologist brushing weathered paper talismans in a flooded bunker, flashlight haze, focused expression”
+
+Figure 8: ImageReward (archaeologist). We guide using ImageReward [ 2], a learned human-preference reward. Both the unguided and naively guided images produce unnatural images or fail to show a brush, while the damped guidance produces a more natural image with a visible brush. Unguided Guided Guided (lower λ) Guided ( k = 8 ) Guided (damped) 
+
+> “a dull, muted, washed-out, desaturated Indian outdoor market with stalls and produce, overcast gloomy lighting, faded colors”
+
+Figure 9: ImageReward (market). The image is scored against the prompt “a vibrant Indian outdoor market with colorful stalls and produce.” Naive guidance brightens the lamps while leaving the rest of the image washed out; reward damping produces a more balanced improvement across brightness and color. 
+
+[36] with 5 inner steps. 
+
+Reward functions. We use three rewards: the blueness reward r(x) = ¯xblue − ¯xred − ¯xgreen (mean blue-channel excess), the masked-brightness reward (mean intensity inside a top-right circular mask, minus the mean intensity outside), ImageReward [2] (a learned human-preference scorer applied with the BLIP visual encoder, BLIP text encoder, and reward MLP exposed in-graph for backpropagation). 
+
+Results. For the masked-intensity reward (Figure 5), naive guidance removes the welder to brighten the masked region. Damping reaches a high reward while keeping the welder in the scene. For the blueness reward, naive guidance produces a flat blue image that drops the artist and the candles (Figure 6), and washes the orange out of the fox’s fur (Figure 7). Damping produces very blue images that keep the artist visible 10 Unguided Guided Guided (lower λ) Guided ( k = 8 ) Guided (damped) 
+
+> “Cinematic split diorama of a miner above and below ground, helmet beam, coal dust, family dinner fading opposite”
+
+Figure 10: ImageReward (miner). Naive guidance hacks ImageReward by ignoring the split diorama constraint; reward damping produces dramatic images that still respect the constraint. 
+
+with the warm candlelight, and that leave the fox’s fur orange while turning the sweater and background blue. For ImageReward, naive guidance hacks the reward in three different ways: it produces an unnatural archaeologist scene with no brush (Figure 8), brightens the market lamps and leaves the rest of the scene washed out (Figure 9), and produces a single dramatic miner scene that ignores the split-diorama constraint (Figure 10). With damping, the archaeologist holds a brush, the market improves in brightness and color evenly, and the miner images stay dramatic while respecting the split-diorama constraint. 
+
+## 5.2 Mode selection 
+
+5.2.1 Checkerboard. 
+
+We first demonstrate the failure of plug-in guidance for mode selection using a base model sampling uniformly from a 2D checkerboard, where the reward is a Gaussian bump r(x) = exp (−∥ x − c∥22/(2 σ2 
+
+> r
+
+)) . Figure 12 and Table 11 show that plug-in estimators fail to concentrate samples near c, while a combination of best-of-n
+
+and damping improves fidelity to ˜ρ1. We provide further details on the experimental setup and additional results in Appendix D.3. 
+
+Table 11: Checkerboard statistics. Mean reward and covariance trace for each method ( λ = 10 ). Uncertainties are ±2 standard errors of the mean; covariance-trace uncertainties are bootstrapped. Method Mean reward Cov. trace Method Mean reward Cov. trace Analytic tilt 0.914 ±0.003 0.457 ±0.021 Best-of-2 0.914 ±0.003 0.520 ±0.026 
+
+Plug-in ( k = 1 ) 0.764 ±0.004 1.930 ±0.048 Best-of-4 0.978 ±0.002 0.107 ±0.010 
+
+Plug-in ( k = 8 ) 0.804 ±0.007 1.397 ±0.068 Best-of-4, σdamp = 0 .2 0.920 ±0.004 0.429 ±0.022 
+
+11 −2 0 2
+
+> −202
+
+A
+
+Analytic tilt ˜ρ1  
+
+> −202
+
+B
+
+Plug-in ( k = 1 )  
+
+> −202
+
+C
+
+Plug-in ( k = 8 )  
+
+> −202
+
+D
+
+Best-of-4 (σdamp = 0 .2)
+
+> Guided samples Reward target
+
+Figure 12: Checkerboard guidance. Unlike plug-in guidance, best-of-n can select modes. With reward damping, best-of-n significantly improves fidelity to the analytic tilt. 
+
+5.2.2 FLUX.1: text-to-image. 
+
+In Figures 13 and 14, we use FLUX.1-dev [ 1] with a VLM reward using Qwen2.5-VL-3B [ 47 ] to demonstrate that plug-in guidance cannot perform mode selection in a realistic setting. Here, the reward is r(x) = log (p( Yes )) − log (p(No )) , where p(·) denotes the VLM next-token probability. We provide numerics in Appendix D.6. “A roadside American diner in the Nevada desert, shot at twilight, a neon sign on the roof glowing ECLIPSE DINER, in cherry-red and cream tubes, a long empty highway behind it, painterly warm light on chrome surfaces” 
+
+Best-of-1 Best-of-2 Best-of-4 Unguided Guided Guided ( k = 8 )Guided (damped) 
+
+Figure 13: FLUX mode selection (ECLIPSE DINER). The VLM reward is derived from the question “Does this image clearly show a neon sign with the word ‘ECLIPSE’ as the main readable text?” Finite-particle guidance hacks the complex reward function, damping slightly improves the reward, and best-of-n substantially improves the reward, confirming the importance of the initial seed for mode selection. 
+
+12 “cyberpunk subway platform with a holographic display that says NEXT TRAIN MARS, teal neon, commuters in silhouette” 
+
+Best-of-1 Best-of-2 Best-of-4 Unguided Guided Guided ( k = 8 )Guided (damped) Figure 14: FLUX mode selection (NEXT TRAIN MARS). The VLM reward is derived from the question “Does this image clearly show a display with the text ‘NEXT TRAIN MARS’ as the main readable text?” We see the qualitative pattern of Figure 13: plug-in guidance hacks the reward, and best-of-n substantially improves it. 
+
+# 6 Conclusion 
+
+We demonstrate that reward hacking arises from the plug-in estimator commonly used in reward-guided generative modeling even in simple Gaussian settings, and showed that plug-in guidance cannot select between distant high-reward modes for Gaussian mixtures. We proposed reward damping, a principled time-dependent reward scale that corrects the within-mode bias at no additional cost, and clarified the role of best-of-n
+
+in compensating for the mode selection failure. Our experiments in Gaussian mixture, checkerboard, and text-to-image settings demonstrate the limitations of guidance and showcase the usefulness of our methods for overcoming these limitations. 
+
+Limitations and future work. Our closed-form theoretical results are derived for Gaussian and Gaussian-mixture targets with quadratic rewards under the memoryless noise schedule, and the reward damping schedule itself is obtained from the Gaussian analysis; our empirical study is limited to a 2D checkerboard and FLUX.1 text-to-image generation. Several directions remain open: an analytic study of plug-in bias for non-Gaussian targets and non-quadratic rewards, an extension of our analysis to broader reward-tilted-sampling problems in reinforcement learning beyond diffusion, and practical applications of reward damping to settings such as preference fine-tuning, controlled molecular design, and constrained protein generation. 
+
+# Acknowledgements 
+
+We thank Aaditya Ramdas, Sivaraman Balakrishnan, and Arun Kuchibhotla for providing helpful feedback on earlier versions of this work. We also thank Jerry Huang and Peter Holderrieth for useful discussions about text-to-image guidance experiments. 13 References 
+
+[1] Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas Müller, Harry Saini, Yam Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, Dustin Podell, Tim Dockhorn, Zion English, Kyle Lacey, Alex Goodwin, Yannik Marek, and Robin Rombach. Scaling rectified flow transformers for high-resolution image synthesis. arXiv preprint arXiv:2403.03206 , 2024. (pages 1, 2, 9, and 12) [2] Jiazheng Xu, Xiao Liu, Yuchen Wu, Yuxuan Tong, Qinkai Li, Ming Ding, Jie Tang, and Yuxiao Dong. ImageReward: Learning and evaluating human preferences for text-to-image generation. In Advances in Neural Information Processing Systems , volume 36, pages 15903–15935. Curran Associates, Inc., 2023. (pages 1, 2, 4, 9, and 10) [3] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In Advances in Neural Information Processing Systems , 2020. (page 2) [4] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. High-resolution image synthesis with latent diffusion models. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2022. (page 2) [5] Chitwan Saharia, William Chan, Saurabh Saxena, Lala Li, Jay Whang, Emily L. Denton, Kamyar Ghasemipour, Raphael Gontijo Lopes, Burcu Karagol Ayan, Tim Salimans, Jonathan Ho, David J. Fleet, and Mohammad Norouzi. Photorealistic text-to-image diffusion models with deep language understanding. In Advances in Neural Information Processing Systems , 2022. (page 2) [6] Emiel Hoogeboom, Victor Garcia Satorras, Clément Vignac, and Max Welling. Equivariant diffusion for molecule generation in 3D. In International Conference on Machine Learning , 2022. (page 2) [7] Minkai Xu, Lantao Yu, Yang Song, Chence Shi, Stefano Ermon, and Jian Tang. GeoDiff: A geometric diffusion model for molecular conformation generation. In International Conference on Learning Representations , 2022. (page 2) [8] Jiaqi Guan, Wesley Wei Qian, Xingang Peng, Yufeng Su, Jian Peng, and Jianzhu Ma. 3D equivariant diffusion for target-aware molecule generation and affinity prediction. In International Conference on Learning Representations , 2023. (page 2) [9] Arne Schneuing, Charles Harris, Yuanqi Du, Kieran Didi, Arian Jamasb, Ilia Igashov, Weitao Du, Tom Blundell, Pietro Liò, Carla Gomes, Max Welling, Michael Bronstein, and Bruno Correia. Structure-based drug design with equivariant diffusion models. Nature Computational Science , 2024. doi: 10.1038/ s43588-024-00737-x. (page 2) [10] Joseph L. Watson, David Juergens, Nathaniel R. Bennett, Brian L. Trippe, Jason Yim, Helen E. Eisenach, Woody Ahern, Andrew J. Borst, Robert J. Ragotte, Lukas F. Milles, et al. De novo design of protein structure and function with RFdiffusion. Nature , 2023. doi: 10.1038/s41586-023-06415-8. (pages 2 and 4) [11] Jason Yim, Brian L. Trippe, Valentin De Bortoli, Emile Mathieu, Arnaud Doucet, Regina Barzilay, and Tommi Jaakkola. SE(3) diffusion model with application to protein backbone generation. In International Conference on Machine Learning , 2023. (page 2) [12] John B. Ingraham, Max Baranov, Zak Costello, Karl W. Barber, Wujie Wang, Ahmed Ismail, Vincent Frappier, Dana M. Lord, Christopher Ng-Thow-Hing, Erik R. Van Vlack, et al. Illuminating protein space with a programmable generative model. Nature , 2023. doi: 10.1038/s41586-023-06728-8. (pages 2 and 4) [13] Kevin E. Wu, Kevin K. Yang, Rianne van den Berg, Sarah Alamdari, James Y. Zou, Alex X. Lu, and Ava P. Amini. Protein structure generation via folding diffusion. Nature Communications , 2024. doi: 10.1038/s41467-024-45051-2. (page 2) 14 [14] Yuval Kirstain, Adam Polyak, Uriel Singer, Shahbuland Matiana, Joe Penna, and Omer Levy. Pick-a-Pic: An open dataset of user preferences for text-to-image generation. Advances in Neural Information Processing Systems , 2023. (pages 2 and 4) [15] Kevin Black, Michael Janner, Yilun Du, Ilya Kostrikov, and Sergey Levine. Training diffusion models with reinforcement learning. International Conference on Learning Representations , 2024. (page 2) [16] Bram Wallace, Meihua Dang, Rafael Rafailov, Linqi Zhou, Aaron Lou, Senthil Purushwalkam, Stefano Ermon, Caiming Xiong, Shafiq Joty, and Nikhil Naik. Diffusion model alignment using direct preference optimization. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024. (page 2) [17] Jie Wu, Yu Gao, Zilyu Ye, Ming Li, Liang Li, Hanzhong Guo, Jie Liu, Zeyue Xue, Xiaoxia Hou, Wei Liu, Yan Zeng, and Weilin Huang. RewardDance: Reward scaling in visual generation. arXiv preprint arXiv:2509.08826 , 2025. (page 2) [18] Jiaqi Guan, Wesley Wei Qian, Xingang Peng, Yufeng Su, Jian Peng, and Jianzhu Ma. 3D equivariant diffusion for target-aware molecule generation and affinity prediction. International Conference on Learning Representations , 2023. (pages 2 and 4) [19] Jiaqi Guan, Xiangxin Zhou, Yuwei Yang, Yu Bao, Jian Peng, Jianzhu Ma, Qiang Liu, Liang Wang, and Quanquan Gu. DecompDiff: Diffusion models with decomposed priors for structure-based drug design. In International Conference on Machine Learning , 2023. (pages 2 and 4) [20] Yue Jian, Curtis Wu, Danny Reidenbach, and Aditi S. Krishnapriyan. General binding affinity guidance for diffusion models in structure-based drug design. arXiv preprint arXiv:2406.16821 , 2024. (pages 2 and 4) [21] Nate Gruver, Samuel Stanton, Nathan Frey, Tim G. J. Rudner, Isidro Hotzel, Julien Lafrance-Vanasse, Arvind Rajpal, Kyunghyun Cho, and Andrew G. Wilson. Protein design with guided discrete diffusion. In Advances in Neural Information Processing Systems , 2023. (pages 2 and 4) [22] Prafulla Dhariwal and Alexander Nichol. Diffusion models beat GANs on image synthesis. Advances in Neural Information Processing Systems , 2021. (page 2) [23] Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. arXiv preprint arXiv:2207.12598 ,2022. (page 2) [24] Masatoshi Uehara, Yulai Zhao, Kevin Black, Ehsan Hajiramezanali, Gabriele Scalia, Nathaniel Lee Diamant, Alex M Tseng, Tommaso Biancalani, and Sergey Levine. Fine-tuning of continuous-time diffusion models as entropy-regularized control. arXiv preprint arXiv:2402.15194 , 2024. (pages 2 and 4) [25] Masatoshi Uehara, Yulai Zhao, Chenyu Wang, Xiner Li, Aviv Regev, Sergey Levine, and Tommaso Biancalani. Inference-time alignment in diffusion models with reward-guided generation: Tutorial and review. arXiv preprint arXiv:2501.09685 , 2025. (pages 2, 3, and 4) [26] Leo Gao, John Schulman, and Jacob Hilton. Scaling laws for reward model overoptimization. In 
+
+International Conference on Machine Learning , pages 10835–10866. PMLR, 2023. (page 2) [27] Jacob Eisenstein, Chirag Nagpal, Alekh Agarwal, Ahmad Beirami, Alex D’Amour, DJ Dvijotham, Adam Fisch, Katherine Heller, Stephen Pfohl, Deepak Ramachandran, Peter Shaw, and Jonathan Berant. Helping or herding? Reward model ensembles mitigate but do not eliminate reward hacking. In 
+
+Conference on Language Modeling , 2024. (page 2) [28] Rafael Rafailov, Yaswanth Chittepu, Ryan Park, Harshit Sikchi, Joey Hejna, W. Bradley Knox, Chelsea Finn, and Scott Niekum. Scaling laws for reward model overoptimization in direct alignment algorithms. In Advances in Neural Information Processing Systems , volume 37, 2024. (page 2) [29] Ziyi Zhang, Sen Zhang, Yibing Zhan, Yong Luo, Yonggang Wen, and Dacheng Tao. Confronting reward overoptimization for diffusion models: A perspective of inductive and primacy biases. In International Conference on Machine Learning , pages 60396–60413. PMLR, 2024. (page 2) 15 [30] Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching for generative modeling. In International Conference on Learning Representations , 2023. (page 3) [31] Michael Albergo, Nicholas M Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A unifying framework for flows and diffusions. Journal of Machine Learning Research , 2025. (pages 3 and 4) [32] L. C. G. Rogers and David Williams. Diffusions, Markov Processes and Martingales . Cambridge Mathematical Library. Cambridge University Press, 2 edition, 2000. (page 3) [33] Carles Domingo-Enrich, Michal Drozdzal, Brian Karrer, and Ricky T. Q. Chen. Adjoint matching: Fine-tuning flow and diffusion generative models with memoryless stochastic optimal control. International Conference on Learning Representations , 2025. (pages 3, 4, and 21) [34] Peter Holderrieth, Uriel Singer, Tommi Jaakkola, Ricky T. Q. Chen, Yaron Lipman, and Brian Karrer. GLASS flows: Efficient inference for reward alignment of flow and diffusion models. International Conference on Learning Representations , 2026. (pages 3, 4, and 19) [35] Peter Potaptchik, Adhi Saravanan, Abbas Mammadov, Alvaro Prat, Michael S. Albergo, and Yee Whye Teh. Meta Flow Maps enable scalable reward alignment. arXiv preprint arXiv:2601.14430 , 2026. (pages 3 and 4) [36] Peter Holderrieth, Douglas Chen, Luca Eyring, Ishin Shah, Giri Anantharaman, Yutong He, Zeynep Akata, Tommi Jaakkola, Nicholas Matthew Boffi, and Max Simchowitz. Diamond maps: Efficient reward alignment via stochastic flow maps. arXiv preprint arXiv:2602.05993 , 2026. (pages 3, 4, 9, 10, and 35) [37] Xiaoshi Wu, Yiming Hao, Keqiang Sun, Yixiong Chen, Feng Zhu, Rui Zhao, and Hongsheng Li. Human preference score v2: A solid benchmark for evaluating human preferences of text-to-image synthesis. 
+
+arXiv preprint arXiv:2306.09341 , 2023. (page 4) [38] Nicholas M Boffi, Michael S Albergo, and Eric Vanden-Eijnden. How to build a consistency model: Learning flow maps via self-distillation. Advances in Neural Information Processing Systems , 2025. (page 4) [39] Jerry Huang, Justin Lin, Sheel Shah, Kartik Nair, and Nicholas M. Boffi. How to guide your flow: Steering flow maps for rapid test-time alignment. In International Conference on Machine Learning ,2026. (pages 4, 6, 35, 36, and 37) [40] Muthu Chidambaram, Khashayar Gatmiry, Sitan Chen, Holden Lee, and Jianfeng Lu. What does guidance do? a fine-grained analysis in a simple setting. Advances in Neural Information Processing Systems , 2024. (page 4) [41] Yuchen Wu, Minshuo Chen, Zihao Li, Mengdi Wang, and Yuting Wei. Theoretical insights for diffusion guidance: A case study for Gaussian mixture models. International Conference on Machine Learning ,2024. (page 4) [42] Krunoslav Lehman Pavasovic, Jakob Verbeek, Giulio Biroli, and Marc Mezard. Classifier-free guidance: From high-dimensional analysis to generalized guidance forms. arXiv preprint arXiv:2502.07849 , 2025. (page 4) [43] Enrico Ventura, Beatrice Achilli, Luca Ambrogioni, and Carlo Lucibello. Emergence of distortions in high-dimensional guided diffusion models. arXiv preprint arXiv:2602.00716 , 2026. (page 4) [44] Xi Wang, Nicolas Dufour, Nefeli Andreou, Marie-Paule Cani, Victoria Fernández Abrevaya, David Picard, and Vicky Kalogeiton. Analysis of classifier-free guidance weight schedulers. Transactions on Machine Learning Research , 2024. (page 4) [45] Ankur Moitra, Andrej Risteski, and Dhruv Rohatgi. Steering diffusion models with quadratic rewards: a fine-grained analysis. arXiv preprint arXiv:2602.16570 , 2026. (page 4) [46] Ankur Moitra, Andrej Risteski, and Dhruv Rohatgi. The tractability landscape of diffusion alignment: regularization, rewards, and computational primitives. arXiv preprint arXiv:2605.11361 , 2026. (page 4) 16 [47] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, Humen Zhong, Yuanzhi Zhu, Mingkun Yang, Zhaohai Li, Jianqiang Wan, Pengfei Wang, Wei Ding, Zheren Fu, Yiheng Xu, Jiabo Ye, Xi Zhang, Tianbao Xie, Zesen Cheng, Hang Zhang, Zhibo Yang, Haiyang Xu, and Junyang Lin. Qwen2.5-VL technical report. arXiv preprint arXiv:2502.13923 ,2025. (page 12) [48] Stéphane Boucheron, Gábor Lugosi, and Pascal Massart. Concentration Inequalities: a Nonasymptotic Theory of Independence . Oxford University Press, 2013. (page 29) 17 A Further background 
+
+## A.1 Forward SDE matches the probability flow time-marginals 
+
+Proposition 7 (Time-marginals of the forward SDE) . The solution of the forward SDE (2) has the same time-marginal distribution as the probability flow ODE ˙xt = bt(xt).Proof. The Fokker–Planck equation associated with the SDE (2) is 
+
+∂tρt = −∇ · 
+
+
+
+ρtbt + 12 ∇ · (ρt σtσ⊤ 
+
+> t
+
+)
+
+
+
++ 12 ∇ · (∇ · (ρt σtσ⊤ 
+
+> t
+
+)) = −∇ · (ρtbt),
+
+which matches the continuity equation for the probability flow ODE. 
+
+## A.2 Reward-tilted measure as a KL-regularized variational problem 
+
+Proposition 8 (Variational characterization of the reward tilt) . The reward-tilted measure (3) solves the KL-regularized variational problem 
+
+˜ρ1 = arg max 
+
+> ρ
+
+
+
+EX∼ρ[r(X)] − 1
+
+λ KL( ρ ∥ ρ1)
+
+
+
+.
+
+Proof outline. Writing the objective as a single integral against ρ1,
+
+EX∼ρ[r(X)] − 1
+
+λ KL( ρ ∥ ρ1) = 1
+
+λ EX∼ρ1
+
+ ρ(X)
+
+ρ1(X)
+
+
+
+λr (X) − log ρ(X)
+
+ρ1(X)
+
+ 
+
+.
+
+Pointwise maximization in the density ratio f (x) = ρ(x)/ρ 1(x) subject to EX∼ρ1 [f (X)] = 1 yields f (x) ∝ eλr (x)
+
+via a Lagrange multiplier, so the optimal ρ is exactly ˜ρ1(x) ∝ ρ1(x) eλr (x).
+
+## A.3 Connections to stochastic optimal control 
+
+The Doob h-transform approach to reward guidance can also be interpreted through the lens of stochastic optimal control. We start with an uncontrolled diffusion 
+
+dX t = μt(Xt) dt + σt dB t
+
+where μt(x) := bt(x) + 12 (σtσ⊤ 
+
+> t
+
+)∇ log ρt(x) and define a controlled process under a new measure Qu by 
+
+dX t = ( μt(Xt) + σtut(Xt)) dt + σt d ˜Bt.
+
+Now, the goal is to maximize the expected reward while minimizing the control cost, over all admissible controls u:
+
+max  
+
+> u
+
+EQu
+
+
+
+r(X1) − 12λ
+
+Z 10
+
+∥ut(Xt)∥22 dt 
+
+
+
+.
+
+We then define the stochastic value function 
+
+Vt(x) = sup 
+
+> u
+
+EQu
+
+
+
+r(X1) − 12λ
+
+Z 1
+
+> t
+
+∥us(Xs)∥22 ds Xt = x
+
+
+
+,
+
+noting that it must satisfy the Hamilton–Jacobi–Bellman (HJB) equation 
+
+∂tVt(x) + sup 
+
+> u
+
+
+
+(μt(x) + σtu)⊤ ∇Vt(x) + 12 tr(( σtσ⊤ 
+
+> t
+
+) ∇2Vt(x)) − 12λ ∥u∥22
+
+
+
+= 0 
+
+18 with the boundary condition V1(x) = r(x). Then, stationarity implies that the optimal control is given by 
+
+u∗ 
+
+> t
+
+(x) = λ σ ⊤ 
+
+> t
+
+∇Vt(x), and substituting back into the HJB equation yields the nonlinear PDE 
+
+∂tVt(x) + μt(x)⊤∇Vt(x) + 12 tr(( σtσ⊤ 
+
+> t
+
+) ∇2Vt(x)) + λ
+
+2 ∥σ⊤ 
+
+> t
+
+∇Vt(x)∥22 = 0 .
+
+The only source of nonlinearity in this equation comes from the control cost term λ 
+
+> 2
+
+∥σ⊤ 
+
+> t
+
+∇Vt(x)∥22, so we apply the Cole–Hopf transformation ht(x) = eλV t(x) to linearize the PDE: 
+
+∂tht(x)
+
+λh t(x) + μ⊤
+
+> t
+
+ ∇ht(x)
+
+λh t(x)
+
+
+
++ λ
+
+2 σ⊤
+
+> t
+
+ ∇ht(x)
+
+λh t(x)
+
+ 22
+
++ 12 tr 
+
+
+
+σtσ⊤
+
+> t
+
+ ∇2ht(x)
+
+λh t(x) − ∇ht(x)( ∇ht(x)) ⊤
+
+λh t(x)2
+
+ 
+
+= 0 .
+
+Here, note that 
+
+12λh t(x)2 tr( σtσ⊤ 
+
+> t
+
+∇ht(x)( ∇ht(x)) ⊤) = 12λh t(x)2 σ⊤ 
+
+> t
+
+∇ht(x) 22
+
+by the cyclic property of trace, so the nonlinear terms cancel and we are left with the linear PDE 
+
+∂tht(x) + μt(x)⊤∇ht(x) + 12 tr(( σtσ⊤ 
+
+> t
+
+) ∇2ht(x)) = 0 .
+
+Recalling the formula for the generator Lt of the unguided diffusion from (10) , it follows that ht must satisfy the Kolmogorov backward equation ∂tht + Ltht = 0 . Noting that ht(x) = E[eλr (X1) | Xt = x] also satisfies this PDE with boundary condition h1(x) = eλr (x), we conclude that the stochastic value function is given by Vt(x) = 1 
+
+> λ
+
+log ht(x) and the optimal control is given by u∗ 
+
+> t
+
+(x) = σ⊤ 
+
+> t
+
+∇ log ht(x), which matches the Doob 
+
+h-transform guidance term. 
+
+## A.4 GLASS flows for transition sampling 
+
+In this section, we describe the GLASS flow framework introduced by Holderrieth et al. [34] for sampling from the law of (I1 | It = x). Instead of simulating the forward SDE, which is computationally expensive and hard to differentiate through, GLASS flows simulate a deterministic ODE starting from a Gaussian initial condition. This way, transition sampling is much cheaper to simulate, more numerically stable, and easier to differentiate through. The GLASS framework operates under the assumption that the initial distribution ρ0
+
+is Gaussian and that we have access to the optimal denoiser Dt(x) := E[I1 | It = x]. Although the GLASS flow is defined more generally, we specialize it here to the setting of linear stochastic interpolants. 
+
+Theorem 9 (GLASS flow for transition sampling) . Consider the linear interpolant It = (1 − t)X0 + tX 1 for 
+
+t ∈ [0 , 1] with X0 ∼ N (0 , I d). For s, t ∈ [0 , 1) , define the combined signal-to-noise ratio 
+
+η∗ 
+
+> s
+
+:= 
+
+s t
+
+1 − t
+
+2
+
++
+
+ s
+
+1 − s
+
+2
+
+.
+
+To sample from the law of (I1 | It = x), we can simulate the ODE 
+
+d ¯Xs = 11 − s (Dτ ∗ 
+
+> s
+
+(X∗ 
+
+> s
+
+(x)) − ¯Xs) ds, 
+
+from s = 0 to s = 1 starting from ¯X0 ∼ N (0 , I d), where 
+
+τ ∗ 
+
+> s
+
+:= η∗
+
+> s
+
+1 + η∗
+
+> s
+
+, X∗ 
+
+> s
+
+(x) := 1
+
+η∗ 
+
+> s
+
+(1 + η∗ 
+
+> s
+
+)
+
+ t
+
+(1 − t)2 x + s
+
+(1 − s)2 ¯Xs
+
+
+
+.
+
+Let Xt denote the solution to the forward SDE (2) with initial condition X0 ∼ N (0 , I d). Then, note that the GLASS flow will work for transition sampling as long as the memoryless noise schedule is used, since the law of (I1 | It = x) then matches the law of (X1 | Xt = x) by Theorem 13. 19 Proof. Define another linear interpolant Js = (1 − s) ϵ + sI 1, where ϵ ∼ N (0 , I d) is independent of everything else; note that (J0 | It = x) ∼ N (0 , I d) and (J1 | It = x) follows the law of (I1 | It = x). Then, the conditional probability flow ODE for (Js | It = x) is given by 
+
+d ¯Xs = 11 − s (E[I1 | Js = ¯Xs, I t = x] − ¯Xs) ds. 
+
+Therefore, it remains to show that conditioning on Js = ¯Xs and It = x is equivalent to conditioning on Iτ ∗ 
+
+> s
+
+= X∗ 
+
+> s
+
+(x) for an appropriate choice of effective time τ ∗ 
+
+> s
+
+and effective observation X∗ 
+
+> s
+
+(x). Since 
+
+(It | I1) ∼ N (tI 1, (1 − t)2Id) and (Js | I1) ∼ N (sI 1, (1 − s)2Id) are independent, their joint density is given by 
+
+p(It = x, J s = ¯Xs | I1) ∝ exp 
+
+
+
+− 12(1 − t)2 ∥x − tI 1∥22 − 12(1 − s)2 ∥ ¯Xs − sI 1∥22
+
+
+
+∝ exp 
+
+
+
+− 12 I⊤
+
+> 1
+
+ t2
+
+(1 − t)2 + s2
+
+(1 − s)2
+
+
+
+I1 + I⊤
+
+> 1
+
+ t
+
+(1 − t)2 x + s
+
+(1 − s)2 ¯Xs
+
+ 
+
+.
+
+On the other hand, the density of (Iτ ∗ 
+
+> s
+
+| I1) is given by 
+
+p(Iτ ∗ 
+
+> s
+
+= X∗ 
+
+> s
+
+(x) | I1) ∝ exp 
+
+
+
+− 12(1 − τ ∗ 
+
+> s
+
+)2 ∥X∗ 
+
+> s
+
+(x) − τ ∗ 
+
+> s
+
+I1∥22
+
+
+
+∝ exp 
+
+
+
+− 12 I⊤
+
+> 1
+
+ (τ ∗ 
+
+> s
+
+)2
+
+(1 − τ ∗ 
+
+> s
+
+)2
+
+
+
+I1 + I⊤
+
+> 1
+
+ τ ∗
+
+> s
+
+(1 − τ ∗ 
+
+> s
+
+)2 X∗ 
+
+> s
+
+(x)
+
+ 
+
+.
+
+It suffices now to show that the two densities are proportional to each other, since Bayes’ rule will then imply that (I1 | It = x, J s = ¯Xs) d
+
+= ( I1 | Iτ ∗ 
+
+> s
+
+= X∗ 
+
+> s
+
+(x)) . Equating the quadratic coefficients gives 
+
+τ ∗
+
+> s
+
+1 − τ ∗
+
+> s
+
+= η∗ 
+
+> s
+
+=⇒ τ ∗ 
+
+> s
+
+= η∗
+
+> s
+
+1 + η∗
+
+> s
+
+,
+
+and because τ ∗ 
+
+> s
+
+/(1 − τ ∗ 
+
+> s
+
+)2 = η∗ 
+
+> s
+
+(1 + η∗ 
+
+> s
+
+), equating the linear coefficients gives 
+
+X∗ 
+
+> s
+
+(x) = 1
+
+η∗ 
+
+> s
+
+(1 + η∗ 
+
+> s
+
+)
+
+ t
+
+(1 − t)2 x + s
+
+(1 − s)2 ¯Xs
+
+
+
+.
+
+# B Additional results 
+
+## B.1 Analytic guidance for the Gaussian target 
+
+In this appendix, we compute the exact Doob h-transform guidance for a Gaussian target distribution under the memoryless noise schedule, providing a benchmark for the biases that we study in Section 4.1. 
+
+Proposition 10 (Analytic guidance for Gaussian target) . Suppose I1 ∼ N (μ, Σ) and σt = p2(1 − t)/t I d is the memoryless noise schedule. The guidance term of the Doob h-transform is 
+
+∇ log ht(x) = −2λt ΣΣ −1 
+
+> t
+
+(Id + 2 λΣ1|t)−1(μ1|t(x) − a),
+
+where μ1|t(x) = μ + tΣΣ −1 
+
+> t
+
+(x − tμ ) and Σ1|t = (1 − t)2ΣΣ −1 
+
+> t
+
+are the mean and covariance of (X1 | Xt = x).The terminal distribution of the guided ODE is the reward-tilted measure 
+
+˜x1 ∼ N  μ − 2λΣ( Id + 2 λΣ) −1(μ − a), Σ( Id + 2 λΣ) −1 .
+
+Proof. The last part of the corollary follows immediately from Theorem 11 by noting that Ψ = 0 for the memoryless noise schedule. Note that for the memoryless noise schedule ηt = p2(1 − t)/t ,
+
+ddv log( v2 ΣΣ −1 
+
+> v
+
+) = 2
+
+v Id − Σ−1 
+
+> v
+
+˙Σv
+
+= Σ −1
+
+> v
+
+
+
+2vΣ + 2(1 − v)2
+
+v Id − 2vΣ + 2(1 − v)Id
+
+
+
+= 2(1 − v)
+
+v Σ−1
+
+> v
+
+= η2 
+
+> v
+
+Σ−1 
+
+> v
+
+.
+
+20 Therefore, we can compute the integral defining Ψt in closed form: 
+
+Ψt = exp 
+
+
+
+−
+
+Z 1
+
+> t
+
+η2 
+
+> v
+
+Σ−1 
+
+> v
+
+dv 
+
+
+
+= exp(log( t2 ΣΣ −1 
+
+> t
+
+)) = t2 ΣΣ −1 
+
+> t
+
+.
+
+Plugging this back into the covariance formula, we obtain Cov (Xt, X 1) = tΣ. The Gaussian conditioning formula states that (X1 | Xt = x) ∼ N (μ1|t(x), Σ1|t) where μ1|t(x) = μ+tΣΣ −1 
+
+> t
+
+(x−tμ ) and Σ1|t = (1 −t)2ΣΣ −1 
+
+> t
+
+.Using the fact that Σ and Σt are simultaneously diagonalizable, the guidance term is given by 
+
+∇ log ht(x) = −2λt ΣΣ −1 
+
+> t
+
+(Id + 2 λΣ1|t)−1(μ1|t(x) − a).
+
+## B.2 Initial value function bias 
+
+The Doob h-transform of Theorem 12 requires a memoryless noise schedule, but the memoryless schedule of Theorem 13 has σt = p2(1 − t)/t → ∞ as t → 0, so it is numerically unstable near t = 0 ; in practice, practitioners use a non-memoryless alternative. Here we characterize the resulting bias—referred to as the 
+
+initial value function bias [ 33 , Section 4.2]—in closed form for Gaussian and Gaussian mixture targets, using the notation introduced in Section 4.1. As discussed in the main text, this bias acts in the opposite direction to the plug-in bias: it under-corrects the mean and inflates the variance relative to the analytic tilt, so it partially mitigates plug-in reward hacking. However, non-memoryless schedules cannot recover the analytic tilt for any choice of schedule. In particular, any non-memoryless schedule with Ψ ≻ 0 strictly (which holds for all schedules used in practice) has both the mean pull (strictly decreasing in ψ) and the terminal covariance (strictly increasing in ψ) strictly missing their analytic-tilt values 2λσ/ (1 + 2 λσ ) and σ/ (1 + 2 λσ ) along every eigendirection; no such schedule can recover the analytic tilt as the terminal distribution. 
+
+Theorem 11 (Initial value function bias for Gaussian target) . The guidance term in the Doob h-transform (Theorem 12) is 
+
+∇ log ht(x) = −2λΣ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(Id + 2 λΣ1|t)−1(μ1|t(x) − a).
+
+Defining Ψ := Ψ 0, the terminal distribution of the guided ODE is ˜x1 ∼ N (˜ μ, ˜Σ) , where 
+
+˜μ := μ − Tpull (μ − a), Tpull := 2 λΣ( Id − Ψ)( Id + 2 λΣ( Id − Ψ)) −1,
+
+and 
+
+˜Σ := Σ( Id + 2 λΣ( Id − Ψ) 2)( Id + 2 λΣ( Id − Ψ)) −2.
+
+The proof is below; we express the SDE for Xt as a linear system, derive a closed-form ODE for the cross-covariance Cov (Xs, X t) via Fubini’s theorem, and evaluate ht(x) as a Gaussian integral. To provide some intuition for this formula, note that for any non-memoryless schedule, 0 ≺ Ψ ≺ Id and all operators are simultaneously diagonalizable (since Ψ is a matrix function of Σ). Along a joint eigendirection v with Ψ
+
+having eigenvalue ψ ∈ (0 , 1) and Σ having eigenvalue σ > 0, the eigenvalue of Tpull is 
+
+2λσ (1 − ψ)1 + 2 λσ (1 − ψ) ,
+
+a decreasing function of ψ on [0 , 1] , equal to the memoryless tilt’s pull 2λσ/ (1 + 2 λσ ) at ψ = 0 and vanishing as ψ → 1, while the eigenvalue of ˜Σ is 
+
+σ(1 + 2 λσ (1 − ψ)2)(1 + 2 λσ (1 − ψ)) 2 ,
+
+an increasing function of ψ on [0 , 1] , equal to the memoryless tilt’s variance σ/ (1 + 2 λσ ) at ψ = 0 and approaching the unguided variance σ as ψ → 1. Thus, non-memoryless schedules under-correct the mean and inflate the covariance relative to the memoryless tilt. In particular, since 0 ≺ Ψ ≺ Id strictly for any 21 non-memoryless schedule, both the mean pull (strictly decreasing in ψ) and the terminal covariance (strictly increasing in ψ) miss their analytic-tilt values 2λσ/ (1 + 2 λσ ) and σ/ (1 + 2 λσ ) along every eigendirection; no choice of non-memoryless noise schedule can recover the analytic tilt as the terminal distribution. The corresponding analysis for a Gaussian mixture target appears as Theorem 17 and is used in Section 4.2.1 to characterize the long-range mode-selection behavior of the analytic h-transform. 
+
+Proof of Theorem 11. The unguided stochastic interpolant It has distribution N (μt, Σt) where μt = tμ and 
+
+Σt = (1 − t)2Id + t2Σ. It is clear that (It, ˙It) is a linear function of (I0, I 1) and hence jointly Gaussian. We then notice that 
+
+Cov( ˙It, I t) = Cov( I1 − I0, (1 − t)I0 + tI 1) = tΣ − (1 − t)Id
+
+and hence the Gaussian conditional mean is given by 
+
+E[ ˙It | It = x] = μ + ( tΣ − (1 − t)Id)Σ −1 
+
+> t
+
+(x − μt) = μ + 12 ˙ΣtΣ−1 
+
+> t
+
+(x − μt).
+
+Because the score function is ∇ log ρt(x) = −Σ−1 
+
+> t
+
+(x − μt), the forward SDE associated with the stochastic interpolant is 
+
+dX t =
+
+
+
+μ + 12 ( ˙Σt − η2 
+
+> t
+
+Id) Σ −1 
+
+> t
+
+(Xt − μt)
+
+
+
+dt + ηt dB t.
+
+Here, we can use Fubini’s theorem to compute that for 0 ≤ s < t ≤ 1,
+
+Cov( Xs, X t) = E[( Xs − μs)( Xt − μt)⊤]= E
+
+"
+
+(Xs − μs)
+
+
+
+(Xs − μs) + 
+
+Z ts
+
+12 ( ˙Σv − η2 
+
+> v
+
+Id) Σ −1 
+
+> v
+
+(Xv − μv ) dv +
+
+Z ts
+
+ηv dB v
+
+⊤#
+
+= Σ s +
+
+Z ts
+
+12 Cov( Xs, X v )(( ˙Σv − η2 
+
+> v
+
+Id) Σ −1 
+
+> v
+
+)⊤ dv. 
+
+Differentiating both sides with respect to t yields the linear ODE 
+
+∂t Cov( Xs, X t) = 12 Cov( Xs, X t)(( ˙Σt − η2 
+
+> t
+
+Id) Σ −1 
+
+> t
+
+)⊤.
+
+Since all relevant terms are simultaneously diagonalizable, we can change into the eigenbasis of Σ to obtain a scalar ODE for each eigenvalue. As a result, we obtain the closed-form solution 
+
+Cov( Xs, X t) = Σ 1/2 
+
+> s
+
+Σ1/2 
+
+> t
+
+exp 
+
+
+
+− 12
+
+Z ts
+
+η2 
+
+> v
+
+Σ−1 
+
+> v
+
+dv 
+
+
+
+(9) using the boundary condition Cov (Xs, X s) = Σ s. Instantiating this formula yields the joint distribution of the Gaussian vector (X0, X 1) as Cov( X0, X 1) = Σ 1/2Ψ1/2 where 
+
+Ψ := exp 
+
+
+
+−
+
+Z 10
+
+η2 
+
+> v
+
+Σ−1 
+
+> v
+
+dv 
+
+
+
+.
+
+Therefore, we have 
+
+(X1 | X0) ∼ N 
+
+
+
+μ + Σ 1/2Ψ1/2X0, Σ( Id − Ψ) 
+
+
+
+and 
+
+(X0 | X1) ∼ N 
+
+
+
+Σ−1/2Ψ1/2(X1 − μ), I d − Ψ
+
+
+
+.
+
+Using these expressions, we compute h0 as a Gaussian integral: 
+
+h0(x) = E[e−λ∥X1−a∥22 | X0 = x]
+
+∝ exp 
+
+
+
+−λ
+
+
+
+μ + Σ 1/2Ψ1/2x − a
+
+⊤
+
+(Id + 2 λΣ( Id − Ψ)) −1 
+
+μ + Σ 1/2Ψ1/2x − a
+
+
+
+.
+
+22 Similarly, we can compute the initial value function bias by a Gaussian integral: 
+
+E
+
+ 1
+
+h0(X0) X1 = x
+
+
+
+∝ E
+
+
+
+exp 
+
+
+
+λ
+
+
+
+μ + Σ 1/2Ψ1/2X0 − a
+
+⊤
+
+(Id + 2 λΣ( Id − Ψ)) −1 
+
+μ + Σ 1/2Ψ1/2X0 − a
+
+
+
+X1 = x
+
+
+
+∝ exp  λ(μ − a + Ψ( x − μ)) ⊤(Id + 2 λΣ( Id − Ψ) 2)−1(μ − a + Ψ( x − μ))  .
+
+At last, the distribution of ˜x1 under the guided ODE is 
+
+˜ρ1(x) ∝ exp 
+
+
+
+− 12 (x − μ)⊤Σ−1(x − μ) − λ∥x − a∥22
+
+
+
+E
+
+ 1
+
+h0(X0) X1 = x
+
+
+
+,
+
+which is a Gaussian measure 
+
+N
+
+
+
+μ − 2λΣ( Id − Ψ)( Id + 2 λΣ( Id − Ψ)) −1(μ − a),
+
+Σ( Id + 2 λΣ( Id − Ψ) 2)( Id + 2 λΣ( Id − Ψ)) −2
+
+
+
+.
+
+Now, we know that (Xt, X 1) is Gaussian (since it is a linear transformation of the Gaussian vector (X0, X 1)), so we can compute ht in closed form. In particular, we have from (9) that Cov (Xt, X 1) = Σ 1/2 
+
+> t
+
+Σ1/2Ψ1/2 
+
+> t
+
+and thus the Gaussian conditioning formula yields 
+
+(X1 | Xt) ∼ N (μ1|t(x), Σ1|t) := N
+
+
+
+μ + Σ 1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(Xt − μt), Σ( Id − Ψt)
+
+
+
+.
+
+Now, we can compute ht in closed form as a Gaussian integral: 
+
+ht(x) = E[e−λ∥X1−a∥22 | Xt = x] ∝ exp  −λ(μ1|t(x) − a)⊤(Id + 2 λΣ1|t)−1(μ1|t(x) − a) .
+
+This means that the guidance term is given by 
+
+∇ log ht(x) = −2λΣ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(Id + 2 λΣ1|t)−1(μ1|t(x) − a).
+
+# C Omitted proofs 
+
+## C.1 Proof of Theorem 12 
+
+Theorem 12 (Doob h-transform) . Suppose Xt satisfies (2) and define the Doob h-function ht(x) :=
+
+E[eλr (X1) | Xt = x]. Then, consider the guided ODE (4) . If X0 ⊥⊥ X1, the time-marginals of ˜xt will be 
+
+˜ρt(x) ∝ ρt(x) ht(x); in particular, ˜ρ1(x) ∝ ρ1(x) eλr (x) will be the reward-tilted measure. Proof. We first define the Doob h-function 
+
+ht(x) = E[eλr (X1) | Xt = x]
+
+and note that ht(Xt) is a Doob martingale. Letting Lt denote the generator of the diffusion (2): 
+
+Ltf =
+
+
+
+bt + 12 (σtσ⊤ 
+
+> t
+
+)∇ log ρt
+
+⊤
+
+∇f + 12 tr  (σtσ⊤ 
+
+> t
+
+)∇2f  , (10) we know that ht(Xt) must satisfy the Kolmogorov backward equation 
+
+∂tht(Xt) + Ltht(Xt) = 0 . (11) 23 Next, let (Ft)t≥0 denote the natural filtration generated by the Brownian motion (Bt)t≥0. Letting P denote the law of the path (Xt)t∈[0 ,1] and letting Pt denote the restriction of P to Ft, we define the Doob h-transform 
+
+of P by its Radon–Nikodym derivative: 
+
+dQ t
+
+dP t
+
+= gt := ht(Xt)
+
+h0(X0) .
+
+By Itô’s formula and (11), we have 
+
+dg t = 1
+
+h0(X0)
+
+ (∂tht(Xt) + Ltht(Xt)) dt + ∇ht(Xt)⊤σt dB t
+
+
+
+= 1
+
+h0(X0) ∇ht(Xt)⊤σt dB t
+
+= gt∇ log ht(Xt)⊤σt dB t.
+
+At this point, applying Itô’s formula shows that 
+
+d(log gt) = ∇ log ht(Xt)⊤σt dB t − 12 ∥∇ log ht(Xt)⊤σt∥22 dt 
+
+and integrating both sides shows that gt is the Doléans–Dade exponential (local) martingale 
+
+gt = exp 
+
+Z t
+
+> 0
+
+∇ log hs(Xs)⊤σs dB s − 12
+
+Z t
+
+> 0
+
+∥∇ log hs(Xs)⊤σs∥22 ds 
+
+
+
+.
+
+Under the standard Novikov’s condition (for instance): 
+
+E
+
+
+
+exp 
+
+ 12
+
+Z 10
+
+∥∇ log hs(Xs)⊤σs∥22 ds 
+
+ 
+
+< ∞,gt is a true martingale. At last, Girsanov’s theorem implies that under Q := Q1, the process 
+
+˜Bt = Bt −
+
+Z t
+
+> 0
+
+σ⊤ 
+
+> s
+
+∇ log hs(Xs) ds 
+
+is a Brownian motion, and substituting back into the SDE for Xt gives 
+
+dX t =
+
+
+
+bt(Xt) + 12 (σtσ⊤ 
+
+> t
+
+)∇ log ρt(Xt) + ( σtσ⊤ 
+
+> t
+
+)∇ log ht(Xt)
+
+
+
+dt + σt d ˜Bt.
+
+We can then find the density ˜ρt of Xt under Q by integrating a test function f ∈ C∞ 
+
+> c
+
+(Rd):
+
+EQ[f (Xt)] = EP [gt f (Xt)] = EP
+
+
+
+f (Xt) ht(Xt)
+
+h0(X0)
+
+
+
+.
+
+In the specific case that X0 ⊥⊥ X1 (which happens using the memoryless noise schedule from Theorem 13), it is clear that h0(X0) = E[eλr (X1)] is a normalizing constant, and thus ˜ρt(x) ∝ ρt(x) ht(x). At the endpoint, this means that ˜ρ1(x) ∝ eλr (x)ρ1(x) as desired, and the Doob h-transform of the original diffusion gives a principled way to sample from the reward-tilted measure. We can then convert the guided SDE back to a guided ODE by considering the associated probability flow: 
+
+dX t =
+
+
+
+bt(Xt) + 12 (σtσ⊤ 
+
+> t
+
+)∇ log ρt(Xt) + ( σtσ⊤ 
+
+> t
+
+)∇ log ht(Xt) − 12 (σtσ⊤ 
+
+> t
+
+)∇ log ˜ ρt(Xt)
+
+
+
+dt 
+
+=
+
+
+
+bt(Xt) + 12 (σtσ⊤ 
+
+> t
+
+)∇ log ht(Xt)
+
+
+
+dt. 
+
+Hence, the guided probability flow ODE simply includes an additional score term 12 (σtσ⊤ 
+
+> t
+
+)∇ log ht(Xt) that steers the dynamics toward high-reward regions of the output space. 24 C.2 Proof of Theorem 13 
+
+Theorem 13 (Memoryless noise schedule) . Consider the forward SDE (2) for the linear interpolant (1) .Then, choosing the memoryless noise schedule σt = p2(1 − t)/t I d ensures that (Xt | X1) d
+
+= ( It | I1).Proof. Note that (It | I1) ∼ N (tI 1, (1 − t)2Id), so by Tweedie’s formula, we have 
+
+E[I1 | It = x] = xt + (1 − t)2
+
+t ∇ log ρt(x)
+
+and 
+
+E[X0 | It = x] = E
+
+ It − tI 1
+
+1 − t It = x
+
+
+
+= −(1 − t)∇ log ρt(x).
+
+As a result, we deduce that 
+
+bt(x) = E[ ˙It | It = x] = E[I1 − I0 | It = x] = xt + 1 − tt ∇ log ρt(x).
+
+Parameterizing σt = ηtId, the forward SDE for the stochastic interpolant with the memoryless noise schedule is 
+
+dX t =
+
+ Xt
+
+t + 1 − tt ∇ log ρt(Xt) + η2
+
+> t
+
+2 ∇ log ρt(Xt)
+
+
+
+dt + ηt dB t.
+
+The Anderson time-reversal formula then yields the backward SDE 
+
+dX ← 
+
+> t
+
+=
+
+
+
+− X←
+
+> t
+
+t −
+
+ 1 − tt − η2
+
+> t
+
+2
+
+
+
+∇ log ρt(X← 
+
+> t
+
+)
+
+
+
+dt + ηt dB ← 
+
+> t
+
+,
+
+and setting ηt = p2(1 − t)/t cancels the score term in the drift of the backward SDE so that 
+
+dX ← 
+
+> t
+
+= − X←
+
+> t
+
+t dt +
+
+r 2(1 − t)
+
+t dB ← 
+
+> t
+
+.
+
+This shows that (Xt | X1) is Gaussian (because the diffusion coefficient is deterministic) with mean tX 1 and covariance (1 − t)2Id (for example, by the Itô isometry), matching the distribution of (It | I1).
+
+## C.3 Convergence to plug-in flow 
+
+We state and prove the formal version of the convergence result discussed in Section 4.1.1. 
+
+Proposition 14 (Convergence to plug-in flow) . Let ˜xt be the solution to the exact continuous-time ODE 
+
+d˜xt = b(k) 
+
+> t
+
+( ˜xt) dt for t ∈ [0 , 1] with initial condition ˜x0 = x0. Let ( ¯xt)t∈[0 ,1] denote the continuous-time Euler approximation with step size h = 1 /N , defined by ¯x0 = x0 and 
+
+d¯xt =
+
+
+
+bη(t)(¯ xη(t)) + 12 (ση(t)σ⊤
+
+> η(t)
+
+)∇ log ˆh(k)
+
+> η(t)
+
+(¯ xη(t))
+
+
+
+dt, 
+
+where η(t) := ⌊t/h ⌋h is the time of the most recent grid point. We make the following assumptions: (i) ∥b(k) 
+
+> s
+
+(x) − b(k) 
+
+> t
+
+(y)∥2 ≤ L(∥x − y∥2 + |s − t|) for some L > 0 and for all s, t ∈ [0 , 1] and x, y ∈ Rd.(ii) Defining the guidance residual ξt(x) := ∇ log ˆh(k) 
+
+> t
+
+(x) − u(k) 
+
+> t
+
+(x), we have E
+
+h 12 (σtσ⊤ 
+
+> t
+
+) ξt(x) 22
+
+i
+
+≤ Vk for some Vk > 0 and for all x ∈ Rd.(iii) ∥b(k) 
+
+> t
+
+(¯ xt)∥2 ≤ B is uniformly bounded by B > 0.Then, the Euler trajectory converges uniformly over [0 , 1] in probability to the ODE dynamics as N → ∞ :
+
+sup 
+
+> t∈[0 ,1]
+
+∥¯xt − ˜xt∥2
+
+> p
+
+→ 0.
+
+25 The proof combines Grönwall’s inequality with Doob’s L2 maximal inequality for the martingale residual. 
+
+Proof. First, substituting b(k) 
+
+> t
+
+(x) = bt(x) + 12 (σtσ⊤ 
+
+> t
+
+)u(k) 
+
+> t
+
+(x) and ∇ log ˆh(k) 
+
+> t
+
+(x) = u(k) 
+
+> t
+
+(x) + ξt(x) shows that 
+
+¯xt = x0 +
+
+Z t
+
+> 0
+
+
+
+bη(s)(¯ xη(s)) + 12 (ση(s)σ⊤
+
+> η(s)
+
+)
+
+
+
+u(k)
+
+> η(s)
+
+(¯ xη(s)) + ξη(s)(¯ xη(s))
+
+
+
+ds 
+
+= x0 +
+
+Z t
+
+> 0
+
+
+
+b(k)
+
+> η(s)
+
+(¯ xη(s)) + 12 (ση(s)σ⊤
+
+> η(s)
+
+)ξη(s)(¯ xη(s))
+
+
+
+ds. 
+
+Thus, we have 
+
+∥¯xt − ˜xt∥2 =
+
+Z t
+
+> 0
+
+
+
+b(k)
+
+> η(s)
+
+(¯ xη(s)) − b(k) 
+
+> s
+
+( ˜Xs)
+
+
+
+ds + Mt
+
+> 2
+
+≤
+
+Z t
+
+> 0
+
+
+
+b(k) 
+
+> s
+
+(¯ xs) − b(k) 
+
+> s
+
+( ˜Xs)
+
+
+
+ds 
+
+> 2
+
++
+
+Z t
+
+> 0
+
+
+
+b(k)
+
+> η(s)
+
+(¯ xη(s)) − b(k) 
+
+> s
+
+(¯ xs)
+
+
+
+ds 
+
+> 2
+
++ ∥Mt∥2
+
+≤ L
+
+Z t
+
+> 0
+
+∥¯xs − ˜Xs∥2 ds +
+
+Z t
+
+> 0
+
+
+
+b(k)
+
+> η(s)
+
+(¯ xη(s)) − b(k) 
+
+> s
+
+(¯ xs)
+
+
+
+ds 2
+
++ ∥Mt∥2,
+
+where Mt := R t 
+
+> 012
+
+(ση(s)σ⊤
+
+> η(s)
+
+) ξη(s)(¯ xη(s)) ds . By Grönwall’s inequality, this implies the bound 
+
+sup 
+
+> t∈[0 ,1]
+
+∥¯xt − ˜xt∥2 ≤ sup 
+
+> t∈[0 ,1]
+
+Z t
+
+> 0
+
+
+
+b(k)
+
+> η(s)
+
+(¯ xη(s)) − b(k) 
+
+> s
+
+(¯ xs)
+
+
+
+ds 
+
+> 2
+
++ sup 
+
+> t∈[0 ,1]
+
+∥Mt∥2
+
+!
+
+eL.
+
+At this point, we have 
+
+sup 
+
+> t∈[0 ,1]
+
+Z t
+
+> 0
+
+
+
+b(k)
+
+> η(s)
+
+(¯ xη(s)) − b(k) 
+
+> s
+
+(¯ xs)
+
+
+
+ds 
+
+> 2
+
+≤ L
+
+Z 10
+
+∥¯xη(s) − ¯xs∥2 ds +
+
+Z 10
+
+|η(s) − s| ds 
+
+
+
+≤ L
+
+Z 10
+
+(s − η(s)) b(k)
+
+> η(s)
+
+(¯ xη(s)) + 12 (ση(s)σ⊤
+
+> η(s)
+
+) ξη(s)(¯ xη(s))
+
+> 2
+
+ds + L
+
+Z 10
+
+h ds 
+
+≤ Lh 
+
+Z 10
+
+
+
+B + 12 (ση(s)σ⊤
+
+> η(s)
+
+) ξη(s)(¯ xη(s))
+
+> 2
+
+
+
+ds + Lh. 
+
+Taking expectations on both sides and using Jensen’s inequality, we obtain 
+
+E
+
+"
+
+sup 
+
+> t∈[0 ,1]
+
+Z t
+
+> 0
+
+
+
+b(k)
+
+> η(s)
+
+(¯ xη(s)) − b(k) 
+
+> s
+
+(¯ xs)
+
+
+
+ds 
+
+> 2
+
+#
+
+≤ Lh 
+
+Z 10
+
+B +
+
+vuutE
+
+"
+
+12 (ση(s)σ⊤
+
+> η(s)
+
+) ξη(s)(¯ xη(s))
+
+> 22
+
+¯xη(s)
+
+# ds + Lh 
+
+≤ Lh (B + pVk + 1) .
+
+Markov’s inequality now implies that as h ↓ 0,
+
+sup 
+
+> t∈[0 ,1]
+
+Z t
+
+> 0
+
+
+
+b(k)
+
+> η(s)
+
+(¯ xη(s)) − b(k) 
+
+> s
+
+(¯ xs)
+
+
+
+ds 
+
+> 2
+> p
+
+→ 0.
+
+Lastly, it remains to show that sup t∈[0 ,1] ∥Mt∥2
+
+> p
+
+→ 0 as h ↓ 0. Defining tn = nh for 0 ≤ n ≤ N , we know that the supremum of Mt is achieved at some tn since Mt is piecewise linear. Furthermore, (Mtn )Nn=0 is a 26 discrete-time martingale with respect to the filtration (Ftn )Nn=0 generated by the independent samples drawn in the plug-in estimator, so by Doob’s L2 maximal inequality for discrete-time martingales: 
+
+E
+
+
+
+max  
+
+> 0≤n≤N
+
+∥Mtn ∥22
+
+
+
+≤ 4 E[∥M1∥22].
+
+Since the martingale increments are orthogonal in L2(P), we have 
+
+E[∥M1∥22] =  
+
+> N−1
+
+X
+
+> n=0
+
+h2 E
+
+"
+
+12 (σtn σ⊤ 
+
+> tn
+
+) ξtn (¯ xtn )
+
+> 22
+
+#
+
+≤ VkN −1X
+
+> n=0
+
+h2 = hV k.
+
+Thus, we have max 0≤n≤N ∥Mtn ∥2 → 0 in L2(P) and therefore in probability by Chebyshev’s inequality, completing the proof. 
+
+## C.4 Plug-in flow for Gaussian target (non-memoryless) 
+
+The general non-memoryless analogue of Theorem 2 is the following. 
+
+Theorem 15 (Plug-in flow for Gaussian target (non-memoryless)) . Consider the plug-in flow (6) with k = 1 ,and let Ψ := Ψ 0 as in Theorem 11. Then, the guidance term is given by 
+
+u(1)  
+
+> t
+
+(x) = −2λΣ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(μ1|t(x) − a)
+
+and the terminal distribution of the plug-in flow is ˜x1 ∼ N (μ(1) , Σ(1) ), where 
+
+μ(1) = μ − √π (λΣ) 1/2 exp( −λΣ) 
+
+
+
+erfi 
+
+
+
+(λΣ) 1/2
+
+− erfi 
+
+
+
+(λΣ) 1/2Ψ1/2 
+
+(μ − a)
+
+and 
+
+Σ(1) = Σ exp( −2λΣ( Id − Ψ)) .
+
+Proof. We begin by computing the guidance term u(1)  
+
+> t
+
+(x) using the reparameterization trick 
+
+X(1) 1 (x) = μ1|t(x) + Σ 1/21|t ϵ
+
+where ϵ ∼ N (0 , I d) is independent of everything else. In particular, since μ1|t(x) is affine in x, we have 
+
+∇X(1) 1 (x) = Σ 1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+. Thus, we apply the chain rule: 
+
+∇ log ˆh(1)  
+
+> t
+
+(x) = ∇
+
+
+
+−λ∥X(1) 1 (x) − a∥22
+
+
+
+= −2λΣ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(X(1) 1 (x) − a),
+
+and taking conditional expectations on both sides yields the guidance term 
+
+u(1)  
+
+> t
+
+(x) = E[∇ log ˆh(1)  
+
+> t
+
+(Xt) | Xt = x] = −2λΣ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(μ1|t(x) − a).
+
+Substituting this back into the plug-in flow ODE, the dynamics are given by 
+
+d˜xt =
+
+
+
+μ + 12 ˙ΣtΣ−1 
+
+> t
+
+(˜ xt − μt) − λη 2 
+
+> t
+
+Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(μ1|t(˜ xt) − a)
+
+
+
+dt. 
+
+Because the initial condition ˜x0 ∼ N (0 , I d) is Gaussian and the drift is an affine function of ˜xt, the process ˜xt
+
+remains exactly Gaussian for all t ∈ [0 , 1] , and we track its mean μ(1)  
+
+> t
+
+= E[ ˜xt] and covariance Σ(1)  
+
+> t
+
+= Cov ( ˜xt).Taking the expectation of the drift yields an ODE for the mean: 
+
+dμ (1)  
+
+> t
+
+= μ +
+
+ 12 ˙ΣtΣ−1 
+
+> t
+
+− λη 2 
+
+> t
+
+ΣΣ −1 
+
+> t
+
+Ψt
+
+
+
+(μ(1)  
+
+> t
+
+− μt) − λη 2 
+
+> t
+
+Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(μ − a).
+
+27 We then multiply by the integrating factor Σ−1/2 
+
+> t
+
+exp( λΣΨ t) to get 
+
+ddt 
+
+
+
+Σ−1/2 
+
+> t
+
+exp( λΣΨ t)( μ(1)  
+
+> t
+
+− μt)
+
+
+
+= −2λΣ1/2 exp( λΣΨ t) ddt (Ψ 1/2 
+
+> t
+
+)( μ − a).
+
+Integrating both sides from 0 to 1 then gives us 
+
+Σ−1/2 exp( λΣ)( μ(1) − μ) = −2λΣ1/2
+
+Z 10
+
+exp( λΣΨ t) ddt (Ψ 1/2 
+
+> t
+
+) dt (μ − a).
+
+Making the substitution Mt = ( λΣ) 1/2Ψ1/2 
+
+> t
+
+and using the fundamental theorem of calculus gives us a formula for the terminal mean: 
+
+μ(1) = μ − √π (λΣ) 1/2 exp( −λΣ) 
+
+
+
+erfi 
+
+
+
+(λΣ) 1/2
+
+− erfi 
+
+
+
+(λΣ) 1/2Ψ1/2 
+
+(μ − a).
+
+Next, we have the linear ODE 
+
+d(˜ xt − μ(1)  
+
+> t
+
+) = 
+
+ 12 ˙ΣtΣ−1 
+
+> t
+
+− λη 2 
+
+> t
+
+ΣΣ −1 
+
+> t
+
+Ψt
+
+
+
+(˜ xt − μ(1)  
+
+> t
+
+) dt, 
+
+so by the chain rule, the covariance evolves according to the equation 
+
+dΣ(1)  
+
+> t
+
+= ( ˙ΣtΣ−1 
+
+> t
+
+− 2λη 2 
+
+> t
+
+ΣΣ −1 
+
+> t
+
+Ψt) Σ (1)  
+
+> t
+
+dt = ( ˙ΣtΣ−1 
+
+> t
+
+− 2λΣ ˙Ψt) Σ (1)  
+
+> t
+
+dt. 
+
+Because all relevant matrices commute, we can solve this ODE in closed form at t = 1 :
+
+Σ(1) = exp 
+
+Z 10
+
+( ˙Σv Σ−1 
+
+> v
+
+− 2λΣ ˙Ψv ) dv 
+
+
+
+Σ(1) 0 = Σ exp( −2λΣ( Id − Ψ)) .
+
+## C.5 Proof of Theorem 2 
+
+Theorem 2 (Plug-in flow for Gaussian target) . Under the memoryless schedule, the guidance term for the 
+
+k = 1 plug-in flow is given by 
+
+u(1)  
+
+> t
+
+(x) = −2λt ΣΣ −1 
+
+> t
+
+(μ1|t(x) − a),
+
+and the terminal distribution of the plug-in flow is ˜x1 ∼ N (μ(1) , Σ(1) ), where 
+
+μ(1) := μ − T (1) pull (μ − a), T (1) pull := √π (λΣ) 1/2 exp( −λΣ) erfi 
+
+
+
+(λΣ) 1/2
+
+,
+
+Σ(1) := Σ exp( −2λΣ) .
+
+Proof. Under the memoryless schedule, Ψ = 0 and Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+= tΣΣ −1 
+
+> t
+
+, so substituting into the formulas of Theorem 15 and using erfi (0) = 0 yields the stated guidance term and terminal mean and covariance. 
+
+## C.6 Plug-in guidance is aggressive in the tails 
+
+The following uniform bound on the k-particle plug-in drift underlies the ∞-Wasserstein bound of Theorem 3. 
+
+Lemma 16 (Plug-in guidance is aggressive in the tails) . In the setting of Theorem 2, consider the plug-in flow (6) with k particles, where u(k) 
+
+> t
+
+(x) = E[∇ log ˆh(k) 
+
+> t
+
+(Xt) | Xt = x], ˆh(k) 
+
+> t
+
+(x) = 1
+
+> k
+
+Pki=1 eλr (X(i)1 (x)) , and 
+
+X(1) 1 (x), . . . , X (k)1 (x) ∼ law (X1 | Xt = x) are drawn independently and independent from everything else. Then, we have the uniform bounds 
+
+sup 
+
+> x∈Rd
+
+∥u(k) 
+
+> t
+
+(x) − u(1)  
+
+> t
+
+(x)∥2 ≤ Mt(k) := 2 λ Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+Σ1/21|t 2
+
+p2 log k
+
+28 and 
+
+4λ2 λmin 
+
+
+
+Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+Σ1|t(Id + 2 λΣ1|t)−1
+
+∥μ1|t(x) − a∥2 − Mt(k)
+
+≤ ∥ u(k) 
+
+> t
+
+(x) − ∇ log ht(x)∥2
+
+≤ 4λ2 λmax 
+
+
+
+Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+Σ1|t(Id + 2 λΣ1|t)−1
+
+∥μ1|t(x) − a∥2 + Mt(k)
+
+for all x ∈ Rd.
+
+The first inequality shows that the k-particle plug-in flow is well-approximated by the k = 1 dynamics in the tails. The second inequality shows that the error of the plug-in drift grows linearly in ∥x∥2, confirming that the plug-in estimator is overly aggressive far from the reward center. 
+
+Proof. We use the reparameterization trick to write 
+
+X(i)1 (x) = μ1|t(x) + Σ 1/21|t ϵ(i)
+
+for i.i.d. ϵ(1) , . . . , ϵ (k) ∼ N (0 , I d) independent of everything else. Recall from the proof of Theorem 15 that 
+
+∇X(i)1 (x) = Σ 1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+, so by the chain rule, we have 
+
+∇ log ˆh(k) 
+
+> t
+
+(x) = ∇ log 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+e−λ∥X(i)1 (x)−a∥22
+
+!
+
+= −2λ Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2
+
+> t
+
+Pki=1 e−λ∥X(i)1 (x)−a∥22 (X(i)1 (x) − a)
+
+Pki=1 e−λ∥X(i)1 (x)−a∥22
+
+= −2λ Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+(μ1|t(x) − a)
+
+− 2λ Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+Σ1/21|t
+
+Pki=1 e−λ∥X(i)1 (x)−a∥22 ϵ(i)
+
+Pki=1 e−λ∥X(i)1 (x)−a∥22
+
+.
+
+Taking a conditional expectation and subtracting u(1)  
+
+> t
+
+(x) from both sides, we have 
+
+u(k) 
+
+> t
+
+(x) − u(1)  
+
+> t
+
+(x) = −2λ Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+Σ1/21|t E
+
+" Pki=1 e−λ∥X(i)1 (x)−a∥22 ϵ(i)
+
+Pki=1 e−λ∥X(i)1 (x)−a∥22
+
+#
+
+. (12) For any unit vector v ∈ Rd, the projections ⟨v, ϵ (i)⟩ are i.i.d. N (0 , 1) , and since the softmax weights are nonnegative and sum to one, 
+
+E
+
+" Pki=1 e−λ∥X(i)1 (x)−a∥22 ϵ(i)
+
+Pki=1 e−λ∥X(i)1 (x)−a∥22
+
+#
+
+> 2
+
+= sup 
+
+> ∥v∥2=1
+
+E
+
+"* 
+
+v, 
+
+Pki=1 e−λ∥X(i)1 (x)−a∥22 ϵ(i)
+
+Pki=1 e−λ∥X(i)1 (x)−a∥22
+
++# 
+
+≤ sup 
+
+> ∥v∥2=1
+
+E
+
+
+
+max  
+
+> 1≤i≤k
+
+⟨v, ϵ (i)⟩
+
+
+
+≤ p2 log k
+
+by the standard sub-Gaussian maximal inequality (e.g., [ 48 , Theorem 2.5]). Applying a spectral-norm bound to the matrix factor gives the first bound. For the second inequality, note that 
+
+u(k) 
+
+> t
+
+(x) − ∇ log ht(x)= ( u(1)  
+
+> t
+
+(x) − ∇ log ht(x)) + ( u(k) 
+
+> t
+
+(x) − u(1)  
+
+> t
+
+(x)) =
+
+
+
+−4λ2 Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+Σ1|t(Id + 2 λΣ1|t)−1(μ1|t(x) − a)
+
+
+
++ ( u(k) 
+
+> t
+
+(x) − u(1)  
+
+> t
+
+(x)) ,
+
+(13) 29 so by the reverse triangle inequality and the first part of the theorem, we have 
+
+∥u(k) 
+
+> t
+
+(x) − ∇ log ht(x)∥2
+
+≥ 4λ2 Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+Σ1|t(Id + 2 λΣ1|t)−1(μ1|t(x) − a) 2
+
+− ∥ u(k) 
+
+> t
+
+(x) − u(1)  
+
+> t
+
+(x)∥2
+
+≥ 4λ2 λmin 
+
+
+
+Σ1/2Σ−1/2 
+
+> t
+
+Ψ1/2 
+
+> t
+
+Σ1|t(Id + 2 λΣ1|t)−1
+
+∥μ1|t(x) − a∥2 − Mt(k).
+
+Similarly, the upper bound follows by applying the triangle inequality to (13) and using the first part of the theorem again. 
+
+## C.7 Proof of Theorem 3 
+
+Theorem 3 (∞-Wasserstein bound) . Assuming that ρ1 = N (μ, Σ) and r(x) = −∥ x − a∥22, let ˜ρ(k)1 denote the terminal distribution of the plug-in flow (6) with k particles. Then, the density ˜ρ(k)1 is close to the density 
+
+˜ρ(1) 1 in the ∞-Wasserstein distance: 
+
+W∞(˜ ρ(k)1 , ˜ρ(1) 1 ) ≲ plog k. 
+
+Proof. Let X(k) 
+
+> t
+
+denote the solution to the plug-in flow ODE with k particles and note that 
+
+X(k) 
+
+> t
+
+− X(1)  
+
+> t
+
+=
+
+Z t
+
+> 0
+
+
+
+b(k) 
+
+> s
+
+(X(k) 
+
+> s
+
+) − b(1)  
+
+> s
+
+(X(1)  
+
+> s
+
+)
+
+
+
+ds, 
+
+which implies that 
+
+∥X(k) 
+
+> t
+
+− X(1)  
+
+> t
+
+∥2 ≤
+
+Z t
+
+> 0
+
+b(k) 
+
+> s
+
+(X(k) 
+
+> s
+
+) − b(1)  
+
+> s
+
+(X(1)  
+
+> s
+
+) 2
+
+ds 
+
+≤
+
+Z t
+
+> 0
+
+
+
+b(k) 
+
+> s
+
+(X(k) 
+
+> s
+
+) − b(1)  
+
+> s
+
+(X(k) 
+
+> s
+
+) 2
+
++ b(1)  
+
+> s
+
+(X(k) 
+
+> s
+
+) − b(1)  
+
+> s
+
+(X(1)  
+
+> s
+
+) 2
+
+
+
+ds. 
+
+The first term in the integrand is bounded above by 12 η2 
+
+> s
+
+Ms(k) by Lemma 16. For the second term, note that b(1)  
+
+> s
+
+is affine, so it is Lipschitz with constant 
+
+∇b(1)  
+
+> s
+
+(x) = 12 ˙ΣsΣ−1 
+
+> s
+
+− λη 2 
+
+> s
+
+ΣΣ −1 
+
+> s
+
+Ψs.
+
+Combining these observations gives us 
+
+∥X(k) 
+
+> t
+
+− X(1)  
+
+> t
+
+∥2 ≤
+
+Z 10
+
+ 12 η2 
+
+> s
+
+Ms(k) + 12 ˙ΣsΣ−1 
+
+> s
+
+− λη 2 
+
+> s
+
+ΣΣ −1 
+
+> s
+
+Ψs
+
+> 2
+
+∥X(k) 
+
+> s
+
+− X(1)  
+
+> s
+
+∥2
+
+
+
+ds. 
+
+Applying Grönwall’s inequality then gives us 
+
+∥X(k)1 − X(1) 1 ∥2
+
+≤
+
+Z 10
+
+12 η2 
+
+> s
+
+Ms(k) exp 
+
+Z 1
+
+> s
+
+12 ˙Σv Σ−1 
+
+> v
+
+− λη 2 
+
+> v
+
+ΣΣ −1 
+
+> v
+
+Ψv
+
+> 2
+
+dv 
+
+
+
+ds 
+
+= λp2 log k
+
+Z 10
+
+η2 
+
+> s
+
+Σ1/2Σ−1/2 
+
+> s
+
+Ψ1/2 
+
+> s
+
+Σ1/21|s 2
+
+exp 
+
+Z 1
+
+> s
+
+12 ˙Σv Σ−1 
+
+> v
+
+− λη 2 
+
+> v
+
+ΣΣ −1 
+
+> v
+
+Ψv
+
+> 2
+
+dv 
+
+
+
+ds. 
+
+Lastly, we can choose the coupling π = law( X(k)1 , X (1) 1 ) to conclude the desired bound. 30 C.8 Proof of Theorem 17 
+
+Theorem 17 (Analytic guidance for Gaussian mixture target) . The overall guidance term is given by 
+
+∇ log ht(x) = 
+
+> m
+
+X
+
+> i=1
+
+wit (x) ( ∇ log ρit (x) + ∇ log hit (x)) − ∇ log ρt(x)
+
+where 
+
+wit (x) := πi ρit (x) hit (x)
+
+Pmj=1 πj ρjt (x) hjt (x) .
+
+Proof. Introducing a latent mixture index Z ∈ [m] and applying the law of total expectation: 
+
+ht(x) = 
+
+> m
+
+X
+
+> i=1
+
+P(Z = i | Xt = x) E[eλr (X1) | Xt = x, Z = i] = 1
+
+ρt(x)
+
+> m
+
+X
+
+> i=1
+
+πi ρit (x) hit (x).
+
+Taking ∇ log and applying the product rule yields the result. 
+
+## C.9 Proof of Theorem 5 
+
+Theorem 5 (Plug-in flow for Gaussian mixture target) . Fixing t ∈ [0 , 1] , let ¯X1(x) denote a sample from 
+
+p1|t(· | x). Then, the guidance term for the plug-in flow with k = 1 particle is given by 
+
+u(1)  
+
+> t
+
+(x) = −2λ E∇ ¯X1(x)⊤( ¯X1(x) − a) . (8) 
+
+Proof. The guidance formula (8) follows directly from the reparameterization trick and the chain rule. To compute the Jacobian ∇ ¯X1(x), we differentiate the GLASS ODE with respect to x. Using 
+
+∇X∗ 
+
+> s
+
+(x) = 1
+
+η∗ 
+
+> s
+
+(1 + η∗ 
+
+> s
+
+)
+
+ t
+
+(1 − t)2 Id + s
+
+(1 − s)2 ∇ ¯Xs(x)
+
+
+
+,
+
+differentiating under the integral sign yields the variational equation 
+
+d(∇ ¯Xs(x)) = 11 − s
+
+
+
+∇Dτ ∗ 
+
+> s
+
+(X∗ 
+
+> s
+
+(x)) 
+
+ 1
+
+η∗ 
+
+> s
+
+(1 + η∗ 
+
+> s
+
+)
+
+ t
+
+(1 − t)2 Id + s
+
+(1 − s)2 ∇ ¯Xs(x)
+
+ 
+
+− ∇ ¯Xs(x)
+
+
+
+ds 
+
+with initial condition ∇ ¯X0(x) = 0 . By Tweedie’s formula, the optimal denoiser is given by 
+
+Dt(x) = xt + (1 − t)2
+
+t ∇ log ρt(x),
+
+so taking the gradient of both sides gives us 
+
+∇Dt(x) = 1
+
+t Id + (1 − t)2
+
+t ∇2 log ρt(x).
+
+Since ρt = Pmi=1 πi ρit , applying the chain rule to compute the Hessian of log ρt yields 
+
+∇Dt(x)= 1
+
+t Id + (1 − t)2
+
+t
+
+> m
+
+X
+
+> i=1
+
+wit (x)  (∇ log ρit (x) − ∇ log ρt(x))( ∇ log ρit (x) − ∇ log ρt(x)) ⊤ + ∇2 log ρit (x) ,
+
+where wit (x) := πi ρit (x)/ Pmj=1 πj ρjt (x).31 C.10 Proof of Theorem 6 
+
+Theorem 6 (Best-of-n for mode selection) . In the above setting, we have: (i) (Analytic guidance) Under the tilted measure, the correct mode probability is ˜p = (1 + e−λR )−1 → 1
+
+exponentially as R → ∞ .(ii) (Plug-in guidance) Under the k-particle plug-in flow with any finite k ≥ 1, the correct mode probability is ˜p(k)1 = 1 /2.(iii) (Best-of-n) Running n independent finite-k plug-in trajectories and selecting the highest-reward output yields ˜p(k) 
+
+> n
+
+= 1 − 2−n.Proof. For (i), we compute that 
+
+Z− := 
+
+Z 0
+
+> −∞
+
+eλr (x)ρ1(x) dx = e−λR 
+
+Z 0
+
+> −∞
+
+ρ1(x) dx = e−λR 
+
+2 .
+
+On the other hand, we have 
+
+Z+ := 
+
+Z ∞
+
+> 0
+
+eλr (x)ρ1(x) dx =
+
+Z ∞
+
+> 0
+
+ρ1(x) dx = 12 .
+
+Therefore, the correct mode probability under the tilted measure is 
+
+˜p = P(X ≥ 0) = Z+
+
+Z+ + Z−
+
+= (1 + e−λR )−1.
+
+For (ii), note that the gradient of the reward is zero Lebesgue-almost everywhere, so by the chain rule the 
+
+k-particle plug-in gradient 
+
+∇ log ˆh(k) 
+
+> t
+
+(x) = 
+
+> k
+
+X
+
+> i=1
+
+wi λ ∇X(i)1 (x)⊤∇r(X(i)1 (x)) , wi := eλr (X(i)1 (x)) 
+
+Pkj=1 eλr (X(j)1 (x)) ,
+
+is zero almost everywhere for any finite k ≥ 1, since the law of (X1 | Xt = x) is absolutely continuous with respect to Lebesgue measure. Therefore, defining σ2 
+
+> t
+
+:= (1 − t)2 + t2σ2, the k-particle plug-in flow coincides with the unguided flow: 
+
+bt(x) = 
+
+ tσ 2 − (1 − t)
+
+σ2
+
+> t
+
+
+
+x + (1 − t)μσ2
+
+> t
+
+tanh 
+
+ tμx σ2
+
+> t
+
+
+
+.
+
+Since the drift is an odd function, the distribution of the final sample is symmetric about zero, so the correct mode probability is ˜p(k)1 = 12 . For (iii), note that the n independent finite-k plug-in trajectories are i.i.d., so the probability that all n trajectories end up negative is (1 /2) n.
+
+# D Experimental details and ablations 
+
+## D.1 Damping for Gaussian target 
+
+We use a single Gaussian target ρ1 = N (0 , 0.5I2) with quadratic reward r(x) = −∥ x − a∥22 centered at 
+
+a = (0 , 2.5) ⊤ and λ = 3 .0. By Proposition 10 and Theorem 2, the analytic guidance and k = 1 plug-in guidance both produce Gaussian terminal distributions with analytically known means and covariances. We use a Heun integrator for the GLASS flow and draw 200 samples. 
+
+## D.2 Gaussian-mixture ablations: within-mode reward hacking 
+
+We provide additional experiments verifying that the plug-in estimator hacks the reward and that reward scale damping mitigates this in a wider variety of settings than the symmetric isotropic 2-component mixture of Figure 3. The protocol matches that of the main text: 200 samples drawn with the GLASS-flow Heun integrator at λ = 3 .0, background colormap shows the analytic tilt ˜ρ1 together with green level sets, and the red × marks the reward target a.32 −2 0 2        
+
+> −2024
+> A
+> Exact guidance
+> −202
+> B
+> Plug-in ( k= 1 )
+> −202
+> C
+> Plug-in ( k= 8 )
+> −202
+> D
+> Plug-in (damped)
+> Analytic tilt Guided samples Reward target
+
+Figure 15: Single Gaussian target. The k = 1 plug-in over-concentrates exactly as predicted by Theorem 2; increasing k does not help; reward damping recovers the true tilted distribution. −3 0 3        
+
+> −202
+> A
+> Exact guidance
+> −303
+> B
+> Plug-in ( k= 1 )
+> −303
+> C
+> Plug-in ( k= 8 )
+> −303
+> D
+> Plug-in (damped)
+> Analytic tilt Guided samples Reward target
+
+Figure 16: Double-well reward. The plug-in over-concentrates at the reward maxima (marked by red ×); reward damping partially corrects this. 
+
+Single Gaussian. Figure 15 verifies the within-mode reward hacking and damping correction predicted by Theorem 2 on the simplest setting, a single isotropic Gaussian target ρ1 = N ((0 , 0) ⊤, 0.5I2) with quadratic reward r(x) = −∥ x−a∥22 at a = (0 , 2.5) ⊤. The k = 1 plug-in over-concentrates exactly as predicted; increasing 
+
+k does not help; reward damping recovers the analytic tilt. 
+
+Non-quadratic reward. To verify that the plug-in bias is not specific to the quadratic reward setting of our theory, Figure 16 repeats the experiment with a double-well reward r(x) = −0.125( x41 −12 .5x21)−(x2 −0.4x1)2,which has local maxima at (−2.5, −1.0) and (2 .5, 1.0) . Although the double-well reward has no closed-form Doob h-transform, we approximate the exact reward-tilt using a k = 1000 plug-in that draws particles directly from this closed-form posterior. The qualitative pattern persists: samples spread across both reward peaks, the k = 1 plug-in estimator over-concentrates near the maxima, and reward damping partially corrects this. 
+
+GMM ablations. Figures 17 to 19 verify that the plug-in bias and the effectiveness of reward damping persist across three further variations: (i) non-isotropic covariances , where the component covariances are  0.5 ±0.25  
+
+> ±0.25 0.5
+
+ (tilted toward a); (ii) unequal weights (π1, π 2) = (0 .2, 0.8) ; and (iii) uncentered components 
+
+at (−4.0, 0) and (1 .0, 0) . In each case the plug-in estimator collapses samples near the reward target while reward damping restores spread consistent with the tilted density. 
+
+## D.3 Checkerboard mode selection: experimental details 
+
+In this section, we provide further details on the checkerboard mode-selection experiment described in Section 5.2.1. 
+
+Base model. The base velocity field bt is a 4-layer MLP with 256 hidden units and GELU activations, taking the concatenated input (x/s, t ) ∈ R3 where s is the empirical standard deviation of the checkerboard 33 −3 0 3
+
+> −2024
+> A
+
+Exact guidance   
+
+> −303
+> B
+
+Plug-in ( k = 1 )  
+
+> −303
+> C
+
+Plug-in ( k = 8 )  
+
+> −303
+> D
+
+Plug-in (damped) 
+
+> Analytic tilt Guided samples Reward target
+
+Figure 17: Non-isotropic covariances. Both components are tilted toward the target a = (0 , 2.5) ⊤ via off-diagonal entries ±0.25 .−3 0 3
+
+> −2024
+> A
+
+Exact guidance   
+
+> −303
+> B
+
+Plug-in ( k = 1 )  
+
+> −303
+> C
+
+Plug-in ( k = 8 )  
+
+> −303
+> D
+
+Plug-in (damped) 
+
+> Analytic tilt Guided samples Reward target
+
+Figure 18: Unequal component weights (π1, π 2) = (0 .2, 0.8) .−5 −2 1 4
+
+> −2024
+> A
+
+Exact guidance    
+
+> −5−214
+> B
+
+Plug-in ( k = 1 )   
+
+> −5−214
+> C
+
+Plug-in ( k = 8 )   
+
+> −5−214
+> D
+
+Plug-in (damped) 
+
+> Analytic tilt Guided samples Reward target
+
+Figure 19: Uncentered components at (−4.0, 0) and (1 .0, 0) .
+
+data. We train it via flow matching against the linear interpolant It = (1 − t) ϵ + t X 1 with ϵ ∼ N (0 , I 2) and 
+
+X1 drawn uniformly from the 18 filled checkerboard squares. The model is optimized with Adam (learning rate 10 −3, cosine annealing to 0) for 5 × 10 5 steps with batch size 4096 , using an exponential moving average of the weights with decay 0.9999 for inference. Unguided samples are obtained by integrating the learned velocity ODE with a Heun integrator at 200 steps, starting from ϵ ∼ N (0 , s 2I2).
+
+Guided sampling. We use λ = 10 , k = 1 particle by default, and the memoryless schedule σt = p2(1 − t)/t .Guided trajectories are integrated with a Heun integrator at 200 outer steps, and the GLASS lookahead 
+
+(X1 | Xt = x) is computed with 50 inner Euler steps. The reward is the Gaussian bump r(x) = exp (−∥ x −
+
+c∥22/(2 σ2 
+
+> r
+
+)) with c = (0 .5, 0.5) ⊤ and σr = 1 .5. We draw 5000 samples per condition. 34 Analytic samples. We obtain exact samples from ˜ρ1 ∝ eλr ρ1 via rejection sampling over the 18 filled squares: sample a square uniformly (since ρ1 is uniform on each square), sample a point uniformly within that square, and accept with probability eλ(r(x)−1) . This is valid because r(x) ≤ 1 everywhere (the Gaussian bump peaks at r = 1 at its center), so eλ is a global upper bound on eλr . The worst-case acceptance rate is 
+
+e−λ, attained where r(x) → 0 far from c; at c itself, where r(c) = 1 , the acceptance probability is 1. 
+
+## D.4 FLUX.1-dev experimental details 
+
+Licenses. FLUX.1-dev is released under the FLUX.1 [dev] Non-Commercial License; Qwen2.5-VL-3B-Instruct is released under the Qwen Research License Agreement; ImageReward is released under the Apache-2.0 License. All three checkpoints are used within the terms of their respective licenses for non-commercial academic research. 
+
+Cover photo. Figure 1 compares unguided FLUX.1 samples to guided and damped runs with ImageReward across six prompts. We use the following parameters: 
+
+• Guided baselines: λ = 50 for all prompts. 
+
+• Damped runs: λ = 100 with σdamp = 0 .1 for all prompts except the skyscraper prompt, which uses 
+
+σdamp = 0 .15 .
+
+Main experiments. The within-mode and mode-selection experiments shown in Section 5 use the following parameters. 
+
+• Figure 5 (welder, masked-brightness): naive λ = 100 , lower-λ baseline λ = 50 , k = 8 baseline at λ = 50 ,damped λ = 100 with σdamp = 0 .1.
+
+• Figure 6 (rococo, blueness): naive λ = 50 , lower-λ baseline λ = 30 , k = 8 baseline at λ = 50 , damped 
+
+λ = 100 with σdamp = 0 .1.
+
+• Figure 7 (fox, blueness): naive λ = 100 , lower-λ baseline λ = 50 , k = 8 baseline at λ = 50 , damped 
+
+λ = 100 with σdamp = 0 .1.
+
+• Figure 8 (archaeologist, ImageReward): naive λ = 100 , lower-λ baseline λ = 50 , k = 8 baseline at 
+
+λ = 50 , damped λ = 100 with σdamp = 0 .15 .
+
+• Figure 10 (miner, ImageReward): naive λ = 100 , lower-λ baseline λ = 50 , k = 8 baseline at λ = 50 ,damped λ = 100 with σdamp = 0 .1.
+
+• Figure 9 (market, ImageReward): naive λ = 50 , lower-λ baseline λ = 30 , k = 8 baseline at λ = 50 ,damped λ = 100 with σdamp = 0 .05 .
+
+• Figure 13 (ECLIPSE DINER, VLM): naive λ = 100 , k = 8 baseline at λ = 50 , damped λ = 100 with 
+
+σdamp = 0 .1. Best-of-n selections taken from 20 i.i.d. generations per row. 
+
+• Figure 14 (NEXT TRAIN MARS, VLM): same parameters as Figure 13. 
+
+Guidance. The plug-in guidance gradient ∇ log ˆh(k) 
+
+> t
+
+(x) is rescaled to unit norm before applying guidance; this is a standard approximation made for numerical stability [ 36 , 39 ]. We see empirically that this approximation corresponds to a slight damping effect, decreasing the effective guidance scale λ throughout the trajectory. Following Holderrieth et al. [36] , we apply guidance for 5 guidance steps starting from outer step 
+
+1, skipping steps with σt > 0.9 to ensure numerical stability. Reward damping (Section 4.1.2) replaces λ with the time-dependent schedule (7) , parameterized by σdamp . Gradient checkpointing on the FLUX transformer is used to fit backpropagation in memory. We generate 4 images per condition for the within-mode reward hacking grids and 20 images per condition for the mode-selection best-of-n experiments. 
+
+## D.5 Compute 
+
+All FLUX text-to-image experiments run on a single NVIDIA RTX A6000 (48 GB) or L40S (48 GB) GPU, with 8 CPUs and 64 GB RAM. At 512 x 512 resolution with 28 inference steps, an unguided sample takes 35 Table 20: Mode selection on FLUX.1 (ECLIPSE DINER). Mean VLM probability of a clear “ECLIPSE” sign with best-of-n sampling (higher is better). Uncertainties are ±2 bootstrap standard errors over the 20 generations per condition. Method n = 1 n = 2 n = 4 n = 8 n = 16 
+
+Unguided 0.781 ±0.074 0.857 ±0.032 0.885 ±0.021 0.899 ±0.014 0.904 ±0.008 
+
+Guided 0.626 ±0.104 0.761 ±0.081 0.840 ±0.054 0.879 ±0.041 0.901 ±0.037 
+
+Guided ( k = 8 ) 0.776 ±0.070 0.851 ±0.033 0.881 ±0.022 0.897 ±0.020 0.910 ±0.024 
+
+Guided (damped) 0.826 ±0.029 0.863 ±0.024 0.887 ±0.022 0.904 ±0.020 0.914 ±0.018 
+
+Table 21: Step-reward best-of-n. Empirical ˜p(1)  
+
+> n
+
+for best-of-n guided sampling with k = 1 . Theory: 1 − (1 /2) n.Uncertainties are ±2 binomial standard errors 2pˆp(1 − ˆp)/M over M = 1 ,000 independent groups of 32 trajectories. 
+
+n = 1 n = 2 n = 4 n = 8 n = 16 n = 32 
+
+Empirical ˜p(1)  
+
+> n
+
+0.506 ±0.032 0.740 ±0.028 0.931 ±0.016 0.996 ±0.004 1.000 ±0.000 1.000 ±0.000 
+
+Theory 1 − (1 /2) n 0.500 0.750 0.938 0.996 1.000 1.000 
+
+approximately 7-15 seconds; a k = 1 guided sample with 5 Diamond-map guidance steps takes 11-23 seconds; and a k = 8 guided sample takes 37-76 seconds. A typical 20-image condition therefore completes in 4-8 minutes for k = 1 and roughly 25 minutes for k = 8 . Including hyperparameter sweeps over λ, σdamp , gradient-norm scale, prompt variants, and earlier lookahead schemes, the total FLUX compute is approximately 50-55 GPU-hours, of which roughly 10 GPU-hours back the figures and tables in the paper. Checkerboard base-model training ( 5 × 10 5 steps of a 4-layer MLP) takes about 60 minutes on a single GPU, and the reported guided-sampling grid adds another 1-2 GPU-hours. The Gaussian-mixture and 1D mode-selection experiments are closed-form analytics with small numerical integrators and complete in CPU-minutes. 
+
+## D.6 FLUX.1 mode-selection: additional experiments 
+
+Table 20 reports the mean VLM probability of a legible “ECLIPSE” sign for the diner experiment of Section 5.2.2 across best-of-n values, complementing the qualitative results of Figures 13 and 14. We report VLM scores as probabilities sigmoid(log p(Yes ) − log p(No )) .
+
+## D.7 Gaussian-mixture mode-selection experiments 
+
+We provide additional empirical results for the 1D symmetric Gaussian mixture ρ1 = 12 N (μ, σ 2) + 12 N (−μ, σ 2)
+
+with μ = 5 , σ = 1 , and λ = 5 .0, complementing the empirical illustration in Figure 4. 
+
+Step function reward. With the step reward r(x) = 1x≥0, the gradient is zero almost everywhere, so the plug-in estimator (run with k = 1 ) receives no signal and achieves correct-mode probability ˜p(1) 1 = 0 .502 ,essentially random. Best-of-n sampling exactly recovers the prediction ˜p(1)  
+
+> n
+
+= 1 − (1 /2) n from Theorem 6 (Table 21). Figure 22 shows the underlying particle trajectories: unguided and plug-in trajectories split roughly evenly between the two modes, while best-of-n selection concentrates on positive-half trajectories. 
+
+Gaussian reward. We repeat the same 1D mixture experiment with a Gaussian reward r(x) = exp (−(x −
+
+3) 2/2) centered at x = 3 in the positive half. Theorem 6 does not apply here—the reward is smooth and the plug-in estimator receives a nonzero gradient signal—so this case goes beyond what our theory covers. Nevertheless, the qualitative behavior persists: plug-in guidance skews trajectories toward the positive mode (Figure 23, left), and best-of-n further concentrates them (Figure 23, center and right). 
+
+# E Comparison with flow map reward guidance (FMRG) 
+
+Huang et al. [39] propose a deterministic guidance scheme derived directly from the probability flow ODE, without passing through a diffusion. Given the unguided probability flow dX s = bs(Xs) ds and flow map 36 0.25 0.50 0.75  
+
+> Time t
+> −505
+> Position  x
+> A
+
+Unguided    
+
+> 0.25 0.50 0.75
+> Time t
+> B
+
+Plug-in ( k = 1 )   
+
+> 0.25 0.50 0.75
+> Time t
+> C
+
+Best-of-4   
+
+> 0.25 0.50 0.75
+> Time t
+> D
+
+Best-of-16    
+
+> Positive trajectories Negative trajectories +μ−μ
+
+Figure 22: Step reward trajectories. Colored by terminal sign. Unguided and plug-in trajectories split evenly between positive (green) and negative (coral) modes; best-of-n selection produces a strong majority of positive-mode trajectories, increasingly so as n grows. 0.25 0.50 0.75  
+
+> Time t
+> −505
+> Position  x
+
+A
+
+Plug-in ( k = 1 )   
+
+> 0.25 0.50 0.75
+> Time t
+
+B
+
+Best-of-4   
+
+> 0.25 0.50 0.75
+> Time t
+
+C
+
+Best-of-16 
+
+Positive trajectories Negative trajectories +μ −μ
+
+Figure 23: Gaussian reward trajectories. Plug-in already skews toward the positive mode; best-of-n further concentrates it. 
+
+Xt,s (x) denoting its solution at time s given Xt = x, the flow map reward guidance for the reward r is the feedback control 
+
+uFMRG  
+
+> t
+
+(x) := λ ∇Xt, 1(x)⊤∇r(Xt, 1(x)) ,
+
+and the guided trajectory solves 
+
+d˜xt = ( bt(˜ xt) + uFMRG  
+
+> t
+
+(˜ xt)) dt (14) with ˜x0 ∼ N (0 , I d). For the quadratic reward r(x) = −∥ x − a∥22, this simplifies to 
+
+uFMRG  
+
+> t
+
+(x) = −2λ ∇Xt, 1(x)⊤(Xt, 1(x) − a). (15) This is structurally similar to the k = 1 plug-in guidance of Theorem 2: both schemes are of the form 
+
+−2λ (Jacobian )⊤(endpoint − a), and they differ only in which endpoint is used. The plug-in scheme evaluates at a random conditional sample X(1) 1 (x) ∼ (X1 | Xt = x) and averages over the initial noise in the GLASS flow, while the flow map reward scheme evaluates at the deterministic probability flow endpoint Xt, 1(x).Neither scheme targets the exact Doob h-function ht(x) = E[eλr (X1) | Xt = x], so both are single-endpoint surrogates that do not capture the long-range mode attraction of the exact h-transform. In this appendix, we carry out the analysis of Huang et al. [39] in Rd and extend it to Gaussian mixture targets, allowing us to compare the flow map reward guidance directly with the plug-in formulae of Theorems 2 and 5. 37 E.1 Gaussian target 
+
+Throughout this subsection, ρ1 = N (μ, Σ) with Σ ≻ 0, and Σt := (1 − t)2Id + t2Σ denotes the marginal covariance of It as in Theorem 11. We begin by computing the flow map in closed form. 
+
+Lemma 18 (Flow map for Gaussian target) . Suppose ρ1 = N (μ, Σ) . Then the probability flow ODE 
+
+dX s = bs(Xs) ds with bs(x) = μ + 12 ˙ΣsΣ−1 
+
+> s
+
+(x − sμ ) has flow map 
+
+Xt, 1(x) = μ + Σ 1/2Σ−1/2 
+
+> t
+
+(x − tμ )
+
+and state-independent Jacobian ∇Xt, 1(x) = Σ 1/2Σ−1/2 
+
+> t
+
+.Proof. Along a trajectory, define Ys := Xs − sμ so that dY s = 12 ˙ΣsΣ−1 
+
+> s
+
+Ys ds . Because Σs is a matrix polynomial in Σ, the family { ˙ΣsΣ−1 
+
+> s
+
+}s commutes with itself and with Σ, so integrating from s = t to s = 1 
+
+yields 
+
+Y1 = exp 
+
+ 12
+
+Z 1
+
+> t
+
+˙ΣsΣ−1 
+
+> s
+
+ds 
+
+
+
+Yt = exp 
+
+ 12 log(ΣΣ −1 
+
+> t
+
+)
+
+
+
+Yt = Σ 1/2Σ−1/2 
+
+> t
+
+Yt.
+
+Adding μ back gives the flow map, and the Jacobian follows by differentiating in x.
+
+Theorem 19 (Flow map reward guidance for Gaussian target) . Suppose ρ1 = N (μ, Σ) and consider the flow map reward guided ODE (14) with uFMRG  
+
+> t
+
+given by (15) . Then, the guidance term is 
+
+uFMRG  
+
+> t
+
+(x) = −2λ Σ1/2Σ−1/2 
+
+> t
+
+(Xt, 1(x) − a) = −2λ ΣΣ −1 
+
+> t
+
+(x − tμ ) − 2λ Σ1/2Σ−1/2 
+
+> t
+
+(μ − a),
+
+and the terminal distribution of the guided ODE is ˜x1 ∼ N (˜ μFMRG , ˜ΣFMRG ), where 
+
+˜μFMRG := μ − T FMRG pull (μ − a), T FMRG pull := Id − exp( −πλ Σ1/2),
+
+and 
+
+˜ΣFMRG := Σ exp( −2πλ Σ1/2).
+
+Proof. We begin by computing the guidance term uFMRG  
+
+> t
+
+(x). From Lemma 18, the Jacobian ∇Xt, 1(x) = Σ1/2Σ−1/2 
+
+> t
+
+is a matrix function of Σ and hence symmetric. Substituting into (15) and expanding Xt, 1(x)
+
+using the flow map formula gives 
+
+uFMRG  
+
+> t
+
+(x) = −2λ Σ1/2Σ−1/2 
+
+> t
+
+(Xt, 1(x) − a) = −2λ ΣΣ −1 
+
+> t
+
+(x − tμ ) − 2λ Σ1/2Σ−1/2 
+
+> t
+
+(μ − a).
+
+Substituting back into the FMRG ODE (14), the dynamics are given by 
+
+d˜xt =
+
+
+
+μ + 12 ˙ΣtΣ−1 
+
+> t
+
+(˜ xt − μt) − 2λ ΣΣ −1 
+
+> t
+
+(˜ xt − μt) − 2λ Σ1/2Σ−1/2 
+
+> t
+
+(μ − a)
+
+
+
+dt. 
+
+Because the initial condition ˜x0 ∼ N (0 , I d) is Gaussian and the drift is an affine function of ˜xt, the process ˜xt remains exactly Gaussian for all t ∈ [0 , 1] , and we track its mean μFMRG  
+
+> t
+
+= E[ ˜xt] and covariance 
+
+ΣFMRG  
+
+> t
+
+= Cov(˜ xt). Taking the expectation of the drift yields an ODE for the mean: 
+
+dμ FMRG  
+
+> t
+
+= μ +
+
+ 12 ˙ΣtΣ−1 
+
+> t
+
+− 2λ ΣΣ −1
+
+> t
+
+
+
+(μFMRG  
+
+> t
+
+− μt) − 2λ Σ1/2Σ−1/2 
+
+> t
+
+(μ − a).
+
+Defining Φt := R t 
+
+> 0
+
+ΣΣ −1 
+
+> s
+
+ds , we multiply by the integrating factor Σ−1/2 
+
+> t
+
+exp(2 λΦt) to get 
+
+ddt 
+
+
+
+Σ−1/2 
+
+> t
+
+exp(2 λΦt)( μFMRG  
+
+> t
+
+− μt)
+
+
+
+= −Σ−1/2 ddt exp(2 λΦt) ( μ − a),
+
+where we used that ˙Φt = ΣΣ −1 
+
+> t
+
+. Integrating both sides from 0 to 1 then gives us 
+
+Σ−1/2 exp(2 λΦ1)(˜ μFMRG − μ) = −Σ−1/2(exp(2 λΦ1) − Id)( μ − a),
+
+38 so ˜μFMRG = μ − (Id − exp (−2λΦ1))( μ − a). To evaluate Φ1, we note that all relevant matrices are matrix functions of Σ and hence simultaneously diagonalize. Along an eigendirection of Σ with eigenvalue σ > 0 and substituting u = s/ (1 − s),
+
+Z 10
+
+σ
+
+(1 − s)2 + s2σ ds =
+
+Z ∞
+
+> 0
+
+σ
+
+1 + u2σ du = π√σ
+
+2 ,
+
+so Φ1 = π 
+
+> 2
+
+Σ1/2 and ˜μFMRG = μ − (Id − exp (−πλ Σ1/2))( μ − a), which is the claimed form. Next, we have the linear ODE 
+
+d(˜ xt − μFMRG  
+
+> t
+
+) = 
+
+ 12 ˙ΣtΣ−1 
+
+> t
+
+− 2λ ΣΣ −1
+
+> t
+
+
+
+(˜ xt − μFMRG  
+
+> t
+
+) dt, 
+
+so by the chain rule, the covariance evolves according to the equation 
+
+dΣFMRG  
+
+> t
+
+=
+
+ ˙ΣtΣ−1 
+
+> t
+
+− 4λ ΣΣ −1
+
+> t
+
+
+
+ΣFMRG  
+
+> t
+
+dt. 
+
+Because all relevant matrices commute, we can solve this ODE in closed form at t = 1 :
+
+˜ΣFMRG = exp 
+
+Z 10
+
+ ˙ΣsΣ−1 
+
+> s
+
+− 4λ ΣΣ −1
+
+> s
+
+
+
+ds 
+
+
+
+ΣFMRG 0 = Σ exp( −2πλ Σ1/2),
+
+using R 10 ˙ΣsΣ−1 
+
+> s
+
+ds = log Σ and R 10 ΣΣ −1 
+
+> s
+
+ds = π 
+
+> 2
+
+Σ1/2.The proof follows by solving linear ODEs for the mean and covariance of the FMRG flow in closed form. Since T FMRG pull and ˜ΣFMRG are matrix functions of Σ, all operators simultaneously diagonalize. Along an eigendirection v with Σ having eigenvalue σ > 0, the eigenvalues of T FMRG pull and T (1) pull from Theorem 2 along 
+
+v are 
+
+λv (T FMRG pull ) = 1 − e−πλ √σ , λv (T (1) pull ) = √πλσ e −λσ erfi 
+
+√λσ 
+
+
+
+.
+
+The FMRG eigenvalue is monotonically increasing in λ and bounded above by 1, so the FMRG mean contracts toward a without ever overshooting; in contrast, the plug-in eigenvalue crosses 1 around λσ ≈ 0.854 and exhibits mean overshoot. Similarly, the eigenvalues of ˜ΣFMRG and Σ(1) along v are 
+
+λv ( ˜ΣFMRG ) = σ e −2πλ √σ , λv (Σ (1) ) = σ e −2λσ .
+
+Both covariances shrink exponentially in λ, but with different scalings: the plug-in exponent grows like λσ 
+
+while the FMRG exponent grows like λ√σ, with a crossover at σ = π2. Although flow map reward guidance avoids mean overshoot, it still exponentially contracts the covariance, so flow map reward guidance also exhibits reward hacking on a Gaussian target. 
+
+## E.2 Gaussian mixture target 
+
+We now extend the analysis to ρ1 = Pmi=1 πi N (· | μi, Σi). Let Σit := (1 − t)2Id + t2Σi, let ρit denote the unguided marginal density for the ith component, and let wit (x) := πiρit (x)/ρ t(x) with ρt = Pmi=1 πiρit . The probability flow drift is the weighted combination 
+
+bt(x) = 
+
+> m
+
+X
+
+> i=1
+
+wit (x) bit (x), bit (x) := μi + 12 ˙Σit Σ−1 
+
+> it
+
+(x − tμ i), (16) which is nonlinear in x through the mixture weights wit (x). Unlike the single-Gaussian case, the flow map 
+
+Xt, 1 has no closed form and must be obtained by integrating the ODE numerically. 
+
+Theorem 20 (Flow map reward guidance for Gaussian mixture target) . In the above setting, fix t ∈ [0 , 1) 
+
+and let Xt,s (x) denote the solution of the probability flow ODE dX s = bs(Xs) ds with drift (16) and initial condition Xt = x. Then, the flow map reward guidance is 
+
+uFMRG  
+
+> t
+
+(x) = −2λ ∇Xt, 1(x)⊤(Xt, 1(x) − a),
+
+39 where the Jacobian ∇Xt,s (x) can be computed by integrating the variational equation 
+
+dds ∇Xt,s (x) = ∇bs(Xt,s (x)) ∇Xt,s (x), ∇Xt,t (x) = Id. (17) 
+
+In this formula, the spatial Jacobian of the mixture drift is 
+
+∇bs(y) = 
+
+> m
+
+X
+
+> i=1
+
+wis (y)
+
+ 12 ˙Σis Σ−1 
+
+> is
+
++ ( bis (y) − bs(y))( ∇ log ρis (y) − ∇ log ρs(y)) ⊤
+
+
+
+.
+
+Proof. The guidance formula follows from (15) , and the variational equation (17) follows from differentiating 
+
+dX s = bs(Xs) ds with respect to the initial condition and applying the chain rule. For the expression for ∇bs,the product rule applied to (16) gives 
+
+∇bs(y) = 
+
+> m
+
+X
+
+> i=1
+
+ wis (y) ∇bis (y) + bis (y) ∇wis (y)⊤ .
+
+Since bis is affine in y, we have ∇bis (y) = 12 ˙Σis Σ−1 
+
+> is
+
+, and the standard softmax gradient gives ∇wis (y) = 
+
+wis (y)( ∇ log ρis (y) − ∇ log ρs(y)) . Because the weights sum to 1, we have P 
+
+> i
+
+∇wis (y) = 0 , and we can use this to recenter bis (y) − bs(y) inside the second sum, yielding the claimed formula. Comparing Theorem 20 with Theorem 5, the FMRG guidance has the same algebraic form as the k = 1 
+
+plug-in guidance: the random GLASS endpoint ¯X1(x) is replaced by the deterministic probability flow endpoint Xt, 1(x), and the GLASS Jacobian by the unguided flow map Jacobian ∇Xt, 1(x). In both cases, the reward enters only through the displacement ( endpoint − a), and the Jacobian is determined entirely by the unguided dynamics. Since the probability flow starting from x typically transports mass to its own mode, a far-away mode contributes negligibly to ∇Xt, 1(x)⊤(Xt, 1(x) − a) regardless of how large its reward is. The mode selection failure of Theorem 6 therefore applies equally to flow map reward guidance, and best-of-n sampling compensates for it verbatim with u(1)  
+
+> t
+
+replaced by uFMRG  
+
+> t
+
+. Reward damping (Section 4.1.2) does not lift to FMRG, however: from Theorem 19, uFMRG  
+
+> t
+
+(x) has mismatched coefficients on (x − tμ ) and (μ − a) that no scalar schedule λt
+
+can simultaneously match, so the FMRG bias is not simply multiplicative, even for an isotropic Gaussian target. 
+
+## E.3 Empirical comparison 
+
+We empirically verify two claims from the analysis above. First, we show that flow map reward guidance and the k = 1 plug-in flow exhibit qualitatively similar reward hacking on FLUX.1-dev with a blueness reward; the two schemes drive the model in the same direction and produce visually comparable reward-hacked outputs. Second, on the single-Gaussian target of Theorem 19, we verify the σ-regime crossover predicted by the analysis: the eigenvalues of ˜ΣFMRG are smaller than those of Σ(1) when σ < π 2 (FMRG hacks more aggressively than the plug-in flow), and larger when σ > π 2 (FMRG is less aggressive). 
+
+FLUX.1-dev. For the FLUX run in Figure 24, we use the implementation of flow map reward guidance defined by (14) and (15) . The flow map reward guidance and the k = 1 plug-in are evaluated at matched gradient-norm scale on a blue-minus-red-green reward, and produce visually similar reward-hacked outputs. This is consistent with the structural analysis of Theorems 19 and 20: both schemes are single-endpoint surrogates and exhibit the same characteristic reward hacking failure mode. 
+
+Crossover at σ = π2. Recall from Theorems 2 and 19 that for an isotropic Gaussian target ρ1 =
+
+N (μ, σI d) under the memoryless schedule, the eigenvalues of the terminal covariances are ˜ΣFMRG = σe −2πλ √σ
+
+and Σ(1) = σe −2λσ . The plug-in covariance shrinks faster than the FMRG covariance precisely when 
+
+2λσ > 2πλ √σ ⇐⇒ σ > π 2. Figure 25 verifies this regime crossover empirically: with the narrow target (σ = 0 .5 < π 2) at λ = 1 , FMRG produces a much sharper terminal distribution than the k = 1 plug-in flow, while with the wide target ( σ = 16 > π 2) at λ = 0 .1, the same comparison reverses and FMRG samples are visibly more spread out than the plug-in samples. Both regimes exhibit aggressive reward hacking, but the relative aggressiveness flips with σ exactly as predicted. 40 Figure 24: FMRG vs. plug-in on FLUX.1. Top: unguided samples. Middle: the k = 1 plug-in flow. Bottom: flow map reward guidance. Both guided schemes drive the entire image onto a blue tint, sharing the same reward hacking failure mode. −2 0 2
+
+> −2024
+
+A
+
+Plug-in ( k = 1 ), σ = 0 .5  
+
+> −202
+
+B
+
+FMRG, σ = 0 .5     
+
+> −6−3036
+> −6
+> −3036
+
+C
+
+Plug-in ( k = 1 ), σ = 16     
+
+> −6−3036
+
+D
+
+FMRG, σ = 16 
+
+> Analytic tilt Guided samples Reward target
+
+Figure 25: σ-regime crossover. Empirical comparison of FMRG vs. the k = 1 plug-in flow on an isotropic Gaussian target. Panels A,B (narrow, σ = 0 .5 < π 2, λ = 1 ): FMRG concentrates much more sharply at the reward target than the plug-in. Panels C,D (wide, σ = 16 > π 2, λ = 0 .1): the relative aggressiveness reverses, with FMRG samples visibly more spread out, exactly as predicted by Theorem 19. 
+
+41
