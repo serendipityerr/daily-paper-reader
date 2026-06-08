@@ -1,0 +1,884 @@
+Title: Covariance Shrinkage via Stochastic Interpolation
+
+URL Source: https://arxiv.org/pdf/2606.07382v1
+
+Published Time: Mon, 08 Jun 2026 01:02:47 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Covariance Shrinkage via Stochastic Interpolation 
+
+Mathieu Chalvidal 
+
+Capital Fund Management 23 Rue de l’Universit´ e, 75007 Paris 
+
+mathieu.chalvidal@cfm.com 
+
+Florentin Coeurdoux 
+
+Capital Fund Management 23 Rue de l’Universit´ e, 75007 Paris 
+
+florentin.coeurdoux@cfm.com 
+
+Eric Vanden-Eijnden 
+
+Capital Fund Management 23 Rue de l’Universit´ e, 75007 Paris 
+
+eric.vanden-eijnden@cfm.com 
+
+# Abstract 
+
+We recast classical shrinkage of high-dimensional covariance estimators as empir-ical risk minimization over a parametric stochastic interpolant between a source and a target distribution. This formalism recovers known shrinkage estimators as special cases and reveals three distinct mechanisms for reducing statistical risk: (i) Scheduling : the interpolant schedule determines the class of admissi-ble covariances, and hence the achievable risk; (ii) Flow maps and couplings :whereas naive constructions amount to assuming independence between the dis-tributions, specific coupling structures (e.g., solutions of optimal transport prob-lems can lower the empirical risk; moreover, non-linear flow maps realizing such couplings free the interpolant covariance from the eigenbasis of the empirical es-timate, enabling eigenvector regularization; (iii) Early stopping : estimators de-fined by integrating a regressed vector field afford an additional bias–variance trade-off through approximation of the true interpolant distribution. We then pro-pose a neural estimator of the interpolant, together with an upper bound on its quadratic risk in terms of the interpolant approximation error, and validate both on synthetic experiments. Finally, we apply the estimator to real neuroimaging data, demonstrating the regularization power this approach offers in practice. 
+
+# 1 Introduction 
+
+Problem formulation ⋄ Estimating the covariance matrix Σμ of a D-dimensional random vector 
+
+X ∼ μ from N samples is foundational across statistics and machine learning. When D is non-negligible compared to N , the empirical sample covariance ˆΣ is high-variance and ill-conditioned: its spectrum spreads according to Marˇ cenko–Pastur [1] and its eigenvectors absorb sampling noise. Classical shrinkage [2] regularizes ˆΣ by pulling its eigenvalues toward an anchor (identity, scalar-trace, factor model), trading bias for variance. Non-linear shrinkage refinements [3, 4, 5] reshape the spectrum further but remain rotationally invariant: the empirical eigenvectors are preserved exactly, and any signal misaligned with ˆΣ’s eigenbasis is unrecoverable. 
+
+Main contributions ⋄ We recast covariance shrinkage as empirical risk minimization over a para-metric stochastic interpolant [6] between an isotropic source μ0 and the empirical measure ˆμ. This formalism unifies classical estimators as instances of a single construction and exposes three distinct axes of regularization: 
+
+> Preprint.
+> arXiv:2606.07382v1 [cs.LG] 5 Jun 2026
+
+Interpolation type Coupling Solution Spectral reg. Eigenbasis reg. 
+
+Linear interp. Independent Analytical ✓ ✗
+
+McCann interp. Optimal transport Gradient flow ODE ✓ ✓
+
+Stochastic interp. Deterministic Neural ODE ✓ ✓
+
+Table 1: Comparison of the interpolation processes studied in this paper, viewed as estimators be-tween an isotropic anchor μ0 and the empirical measure ˆμ. Different choices of coupling and veloc-ity field yield different regularization effects; only the non-linear flow maps (rows 2–3) escape the rotational-invariance limitation of classical shrinkage. • Schedule. The interpolant defines a two-parameter family of admissible covariances on [0 , 1] 2;the risk-minimizer generically lies in the interior, away from the linear and trace-preserving paths along which Ledoit–Wolf shrinkage is recovered. • Coupling. Optimal-transport and learned couplings reduce the achievable risk relative to the in-dependent coupling. Non-linear flow maps additionally free the estimator from the empirical eigenbasis, lifting the rotational-invariance limitation that constrains all classical shrinkage esti-mators. • Training budget. For a neural velocity field ˆvτt , training to convergence collapses the estimator back to ˆΣ. We observe that early-stopping improves the interpolant risk profile and calibrate the training budget directly from the data via either cross-validation or via a Stein-corrected risk surrogate that, unlike Stein–Haff, applies without rotational invariance. We validate the estimator on synthetic Gaussian benchmarks across spectrum shapes and dimen-sionality ratios q = D/N , and on resting-state fMRI in the data-limited regime q = 2 , where it outperforms Ledoit–Wolf and Wasserstein-2 shrinkage in terms of out-of-sample negative log-likelihood. 
+
+# 2 Related work 
+
+Shrinkage methods ⋄ James and Stein’s realization [7] that multivariate least-square estimators are dominated by estimators that ”shrink” parameters towards any target estimate paved the way for widespread regularization frameworks, ranging from classical Tikhonov-Ridge regularization [8] to the lasso [9] and various generalizations [10, 11, 12, 13]. More specifically, shrinkage methods have been extensively developed to mitigate the high variance incurred by the empirical estimation of high-dimensional covariance matrices: [2, 3, 14] developed methods to select a priori the optimal shrinkage intensity with respect to a target matrix. Additionally, non-linear shrinkage of the matrix spectrum relying on random matrix theory have been proposed by [5] with asymptotical optimal-ity in the problem dimension D. Another popular framework for sparse precision matrix based on graphical models have been developed in [15]. More recently, parameter shrinkage has been ele-gantly recast as the solution to a min-max optimization problem evaluated over a specific region of uncertainty [16]. Importantly, in all these cases, the methods share a unifying structural assumption when the shrinkage target is simultaneously diagonalizable with the empirical estimate: they are ro-tationally invariant, meaning they only regularize the estimated spectrum while leaving the sample eigenvectors unchanged. 
+
+Data augmentation methods : ⋄ Incorporating additional samples derived from the observed pop-ulation have been shown to favorably improve empirical performance in numerous statistical in-ference applications [17, 18] ranging from computer vision [19] to graphs [20] or text [21]. The seminal work of [22] established an equivalence between isotropic Gaussian noise addition and Tikhonov regularization. Since then, some theoretical characterization of the beneficial effect of data augmentation techniques have been proposed in [23, 24, 25] through kernel and group theory, while augmentation techniques have been refined, in particular through modern generative modeling [26, 27] or automated augmentation strategies [28, 29, 30]. More recent work has however pointed out that iterative incorporation of synthetic data predictably hurt downstream regression performance due to the bias of an imperfect augmentation generator [31, 32]. In limited data regime case, some efforts have also been dedicated to characterize the benefit of data augmentation, in particular for few-shot classification [33] or precision matrix estimation [34, 35]. 23 Shrinkage as Stochastic Interpolation 
+
+Notations and conventions ⋄ We denote by D the dimensionality of X and by N the number of observed realizations X = ( X1, . . . , X N ) ∈ RD×N . Throughout, we assume centered data, 
+
+Eμ[X] = 0 , so that the covariance of X under any probability measure μ on RD is the matrix-valued functional 
+
+Σμ := Eμ[XX ⊤] = 
+
+Z
+
+> RD
+
+xx ⊤ μ(dx ). (1) The target of estimation is Σμ, the covariance of the unknown data distribution μ. The simplest estimator is the empirical sample covariance, 
+
+ˆΣ := Σ ˆμ = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+XnX⊤ 
+
+> n
+
+, ˆμ := 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+δXn , (2) which is unbiased but suffers from high variance when D is comparable to or larger than N .
+
+Parametric construction and risk ⋄ Our approach builds the estimator Σθ from a parametric ran-dom variable 
+
+Iθ = I(X0, X ; θ), θ ∈ Θ, (3) where X0 is an auxiliary variable drawn from a fixed source μ0 and X is a target sample. Ideally we would draw X ∼ μ from the true target, but in practice we only have access to the empirical measure ˆμ and must sample X ∼ ˆμ instead. More generally the pair (X0, X ) is drawn from a coupling ν ∈ π(μ0, ˆμ) whose target-side marginal is ˆμ rather than μ. Since ˆμ depends on the sample X, the coupling ν and all objects derived from it are random in X — a dependence we leave implicit in the notation. Letting μθ denote the law of Iθ (i.e. the pushforward of ν under I(·, ·; θ))the induced covariance estimator 
+
+Σθ := Σ μθ = Eν
+
+Iθ I⊤
+
+> θ
+
+ (4) is itself a random matrix, and we select θ to minimize its expected distance to the target, 
+
+θ∗ ∈ arg min  
+
+> θ∈Θ
+
+R(θ), R(θ) := EX∼μ⊗N
+
+ d(Σ θ , Σμ) , (5) where d is a matrix distance — typically the squared Frobenius distance d2 
+
+> F
+
+(A, B ) = ∥A − B∥2
+
+> F
+
+between real-valued matrices or the squared Bures-Wasserstein distance between SPD matrices. The error in Σθ thus decomposes into two sources: a model error from approximating μ by the parametric family {μθ }, and a sampling error from substituting ˆμ for μ in the coupling. The various forms of regularization developed below trade these two sources against each other. 
+
+3.1 Interpolant schedule 
+
+A natural construction for Iθ is the stochastic interpolant of Albergo et al. [6], parameterized by 
+
+θ = ( α, β ) ∈ [0 , 1] 2 between a source distribution μ0 and the target μ.
+
+Definition 1 (Stochastic interpolant) . Given a couple of random variables (X0, X ) with joint law 
+
+ν ∈ π(μ0, ˆμ), the stochastic interpolant is 
+
+Iθ = α X 0 + β X, θ = ( α, β ) ∈ [0 , 1] 2, (6) whose associated law μθ is the pushforward of ν under (x0, x ) 7 → αx 0 + βx . The endpoints 
+
+θ = (1 , 0) and θ = (0 , 1) recover μ0 and ˆμ respectively. Already the simplest realization of this construction — independent coupling against the empirical measure — exposes the mechanics: the interpolant defines a two-parameter family of admissible covariances on [0 , 1] 2, and the risk minimum within this family generically lies in the interior, away from any one-dimensional path. 
+
+Example 1 (Independent coupling) . Take ν = μ0 ⊗ ˆμ with both μ0 and ˆμ centered. Independence and centering eliminate the cross-terms in Eν [Iθ I⊤ 
+
+> θ
+
+], and the interpolant covariance reduces to a quadratic form in the parameters, 
+
+Σθ = α2 Σ0 + β2 ˆΣ, θ = ( α, β ) ∈ [0 , 1] 2, (7) 3with Σ0 := Σ μ0 and ˆΣ := Σ ˆμ. Two one-parameter restrictions are natural: the linear path α+β = 1 ,and the trace-preserving path α2 + β2 = 1 . The latter, when Σ0 = I and tr(Σ μ) = D, reduces (7) to the convex combination Σθ = λI + (1 − λ) ˆΣ and recovers classical Ledoit–Wolf shrinkage [2]. The Frobenius risk on the full square, 
+
+RF (α, β ) = EX
+
+h
+
+α2 Σ0 + β2 ˆΣ − Σμ
+
+> 2
+> F
+
+i
+
+, (8) admits a closed-form minimizer (α∗, β ∗) ∈ [0 , 1] 2. If ˆΣ = Σ μ almost surely the minimizer collapses to (0 , 1) ; any finite-sample deviation forces α∗ > 0, so a strictly shrunken estimator achieves lower risk irrespective of the anchor μ0 — a finite-sample echo of Stein’s inadmissibility result [36]. Whenever Σ0 is diagonal, however, the estimator preserves the eigenbasis of ˆΣ and is therefore 
+
+rotationally invariant [5] — a structural limitation we revisit in §3.2. 
+
+Figure 1: Frobenius risk surface R(α, β ) on [0 , 1] 2
+
+for the interpolant between a 100-dimensional Gaus-sian target and an isotropic source, estimated from 
+
+N = 100 samples. The optimum lies neither on the linear path α + β = 1 nor on the trace-preserving path 
+
+α2 + β2 = 1 .The independent coupling ν = μ0 ⊗ ˆμ
+
+of Example 1 was chosen for analytic tractability, but it sits at one extreme of the admissible set π(μ0, ˆμ) and the result-ing estimator pays for that simplicity in variance. Enriching the family of cou-plings considered in (5) can only lower the achievable risk, provided the new Σθ re-mains computable. 
+
+Example 2 (Gaussian optimal-transport coupling) . Take both source and target Gaussian and centered, μ0 = N (0 , Σ0)
+
+and ˆμ = N (0 , ˆΣ) . The Monge– Kantorovich map under the Wasserstein-2 distance is then affine, X1 = T (X0) = 
+
+AX 0, with 
+
+A = Σ −1/20
+
+ Σ1/20 ˆΣ Σ 1/20
+
+1/2Σ−1/20 ,
+
+(9) and the displacement geodesic It = (1 −
+
+t) X0 + t AX 0 realizes the interpolant of Definition 1 along the linear path θt =(1 − t, t ) under this OT-induced coupling. Specializing to an isotropic source Σ0 =
+
+σ2I collapses A to σ−1 ˆΣ1/2 and yields the closed-form covariance 
+
+ΣOT  
+
+> t
+
+= (1 − t)2σ2I + 2 t(1 − t) σ ˆΣ1/2 + t2 ˆΣ. (10) At the spectral level, writing ˆλi for the eigenvalues of ˆΣ,
+
+λOT  
+
+> i
+
+(t) =  (1 − t) σ + t
+
+q
+
+ˆλi
+
+2, (11) so the OT-induced shrinkage interpolates eigenvalues linearly in standard deviation rather than in variance. Compared to the independent coupling of Example 1, which gives 
+
+λlin  
+
+> i
+
+(t) = (1 − t)2σ2 + t2 ˆλi, each eigenvalue under (11) now moves monotonically from σ2 to ˆλi
+
+along t ∈ [0 , 1] : large eigenvalues ( ˆλi > σ 2) are not depressed at intermediate t, and small eigenval-ues ( ˆλi < σ 2) descend more gradually. Both effects are favorable in the finite-sample regime where 
+
+ˆΣ generically over-estimates large eigenvalues and under-estimates small ones [1]. We note that A
+
+shares its eigenbasis with ˆΣ, so ΣOT  
+
+> t
+
+is diagonal in that basis and the estimator remains rotationally invariant — a limitation we lift in §3.3 by parameterizing the velocity field with a neural network. 
+
+3.2 Coupling via flow maps 
+
+We consider next ordinary differential equations of the form 
+
+˙Xt = vt(Xt), X0 ∼ μ0, (12) 4which transports samples from μ0 at t = 0 to a terminal distribution μ1 at t = 1 , with intermediate marginals μt satisfying the continuity equation 
+
+∂tμt + ∇ · (μt vt) = 0 , μt=0 = μ0 (13) The pair (X0, X 1) defines a deterministic coupling in π(μ0, μ 1), and we focus on velocity fields for which μ1 = ˆ μ, exactly or in approximation. Two natural constructions arise: 
+
+Gradient flows of an optimal-transport potential. ⋄ Following the Benamou–Brenier formulation [37], the velocity field minimizing R 10 Eμt [∥vt∥2] dt subject to (13) and the boundary conditions 
+
+μ0, μ 1 = ˆ μ generates the Wasserstein-2 optimal transport plan as its endpoint coupling. In practice the flow is realized by descending the gradient of an entropic OT distance with respect to particle positions transported from μ0 to ˆμ.
+
+Conditional flow matching. ⋄ Restricting Definition 1 to a one-parameter path θt = ( αt, β t) with 
+
+α0 = β1 = 1 and α1 = β0 = 0 conditional flow matching [38, 39] regresses a parametric velocity field vϕ against the conditional expectation 
+
+vt(x) = Eν
+
+ ˙It It = x , It = Iθt = αtX0 + βtX (14) where ν ∈ π(μ0, ˆμ) is a chosen base coupling. The velocity vt(x) can be learned via minimization of the loss 
+
+L[ˆ v] = Eν,t ∼U ([0 ,1]) 
+
+|ˆvt(It) − ˙It|2, (15) over a rich parametric class of ˆvt(x). The minimizer is nonlinear in x in general, so the flow can encode higher-order structure of ˆμ that the independent coupling of Example 1 cannot capture. 
+
+Figure 2: Risk profiles under the Bures-Wasserstein distance of several interpolant constructions for three different Gaussian distributions described in Section 4.1. The empirical estimate is pictured as a red triangle. Color darkness indicate vector field training progress ranging linearly from 1K to 50K gradient steps. OT shrinkage is constructed analytically from the empirical covariance. Depending on the underlying distribution, the SI estimator might largely reduce the risk. 
+
+Monte Carlo over flow trajectories: A practical benefit of building the coupling through a flow map is that once vt is fixed, sampling from μt at any t amounts to integrating (12) forward, which can be done over arbitrarily many independent trajectories. The estimator Σθ is then evaluated by Monte Carlo estimation over M ≫ N samples, replacing the O(N −1/2) sampling error inherited from 
+
+ˆμ by an integration error of order M −1/2 that can be driven below the model bias at modest cost. Figure 3 quantifies this effect. 
+
+3.3 Early stopping 
+
+When the velocity field in (12) is parameterized by a neural network ˆvt trained with a conditional-flow-matching loss [38], the training budget τ controls how closely ˆvτt approximates the regression target (15). For a sufficiently expressive network and τ → ∞ , the trained flow pushes μ0 exactly onto ˆμ and the induced covariance estimator collapses to the empirical sample covariance: Σθ → ˆΣ.The model memorizes the sampling noise of ˆμ and the regularization purchased by the schedule and the coupling is undone. At finite capacity the hypothesis class of ˆvt imposes additional implicit regularization on the converged flow; this effect is real but orthogonal to our analysis and we do not study it here. 5Figure 3: Evolution of the covariance estimator with the number of samples considered for the Monte-Carlo estimation. Finite sample effects affecting the empirical estimate get largely attenuated in the spectrum tail ( left ). In parallel, the alignment of the true versus estimated eigendirections increases ( middle ). These two effects contribute to the reduction of risk.( right )Stopping training before this fixed point is reached prevents the collapse. At intermediate τ , the trained field ˆvτt generates a smoothed terminal distribution whose covariance lies between that of the isotropic source and ˆΣ, trading the bias of an under-trained flow against the sampling variance of ˆΣ. The training budget therefore enters the risk (5) as a third regularization axis, alongside the schedule (αt, β t) of §3.1 and the coupling ν of §3.2. The next subsection shows how to estimate this risk from the data and select τ ∗ accordingly. 
+
+Figure 4: Comparison of true versus estimated risk profiles for the factorial and power law models considered in section 4.1 for Bures-Wasserstein ( left ) and Frobenius ( right ) distances. For the CV estimation, a held out set of Nval = 30 samples is used 
+
+3.4 Risk estimation 
+
+To deploy the estimator we need a data-driven proxy for the risk R(θ) in (5). We propose two complementary methods. 
+
+Cross-validation. Split the sample into a training subset Xtr used to construct Σθ and a held-out subset Xval used to evaluate it, and approximate R(θ) by the held-out distance d Σθ (Xtr ), ˆΣval 
+
+,where ˆΣval is the empirical covariance on the validation fold. Although the split further reduces the data available for fitting — a real concern in the small-sample regime — we show empirically that a modest validation fold is sufficient to obtain stable risk estimates even at high dimension. 
+
+SURE correction. Specializing R(θ) to the squared Frobenius distance, 
+
+RF (θ) = EX
+
+∥Σθ ∥2
+
+> F
+
+ − 2 EX
+
+Tr(Σ θ Σμ) + ∥Σμ∥2 
+
+> F
+
+, (16) 6only the cross term depends on the unobservable Σμ. Naively replacing it by ˆΣ underestimates the risk because Σθ was built from the same data, leading to an optimistic bias. The standard correction comes from a multivariate Stein identity: assuming Xn ∼ N (0 , Σμ) and applying Stein’s lemma componentwise to each Xn yields (proof in Appendix A.2) 
+
+EX
+
+Tr(Σ θ Σμ) = EX
+
+Tr(Σ θ ˆΣ)  − 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+EX
+
+Tr  Σμ · jvp Xn (Σ θ , X n) , (17) where jvp Xn (Σ θ , X n) ∈ RD×D denotes the Jacobian of Σθ with respect to Xn contracted with Xn
+
+itself. Substituting back into (16) and dropping the θ-independent constant ∥Σμ∥2 
+
+> F
+
+gives the risk surrogate 
+
+˜R(θ) = EX
+
+∥Σθ ∥2
+
+> F
+
+ − 2 EX
+
+Tr(Σ θ ˆΣ)  + 2
+
+N
+
+> N
+
+X
+
+> n=1
+
+EX
+
+Tr  Σμ · jvp Xn (Σ θ , X n) . (18) The correction term in (18) still contains Σμ, so the surrogate is not directly observable. In practice we plug in ˆΣ for Σμ inside the correction, yielding an asymptotically unbiased risk estimator that — in contrast to Stein–Haff applied to rotationally-invariant shrinkage — requires no special structure on Σθ and is therefore compatible with the neural interpolant of §3.3. 
+
+# 4 Numerical experiments 
+
+4.1 Controlled experiment 
+
+In this section we empirically compare the risk of several interpolant estimators across different settings where we control the data generative process, thus having access to the ground truth co-variance. We vary the underlying distribution, the amount of available data and the dimensionality of the considered estimation problems. We also consider two risk definitions arising from either the Bures-Wasserstein distance between SPD matrices or the Frobenius norm between real-valued matrices. 
+
+Experiment 1 ⋄ We first consider 100-dimensional Gaussian distributions with different spectral properties. For each of the three settings considered below, we sample 100 points such that we place our setting in q = 1 . Additionally, to make the estimation problem closer to real-case scenarios, we further inject a sparse ( p = 0 .1) Gaussian noise ϵ with a small scale (σϵ = 0 .1) to our observations. • Factorial model : This case is prevalent in signal processing and machine learning. The dis-tribution has most of its variance concentrated on a small number of dimensions within the ambient space while the variance of other dimensions is set to a nominal level c = 0 .5.• Power law spectrum : The covariance spectrum is decaying with a power law s ≈ t−1.• Linear decay spectrum : Contrary to the two previous models, the variance is spread over all dimensions with a linear decay. This case is most adversarial to small data population estimation since the variance is more evenly spread over each dimension. For each distribution, we train a 2-layer multi-layer perceptron with ReLU activations as our neural interpolant with schedule αt + βt = 1 for 50.000 steps on the full batch and compute the covariance by sampling n = 20 .000 trajectories. Results are presented in figure 2. We show that the risk can be notably reduced compared to vanilla shrinkage methods in both settings where the prior is closer or farther from the ground truth than the empirical estimate, while increasing as training progress past a certain training budget (data overfitting). 
+
+Experiment 2 ⋄ We investigate next how the neural interpolant estimator behaves as a function of the data ratio q, the interpolant schedule and the model capacity. Even in very limited data regime, the regularization effect of the interpolation over linear shrinkage can remain, and is dependent on the schedule definition, while restricting the model dimensionality compared to the distribution increases the risk uniformly over the interpolant trajectory (see figure 5). 
+
+4.2 Real world application 
+
+We validate our approach on a real world application of neuroimaging: Functional Magnetic Res-onance Imaging (fMRI) refers to imaging methods able to capture spatial and temporal changes in 7Figure 5: Risk profiles for covariance estimation under the two considered distances varied across different specifications for an elliptic 100-dimensional Gaussian distribution corrupted with sparse random noise (see experiment 1). The covariance path learned by the neural interpolant reach a lower minimal error than the linear interpolation, providing a different bias-variance trade-off that depends on ratio q = D/N (left ), the interpolant definition ( middle ) and the network capacity (right ). brain metabolism that are induced by cognitive state changes or unregulated processes in the resting brain, through variation of oxygen concentration in blood flows. fMRI is being used as a biomarker for disease detection, to monitor therapy in patients, or for studying pharmacological efficacy. How-ever, fMRI data natively operates in a highly adverse statistical regime. The number of parcellated brain regions ( D) is typically large, while the number of temporal observations ( N ) per scanning session is limited due to scanner costs and subject motion constraints. In this D ≈ N or D > N 
+
+regime, the empirical sample covariance matrix is notoriously ill-conditioned or singular, severely overfitting the in-sample noise. Consequently, regularization is mandatory. 
+
+4.2.1 Out-of-Sample Statistical Risk Assessment 
+
+To empirically validate both our estimator’s generalization capability and the efficacy of our pro-posed Stein’s Unbiased Risk Estimate (SURE) early-stopping criterion, we conduct an out-of-sample risk evaluation on the ABIDE dataset [40]. 
+
+Experimental Setup ⋄ We utilize pre-extracted region-of-interest time series parcellated into D =200 regions from the Craddock atlas [41]. Each region’s time series is independently standardized to zero mean and unit variance. To simulate the extreme data-limited regime, each subject’s time series 
+
+X ∈ RN ×D is split longitudinally into a training set Xtrain of length Ntrain = 100 , and a held-out test set Xtest of length Ntest = 100 . This enforces a dimensionality ratio of q = D/N = 2 .0, ensuring the empirical training covariance ˆΣtrain is singular. 
+
+Estimator Calibration ⋄ For each subject, we construct the SI estimator path Σt initialized at the isotropic source distribution Σ0 = I. The optimal integration time t∗ is selected strictly us-ing the training data by minimizing the theoretical SURE penalty derived in Section 3.4, specifi-cally utilizing batched Jacobian-Vector Products (JVPs) over Xtrain . The final calibrated estimator is ˆΣFM = Σ t∗ . As benchmark, we consider the Ledoit-Wolf linearly shrunk covariance ˆΣLW and the Wasserstein-2 OT regularization ˆΣOT .
+
+Evaluation Metric The performance of the estimators is measured using the out-of-sample Gaus-sian Negative Log-Likelihood (NLL) on the unseen test acquisitions. Importantly, to bypass the rank-deficiency of the empirical test covariance ˆΣtest , the average NLL is evaluated using the stable 8trace formulation: 
+
+L(Σ) ∝ 12
+
+
+
+log det(Σ) + Tr (Σ −1 ˆΣtest )
+
+
+
+(19) where ˆΣtest = 1 
+
+> Ntest
+
+XT
+
+> test
+
+Xtest . Note that this formulation only requires the inversion of the well-conditioned, regularized estimators. 
+
+4.3 Results 
+
+The mean out-of-sample Negative Log-Likelihood across all subjects is reported in Table 2. The unregularized sample covariance cannot be evaluated due to its singularity ( det( ˆΣtrain ) = 0 ). 
+
+Estimator Out-of-Sample NLL (↓) Computation time (↓)Sample Covariance ( ˆΣtrain ) N/A (Singular) ∼ 100 μs 
+
+Ledoit-Wolf Linear Shrinkage ( ˆΣLW ) 51.68 ± 42.81 ∼ 10 ms 
+
+Wasserstein-2 Shrinkage ( ˆΣOT ) 40.89 ± 24.44 ∼ 30 s
+
+SI Shrinkage (Ours) 30.96 ± 15.64 ∼ 7s
+
+Table 2: Out-of-Sample Negative Log-Likelihood on held-out fMRI acquisitions ( D = 200 , Ntrain =100 , Ntest = 100 ). Lower is better. NLL is reported as Mean ± Standard Deviation across subjects. As shown in Table 2, our SI shrinkage Estimator significantly outperforms both classical linear shrinkage and optimal transport regularized shrinkage. By successfully leveraging the SURE stop-ping criterion, the SI estimator halts the probability flow at an optimal geometry that generalizes better to unseen fMRI acquisitions, proving the practical utility of non-linear covariance interpola-tion in high-dimensional biological settings. 
+
+# 5 Discussion 
+
+By reframing covariance shrinkage as the minimization of a parametric empirical risk over a continuous-time flow, we unite classical algebraic methods—such as linear and optimal transport shrinkage—under a single continuous framework. Beyond serving as a unifying theory, this formalism reveals new pathways for reducing statistical risk by viewing the interpolant schedule, the coupling structure, and the integration time as distinct axes of regularization. A primary conceptual advantage of this framework is its ability to bypass the rotational invariance constraint that strictly limits traditional shrinkage techniques. Through non-linear flow maps parameterized by neural networks, our approach dynamically regularizes the empirical eigenvectors. This enables the estimator to exploit the local second-order geometry of the data by performing an annealed, path-dependent shrinkage that gracefully adjusts to the underlying data manifold. Furthermore, casting the estimation as the integration of a vector field naturally introduces the integration trajectory as an explicit control over the bias-variance trade-off. We operationalized this insight using a bias penalization, providing a fully observable, data-driven criterion to halt the continuous flow at an optimal geometry before overfitting occurs. The practical efficacy of this approach was validated in the highly adverse, data-limited regime of neuro-imaging, where the non-linear interpolant captured the covariance structure significantly better than established robust baselines. 
+
+Limitations and Future Work While the neural interpolant demonstrates powerful geometric reg-ularization, parameterizing the velocity field with a neural network intrinsically carries a higher computational burden than deriving closed-form analytical estimators. Future research will explore more computationally efficient parameterizations of the flow maps to accelerate the integration pro-cess. Additionally, the stochastic interpolation formalism naturally lends itself to the estimation of higher-order statistical moments, presenting an exciting frontier for building robust, non-parametric estimators in complex geometric spaces. 9References 
+
+[1] V.A. Marˇ cenko and Leonid Pastur. Distribution of eigenvalues for some sets of random matri-ces. Math USSR Sb , 1:457–483, 01 1967. [2] Olivier Ledoit and Michael Wolf. A well-conditioned estimator for large-dimensional covari-ance matrices. Journal of Multivariate Analysis , 88(2):365–411, 2004. ISSN 0047-259X. doi: https://doi.org/10.1016/S0047-259X(03)00096-4. URL https://www.sciencedirect. com/science/article/pii/S0047259X03000964 .[3] Olivier Ledoit and Michael Wolf. Analytical nonlinear shrinkage of large-dimensional covari-ance matrices. The Annals of Statistics , 48(5):3043–3065, 2020. doi: 10.1214/19-AOS1921. [4] Clifford Lam. Nonparametric eigenvalue-regularized precision or covariance matrix estimator. 
+
+The Annals of Statistics , 44(3):928–953, 2016. ISSN 00905364. URL http://www.jstor. org/stable/43818916 .[5] Jo¨ el Bun, Jean-Philippe Bouchaud, and Marc Potters. Cleaning large correlation matrices: Tools from random matrix theory. Physics Reports , 666:1–109, 2017. ISSN 0370-1573. doi: https://doi.org/10.1016/j.physrep.2016.10.005. URL https://www.sciencedirect.com/ science/article/pii/S0370157316303337 . Cleaning large correlation matrices: tools from random matrix theory. [6] Michael Albergo, Nicholas M Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A unifying framework for flows and diffusions. Journal of Machine Learning Research , 26(209): 1–80, 2025. [7] William James, Charles Stein, et al. Estimation with quadratic loss. In Proceedings of the fourth Berkeley symposium on mathematical statistics and probability , volume 1, pages 361– 379. University of California Press, 1961. [8] Arthur E. Hoerl and Robert W. Kennard. Ridge regression: Biased estimation for nonorthog-onal problems. Technometrics , 12(1):55–67, 1970. ISSN 00401706. URL http://www. jstor.org/stable/1267351 .[9] Robert Tibshirani. Regression shrinkage and selection via the Lasso. Journal of the Royal Sta-tistical Society: Series B (Methodological) , 58(1):267–288, 1996. doi: 10.1111/j.2517-6161. 1996.tb02080.x. [10] Hui Zou and Trevor Hastie. Regularization and variable selection via the elastic net. Journal of the Royal Statistical Society Series B: Statistical Methodology , 67(2):301–320, 04 2005. ISSN 1369-7412. doi: 10.1111/j.1467-9868.2005.00503.x. URL https://doi.org/10.1111/j. 1467-9868.2005.00503.x .[11] Hui Zou. The adaptive lasso and its oracle properties. Journal of the American Statistical Association , 101(476):1418–1429, 2006. ISSN 01621459. URL http://www.jstor.org/ stable/27639762 .[12] Bin Li and Qingzhao Yu. Robust and sparse bridge regression. Statistics and Its Interface , 4, 01 2009. doi: 10.4310/SII.2009.v2.n4.a9. [13] Dingfeng Jiang and Jian Huang. Concave 1-norm group selection. Biostatistics , 16(2):252– 267, 04 2015. ISSN 1465-4644. doi: 10.1093/biostatistics/kxu050. URL https://doi.org/ 10.1093/biostatistics/kxu050 .[14] Taras Bodnar, Arjun K. Gupta, and Nestor Parolya. Direct shrinkage estimation of large dimensional precision matrix. Journal of Multivariate Analysis , 146:223–236, 2016. ISSN 0047-259X. doi: https://doi.org/10.1016/j.jmva.2015.09.010. URL https://www. sciencedirect.com/science/article/pii/S0047259X15002249 . Special Issue on Sta-tistical Models and Methods for High or Infinite Dimensional Spaces. [15] Tony Cai, Weidong Liu, and Xi Luo. A constrained l1 minimization approach to sparse preci-sion matrix estimation, 2011. URL https://arxiv.org/abs/1102.2233 .10 [16] Man-Chung Yue, Yves Rychener, Daniel Kuhn, and Viet Anh Nguyen. A geometric unifica-tion of distributionally robust covariance estimators: Shrinking the spectrum by inflating the ambiguity set. arXiv preprint arXiv:2405.20124 , 2024. [17] David A. van Dyk and Xiao-Li Meng. The art of data augmentation. Journal of Computational and Graphical Statistics , 10:1 – 50, 2001. URL https://api.semanticscholar.org/ CorpusID:121929631 .[18] Alhassan Mumuni and Fuseini Mumuni. Data augmentation: A comprehensive survey of modern approaches. Array , 16:100258, 2022. ISSN 2590-0056. doi: https://doi.org/10.1016/ j.array.2022.100258. URL https://www.sciencedirect.com/science/article/pii/ S2590005622000911 .[19] Connor Shorten and Taghi Khoshgoftaar. A survey on image data augmentation for deep learning. Journal of Big Data , 6, 07 2019. doi: 10.1186/s40537-019-0197-0. [20] Kaize Ding, Zhe Xu, Hanghang Tong, and Huan Liu. Data augmentation for deep graph learning: A survey, 2022. URL https://arxiv.org/abs/2202.08235 .[21] Connor Shorten, Taghi Khoshgoftaar, and Borko Furht. Text data augmentation for deep learn-ing. Journal of Big Data , 8, 07 2021. doi: 10.1186/s40537-021-00492-0. [22] Chris M Bishop. Training with noise is equivalent to tikhonov regularization. Neural compu-tation , 7(1):108–116, 1995. [23] Tri Dao, Albert Gu, Alexander Ratner, Virginia Smith, Chris De Sa, and Christopher Re. A kernel theory of modern data augmentation. In Kamalika Chaudhuri and Ruslan Salakhutdinov, editors, Proceedings of the 36th International Conference on Machine Learning , volume 97 of 
+
+Proceedings of Machine Learning Research , pages 1528–1537. PMLR, 09–15 Jun 2019. URL 
+
+https://proceedings.mlr.press/v97/dao19b.html .[24] Shuxiao Chen, Edgar Dobriban, and Jane H. Lee. A group-theoretic framework for data augmentation. Journal of Machine Learning Research , 21(245):1–71, 2020. URL http: //jmlr.org/papers/v21/20-163.html .[25] Chi-Heng Lin, Chiraag Kaushik, Eva L. Dyer, and Vidya Muthukumar. The good, the bad and the ugly sides of data augmentation: An implicit spectral regularization perspective. J. Mach. Learn. Res. , 25:91:1–91:85, 2022. URL https://api.semanticscholar.org/CorpusID: 252815719 .[26] Søren Hauberg, Oren Freifeld, Anders Boesen Lindbo Larsen, John Fisher, and Lars Hansen. Dreaming more data: Class-dependent distributions over diffeomorphisms for learned data augmentation. In Arthur Gretton and Christian C. Robert, editors, Proceedings of the 19th International Conference on Artificial Intelligence and Statistics , volume 51 of Proceedings of Machine Learning Research , pages 342–350, Cadiz, Spain, 09–11 May 2016. PMLR. URL 
+
+https://proceedings.mlr.press/v51/hauberg16.html .[27] Antreas Antoniou, Amos Storkey, and Harrison Edwards. Data augmentation generative ad-versarial networks. 11 2017. doi: 10.48550/arXiv.1711.04340. [28] Alexander J. Ratner, Henry R. Ehrenberg, Zeshan Hussain, Jared Dunnmon, and Christopher R´ e. Learning to compose domain-specific transformations for data augmentation, 2017. URL 
+
+https://arxiv.org/abs/1709.01643 .[29] Ekin D. Cubuk, Barret Zoph, Dandelion Mane, Vijay Vasudevan, and Quoc V. Le. Autoaug-ment: Learning augmentation policies from data, 2019. URL https://arxiv.org/abs/ 1805.09501 .[30] Ekin Dogus Cubuk, Barret Zoph, Jon Shlens, and Quoc Le. Randaugment: Prac-tical automated data augmentation with a reduced search space. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin, editors, Advances in Neural In-formation Processing Systems , volume 33, pages 18613–18624. Curran Associates, Inc., 2020. URL https://proceedings.neurips.cc/paper_files/paper/2020/file/ d85b63ef0ccb114d0a3bb7b7d808028f-Paper.pdf .11 [31] Adil Rengim Cetingoz and Charles-Albert Lehalle. Synthetic data for portfolios: A throw of the dice will never abolish chance, 2025. URL https://arxiv.org/abs/2501.03993 .[32] Elvis Dohmatob, Yunzhen Feng, and Julia Kempe. Model collapse demystified: The case of regression. In A. Globerson, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang, editors, Advances in Neural Information Processing Sys-tems , volume 37, pages 46979–47013. Curran Associates, Inc., 2024. doi: 10.52202/ 079017-1490. URL https://proceedings.neurips.cc/paper_files/paper/2024/ file/53dbd7e34fab703a639964e2d3ee9e84-Paper-Conference.pdf .[33] Yourun Zhang, Maoguo Gong, Jianzhao Li, Kaiyuan Feng, and Mingyang Zhang. Few-shot learning with enhancements to data augmentation and feature extraction. IEEE transactions on neural networks and learning systems , 36(4):6655–6668, 2024. [34] Lucas Morisset, Adrien Hardy, and Alain Durmus. Non-asymptotic analysis of data augmen-tation for precision matrix estimation, 2025. URL https://arxiv.org/abs/2510.02119 .[35] Zhenshan Zhang, Wenjie Xu, Haitao Zou, and Shichao Yi. Data augmentation for doa estimation using wasserstein gan with gradient penalty. Digital Signal Processing , 179: 106039, 2026. ISSN 1051-2004. doi: https://doi.org/10.1016/j.dsp.2026.106039. URL 
+
+https://www.sciencedirect.com/science/article/pii/S1051200426001582 .[36] Charles Stein. Inadmissibility of the usual estimator for the mean of a multivariate normal distribution. In Proceedings of the Third Berkeley Symposium on Mathematical Statistics and Probability , volume 1, pages 197–206, Berkeley, 1956. University of California Press. [37] Jean-David Benamou and Yann Brenier. A computational fluid mechanics solution to the Monge–Kantorovich mass transfer problem. Numerische Mathematik , 84(3):375–393, 2000. doi: 10.1007/s002110050002. [38] Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow matching for generative modeling. In International Conference on Learning Representations ,2023. [39] Michael Samuel Albergo and Eric Vanden-Eijnden. Building normalizing flows with stochastic interpolants. In Proceedings of the Eleventh International Conference on Learning Represen-tations , 2023. URL https://arxiv.org/abs/2209.15571 .[40] A. Di Martino, C.-G. Yan, Q. Li, E. Denio, F. X. Castellanos, K. Alaerts, J. S. Anderson, M. Assaf, S. Y. Bookheimer, M. Dapretto, B. Deen, S. Delmonte, I. Dinstein, B. Ertl-Wagner, D. A. Fair, L. Gallagher, D. P. Kennedy, C. L. Keown, C. Keysers, J. E. Lainhart, C. Lord, B. Luna, V. Menon, N. J. Minshew, C. S. Monk, S. Mueller, R.-A. M¨ uller, M. B. Nebel, J. T. Nigg, K. O’Hearn, K. A. Pelphrey, S. J. Peltier, J. D. Rudie, S. Sunaert, M. Thioux, J. M. Tyszka, L. Q. Uddin, J. S. Verhoeven, N. Wenderoth, J. L. Wiggins, S. H. Mostofsky, and M. P. Milham. The autism brain imaging data exchange: towards a large-scale evaluation of the intrinsic brain architecture in autism. Molecular Psychiatry , 19(6):659–667, 2014. doi: 10.1038/mp.2013.78. [41] R. C. Craddock, G. A. James, P. E. Holtzheimer, X. P. Hu, and H. S. Mayberg. A whole brain fMRI atlas generated via spatially constrained spectral clustering. Human Brain Mapping , 33 (8):1914–1928, 2012. doi: 10.1002/hbm.21333. 12 A Theoretical Details 
+
+A.1 Effect of conditional couplings on Frobenius risk 
+
+Let us keep the same construction for I(X, θ ) as in Definition 1, but consider more complex cou-plings ν between X0 and X. In the general case, it is possible to express our interpolant estimator as : 
+
+Eρθ [φ(I(θ))] = α2Eρ0 [φ(X0)] + β2Eρ[φ(X)] + 2 αβ Eν [φ(X0, X)] (20) where φ(X0, X) corresponds to the cross-correlation statistic. Here, setting β = (1 − α) and ob-serving that φ(X0, X) = φ(X0) + φ(X) − φ(X − X0) , yields the associated risk Rφρ (t):
+
+Rφ(α) = R⊥ 
+
+> φ
+
+(α)−2α(1 −α)EX
+
+⟨E φ, ⊥ 
+
+> ν
+
+(α)−Eρ[φ(X)] , Eν [φ(X0−X)] ⟩F
+
++O(α2(1 −α)2) (21) where R⊥ 
+
+> φ
+
+(α) corresponds to the independent coupling case. We see that a coupling ν where the dif-ference between the error between the statistic under the distribution X0 and the empirical estimator is anticorrelated, favorably reduces the risk ( α, β ≥ 0) and describe a different landscape for the risk. 
+
+A.2 Stein unbiased risk estimation 
+
+Recall the squared Frobenius risk of the estimator Σt,
+
+RF (t) = EX
+
+∥Σt − Σμ∥2
+
+> F
+
+ = EX
+
+∥Σt∥2
+
+> F
+
+| {z }
+
+> observable
+
+− 2 EX[Tr(Σ tΣμ)] + ∥Σμ∥2
+
+> F
+
+| {z } 
+
+> constant
+
+, (22) where Σμ denotes the unknown target covariance and ˆΣ = 1 
+
+> N
+
+XX ⊤ the sample covariance. The first term is computable from the estimator alone, and the third is independent of t and may be dropped for optimization. The middle term is the only obstacle: it involves the unknown Σμ, and because Σt
+
+is itself constructed from X, the naive substitution Σμ → ˆΣ is optimistically biased. To quantify this bias, expand the naive plug-in using the cyclic property of the trace, 
+
+EX
+
+h
+
+Tr(Σ t ˆΣ) 
+
+i
+
+= 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+EX
+
+x⊤ 
+
+> i
+
+Σt xi
+
+ , (23) which evaluates Σt against the very samples used to construct it. The correction is supplied by the multivariate Stein identity: for x ∼ N (0 , Σμ) and any differentiable f : RD → RD ,
+
+Ex⊤f (x) = ETr  Σμ ∇xf (x) . (24) We apply (24) with f (xi) = Σ t xi. Since Σt depends on xi, the product rule gives 
+
+∇xi
+
+ Σt xi
+
+ = Σ t + jvp xi (Σ t, x i), jvp xi (Σ t, x i) :=  ∇xi Σt
+
+[xi] ∈ RD×D, (25) where the second term is the directional derivative of the matrix Σt contracted with xi, i.e. a Jacobian–vector product. Substituting (25) into (24) and averaging over the N samples yields the identity 
+
+EX[Tr(Σ μΣt)] = EX
+
+h
+
+Tr(Σ t ˆΣ) 
+
+i
+
+− 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+EX
+
+Tr  Σμ · jvp xi (Σ t, x i) . (26) The first term on the right recovers the naive plug-in; the second is precisely the optimism bias it incurs. Inserting (26) into (22) and discarding the constant ∥Σμ∥2 
+
+> F
+
+gives the risk surrogate 
+
+eR(t) = EX
+
+∥Σt∥2
+
+> F
+
+ − 2 EX
+
+h
+
+Tr(Σ t ˆΣ) 
+
+i
+
++ 2
+
+N
+
+> N
+
+X
+
+> i=1
+
+EX
+
+Tr  Σμ · jvp xi (Σ t, x i) . (27) The penalty in (27) still contains the unknown Σμ, but only inside an O(1 /N ) term; replacing it by a high-quality empirical proxy therefore leaves the estimator asymptotically unbiased. Taking the proxy to be ˆΣ recovers the standard SURE penalty, whereas taking the Ledoit–Wolf estimate ˆΣLW 
+
+yields a lower-variance hybrid penalty in the small-sample regime. Finally, the sum of per-sample Jacobian–vector products equals a single batched product over X, so the penalty deployed on the observed sample reads 
+
+Penalty( t) = 2
+
+N Tr   ˆΣprox · jvp X(Σ t, X), ˆΣprox ∈ { ˆΣ, ˆΣLW }. (28) 13 B Frobenius Error Bound for the Covariance Estimator 
+
+In this section, we derive a theoretical upper bound for the estimation error of our continuous-time covariance estimator. Rather than bounding the pointwise distance between the true and approxi-mated trajectories (which typically yields loose bounds due to Gr¨ onwall’s inequality), we directly bound the weak error . This approach leverages the regularity of the true flow to measure how local vector field approximations compound into the final statistical estimator. Let μ0 and ˆμ denote the initial and target distributions, coupled via ν ∈ π(μ0, ˆμ). The ex-act interpolant It ∈ RD is governed by the true velocity field vt(x) via the ordinary differen-tial equation (ODE) dI t = vt(It)dt . We define the exact flow map Φt,s : RD → RD , which transports a point from time s to time t along the true vector field, such that Φs,s (x) = x and  
+
+> ∂∂τ
+
+Φτ,s (x) = vτ (Φ τ,s (x)) . Our covariance estimator relies on integrating a neural velocity field 
+
+vθt (x) ≈ vt(x) to produce an approximate trajectory Iθt , satisfying dI θt = vθt (Iθt )dt . The true and approximated terminal covariance matrices are respectively given by: 
+
+Σ( t) = Eν [ItI⊤ 
+
+> t
+
+], and Σθ (t) = Eν [Iθt (Iθt )⊤] (29) where I0 = Iθ 
+
+> 0
+
+almost surely. Our objective is to bound the Frobenius risk || Σθ (t) − Σ( t)|| F .To bypass trajectory-wise error accumulation, we introduce a matrix-valued value function u(s, x ) : [0 , t ] × RD → RD×D. For a given terminal time t and spatial coordinate x, we define: 
+
+u(s, x ) = Φ t,s (x)Φ t,s (x)⊤ (30) The function u(s, x ) represents the terminal outer product obtained if we follow the true flow starting from point x at time s. By definition, evaluating this function at the boundaries yields: 
+
+u(t, x ) = xx ⊤ and u(0 , I 0) = Φ t, 0(I0)Φ t, 0(I0)⊤ = ItI⊤ 
+
+> t
+
+(31) Because Φt,s (x) represents a backward mapping from the perspective of time s, u(s, x ) satisfies the fundamental transport equation (the deterministic backward Kolmogorov equation): 
+
+∂su(s, x ) + Dxu(s, x )[ vs(x)] = 0 (32) where Dxu(s, x )[ ·] denotes the directional derivative of u with respect to the spatial variable x, act-ing as a linear operator from RD to RD×D.We can express the difference between the approximated and true terminal statistics by evaluating the value function along the approximated path Iθs . Using the boundary conditions from Equation (31), we have: 
+
+Iθt (Iθt )⊤ − ItI⊤ 
+
+> t
+
+= u(t, I θt ) − u(0 , I θ 
+
+> 0
+
+) (33) Applying the fundamental theorem of calculus, we rewrite this difference as the integral of its total time derivative: 
+
+u(t, I θt ) − u(0 , I θ 
+
+> 0
+
+) = 
+
+Z t
+
+> 0
+
+dds u(s, I θs )ds 
+
+=
+
+Z t
+
+> 0
+
+
+
+∂su(s, I θs ) + Dxu(s, I θs ) ˙Iθs
+
+
+
+ds 
+
+=
+
+Z t
+
+> 0
+
+
+
+∂su(s, I θs ) + Dxu(s, I θs )vθs (Iθs )
+
+ds (34) Substituting the transport equation identity ∂su(s, I θs ) = −Dxu(s, I θs )[ vs(Iθs )] from Equation (32) into the integral, the partial derivative ∂su elegantly cancels out, leaving only the residual of the vector fields: 
+
+Iθt (Iθt )⊤ − ItI⊤ 
+
+> t
+
+=
+
+Z t
+
+> 0
+
+Dxu(s, I θs )vθs (Iθs ) − vs(Iθs )ds (35) This formula acts as a non-linear variation of constants, mapping the local truncation error of the velocity field directly to the terminal covariance error, weighted by the spatial sensitivity Dxu of the true flow. To bound Equation (35), we must bound the operator norm of Dxu(s, x ). By applying the product rule to u(s, x ) = Φ t,s (x)Φ t,s (x)⊤, the directional derivative applied to a perturbation vector w ∈ RD is: 
+
+Dxu(s, x )[ w] =  Jt,s (x)wΦt,s (x)⊤ + Φ t,s (x) Jt,s (x)w⊤ (36) 14 where Jt,s (x) = ∂∂x Φt,s (x) ∈ RD×D is the Jacobian matrix of the true flow. Taking the Frobenius norm and applying sub-multiplicativity yields: 
+
+|| Dxu(s, x )[ w]|| F ≤ 2|| Jt,s (x)w|| 2|| Φt,s (x)|| 2 ≤ 2|| Jt,s (x)|| op || Φt,s (x)|| 2|| w|| 2 (37) Assuming the true vector field generates a well-behaved flow whose Jacobian norm is bounded by a constant CJ (s) > 0, the operator norm is bounded by 2CJ (s)|| Φt,s (x)|| 2. We now take the expectation over the coupling ν and apply the Frobenius norm to Equation (35). Passing the norm inside the integral and applying the Cauchy-Schwarz inequality over the expectation yields: 
+
+|| Σθ (t) − Σ( t)|| F ≤
+
+Z t
+
+> 0
+
+Eν
+
+h
+
+|| Dxu(s, I θs )vθs (Iθs ) − vs(Iθs )|| F
+
+i
+
+ds 
+
+≤ 2
+
+Z t
+
+> 0
+
+CJ (s)Eν
+
+h
+
+|| Φt,s (Iθs )|| 2|| vθs (Iθs ) − vs(Iθs )|| 2
+
+i
+
+ds 
+
+≤ 2
+
+Z t
+
+> 0
+
+CJ (s)
+
+q
+
+Eν
+
+|| Φt,s (Iθs )|| 22
+
+q
+
+Eν
+
+|| vθs (Iθs ) − vs(Iθs )|| 22
+
+ds (38) Assuming bounded second moments for the flow paths, the term pEν [|| Φt,s (Iθs )|| 22] is bounded by a spatial constant Rt. Defining κ(s) = 2 RtCJ (s), we arrive at our final bound: 
+
+|| Σθ (t) − Σ( t)|| F ≤
+
+Z t
+
+> 0
+
+κ(s)
+
+r
+
+Eν
+
+h
+
+|| vθs (Iθs ) − vs(Iθs )|| 22
+
+i
+
+ds (39) Equation (39) demonstrates that the Frobenius risk of the covariance estimator scales linearly with the L2 error of the neural velocity field. By bounding the weak error through the adjoint vari-able u(s, x ), we effectively avoid the exponential compounding associated with trajectory distance bounds. Instead, the error amplification is strictly governed by κ(s), which relies purely on the structural regularity and stability (the Jacobian) of the true target flow. 
+
+# C Experimental Details 
+
+C.1 Evaluation Metrics 
+
+We evaluate the estimated covariance matrices ˆΣ against the ground-truth Σtrue using the following metrics: • Matrix distance: The distance between the estimated covariance ˆΣ and the true covari-ance Σtrue is quantified using matrix distances. Specifically, we consider the following two metrics: 
+
+– Frobenius Norm , the standard entry-wise distance metric defined as: 
+
+d2
+
+> F
+
+( ˆΣ, Σtrue ) = 
+
+r
+
+Tr 
+
+
+
+( ˆΣ − Σtrue )2
+
+
+
+– Bures-Wasserstein Distance defined between SPD matrices as the 2-Wasserstein dis-tance between centered Gaussian distributions with such covariance matrices, defined as: 
+
+d2
+
+> BW
+
+( ˆΣ, Σtrue ) = Tr ( ˆΣ) + Tr (Σ true ) − 2Tr 
+
+
+
+( ˆΣ) 1/2Σtrue ( ˆΣ) 1/21/2
+
+• Spectral Alignment (Cosine Similarity): We compute the maximum absolute cosine sim-ilarity between the eigenvectors of ˆΣ and the eigenvectors corresponding to the largest eigenvalues of Σtrue . The cumulative sum of these similarities, ordered by rank, provides a measure of how well the principal eigenspace is recovered. 
+
+C.2 Synthetic experiments C.2.1 Synthetic Data Generation Process 
+
+To systematically evaluate the performance of our estimators, we employ various synthetic data gen-eration processes that allow us to control the true underlying covariance structure and the nature of 15 the observation noise. The data generation generally follows a two-step procedure: first, generating ”clean” samples from a specified true covariance matrix Σtrue , and second, corrupting these samples with observation noise. 
+
+Clean Data Generation Models We explore several structural archetypes for the true covariance matrix Σtrue ∈ RD×D:• Factorial Data (Spiked Covariance): This model simulates a scenario with a few strong latent factors embedded in isotropic noise. The true eigenvalues λi are set to a base-line noise level for most dimensions, while the first k eigenvalues (the ”spikes”) de-crease linearly from a specified signal strength. A random orthogonal matrix Q is ob-tained via the QR decomposition of a standard Gaussian matrix. The true covariance is 
+
+Σtrue = Q diag( λ1, . . . , λ D )QT . Clean data Xclean ∈ RN ×D is generated as Xclean =
+
+Z diag( √λ1, . . . , √λD )QT , where Zij ∼ N (0 , 1) .• Power-Law Spectrum: This model captures scenarios where the explained variance de-cays smoothly, as often seen in natural signals. The true covariance is diagonal, Σtrue =diag( λ1, . . . , λ D ), with eigenvalues following a power-law decay: λi = c · i−α + ϵ, where 
+
+c is a scaling constant, α dictates the decay rate, and ϵ is a nominal noise floor. Clean data is sampled as Xclean = ZΣ1/2 
+
+> true
+
+for Zij ∼ N (0 , 1) .• Linear decay Spectrum: This model represents scenarios where the variance is spread more homogeneously across the D dimensions according to a uniform distribution with range [a,b] where b= 3σnoise and a= 2σnoise (see below) 
+
+Observation Noise Models To make our experiment more realistic, we additionally corrupt the clean data Xclean to produce the observed empirical data Xemp . We considered in our experiments three distinct types of additive noise: • Sparse Outliers: A fraction of the data entries (determined by a corruption rate p) is replaced by extreme outliers. A binary mask M is sampled where Mij ∼ Bernoulli (p).The observed data is Xemp = Xclean + M ⊙ O, where Oij ∼ N (0 , σ 2
+
+> noise
+
+) and σnoise is the base noise level. • Heavy-Tailed Noise: Dense noise is added to all entries, sampled from a Student’s t-distribution with 2 degrees of freedom, scaled by σnoise . This simulates data with heavy tails and frequent moderate outliers. • Heteroskedastic Noise: Feature-dependent Gaussian noise is added, where the noise vari-ance varies across dimensions. A set of standard deviations is linearly spaced between 
+
+0.1 and 2σnoise and then randomly permuted across the D dimensions. Noise is sampled accordingly for each feature. For the noise perturbation settings that we considered, we empirically observed minimal difference across the three settings with respect to the regularization effect of the learned interpolant, and report only the first case (sparse outliers). We emphasize that more completely characterizing the interpolant estimator properties as a function of signal-to-noise ratio might be valuable but is beyond this paper scope. 
+
+C.2.2 Effect of Particle Count on Covariance Estimation 
+
+In this section, we detail the experimental setup used to investigate the effect of the num-ber of simulated particles on the quality of the covariance estimator derived from the neu-ral vector field in Figure 3. The experiment compares the recovered covariance spec-trum, cosine similarity of eigenvectors, and risk profiles across various particle counts P ∈{100 , 150 , 200 , 300 , 500 , 1000 , 2000 , 5000 , 10000 }.
+
+Data Generation: We generate synthetic high-dimensional data following the factor model. The dimensionality of the features is set to D = 100 , and the number of observations is N = 100 .
+
+Model Architecture and Training: A neural approximation of the vector field vθ (x, t ) is trained to transport an anchor Gaussian distribution N (0 , σ 20 I) (with σ0 = 1 .0) to the empirical data dis-tribution. A simple linear schedule is utilized for the interpolation process. We employ an MLP 16 architecture with a hidden dimension of 256 . The model is trained using Adam with a learning rate of 10 −4 for a total of 15 , 000 epochs. 
+
+ODE Integration and Covariance Estimation: To evaluate the learned neural covariance at any intermediate time t ∈ [0 , 1] , we sample P initial particles X(i)0 ∼ N (0 , σ 20 I). The particles are pushed forward through the learned vector field vθ using the Euler integration scheme. The time interval t ∈ [0 , 1] is discretized into nsteps = 50 evenly spaced steps ( ∆t = 1 /49 ). The update rule is given by: 
+
+X(i) 
+
+> t+∆ t
+
+= X(i) 
+
+> t
+
++ vθ (X(i) 
+
+> t
+
+, t )∆ t ∀i ∈ { 1, . . . , P }
+
+At each time step t, the estimated covariance matrix is computed as the empirical covariance of the current particle population: 
+
+Σ(P ) 
+
+> t
+
+= 1
+
+P − 1
+
+> P
+
+X
+
+> i=1
+
+(X(i) 
+
+> t
+
+− ¯Xt)( X(i) 
+
+> t
+
+− ¯Xt)⊤
+
+C.3 Shrinkage Interpolant Profiles 
+
+The experiments explored the impact of varying the data size ( N ), different interpolation schedules, and the neural network’s hidden dimension on the estimation risk, measured by both Frobenius (top row) and Bures-Wasserstein distances (bottom row). 
+
+Experimental Setup All experiments utilized a factorial data generation process for the true co-variance Σtrue with dimension D = 100 and a signal strength of 10.0. Observed data was generated by adding sparse observation noise (noise level 0.3, corruption rate 0.1) to the clean data. The interpolation process started from an isotropic prior with σ0 = 1 .0.
+
+Panel 1: Impact of Data-to-Dimension Ratio (varying N ) The left column of Figure 5 illustrates the true risk profiles for varying data-to-dimension ratios q = N/D , with D = 100 . The N values explored range from 50 to 300 , corresponding to q ratios of 0.5 to 3.0. For each N , the SI method was trained with a fixed hidden dimension of 256. SI performance is compared against a Linear Shrinkage baseline. The color intensity indicates the q-ratio. Both risk measures consistently show that the SI method is able to find lower risk estimators across a range of N values compared to the baseline, with minimum risk points generally observed at intermediate interpolation times t.
+
+Panel 2: Comparison of Interpolation Schedules The middle column focuses on a fixed data size 
+
+N = 100 (q = 1 .0), comparing the performance of the SI method under different interpolation schedules: ’linear’ ( α + β = 1 ), ’vp’ (variance-preserving, α2 + β2 = 1 ), and ’ve’ (variance-exploding, β → ∞ ). These are benchmarked against traditional Linear Shrinkage and Optimal Transport (OT) Shrinkage. The results indicate that the ’linear’ schedule consistently achieves the lowest risk for SI among the tested schedules, outperforming the analytical baselines. 
+
+Panel 3: Impact of Neural Network Capacity The right column investigates the influence of the neural network’s hidden dimension on the SI performance, keeping N = 100 and D = 100 fixed and retaining the network weights that achieve lower validation risk over the optimization trajectory. Hidden dimensions ranging from 64 to 1024 were tested. It is observed that increasing the hidden dimension generally leads to lower minimum risk values for the SI estimator. The SI method, partic-ularly with larger hidden dimensions, robustly outperforms the Linear and OT shrinkage baselines. 
+
+C.4 fMRI acquisition covariance estimation 
+
+This section details the steps taken to acquire and prepare the neuroimaging data for covariance estimation. 
+
+Data Acquisition: The ABIDE PCP dataset, containing resting-state functional magnetic reso-nance imaging (fMRI) data, was utilized for this study. Specifically, pre-extracted time series data, processed with the CC200 atlas (resulting in 200 brain regions), were fetched using the nilearn 
+
+library. The data was downloaded to a specified Google Drive directory for persistent storage and accessibility: • Library: nilearn.datasets.fetch abide pcp 
+
+17 • Atlas: CC200 (yielding D = 200 regions of interest) • Derivatives: ’rois cc200’ (pre-extracted 2D arrays) Upon fetching, the dataset object provides access to the individual subject’s time series files. The first subject’s time series, for example, had a shape of (196 , 200) , indicating 196 time points and 200 brain regions. 
+
+Data Filtering: To ensure data quality and consistency, a filtering step was applied to the acquired time series. Only those subject time series i with more than 100 time points (i.e., i. shape[0] > 100 )were retained for further analysis. This resulted in a subset of 846 subjects from the initial 871 
+
+subjects. 
+
+Data Splitting: For each subject’s Z-scored time series Xzscored , the data was split into training and testing sets. The first 100 time points were used for training (Xtrain ) and the remaining time points were used for testing (Xtest ). This split allows for the evaluation of covariance estimators on unseen data. 
+
+Z-scoring: Each filtered time series X (of shape (N, D ), where N is the number of time points and D is the number of brain regions) underwent independent Z-score standardization for each dimension (brain region). This ensures that each regional signal has zero mean and unit variance across time, preventing features with larger magnitudes from dominating the covariance estimation. A small epsilon (10 −8) was added to the standard deviation to avoid division by zero for flat signals: 
+
+Xzscored (t, d ) = X(t, d ) − μd
+
+σd + ϵ
+
+where μd and σd are the mean and unbiased standard deviation of region d over time t, respectively. 18
