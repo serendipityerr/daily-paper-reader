@@ -6,26 +6,30 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-08
-- 运行时间：2026-06-08 21:42:58 UTC
+- 最新运行日期：2026-06-09
+- 运行时间：2026-06-09 21:59:09 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 本次总论文数：3
+- 精读区：0
+- 速读区：3
 
 ### 今日简报（AI）
-今日精读一篇高评分论文，速读一篇方法论文章。最值得关注的是协方差收缩的随机插值新方法（评分8.0），以及强随机流映射理论（评分6.0）。建议深度理解插值技术在协方差估计中的优势，再结合流映射拓展实际应用场景。
-- 详情：[/202606/08/README](/202606/08/README)
+今天速读了3篇生成模型与最优运输理论结合的前沿论文，分数均为6.0/10。最值得关注《Structured drift design》对扩散模型漂移项的结构化改进，以及《Self-Consistent Generative Paths》提出的自洽变分运输框架。后续可优先研读这两篇，加深对生成路径几何性质的理解。
+- 详情：[/202606/09/README](/202606/09/README)
 
 ### 精读区论文标签
-1. [Covariance Shrinkage via Stochastic Interpolation](/202606/08/2606.07382v1-covariance-shrinkage-via-stochastic-interpolation)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：源和目标分布之间的随机插值，类似扩散桥
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Strong Stochastic Flow Maps](/202606/08/2606.01086v1-strong-stochastic-flow-maps)  
+1. [Convex Distance Operator Transport: A Convex and Geometry-Preserving Formulation](/202606/09/2606.02047v1-convex-distance-operator-transport-a-convex-and-geometry-preserving-formulation)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：学习SDE的强解映射用于生成建模
+   evidence：用于对齐分布的最优传输框架
+2. [Structured drift design for denoising diffusion models](/202606/09/2606.03360v1-structured-drift-design-for-denoising-diffusion-models)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：去噪扩散模型中的结构化漂移设计，与桥构建相关
+3. [Self-Consistent Generative Paths via Admissible Random Variational Transport](/202606/09/2606.08953v1-self-consistent-generative-paths-via-admissible-random-variational-transport)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：生成概率路径的自一致性与变分输运
 
 
 <div class="dpr-home-promo-card">

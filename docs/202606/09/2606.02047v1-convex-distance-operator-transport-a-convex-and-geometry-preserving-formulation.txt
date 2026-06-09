@@ -1,0 +1,3871 @@
+Title: Convex Distance Operator Transport: A Convex and Geometry-Preserving Formulation
+
+URL Source: https://arxiv.org/pdf/2606.02047v1
+
+Published Time: Tue, 02 Jun 2026 02:30:29 GMT
+
+Number of Pages: 41
+
+Markdown Content:
+# Convex Distance Operator Transport: A Convex and Geometry-Preserving Formulation 
+
+Junhyoung Chung 1 Euijong Song 2 Won Hwa Kim 3 4 Gunwoong Park 2 5 6 
+
+## Abstract 
+
+We introduce Convex Distance Operator Trans-port (CDOT), the first convex optimal transport framework that aligns distributions across het-erogeneous domains by jointly preserving fea-ture correspondence and intrinsic geometric struc-ture. Specifically, CDOT employs an operator-based regularization that aligns aggregated dis-tance structures by introducing distance and con-ditional expectation operators. Consequently, the proposed regularization improves the robustness to local geometric variations. We further prove that the resulting CDOT discrepancy is a valid pseudometric on the space of attributed compact metric-measure spaces. In addition, we character-ize the relationship between CDOT and Gromov– Wasserstein (GW) through a new notion of dis-persion gap, formally elucidating the geometric source of non-convexity in GW compared to the convexity of CDOT. In the finite-sample regime, we derive a non-asymptotic risk bound decom-posed into optimization and statistical errors, es-tablishing risk consistency under a globally con-vergent Frank–Wolfe algorithm. Experiments on synthetic point clouds, brain connectomes, and graph classification benchmarks demonstrate bet-ter performance over existing methods, with sta-ble and reliable behavior in practice. 
+
+## 1. Introduction 
+
+Optimal transport (OT) provides a fundamental framework for comparing probability measures by quantifying the min-imal cost required to transport mass across spaces (Villani, 
+
+> 1
+
+KRAFTON 2Department of Statistics, Seoul National Univer-sity, Seoul, South Korea 3Graduate School of AI, POSTECH, Pohang, South Korea 4Computer Science and Engineering, POSTECH 5IPAI, Seoul National University 6IDIS, Seoul Na-tional University. Correspondence to: Gunwoong Park <gw-park23@snu.ac.kr >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+dxx ′
+
+E[d]
+
+(a) Cyclic graph with 8 nodes. 
+
+dyy ′
+
+E[d′]
+
+(b) Cyclic graph with 12 nodes. 
+
+Figure 1. Cyclic graphs with different numbers of nodes. While FGW compares distances edge by edge ( |d − d′|2), CDOT aligns the aggregated distance profiles ( |E[d] − E[d′]|2), comparing how each node relates to its geometric structure. 
+
+2008). As OT induces meaningful correspondences between samples, it has become a powerful tool in statistics and ma-chine learning with various applications ranging from gen-erative modeling to transfer learning (Rubner et al., 2000; Courty et al., 2014; Yuan et al., 2025). However, the classical OT based on the Wasserstein dis-tance necessitates that data distributions reside in the same space, which poses a restriction in many practical settings where observations come from heterogeneous domains. The Gromov–Wasserstein (GW) framework overcomes this lim-itation by comparing distributions through their associated metric-measure (mm) spaces, aligning intrinsic structure without requiring an explicit cross-domain cost (M ´emoli, 2011). The resulting GW discrepancy induces a pseudomet-ric on the space of compact mm spaces, vanishing if and only if the spaces are measure-preserving isometric. More recently, Vayer et al. (2020) propose the fused Gromov– Wasserstein (FGW) approach, which integrates the struc-tural GW cost with a feature-based OT cost to utilize auxil-iary information such as node attributes in graphs. Despite its versatility, FGW inherits the non-convexity of GW arising from its formulation involving pairwise distance comparisons, thereby standard optimization algorithms typ-ically converge only to local stationary points. This lim-itation calls for a convex objective that retains the metric property while producing a meaningful transport plan. In this study, we propose Convex Distance Operator Trans-port (CDOT) , the first convex geometry-aware OT frame-work for aligning heterogeneous mm spaces via an operator-level formulation that encodes intrinsic geometric structure. 1
+
+> arXiv:2606.02047v1 [stat.ML] 1 Jun 2026
+
+Convex Distance Operator Transport 
+
+Table 1. Comparison of CDOT to existing methods. Domain groups methods by the underlying space of interest. Plan denotes whether the algorithm explicitly outputs a coupling/matching. Theoretical Guarantees summarize (pseudo-)metricity, convexity of the underlying optimization, and whether asymptotic consistency and finite-sample guarantees are available on the stated domain. 
+
+Domain Method Plan Feature Info. Time Theoretical Guarantees Metric Convexity Consistency Finite 
+
+Metric-measure (mm) spaces 
+
+CDOT (Ours) ✓ ✓ O(n3) ✓ ✓ ✓ ✓
+
+GW (M´ emoli, 2011) ✓ ✗ O(n3) ✓ ✗ △ ✗
+
+FGW (Vayer et al., 2020) ✓ ✓ O(n3) △ ✗ △ △
+
+Entropic GW (Peyr´ e et al., 2016) ✓ ✗ O(n2) ✗ △ ✗ ✗
+
+Euclidean Sliced GW (Titouan et al., 2019) ✗ ✗ O(n log n) ✓ ✗ ✗ ✗
+
+Discrete mm spaces Low-rank GW (Scetbon et al., 2022) ✓ ✗ O(n) ✗ ✗ ✗ ✗
+
+GW-SDP (Chen et al., 2024) ✓ ✗ O(n6) ✗ ✓ ✗ ✗
+
+Sliced FGW (Piening & Beinert, 2025) ✗ ✓ O(n2 log n) ✓ ✗ ✗ ✗
+
+Graphs Spectral (Leordeanu & Hebert, 2005) △ ✗ O(n3) ✗ ✗ ✗ ✗
+
+IsoRank (Singh et al., 2008) ✓ ✓ O(n3) ✗ ✗ ✗ ✗
+
+COPT (Dong & Sawin, 2020) ✓ ✗ O(n2.373 ) ✓ ✗ ✗ ✗           
+
+> Legend: ✓: established guarantee on the stated domain. △: related statistical results exist, but they control the empirical risk/cost relative to its population counterpart rather than the population risk attained by the returned plan/estimator itself. ✗: no explicit guarantee in the cited reference. Domain : Metric-measure (mm) spaces: population-level mm spaces. Euclidean: standard Euclidean spaces Rd. Discrete mm spaces: discrete/empirical mm spaces. Graphs: finite graphs. Plan : outputs an explicit coupling/matching.
+> Feature Info. : uses feature information as data. Time : computational complexity. Metric : refers to (pseudo-)metricity on the stated domain. Convexity : convexity of the objective. Consistency : existence of an explicit asymptotic guarantee for the population risk attained by the returned plan/estimator on the stated domain; for CDOT, this is the risk-consistency result in Corollary 5.7. Finite : existence of an explicit finite-sample bound for the population risk attained by the returned plan/estimator on the stated domain.
+
+Figure 1 contrasts two cyclic graphs, showing that (F)GW distinguishes them by enforcing rigid consistency between individual pairwise distances, whereas CDOT aligns aggre-gated distance profiles through operator-based regulariza-tion and thus identifies the two structures as equivalent de-spite differing node cardinalities. This relaxation attenuates structural noise and yields a convex optimization landscape. The advantages of the proposed framework, as summarized in Table 1, can be highlighted as follows: • Transport plan. Unlike slicing-based approaches that focus on scalable discrepancy estimation, CDOT ex-plicitly recovers an optimal transport plan, enabling direct node correspondences between domains. • Convexity. In contrast to existing approaches defined on population-level mm spaces, CDOT admits a con-vex optimization problem in its original, unregularized formulation, so global optimization does not depend on introducing an additional smoothing parameter such as entropic regularization. • Theoretical guarantees. We establish that CDOT in-duces a pseudometric on the space of attributed com-pact mm spaces and provide a statistical theory, in-cluding non-asymptotic risk bounds and consistency, properties often absent in existing works. • Computational tractability. CDOT admits an effi-cient implementation with complexity O(n3), which is comparable to standard FGW and substantially lower than semidefinite relaxations O(n6).In addition, we rigorously compare CDOT with the GW ob-jective through a dispersion gap analysis. Specifically, we decompose the non-convex GW cost into our convex CDOT objective and a concave dispersion penalty. This analysis reveals that the non-convexity of GW stems from this dis-persion term which favors deterministic plans, whereas our approach achieves convexity by filtering out this effect. We also substantiate our theoretical results through synthetic 2D point clouds and demonstrate the practicality of CDOT on real brain connectome and graph classification datasets. The remainder of this paper is organized as follows. Sec-tion 2 fixes notation and reviews related work. Section 3 introduces the CDOT objective, establishes its convexity and pseudometric property, and quantifies its gap to the GW objective via a dispersion decomposition. Section 4 presents the empirical quadratic program and its optimiza-tion algorithm. Section 5 establishes the risk consistency of our estimator. Section 6 validates our algorithm empirically using both synthetic and real-world data. Finally, Section 7 concludes with a summary of our findings and discusses future directions. 
+
+Conflict of Interest Disclosure. The authors declare that they have no competing interests. 
+
+## 2. Preliminaries 
+
+2.1. Notations 
+
+Let (Ω , F, P) be a probability space, and let (X , d X ),
+
+(Y, d Y ) be compact metric spaces. This guarantees that 2Convex Distance Operator Transport 
+
+both spaces are Polish so that regular conditional distribu-tions exist (Lemma F.1). Measurable maps X : Ω → X 
+
+and Y : Ω → Y are called random elements, with dis-tributions PX := P ◦ X−1 and PY := P ◦ Y −1, respec-tively. For simplicity, PX and PY are fully supported. Then (X , d X , PX ) and (Y, d Y , PY ) form compact metric-measure (mm) spaces. Denote by L2(X , PX ) the Hilbert space of real-valued, square-integrable functions on X with respect to PX . We define L2(Y, PY ) analogously. We fur-ther introduce a compact feature space M ⊂ Rk and define continuous mappings fX : X → M and fY : Y → M ,referred to as feature functions. We define an attributed compact mm space as a tuple X := ( X , d X , PX , f X ) and define Y := ( Y, d Y , PY , f Y ) similarly. For brevity, we as-sume that diam( X ) = diam( Y) = diam( M) = 1 , where 
+
+diam( A) := sup a,a ′∈A dA(a, a ′) denotes the diameter. For probability measures μ and ν, denote by Π( μ, ν ) the set of couplings whose marginals are μ and ν.
+
+2.2. Related Work 
+
+The GW discrepancy (M ´emoli, 2011) and its attributed vari-ant, FGW (Vayer et al., 2020), serve as canonical frame-works for aligning heterogeneous structures: 
+
+min  
+
+> π
+
+(1 − α)Eπ [cf (X, Y )] + αRGW ,2(π),
+
+where the minimum is taken over the set of valid couplings 
+
+Π( PX , PY ), cf (x, y ) := ∥fX (x) − fY (y)∥22 is the squared Euclidean feature cost, and the quadratic GW cost is given by RGW ,2(π) := Eπ⊗π [|dX (X, X ′) − dY (Y, Y ′)|2].A fundamental limitation of (F)GW is the non-convexity arising from the tensor product π ⊗ π in RGW ,2. As shown in Table 1, several works have attempted to tackle this issue, but few works have fully resolved the non-convexity and provided rigorous metric properties on mm spaces. A more comprehensive review is provided in Appendix B. 
+
+## 3. Proposed Method 
+
+3.1. CDOT: Convex Distance Operator Transport 
+
+The goal of CDOT is to align distributions on heteroge-neous compact mm spaces by jointly matching features and intrinsic structures through a transport plan π ∈ Π( PX , PY ).A fundamental challenge arises from the distinct metrics equipped on each space, which precludes direct comparison across domains. CDOT addresses this issue by lifting (i) the geometric structure of each space and (ii) the transport plan into linear operators acting on L2 spaces, so that structural alignment can be measured through operator compositions. 
+
+Definition 3.1 (Distance operator) . Let (X , d X , PX ) be a compact mm space. The distance operator DPX is an integral operator defined on L2(X , PX ) by 
+
+(DPX f )( x) := 
+
+Z
+
+> X
+
+dX (x, x ′)f (x′)PX (dx ′),
+
+∀f ∈ L2(X , PX ), ∀x ∈ X .
+
+The distance operator can be viewed as a continuous ana-logue of the pairwise distance matrix. For an empirical measure ˆPX supported on n distinct samples, the operator admits a matrix representation [DˆPX ]ij = dX (Xi, X j )/n 
+
+(see Appendix G.1 for the derivation). 
+
+Definition 3.2 (Conditional expectation operator) . For a coupling π ∈ Π( PX , PY ), the conditional expectation oper-ator Tπ : L2(Y, PY ) → L2(X , PX ) is defined as 
+
+(Tπ g)( x) := 
+
+Z
+
+> Y
+
+g(y)π(dy | x), ∀g ∈ L2(Y, PY ), ∀x ∈ X ,
+
+where π(dy | x) denotes a Markov kernel. Analogously, in finite-sample settings, Tπ reduces to the scaled transport matrix [Tπ ]ij = nπ ij .Leveraging these operator representations, the CDOT objec-tive seeks a coupling that harmonizes both the feature repre-sentations and the geometric structures of the two spaces. 
+
+Definition 3.3 (CDOT) . Given two attributed compact mm spaces X, Y, and a fusion weight parameter 0 ≤ α ≤ 1,CDOT finds a transport plan π ∈ Π( PX , PY ) by balancing the following two components: 
+
+Feature: F(π) := Eπ [cf (X, Y )] ,
+
+Structure: R(π) := ∥DPX Tπ − Tπ DPY ∥2HS ,
+
+CDOT objective: Lα(π) := (1 − α)F(π) + α/ 2R(π),where ∥ · ∥ HS is the Hilbert–Schmidt (HS) norm. The CDOT problem is then 
+
+inf    
+
+> π∈Π( PX,PY)
+
+Lα(π; X, Y).
+
+The feature alignment term F(π) encourages element-wise similarity between features, whereas the structural regular-ization term R(π) penalizes structural discrepancy. Specif-ically, R(π) measures the extent to which the conditional expectation operator Tπ fails to intertwine the intrinsic dis-tance operators of the two spaces (i.e., the failure of the commutativity relation DPX Tπ ≈ Tπ DPY ). The well-definedness of R(π) can be verified through its integral representation (see Appendix G.2 for more details): 
+
+R(π; X, Y) = 
+
+Z
+
+> Y
+
+Z
+
+> X
+
+Γπ (x, y )2 PX (dx )PY (dy ), (1) 3Convex Distance Operator Transport 
+
+where Γ(1)  
+
+> π
+
+(x, y ) := Eπ [dX (x, X ) | Y = y], Γ(2)  
+
+> π
+
+(x, y ) := 
+
+Eπ [dY (y, Y ) | X = x], and Γπ = Γ (1)  
+
+> π
+
+− Γ(2)  
+
+> π
+
+. Since the underlying spaces are compact, |Γπ (x, y )| is bounded, ensuring the finiteness of the integral. 
+
+Theorem 3.4 (Convex optimization) . Given two attributed compact mm spaces X, Y, and a fusion weight parameter 
+
+0 ≤ α ≤ 1, the CDOT problem satisfies the following: 
+
+(Existence). There exists π∗ ∈ Π( PX , PY ) such that 
+
+Lα(π∗; X, Y) = inf    
+
+> π∈Π( PX,PY)
+
+Lα(π; X, Y).
+
+(Convexity). The CDOT objective is convex. Proof. See Appendix G.3. Theorem 3.4 confirms that the CDOT problem is a well-posed convex optimization problem. The existence of an optimal coupling is guaranteed by the weak compactness of the transport polytope Π( PX , PY ), the lower semicontinuity of the objective, and the generalized Weierstrass theorem (Lemma F.11). Convexity arises from the linearity of F(π)
+
+and the convexity of the squared HS norm in R(π).
+
+3.2. Geometric Interpretation: Pseudometricity 
+
+Beyond its optimization-theoretic properties, CDOT also serves as a discrepancy between attributed compact mm spaces. We define the CDOT discrepancy as the square root of the objective, which satisfies the pseudometric property on the space of attributed compact mm spaces. 
+
+Theorem 3.5 (Pseudometric) . For each 0 ≤ α ≤ 1, define the CDOT discrepancy between two attributed compact mm spaces X and Y as 
+
+d(α)CT (X, Y) := 
+
+
+
+min    
+
+> π∈Π( PX,PY)
+
+Lα(π; X, Y)
+
+1/2
+
+.
+
+Then, d(α)CT is a pseudometric on the space of attributed compact mm spaces. Proof. See Appendix G.4. Theorem 3.5 confirms that d(α)CT is a valid pseudometric. The failure to be a genuine metric stems from the fact that d(α)CT (X, Y) = 0 does not necessarily imply X = Y;instead, it indicates the existence of a coupling that pre-serves both feature mappings and intrinsic distance opera-tors. This operator-level equivalence is strictly weaker than the measure-preserving isometric identification underlying GW, and is conceptually closer to a fractional notion of structural equivalence (Greb ´ık & Rocha, 2022). A complete characterization of the zero-discrepancy class of CDOT in terms of such relaxed equivalences is left for future work. The advantage of CDOT compared to GW-type methods is illustrated in Figure 1. While FGW enforces consis-tency at the level of individual pairwise distances and thus depends critically on pointwise correspondences between nodes, CDOT compares geometric structures through aggre-gated distance profiles, formalized as conditional expecta-tions of distances. In this example, although the two spaces differ in the cardinality of nodes, their aggregated distance profiles coincide under a suitable coupling. As a result, CDOT assigns zero discrepancy, reflecting the alignment of local geometric structure, whereas GW-type methods incur a positive cost due to unavoidable pairwise mismatches. 
+
+3.3. CDOT vs. Gromov–Wasserstein 
+
+This section clarifies the structural difference between CDOT and FGW by isolating their geometry terms. Since the feature-alignment component is shared by CDOT and FGW, we focus exclusively on comparing our R(π) with the GW objective. To facilitate this comparison, we intro-duce a new functional, termed dispersion , which quantifies the spatial uncertainty induced by a coupling. 
+
+Definition 3.6 (Dispersion) . The dispersion functional V :Π( PX , PY ) → R is defined by 
+
+V(π) := 
+
+Z Z 
+
+Var π [dX (x, X ) | Y = y]+ Var π [dY (y, Y ) | X = x]
+
+
+
+PX (dx )PY (dy ).
+
+Theorem 3.7 (Dispersion gap) . For any π ∈ Π( PX , PY ),
+
+RGW ,2(π) − R (π) = V(π).
+
+Proof. See Appendix G.5. Theorem 3.7 reveals that the GW objective penalizes not only structural distortion, as captured by R(π), but also the spatial uncertainty of the coupling through the dispersion term V(π). In contrast, the CDOT formulation deliberately isolates the structural component by discarding this addi-tional penalty, a design choice that underlies the differing geometric and optimization behavior of the two methods. As a side effect, the dispersion term in GW favors concen-trated, nearly deterministic couplings, whereas the absence of this term in CDOT tends to admit more diffuse optimal plans, so applications that require a hard correspondence may proceed via the post-processing step in Section 4. Figure 2 compares the level sets of R(π) and RGW ,2(π)
+
+on the joint range of the mapping π 7 → (R(π), V(π)) . The independent coupling πind = PX ⊗ PY exhibits maximal 4Convex Distance Operator Transport 
+
+(a) Level sets of R(π). (b) Level sets of RGW ,2(π).
+
+Figure 2. Comparison of level sets. The blue region represents the range of π 7 → (R(π), V(π)) , and red lines indicate the level sets of the respective objectives. πind := PX ⊗ PY denotes the independent coupling. (a) Our formulation yields vertical level sets, guiding the optimization trajectory (black arrows) from initialization π0 directly toward the global optimum π∗. (b) In contrast, the GW objective induces diagonal level sets, causing the optimization trapped in a local optimum πloc .
+
+dispersion, while bi-deterministic couplings lie on the zero-dispersion axis. The attainable range typically forms a non-convex, boomerang-like region, reflecting the trade-off between structural distortion and dispersion. Since our objective minimizes only R(π), its level sets are vertical (x = c), guiding descent-type methods toward the global optimum π∗ regardless of initialization. In contrast, the GW objective minimizes R(π) + V(π), yielding diagonal level sets ( x + y = c). These level sets can interact with the non-convex region and lead to suboptimal points. A numerical realization of the blue region is provided in Appendix C. 
+
+## 4. Finite-Sample Estimation 
+
+This section presents the empirical formulation of the CDOT objective, leading to a convex quadratic program over a polytope. We solve this problem using the Frank–Wolfe algorithm, with an optional post-processing step to extract a hard matching from the resulting soft transport plan. Let X1, ..., X nX ∈ X and Y1, ..., Y nY ∈ Y be distinct sam-ples, with associated features fX (Xi) and fY (Yj ). We de-fine the empirical probability measures by 
+
+ˆPX := 1
+
+nXnXX
+
+> i=1
+
+δXi , ˆPY := 1
+
+nYnYX
+
+> j=1
+
+δYj ,
+
+where δx is the Dirac measure at x. With a slight abuse of notation, we identify the set of couplings Π( ˆPX , ˆPY ) with the polytope of nX × nY transport matrices. Under this identification, any coupling π is treated as a matrix with entries πij = π({Xi} × { Yj }).The empirical counterparts of the components in Defini-tion 3.3 can be naturally derived by plugging in the em-pirical probability measures. To this end, we first define the cost and distance matrices. Let Cf ∈ RnX ×nY be the feature cost matrix with [Cf ]ij = ∥fX (Xi) − fY (Yj )∥22.Similarly, let DˆPX ∈ RnX ×nX and DˆPY ∈ RnY ×nY be the normalized distance matrices defined by [DˆPX ]ij =
+
+dX (Xi, X j )/n X and [DˆPY ]ij = dY (Yi, Y j )/n Y . Substi-tuting these into Definition 3.3, we obtain the following empirical counterparts: 
+
+Empirical feature: ˆF(π) := ⟨Cf , π ⟩F = Tr( C⊤ 
+
+> f
+
+π),
+
+Empirical structure: ˆR(π) := nX nY ∥DˆPX π −πD ˆPY ∥2 
+
+> F
+
+,
+
+Empirical objective: ˆLα(π) := (1 − α) ˆF(π) + α/ 2 ˆR(π).Consequently, the empirical CDOT problem is a convex quadratic program over the transport polytope: 
+
+min   
+
+> π∈Π( ˆPX,ˆPY)
+
+ˆLα(π; X, Y). (2) Since (2) is a convex program, a wide range of convex solvers can be applied (Boyd & Vandenberghe, 2004). In this paper, we adopt the Frank–Wolfe (FW) algo-rithm (Frank & Wolfe, 1956). The FW algorithm is well-suited to this setting due to its projection-free nature. At each iteration, it requires solving a linear minimization prob-lem over Π( ˆPX , ˆPY ), avoiding projections onto the trans-port polytope. This subproblem is often computationally simpler than the full projection, making the FW algorithm an attractive choice. Appendix D presents two algorithms: the standard FW procedure (Algorithm 1) and an efficient variant termed lazy gradient FW (Algorithm 2). The latter leverages the quadratic structure of the objective to efficiently update gra-dients, reducing the cost from cubic to quadratic time. Al-though the overall per-iteration complexity remains O(n3)
+
+5Convex Distance Operator Transport 
+
+dominated by the linear minimization problem, this strategy significantly lowers the practical computational overhead. The estimated coupling ˆπ is generally a soft transport plan, i.e., a fractional coupling over Π( ˆPX , ˆPY ). In applications that require a deterministic matching, we project the soft plan onto the set of permutation matrices via the linear assignment problem (LAP): 
+
+ˆP := arg max  
+
+> P∈P n
+
+Tr( P ⊤ ˆπ), (3) where Pn is the set of permutation matrices when nX =
+
+nY = n. This LAP can be efficiently solved by the Hungar-ian algorithm (Kuhn, 1955). When nX̸ = nY , an analogous rectangular assignment problem can be solved instead. 
+
+## 5. Risk Consistency 
+
+This section establishes the risk consistency of the estimator 
+
+ˆπ. Our analysis relies on Wasserstein-1 distances to control the discrepancy between empirical and population measures. 
+
+Definition 5.1 (Wasserstein-p distance) . Let (S, d S ) be a compact metric space. For Borel probability measures μ
+
+and ν on S, the Wasserstein-p distance ( 1 ≤ p < ∞) is 
+
+W dS 
+
+> p
+
+(μ, ν ) := 
+
+
+
+inf 
+
+> π∈Π( μ,ν )
+
+Z
+
+> S×S
+
+dS (x, y )p π(dx, dy )
+
+1/p 
+
+.
+
+Since dp 
+
+> S
+
+is continuous and S is compact, the infimum is always attained (see Appendix F.2 for details). Below are some technical assumptions required to derive the precise convergence rate for our proposed method. 
+
+Assumption 5.2 (No atoms) . PX and PY are non-atomic; 
+
+PX ({x}) = PY ({y}) = 0 for all x ∈ X and y ∈ Y .
+
+Assumption 5.3 (No ties) . For any distinct x1, x 2 ∈ X ,
+
+y1, y 2 ∈ Y , and for any c ∈ R,
+
+PX ({x ∈ X : dX (x, x 1) − dX (x, x 2) = c}) = 0 ,
+
+PY ({y ∈ Y : dY (y, y 1) − dY (y, y 2) = c}) = 0 .
+
+Assumptions 5.2 and 5.3 rule out degeneracies such as ties and mass concentration. In particular, these conditions pre-vent ambiguous assignments and discontinuities caused by boundary events, which allows empirical and population-level objectives to be compared in a stable manner. 
+
+Assumption 5.4 (Lipschitzness) . The feature functions fX
+
+and fY are Lf -Lipschitz: for all x1, x 2 ∈ X and y1, y 2 ∈ Y ,
+
+∥fX (x1) − fX (x2)∥2 ≤ Lf dX (x1, x 2),
+
+∥fY (y1) − fY (y2)∥2 ≤ Lf dY (y1, y 2).
+
+Assumption 5.4 ensures that variations in the feature space 
+
+M are controlled by the metric structures of X and Y.
+
+Assumption 5.5 (Stability) . For each 0 ≤ α ≤ 1, there exists an optimal coupling π∗ 
+
+> α
+
+∈ arg min π∈Π( PX ,PY ) Lα(π)
+
+such that for some LW > 0,
+
+W dX 
+
+> 1
+
+(π∗
+
+> α
+
+(· | y), π ∗
+
+> α
+
+(· | y′)) ≤ LW dY (y, y ′), ∀y, y ′ ∈ Y ,W dY 
+
+> 1
+
+(π∗
+
+> α
+
+(· | x), π ∗
+
+> α
+
+(· | x′)) ≤ LW dX (x, x ′), ∀x, x ′ ∈ X .
+
+Assumption 5.5 is a kernel-regularity condition that prevents the conditional distributions of an optimal coupling from oscillating severely; analogous stability assumptions have been widely adopted in the OT literature (Deb et al., 2021; H ¨utter & Rigollet, 2021; Manole et al., 2024). A simple geometric example is the case where the optimal coupling is induced by a bi-Lipschitz Monge map. In addition, the assumption holds whenever the conditional laws of π∗ 
+
+> α
+
+are Lipschitz in total variation, via the standard bound W1 ≤
+
+diam( ·) ∥ · ∥ TV ; in the discrete setting, this condition is directly checkable from the rows and columns of the optimal coupling matrix. We are now ready to present the main consistency results. 
+
+Theorem 5.6 (Deterministic error bound) . Consider the fixed empirical measures ˆPX and ˆPY supported on distinct points. Let ˆπ be the output of FW Algorithm 1 with 0 ≤
+
+α ≤ 1, the iteration count T , and step size γt = 2 /(t +2) . In addition, suppose that Assumptions 5.2 to 5.5 hold. Let QX ∈ Π( PX , ˆPX ) and QY ∈ Π( PY , ˆPY ) denote the optimal couplings minimizing W dX 
+
+> 1
+
+and W dY 
+
+> 1
+
+. We define the glued measure Φn : Π( ˆPX , ˆPY ) → Π( PX , PY ) by 
+
+Φn(π)( dx, dy ) := 
+
+Z
+
+QX (dx | ˆx) QY (dy | ˆy) π(dˆx, d ˆy).
+
+Then, there exists a constant C > 0 such that 
+
+Lα(Φ n(ˆ π); X, Y) − min    
+
+> π∈Π( PX,PY)
+
+Lα(π; X, Y)
+
+≤ 32 α n min 
+
+T + 3 
+
+| {z }
+
+> Optimization error
+
++C
+
+
+
+W dX 
+
+> 1
+
+(PX , ˆPX ) + W dY 
+
+> 1
+
+(PY , ˆPY )
+
+| {z }
+
+> Statistical error
+
+,
+
+where nmin = min {nX , n Y }.Proof. See Appendix G.6. Theorem 5.6 demonstrates that the total error naturally de-composes into two distinct sources. The first is the optimiza-tion error , arising from the finite number of iterations in the FW algorithm; as expected, this term decays at the rate of 
+
+O(1 /T ). The second is the statistical error , which reflects the intrinsic uncertainty incurred by replacing the true dis-tributions PX and PY with their empirical counterparts. We note that the construction of the glued measure Φn relies on the disintegration of optimal couplings QX and QY ; we 6Convex Distance Operator Transport 
+
+refer the reader to Lemma F.5 for details. Consequently, the statistical bound is governed by the convergence rates of the empirical measures, depending essentially on the geometry of the underlying sample spaces. The glued measure Φn lifts the discrete solution ˆπ to the continuous population space with minimal transport cost. We can quantify the spatial displacement incurred by this lifting using Markov’s inequality: 
+
+P(X, ˆX)∼QX(dX (X, ˆX) > ε ) ≤ ε−1W dX 
+
+> 1
+
+(PX , ˆPX ).
+
+Therefore, provided that the empirical measures converge in W1, the blurring effect introduced by lifting ˆπ to the continuous space Π( PX , PY ) vanishes asymptotically. 
+
+Corollary 5.7 (Risk consistency) . Suppose the assumptions in Theorem 5.6 hold. Assume further that the datasets con-sist of i.i.d. samples drawn from PX and PY , respectively. Consider sequences of sample sizes nX , n Y → ∞ and it-eration count Tn such that nmin T −1 
+
+> n
+
+→ 0. Then, Φn(ˆ π)
+
+asymptotically achieves a global optimum: 
+
+Lα(Φ n(ˆ π); X, Y) a.s. 
+
+−−→ min    
+
+> π∈Π( PX,PY)
+
+Lα(π; X, Y).
+
+The established error bound remains valid up to a constant factor when the population objective Lα(Φ n(ˆ π); X, Y) is replaced by the empirical objective ˆLα(ˆ π; X, Y) in Theo-rem 5.6 and Corollary 5.7. Therefore, the finite-sample opti-mal transport cost itself is a consistent estimator of the pop-ulation optimal cost, i.e., ˆLα(ˆ π) → min π∈Π( PX ,PY ) Lα(π).The deterministic bound in Theorem 5.6 holds on arbitrary compact mm spaces, but the resulting sample-size rate de-pends on the geometry of the underlying domain through the empirical Wasserstein terms. For i.i.d. samples on a compact subset of Rd, the statistical error scales at the standard rate 
+
+O(n−1/d  
+
+> min
+
+) for d ≥ 3 (Fournier & Guillin, 2015; Weed & Bach, 2019), with faster rates in low dimensions. In infinite-dimensional settings, however, such polynomial rates are not guaranteed without further structural assumptions on the underlying measures. Finally, the choice of iteration count T is briefly discussed. While the optimization error bound in Theorem 5.6 depends on nmin due to worst-case control of operator norms, a moderate number of iterations (e.g., T = 50 , 100 , 200 ) is sufficient to reduce the error to a negligible level in practice. 
+
+## 6. Empirical Validation 
+
+6.1. Synthetic Data Analysis 
+
+This section empirically validates the theoretical results using synthetic 2D clustered point clouds. Our primary focus is to assess optimal solution recovery and to verify the consistency of the estimated transport plan by increasing the sample size. We first define the underlying space as [0 , 2] 2,partitioned into four unit-square regions {R k}4
+
+> k=1
+
+:
+
+R1 = [0 , 1) 2, R2 = [1 , 2] × [0 , 1) ,
+
+R3 = [0 , 1) × [1 , 2] , R4 = [1 , 2] 2.
+
+We equip this space with the Euclidean metric and a feature function f : [0 , 2] 2 → { 1, ..., 4} defined by f (x) = k if 
+
+x ∈ R k. This constructs the attributed mm spaces: 
+
+X = Y =  [0 , 2] 2, ∥ · ∥ 2, U ([0 , 2] 2), f  ,
+
+where U ([0 , 2] 2) denotes the uniform distribution on [0 , 2] 2.We sample n points uniformly from each region Rk, re-sulting in a total sample size of N = 4 n. The feature cost matrix Cf is defined by the 0-1 cluster mismatch penalty: 
+
+[Cf ]ij = min {1, |f (xi) − f (yj )|} .
+
+We compare CDOT with five baseline algorithms: 1) FGW, 2) Entropic FGW (EFGW), 3) IsoRank, 4) Spectral Matching (Spectral), and 5) Coordinated Optimal Trans-port (COPT). Detailed configurations are provided in Ap-pendix H. Since Spectral and COPT do not incorporate fea-ture information, they are independent of the fusion weight 
+
+α. Distance matrices are normalized by their maximum values in all experiments. For EFGW, we report the best per-formance obtained at ε = 10 −3 over {10 −4, ..., 10 −1}. We vary the cluster size n ∈ { 100 , ..., 500 } with a fixed α = 0 .5
+
+for CDOT, FGW, EFGW, and IsoRank. Results are averaged over 100 independent trials with random initialization, and the number of iterations is set to T = 200 . Performance is evaluated using the mean squared error (MSE) between the source X and the transported target ˆY = N ˆπY .Table 2 summarizes the simulation results. CDOT consis-tently achieves the lowest MSE across all sample sizes, and the error decreases as n increases. These trends empirically support the design of the CDOT objective, suggesting that the operator-based structural term provides a stable and ef-fective geometric alignment signal when combined with fea-ture matching. EFGW yields results comparable to CDOT, likely due to the entropic regularization; as the entropic regu-larization smooths the GW objective and partially mitigates issues arising from the dispersion term. IsoRank also shows comparable performance to CDOT, which is expected given the underlying isomorphism between the spaces. In contrast, Spectral and COPT exhibit higher MSEs, as they rely purely on structural information without leveraging the features. 
+
+6.2. Brain Connectome Analysis 
+
+The proposed CDOT is evaluated on the OASIS-3 brain con-nectome dataset (Kerepesi et al., 2017), which comprises structural brain networks from 696 subjects. Each network 7Convex Distance Operator Transport      
+
+> Table 2. Comparison of MSE (mean ±std) over 100 trials. CDOT is compared against FGW, Entropic FGW (EFGW), IsoRank, Spectral Matching (Spectral), and COPT. The best MSE for each nis highlighted in bold.
+
+n = N/ 4 CDOT (Ours) FGW EFGW IsoRank Spectral COPT 
+
+100 0.0077 ± 0.00 0.0146 ± 0.00 0.0098 ± 0.00 0.0141 ± 0.00 1.3447 ± 0.07 0.6664 ± 0.02 200 0.0040 ± 0.00 0.0081 ± 0.00 0.0054 ± 0.00 0.0078 ± 0.00 1.3429 ± 0.06 0.6691 ± 0.01 300 0.0027 ± 0.00 0.0055 ± 0.00 0.0038 ± 0.00 0.0053 ± 0.00 1.3276 ± 0.04 0.6670 ± 0.01 400 0.0020 ± 0.00 0.0043 ± 0.00 0.0031 ± 0.00 0.0041 ± 0.00 1.3355 ± 0.04 0.6682 ± 0.01 500 0.0016 ± 0.00 0.0034 ± 0.00 0.0025 ± 0.00 0.0033 ± 0.00 1.3373 ± 0.03 0.6670 ± 0.01   
+
+> Figure 3. Visualization of an OASIS-3 brain connectome (170 nodes). Nodes are colored according to six anatomical region labels, corresponding to left, right, and central regions, each subdi-vided into cortical and subcortical areas.
+
+consists of 170 nodes annotated by six anatomical labels (see Figure 3), with weighted edges representing anatomical connectivity. The connectivity matrices are used only to define the graph geometry, while the six anatomical cate-gories serve as auxiliary node features. We perform node correspondence across subjects: since all subjects share a common atlas, node i in one subject and node i in another subject represent the same anatomical region of interest, so the ground-truth matching is the identity permutation. Pair-wise matching is performed between the first 100 subjects (100 C2). Each method outputs a soft coupling or similarity matrix, which we convert to a hard one-to-one matching via the linear assignment problem; accuracy is reported as the fraction of nodes matched to their correct atlas index, averaged over subject pairs. We use categorical labels representing hemispheric and cor-tical status as features, and we consider two distinct met-rics: geodesic distance and diffusion distance. CDOT is compared against OT-based methods (FGW, EFGW) and topology-based baselines (Spectral, IsoRank, and COPT), where topology-based methods utilize graph adjacency ma-trices as inputs. Analogously to the synthetic setting, we use the fusion weight α = 0 .5 for CDOT, FGW, EFGW, and IsoRank. Further details are provided in Appendix H.3. The results in Table 3 demonstrate CDOT’s capacity to uti-                      
+
+> Table 3. Comparison of matching accuracy on OASIS-3. The best value for each structure representation is highlighted in bold.
+> Structure Representation Method Diffusion Geodesic Topology CDOT (Ours) 0.6136 0.4640 –
+> FGW 0.1853 0.5375 –
+> EFGW 0.4097 0.4583 –
+> IsoRank ––0.4055 Spectral ––0.0737
+> COPT ––0.0253
+
+lize robust geometric information. While FGW shows a marginal edge under the geodesic distance due to its direct minimization of pairwise distortions, CDOT achieves a lead when utilizing diffusion distance. This performance dis-parity stems from the fundamental difference in geometric perception. Unlike the brittle geodesic distance, which re-lies on single shortest paths vulnerable to noise, diffusion distance averages over all paths to capture robust global con-nectivity. CDOT effectively leverages this rich geometric information. Conversely, FGW struggles because diffusion smooths out local metric details; this reduced variance di-minishes the distinct pairwise contrasts required by the GW objective for precise alignment. Performance among topology-based baselines is mixed. Spectral and COPT yield poor accuracy, confirming that relying solely on adjacency structure is insufficient. Con-versely, IsoRank achieves a competitive accuracy by incor-porating node features. However, it still falls short of OT-based methods. This indicates that while integrating feature signals is crucial, IsoRank’s reliance on local neighborhood similarity is less effective than OT frameworks. 
+
+6.3. Graph Classification 
+
+Beyond the matching application, we assess the capability of CDOT to serve as a metric for graph classification tasks. We conduct experiments on standard benchmark datasets from TUDataset (Morris et al., 2020), covering both bioinformat-ics (MUTAG, PROTEINS, NCI1, ENZYMES) and social network (IMDB-BINARY). Specifically, the bioinformatics tasks involve predicting molecular properties or biological 8Convex Distance Operator Transport    
+
+> Table 4. Comparison of classification accuracy (mean ±std) across different graph datasets. We compare CDOT against FGW, GW, and COPT methods. The best accuracy for each dataset is highlighted in bold.
+
+CDOT (Ours) FGW GW COPT 
+
+Dataset Avg. Nodes Node Info. Acc. (mean ± std) Acc. (mean ± std) Acc. (mean ± std) Acc. (mean ± std) MUTAG 17.93 Label 0.8617 ± 0.07 0.8249 ± 0.08 0.7175 ± 0.10 0.6330 ± 0.04 IMDB-B 19.77 None 0.6420 ± 0.04 0.6020 ± 0.07 – 0.6370 ± 0.03 PROTEINS 39.06 Attr. 0.7547 ± 0.03 0.7358 ± 0.03 0.6612 ± 0.03 0.6954 ± 0.04 NCI1 29.87 Label 0.7477 ± 0.01 0.7302 ± 0.01 0.5708 ± 0.02 0.5993 ± 0.02 ENZYMES 32.63 Attr. 0.5133 ± 0.04 0.4450 ± 0.03 0.2383 ± 0.07 0.2350 ± 0.06 functions, whereas the social network task classifies actor collaboration graphs by movie genre. We adopt a kernel-based classification framework using a support vector machine (SVM). For each method, we com-pute the pairwise distance matrix D between all graphs in the dataset to construct a Gaussian RBF kernel K =exp( −γD 2). We employ a nested cross-validation scheme to ensure a robust evaluation. The outer loop performs 10-fold stratified cross-validation to estimate accuracy. The inner loop (5-fold) performs a grid search to select op-timal hyperparameters: the SVM regularization parame-ter C ∈ { 10 −1, ..., 10 2} and the kernel bandwidth γ ∈{10 −3, ..., 10 }. For fused approaches (CDOT, FGW), we also tune the fusion weight α ∈ 0.25 × { 0, ..., 4}. Input graphs are represented by their geodesic distance matrices to capture global geometry. For node features, we utilize the provided labels or attributes. However, for IMDB-BINARY, lacking node features, we rely solely on structural geometry; in such cases, the fusion weight is fixed at α = 1 , and it is excluded from the hyperparameter tuning procedure. Table 4 summarizes the classification performance. CDOT consistently outperforms the baseline methods across di-verse datasets. The performance gap is particularly notable in datasets rich in feature information, such as MUTAG and ENZYMES, where CDOT achieves significantly higher accuracy than purely structural methods (GW and COPT). This highlights the efficacy of our method in fusing feature signals with geometric structure. Notably, even in IMDB-BINARY where no node features are available ( α = 1 ), CDOT maintains the best performance solely based on struc-tural information. This suggests that the proposed operator geometry captures topological distinctions more effectively than the standard GW approaches. We emphasize that while specialized neural architectures may achieve state-of-the-art results on these benchmarks, CDOT demonstrates superior performance compared to existing OT baselines. 
+
+## 7. Discussion 
+
+This work introduces Convex Distance Operator Transport (CDOT) , a novel geometry-aware convex framework that aligns heterogeneous mm spaces via an operator-based for-mulation. By aggregating geometric information at the operator level, CDOT filters out the geometric dispersion term, the source of non-convexity in GW approaches, which ensures a convex optimization landscape while effectively capturing geometric information. Theoretically, we show that the resulting discrepancy serves as a valid pseudometric between attributed compact mm spaces and establish the risk consistency of our estimator through non-asymptotic risk bounds. Experiments on synthetic and real-world data empirically demonstrate the efficacy of our method. We also note two limitations. First, CDOT is designed for operator-level alignment rather than nearly one-to-one matching, since zero discrepancy does not necessarily im-ply exact measure-preserving isometry; GW and FGW may therefore be more appropriate when rigid pointwise match-ing is the primary goal. Second, although CDOT admits a convex formulation, each Frank–Wolfe iteration is still dominated by a standard OT subproblem, so the current implementation is better suited to moderate problem sizes than to very large-scale settings. Several avenues remain for future investigation. A particu-larly promising direction is the development of a statistical inference framework for mm spaces. Since the CDOT dis-crepancy constitutes a valid pseudometric, it naturally lends itself to statistical inference on mm spaces. Developing hypothesis testing frameworks, such as isomorphism tests based on the CDOT discrepancy, would be an interesting future work. Furthermore, while this study requires that the metric structure (e.g., geodesic or diffusion) be predefined, one could jointly learn the optimal ground metric or fea-ture representation that minimizes the CDOT discrepancy by integrating the CDOT objective as a differentiable layer within deep neural networks. We expect that this direction bridges the gap between geometric optimal transport and representation learning. 
+
+## Impact Statement 
+
+This paper presents a methodological contribution to op-timal transport and structured data analysis. Its potential 9Convex Distance Operator Transport 
+
+benefits include more reliable alignment and comparison of heterogeneous graphs or metric-measure spaces, with appli-cations in scientific domains such as biology, neuroscience, and network analysis. Since CDOT is a general-purpose tool, its societal impact depends on the downstream setting; possible risks include privacy-sensitive graph matching or biased conclusions when applied to human-related network data. We do not foresee direct negative societal impacts beyond those common to machine learning methods, but deployment in sensitive domains should be accompanied by appropriate validation, privacy safeguards, and domain-specific oversight. 
+
+## Acknowledgments 
+
+This work was supported by the National Research Founda-tion of Korea (NRF) grant funded by the Korea government (MSIT) (No. RS-2026-25473737), the Institute of Informa-tion & Communications Technology Planning & Evaluation (IITP) grant funded by the Korea government (MSIT) (No. RS-2021-II211343), the Global-LAMP Program of the Na-tional Research Foundation of Korea (NRF) grant funded by the Ministry of Education (No. RS-2023-00301976), and the National Research Foundation of Korea (NRF) grant funded by the Korea government (MSIT) (No. RS-2026-25494850). 
+
+## References 
+
+Abdelnour, F., Voss, H. U., and Raj, A. Network diffusion accurately models the relationship between structural and functional brain connectivity networks. Neuroimage , 90: 335–347, 2014. Aflalo, Y., Bronstein, A., and Kimmel, R. On convex relax-ation of graph isomorphism. Proceedings of the National Academy of Sciences , 112(10):2942–2947, 2015. Aliprantis, C. D. and Border, K. C. Infinite dimensional analysis: a hitchhiker’s guide . Springer, 2006. Backhoff-Veraguas, J. and Pammer, G. Stability of martin-gale optimal transport and weak optimal transport. The Annals of Applied Probability , 32(1):721–752, 2022. Boyd, S. and Vandenberghe, L. Convex optimization . Cam-bridge university press, 2004. Chen, J., Nguyen, B. T., Koh, S., and Soh, Y. S. Semidef-inite relaxations of the Gromov–Wasserstein distance. 
+
+Advances in Neural Information Processing Systems , 37: 69814–69839, 2024. Coifman, R. R. and Lafon, S. Diffusion maps. Applied and computational harmonic analysis , 21(1):5–30, 2006. Courty, N., Flamary, R., and Tuia, D. Domain adaptation with regularized optimal transport. In Joint European conference on machine learning and knowledge discovery in databases , pp. 274–289. Springer, 2014. Deb, N., Ghosal, P., and Sen, B. Rates of estimation of opti-mal transport maps using plug-in estimators via barycen-tric projections. Advances in Neural Information Process-ing Systems , 34:29736–29753, 2021. Dong, Y. and Sawin, W. COPT: Coordinated optimal trans-port on graphs. Advances in Neural Information Process-ing Systems , 33:19327–19338, 2020. Flamary, R., Courty, N., Gramfort, A., Alaya, M. Z., Bois-bunon, A., Chambon, S., Chapel, L., Corenflos, A., Fa-tras, K., Fournier, N., et al. POT: Python optimal trans-port. Journal of Machine Learning Research , 22(78):1–8, 2021. Fournier, N. and Guillin, A. On the rate of convergence in Wasserstein distance of the empirical measure. Probabil-ity theory and related fields , 162(3):707–738, 2015. Frank, M. and Wolfe, P. An algorithm for quadratic pro-gramming. Naval Research Logistics Quarterly , 3(1-2): 95–110, 1956. Greb ´ık, J. and Rocha, I. Fractional isomorphism of graphons. 
+
+Combinatorica , 42(3):365–404, 2022. H ¨utter, J.-C. and Rigollet, P. Minimax estimation of smooth optimal transport maps. The Annals of Statistics , 49(4): 2231–2255, 2021. Kerepesi, C., Szalkai, B., Varga, B., and Grolmusz, V. The braingraph.org database of high resolution structural con-nectomes and the brain graph tools. Cognitive Neurody-namics , 11(5):483–486, 2017. Kuhn, H. W. The Hungarian method for the assignment problem. Naval Research Logistics Quarterly , 2(1-2): 83–97, 1955. Leordeanu, M. and Hebert, M. A spectral technique for correspondence problems using pairwise constraints. In 
+
+Tenth IEEE International Conference on Computer Vision (ICCV’05) Volume 1 , volume 2, pp. 1482–1489. IEEE, 2005. Manole, T., Balakrishnan, S., Niles-Weed, J., and Wasser-man, L. Plugin estimation of smooth optimal transport maps. The Annals of Statistics , 52(3):966–998, 2024. M ´emoli, F. Gromov–Wasserstein distances and the metric approach to object matching. Foundations of computa-tional mathematics , 11(4):417–487, 2011. 10 Convex Distance Operator Transport 
+
+Morris, C., Kriege, N. M., Bause, F., Kersting, K., Mutzel, P., and Neumann, M. TUDataset: A collection of bench-mark datasets for learning with graphs. In ICML 2020 Workshop on Graph Representation Learning and Beyond (GRL+ 2020) , 2020. URL www.graphlearning. io .Peyr ´e, G., Cuturi, M., and Solomon, J. Gromov–Wasserstein averaging of kernel and distance matrices. In Interna-tional Conference on Machine Learning , pp. 2664–2672. PMLR, 2016. Piening, M. and Beinert, R. A novel sliced fused Gromov– Wasserstein distance. arXiv preprint arXiv:2508.02364 ,2025. Ravikumar, P. and Lafferty, J. Quadratic programming relaxations for metric labeling and Markov random field MAP estimation. In Proceedings of the 23rd international conference on Machine learning , pp. 737–744, 2006. Rioux, G., Goldfeld, Z., and Kato, K. Entropic Gromov– Wasserstein distances: Stability and algorithms. Journal of Machine Learning Research , 25(363):1–52, 2024. Rubner, Y., Tomasi, C., and Guibas, L. J. The earth mover’s distance as a metric for image retrieval. International journal of computer vision , 40(2):99–121, 2000. Scetbon, M., Peyr ´e, G., and Cuturi, M. Linear-time Gromov– Wasserstein distances using low rank couplings and costs. In International Conference on Machine Learning , pp. 19347–19365. PMLR, 2022. Schellewald, C. and Schn ¨orr, C. Probabilistic subgraph matching based on convex relaxation. In International Workshop on Energy Minimization Methods in Computer Vision and Pattern Recognition , pp. 171–186. Springer, 2005. Schellewald, C., Roth, S., and Schn ¨orr, C. Evaluation of a convex relaxation to a quadratic assignment matching approach for relational object views. Image and Vision Computing , 25(8):1301–1314, 2007. Singh, R., Xu, J., and Berger, B. Global alignment of multiple protein interaction networks with application to functional orthology detection. Proceedings of the National Academy of Sciences , 105(35):12763–12768, 2008. Solomon, J., Peyr ´e, G., Kim, V. G., and Sra, S. Entropic metric alignment for correspondence problems. ACM Transactions on Graphics (ToG) , 35(4):1–13, 2016. Swoboda, P., Kainm ¨uller, D., Mokarian, A., Theobalt, C., and Bernard, F. A convex relaxation for multi-graph matching. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 11156– 11165, 2019. Titouan, V., Flamary, R., Courty, N., Tavenard, R., and Chapel, L. Sliced Gromov–Wasserstein. Advances in Neural Information Processing Systems , 32, 2019. Vayer, T., Chapel, L., Flamary, R., Tavenard, R., and Courty, N. Fused Gromov–Wasserstein distance for structured objects. Algorithms , 13(9):212, 2020. Villani, C. Optimal transport: old and new , volume 338. Springer, 2008. Weed, J. and Bach, F. Sharp asymptotic and finite-sample rates of convergence of empirical measures in Wasserstein distance. Bernoulli , 25(4A):2620–2648, 2019. Yuan, Y., Zhang, Y., Shahbaba, B., Fortin, N., Cooper, K., Nie, Q., and Qu, A. Optimal transport based cross-domain integration for heterogeneous data. Journal of the Ameri-can Statistical Association , 120(551):1449–1462, 2025. Zaslavskiy, M., Bach, F., and Vert, J.-P. A path following algorithm for the graph matching problem. IEEE trans-actions on pattern analysis and machine intelligence , 31 (12):2227–2242, 2008. 11 Convex Distance Operator Transport 
+
+## A. Notations 
+
+We first introduce some notations used throughout the Appendix. Let (Ω , F, P) be a probability space, and let (X , d X ) and 
+
+(Y, d Y ) be compact metric spaces. We denote by B(X ) the Borel σ-algebra on X . The compactness guarantees that both spaces are Polish, ensuring that regular conditional distributions exist (Lemma F.1). For a set S, we denote by IA the indicator function of a subset A ⊂ S . For a metric space (S, d S ), let C(S) be the space of continuous functions and Cb(S) be the space of bounded continuous functions from S to R. Note that since X and Y
+
+are compact, C(X ) = Cb(X ) and C(Y) = Cb(Y). For a measure μ on S and p ∈ [1 , ∞), let Lp(S, μ ) denote the Banach space of measurable functions f : S → R such that R 
+
+> S
+
+|f |pdμ < ∞. When the domain is clear from the context, we abbreviate this as Lp(μ). Specifically, L2(μ) forms a Hilbert space equipped with the inner product ⟨f, g ⟩L2(μ) = R f gdμ .We denote by P(X ) the set of all Borel probability measures on X . For x ∈ X , δx denotes the Dirac measure concentrated at x. Measurable maps X : Ω → X and Y : Ω → Y are called random elements taking values in X and Y, with distributions 
+
+PX := P ◦ X−1 and PY := P ◦ Y −1, respectively. For simplicity, we assume PX and PY are fully supported. Then 
+
+(X , d X , PX ) and (Y, d Y , PY ) form compact metric-measure (mm) spaces. We say a measurable map T : X → Y pushes forward μ to ν if μ(T −1(A)) = ν(A) for all A ∈ B (Y). We write T#μ = ν if T pushes forward μ to ν. For a subset 
+
+A ∈ B (X ), the restriction of μ to A is denoted by μ⌊A, defined as μ⌊A(B) = μ(A ∩ B).For probability measures μ1, ..., μ m, denote by 
+
+Π( μ1, ..., μ m) := {π : the marginals of π are μ1, ..., μ m}
+
+the set of all couplings among them. We further introduce a compact feature space M ⊂ Rk and define continuous mappings 
+
+fX : X → M and fY : Y → M , referred to as feature functions. With these components, we define an attributed compact mm space as a tuple X := ( X , d X , PX , f X ). We define Y := ( Y, d Y , PY , f Y ) analogously. Throughout this paper, we assume that diam( X ) = diam( Y) = diam( M) = 1 , where diam( A) := sup a,a ′∈A dA(a, a ′) denotes the diameter. 
+
+## B. Related Work 
+
+This section reviews representative approaches for aligning structured objects modeled as mm spaces and graphs. We begin with the definition of the Gromov–Wasserstein (GW) discrepancy, a fundamental framework for comparing metric structures. This is immediately followed by the fused Gromov–Wasserstein (FGW) formulation, which extends GW to incorporate auxiliary feature information alongside structural data. Given that both objectives involve a quadratic dependence on the coupling, we subsequently discuss strategies to address the inherent non-convexity of these problems, including entropic regularization schemes and convex relaxations. The review then proceeds to scalability-oriented approximations designed for large-scale applications, such as sliced and low-rank variants. Finally, we cover graph-specific optimal transport formulations, specifically Coordinated Optimal Transport (COPT), and summarize classical non-OT baselines such as spectral and random-walk-based network alignment methods. For two compact mm spaces (X , d X , PX ) and (Y, d Y , PY ), the p-th order GW (GW-p) objective RGW ,p : Π( PX , PY ) → R
+
+with 1 ≤ p < ∞ is defined by 
+
+RGW ,p (π) := Eπ⊗π
+
+ dX (X, X ′) − dY (Y, Y ′) p =
+
+Z Z 
+
+dX (x, x ′) − dY (y, y ′) pπ(dx, dy )π(dx ′, dy ′).
+
+The GW-p discrepancy is obtained by minimizing (RGW ,p (π)) 1/p over π ∈ Π( PX , PY ), vanishing if and only if the two spaces are measure-preserving isometric. However, this formulation involves a tensor product of the coupling (i.e., π ⊗ π), rendering the optimization landscape inherently non-convex due to its quadratic dependence on π. While GW-p is defined for general p, most works focus on the quadratic case ( p = 2 ) (M ´emoli, 2011; Peyr ´e et al., 2016; Rioux et al., 2024; Chen et al., 2024) due to its theoretical clarity. In the sequel, references to the GW objective imply p = 2 unless otherwise specified. In many applications, points in mm spaces are equipped with auxiliary attributes alongside their structural information. The FGW framework (Vayer et al., 2020) addresses this by interpolating between a feature-based transport cost and the structural GW discrepancy. Given two attributed compact mm spaces X and Y coupled with a feature cost c(·, ·), the FGW objective 
+
+LFGW ,α : Π( PX , PY ) → R is defined by 
+
+LFGW ,α (π; X, Y) := (1 − α) Eπ [c(X, Y )] + α RGW ,2(π),
+
+12 Convex Distance Operator Transport 
+
+where the parameter 0 ≤ α ≤ 1 regulates the trade-off between feature matching and structural alignment. Although Vayer et al. (2020) define FGW in a more general setting and establish its pseudometric properties in special cases, we focus here on the quadratic formulation. Consequently, the FGW objective inherits the non-convex nature of the GW objective RGW ,2.Weak optimal transport provides another nonlinear variant of optimal transport, where the transportation cost may depend on the conditional law induced by a coupling (Backhoff-Veraguas & Pammer, 2022). This perspective is related to our formulation in that CDOT also depends on conditional transport mechanisms rather than only on a pointwise cost. However, standard weak OT typically considers costs depending on the forward conditional law π(· | x), whereas our structural term involves both directions of the coupling through conditional expectations with respect to π(· | x) and π(· | y). Thus, we regard weak OT as a conceptually related but distinct framework, rather than as a direct baseline for structured alignment. A substantial literature aims to mitigate the non-convexity of (F)GW, either by proposing scalable solvers with convergence to stationary points or by constructing convex surrogates. For instance, Peyr ´e et al. (2016) and Solomon et al. (2016) introduce entropic regularization together with projected-gradient or Sinkhorn-type schemes, which partially mitigates the non-convexity issue and improves numerical stability. Notably, Rioux et al. (2024) demonstrate that under sufficiently strong regularization, the dual formulation of the entropic GW objective becomes globally convex, admitting theoretical guarantees for global optimality. However, outside this specific high-regularization regime, the optimization landscape remains generally non-convex, with solvers typically converging only to stationary points. Furthermore, a limitation of these entropic formulations is that they generally fail to preserve the pseudometric properties on the space of attributed compact mm spaces. Finally, its performance is often highly sensitive to the choice of the regularization parameter, which necessitates careful tuning to balance numerical stability with approximation fidelity. To mitigate the computational burden of GW-type objectives, several scalable approximations have been proposed. A prominent direction is a slicing-based approach, exemplified by Sliced GW (Titouan et al., 2019), which approximates the discrepancy by averaging costs computed over randomized one-dimensional projections. While this formulation offers significant scalability for large-scale Euclidean point clouds, it inherently requires the underlying spaces to possess a Euclidean structure and typically estimates the distance value rather than explicitly retrieving the transport coupling. Recently, Piening & Beinert (2025) extend this paradigm to the fused setting (Sliced FGW), incorporating attribute information to handle structured domains efficiently. However, like its predecessors, it primarily targets fast discrepancy estimation via sliced projections and therefore does not directly output a globally consistent coupling or permutation, often necessitating auxiliary post-processing when explicit node correspondences are required. Moreover, its fidelity to the underlying FGW objective depends on approximation choices (e.g., the number and placement of quantile samples and random projections), introducing a trade-off between computational efficiency and the tightness of the approximation. Alternatively, structural restrictions on the optimization variables offer another path to scalability. Scetbon et al. (2022) introduce a low-rank GW framework that restricts the admissible couplings and cost matrices to low-rank factorizations. This approach achieves linear time and memory complexity, making it applicable to massive datasets with millions of points. Nevertheless, its effectiveness is contingent upon the assumption that the intrinsic geometry of the data and their optimal alignment can be faithfully captured by a low-rank representation, which may not hold for all complex topological structures. Chen et al. (2024) propose a semidefinite programming relaxation of the GW objective (GW-SDP), yielding a convex lower bound that can be optimized in a lifted space and providing a certificate to assess near-optimality. Despite these appealing guarantees, the relaxation can incur substantial computational overhead, limiting applicability to small-sized problems. Moreover, while the relaxation is provably tight in several structured settings, its broader theoretical behavior remains largely unexplored. Beyond GW/FGW, COPT (Dong & Sawin, 2020) provides an OT-based approach to graph alignment by coupling vertex matching with the alignment of graph-induced random signal distributions. COPT equips each graph with a Gaussian measure over graph signals and seeks a vertex coupling that is consistent with a transport mechanism acting on these signal distributions. This perspective emphasizes global structural alignment through signal statistics, rather than relying on an explicit feature cost matrix. However, this framework requires the assumption of Gaussian signal distributions and lacks a direct mechanism to incorporate node attributes. A formal definition of the COPT objective is provided in Appendix H. When the objects are finite graphs, matching is represented by a permutation matrix P (or a soft assignment matrix π after relaxation). In this discrete regime, matching by comparing adjacency matrices naturally leads to quadratic assignment– type objectives, linking GW-style structure matching to the classical graph matching literature (Zaslavskiy et al., 2008; Ravikumar & Lafferty, 2006; Aflalo et al., 2015; Schellewald et al., 2007; Schellewald & Schn ¨orr, 2005; Swoboda et al., 13 Convex Distance Operator Transport 
+
+2019). For example, given adjacency matrices A1 and A2 of graphs G1 and G2, the classical graph matching problem seeks a permutation matrix P that minimizes 
+
+∥A1 − P A 2P ⊤∥2 
+
+> F
+
+,
+
+which is equivalent to ∥A1P − P A 2∥2 
+
+> F
+
+. A common convex relaxation replaces P by a soft assignment matrix π constrained to lie in the Birkhoff polytope (i.e., the set of doubly stochastic matrices), yielding the convex quadratic program 
+
+min  
+
+> π∈B
+
+∥A1π − πA 2∥2 
+
+> F
+
+,
+
+where B denotes the Birkhoff polytope. Such relaxations are widely used to obtain tractable surrogates of combinatorial matching objectives and to provide principled initializations for non-convex solvers. Classical baselines for matching and network alignment include spectral methods and random-walk-based similarity propagation. Spectral Matching (Spectral) (Leordeanu & Hebert, 2005) embeds nodes using eigenvectors of adjacency or Laplacian-derived matrices and then solve an assignment problem based on distances between spectral embeddings. This typically yields a continuous score first, and a hard matching is obtained only after an additional discretization or assignment step (e.g., solving an LAP). In network alignment, IsoRank (Singh et al., 2008) iteratively propagates similarity scores over the Kronecker product of two graphs, based on the principle that two nodes are similar if their neighbors are similar. These approaches are typically computationally efficient and conceptually simple, but their performance can be sensitive to symmetries, spectral ambiguities, or local neighborhood distortions, depending on the underlying graph geometry. 
+
+## C. Numerical Realization of π 7 → (R(π), V(π)) 
+
+We empirically project the coupling space Π( PX , PY ) onto the two-dimensional plane spanned by the structural regulariza-tion R(π) and the dispersion penalty V(π). We consider a synthetic matching problem between two Euclidean spaces with 
+
+n = 4 points, constructed to be isomorphic (measure-preserving isometric) up to a rigid transformation. The resulting landscape is illustrated in Figure 4. The horizontal and vertical axes correspond to the structural regularization 
+
+R(π) and the dispersion penalty V(π), respectively. The gray scatter points represent transport plans π randomly sampled from the interior of the transport polytope ( Π( PX , PY )) using Dirichlet mixtures. The black circular points denote the permutation matrices (extreme points), while the red triangle marks the independent coupling ( PX ⊗ PY ). Notably, the projected points form a distinctive non-convex, boomerang-like region, empirically validating the schematic illustration discussed in Section 3.3. This shape highlights the geometry of the coupling space: the independent coupling sits at the peak with maximal dispersion, while the feasible region bifurcates and descends towards the zero-dispersion axis where the bi-deterministic permutation matrices reside. 
+
+## D. Algorithms 
+
+In this appendix, we provide detailed pseudocodes for the algorithms discussed in Section 4 and present a comparative analysis of their computational complexity. Importantly, we note that these algorithms are mathematically equivalent. 
+
+D.1. Standard FW Algorithm 
+
+Algorithm 1 outlines the standard Frank–Wolfe (FW) procedure. In each iteration, it computes the full gradient of the objective function and solves a linear minimization subproblem over the transport polytope. The procedure begins by constructing the feature cost matrix Cf and the normalized distance matrices DˆPX and DˆPY based on the input data (lines 3–5). The main optimization loop (lines 6–10) iteratively refines the transport plan π. In each iteration t, we first compute the full gradient of the objective function, ∇ ˆLα(π(t)), at the current iterate π(t) (line 7). Next, we solve the linear minimization oracle (LMO) in line 8; this step corresponds to a standard linear optimal transport problem where the cost matrix is given by the computed gradient. This yields the update direction μ(t), which is a vertex of the transport polytope. The new iterate π(t+1) is then obtained by taking a convex combination of the current plan π(t) and the direction μ(t) using a step size γt (line 9). After T iterations, the algorithm outputs the final soft coupling ˆπ (line 11). Finally, line 12 describes the optional post-processing step, which solves the linear assignment problem (LAP) to project the soft coupling ˆπ onto the set of deterministic assignments P, yielding the hard assignment ˆP .14 Convex Distance Operator Transport 
+
+Figure 4. Empirical visualization of the optimization landscape. The scatter plot illustrates the image of the transport polytope projected onto the plane spanned by the structural regularization R(π) (x-axis) and the dispersion penalty V(π) (y-axis) for an isomorphic matching problem with n = 4 . Black circles represent permutation matrices (extreme points), the red triangle marks the independent coupling (PX ⊗ PY ), and gray points denote random transport plans sampled from the interior of the polytope. 
+
+D.2. Lazy Gradient FW Algorithm 
+
+The standard FW algorithm typically requires recomputing the full gradient ∇ ˆLα(π(t)) at every iteration t:
+
+∇ ˆLα(π(t)) = (1 − α)Cf + αn X nY
+
+
+
+D⊤
+
+> ˆPX
+
+(DˆPX π(t) − π(t)DˆPY ) − (DˆPX π(t) − π(t)DˆPY )D⊤
+
+> ˆPY
+
+
+
+.
+
+For the proposed objective function, the structural term involves matrix multiplications (e.g., D⊤
+
+> ˆPX
+
+(DˆPX π(t) − π(t)DˆPY )), which can be computationally intensive to recalculate from scratch. However, we observe that the proposed objective function ˆLα(π) is quadratic with respect to the transport plan π. Con-sequently, the gradient mapping π 7 → ∇ ˆLα(π) is affine. Another key observation is that the FW algorithm updates the transport plan via a convex combination, i.e., 
+
+π(t+1) = (1 − γt)π(t) + γtμ(t), where μ(t) = arg min   
+
+> μ∈Π( ˆPX,ˆPY)
+
+Tr 
+
+
+
+∇ ˆLα(π(t))⊤μ
+
+
+
+.
+
+Thus, the gradient at the next iteration satisfies the linearity property: 
+
+∇ ˆLα(π(t+1) )
+
+| {z }
+
+> =G(t+1)
+
+= ∇ ˆLα
+
+ (1 − γt)π(t) + γtμ(t) = (1 − γt) ∇ ˆLα(π(t))
+
+| {z }
+
+> =G(t)
+
++γt∇ ˆLα(μ(t)).
+
+Algorithm 2 exploits this property by maintaining the gradient matrix G(t) := ∇ ˆLα(π(t)) and performing a lazy update using the gradient at the LMO solution ∇ ˆLα(μ(t)). This approach allows for efficient in-place updates of the gradient matrix without redundant matrix operations involving the dense coupling π(t+1) .15 Convex Distance Operator Transport 
+
+Algorithm 1 Convex Distance Operator Transport Plan via FW and Optional LAP  
+
+> 1:
+
+Input: Source data {(Xi, f X (Xi)) }nX
+
+> i=1
+
+, target data {(Yj , f Y (Yj )) }nY
+
+> j=1
+
+, fusion weight parameter 0 ≤ α ≤ 1, iteration count T , initial coupling π(0)  
+
+> 2:
+
+Construct matrices:  
+
+> 3:
+
+[Cf ]ij ← ∥ fX (Xi) − fY (Yj )∥22 
+
+> 4:
+
+[DˆPX ]ii ′ ← dX (Xi, X i′ )/n X 
+
+> 5:
+
+[DˆPY ]jj ′ ← dY (Yj , Y j′ )/n Y 
+
+> 6:
+
+for t = 0 to T − 1 do  
+
+> 7:
+
+Calculate the gradient ∇ ˆLα(π(t)) 
+
+> 8:
+
+μ(t) ← arg min μ∈Π( ˆPX ,ˆPY ) Tr  ∇ ˆLα(π(t))⊤μ 
+
+> 9:
+
+π(t+1) ← (1 − γt)π(t) + γtμ(t) for some 0 < γ t ≤ 1 
+
+> 10:
+
+end for  
+
+> 11:
+
+ˆπ ← π(T ) 
+
+> 12:
+
+Optional (LAP): ˆP ← arg max P ∈P Tr( P ⊤ ˆπ) 
+
+> 13:
+
+Return: ˆπ (and optionally ˆP )
+
+D.3. Computational Complexity 
+
+We compare the computational complexity of the two algorithms. Assuming each distance and feature evaluation is O(1) ,both algorithms share the same initialization cost of O(n2 
+
+> X
+
++ n2 
+
+> Y
+
++ nX nY ) to construct Cf , DˆPX , and DˆPY . By defining 
+
+nmax := max {nX , n Y }, the initialization cost scales as O(n2max ).Both Algorithm 1 (line 8) and Algorithm 2 (line 9) require solving the same linear minimization problem over the transport polytope at each iteration. This subproblem is an optimal transport problem and its complexity depends on the chosen solver. For example, using an exact network-simplex solver (e.g., emd from (Flamary et al., 2021)) incurs a worst-case complexity 
+
+O(n3max ). Since this step is identical for both methods, it dictates the worst-case bound for the entire procedure O(T n 3max ).The advantage of Algorithm 2 becomes evident in the gradient computation step. • Standard FW (Algorithm 1): Computing the gradient in line 7 requires dense matrix multiplications involving the current coupling π(t) (e.g., DˆPX π(t)). Since π(t) is generally dense, these operations incur a complexity of O(n3max ).• Lazy FW (Algorithm 2): Instead of recomputing the gradient from the dense π(t), the algorithm computes lazy terms involving the LMO solution μ(t) in line 12 (e.g., DˆPX μ(t)). Since μ(t) is a vertex of the transport polytope, it is extremely sparse with at most nX + nY − 1 non-zero entries. Consequently, these matrix products involve only sparse operations, reducing the cost to O(nX (nX + nY ) + nY (nX + nY )) = O(( nX + nY )2), which scales as O(n2max ).The gradient matrix G(t) is then updated via a simple linear combination (line 13), which is also O(n2max ).In summary, while the solver complexity makes the asymptotic bound equal, the lazy algorithm reduces the gradient update cost from cubic O(n3max ) to quadratic O(n2max ). In practice, where dense matrix multiplication has a large constant factor, this reduction leads to significant improvements in total runtime. 
+
+D.4. Empirical Convergence and Wall-Clock Runtime 
+
+We complement the optimization analysis with two empirical studies. The first compares the lazy-gradient Frank–Wolfe (FW) implementation with the standard FW implementation on the CDOT objective, and the second reports wall-clock runtimes of CDOT against FGW and EFGW under a common benchmark setting. Both studies use three families of attributed compact mm spaces: quadrant-labeled point clouds, anisotropic clustered point clouds, and attributed stochastic block model (SBM) graphs. The reported numbers below correspond to the median of three runs at N = 400 ; consistent behavior is observed at N = 200 .16 Convex Distance Operator Transport 
+
+Algorithm 2 Convex Distance Operator Transport Plan via FW and Optional LAP with Lazy Gradient Updates 
+
+1: Input: Source data {(Xi, f X (Xi)) }nX
+
+> i=1
+
+, target data {(Yj , f Y (Yj )) }nY
+
+> j=1
+
+, fusion weight parameter 0 ≤ α ≤ 1, iteration count T , initial coupling π(0) 
+
+2: Construct matrices: 
+
+3: [Cf ]ij ← ∥ fX (Xi) − fY (Yj )∥22
+
+4: [DˆPX ]ii ′ ← dX (Xi, X i′ )/n X
+
+5: [DˆPY ]jj ′ ← dY (Yj , Y j′ )/n Y
+
+6: Calculate the initial gradient ∇ ˆLα(π(0) )
+
+7: G(0) ← ∇ ˆLα(π(0) )
+
+8: for t = 0 to T − 1 do 
+
+9: μ(t) ← arg min μ∈Π( ˆPX ,ˆPY ) Tr  (G(t))⊤μ
+
+10: π(t+1) ← (1 − γt)π(t) + γtμ(t) for some 0 < γ t ≤ 1
+
+11: if t ≤ T − 2 then 
+
+12: Calculate the directional component (lazy term) ∇ ˆLα(μ(t))
+
+13: G(t+1) ← (1 − γt)G(t) + γt∇ ˆLα(μ(t))
+
+14: end if 
+
+15: end for 
+
+16: ˆπ ← π(T )
+
+17: Optional (LAP): ˆP ← arg max P ∈P Tr( P ⊤ ˆπ)
+
+18: Return: ˆπ (and optionally ˆP )
+
+Table 5. Lazy versus standard FW on the CDOT objective. Lazy (s) and Standard (s) are total wall-clock runtimes; Max obj. diff. and 
+
+Max gap diff. denote the maximum absolute differences in objective value and FW duality gap over the run. 
+
+Space N Lazy (s) Standard (s) Max obj. diff. Max gap diff. 
+
+Quadrant point cloud 400 2.692 2.699 1.84 × 10 −7 2.47 × 10 −6
+
+Anisotropic point cloud 400 2.764 2.865 1.33 × 10 −7 8.36 × 10 −7
+
+SBM graph metric 400 2.890 2.954 7.80 × 10 −8 1.51 × 10 −6
+
+Table 5 reports the convergence comparison. In all three families, the lazy and standard FW variants produce nearly indistinguishable trajectories: the maximum discrepancy is below 1.9 × 10 −7 in objective value and below 2.5 × 10 −6
+
+in duality gap. This shows that the lazy update does not alter the numerical optimization path of FW, so it preserves the convergence behavior of the standard method while saving per-iteration gradient cost. 
+
+Table 6. Wall-clock runtime of CDOT, FGW, and EFGW on the three benchmark families ( N = 400 ), reporting median over three runs with outer-iteration counts in parentheses. All methods use a cap of 200 outer iterations. CDOT uses tol = 10 −7; FGW and EFGW use the POT defaults tol = 10 −9.
+
+Family N CDOT FGW EFGW CDOT/iter (s) FGW/iter (s) EFGW/iter (s) 
+
+Quadrant point cloud 400 2.768 s (200) 0.065 s (5) 0.047 s (11) 1.38 × 10 −2 1.30 × 10 −2 4.27 × 10 −3
+
+Anisotropic point cloud 400 2.697 s (200) 0.061 s (5) 0.048 s (11) 1.35 × 10 −2 1.21 × 10 −2 4.39 × 10 −3
+
+SBM graph metric 400 3.063 s (200) 0.220 s (15) 0.040 s (11) 1.53 × 10 −2 1.47 × 10 −2 3.65 × 10 −3
+
+Table 6 summarizes the wall-clock comparison. Under the present benchmark setting, CDOT requires more total wall-clock time than FGW and EFGW, while the per-iteration cost of CDOT is on the order of 10 −2 s. The runtime gap is therefore driven primarily by the stopping rule and the resulting iteration count rather than by a substantially larger per-iteration computational burden. A looser practical stopping rule could reduce the number of CDOT iterations in these benchmark families. 17 Convex Distance Operator Transport 
+
+Disintegration theorem                                                          
+
+> π(dx, dy ) = π(dy |x)PX(dx )on Polish spaces defines Tπ, every coupling-gluing argument, and the lifting Φn.
+> Existence
+> •Compactness of
+> Π( PX,PY)
+> •Lower-semicontinuity of
+> F(π) + R(π)
+> Convexity
+> •π7→Tπaffine
+> • ∥·∥ 2HS convex
+> Non-negativity
+> •d(α)CT (X,Y)≥0
+> Identity
+> •d(α)CT (X,X) = 0
+> Symmetry
+> •d(α)CT (X,Y) = d(α)CT (Y,X)
+> Triangle inequality
+> •d(α)CT (X,Z)
+> ≤d(α)CT (X,Y) + d(α)CT (Y,Z)
+> Kernel representation
+> R(π) = RR Γ2
+> πdPXdPY
+> Variance identity
+> E[Z2] = E[Z]2+ Var[ Z]
+> ⇒RGW ,2=R+V
+> Optimization error
+> •Convexity
+> •FW rate O(1 /T )
+> Statistical error
+> • F : Kantorovich– Rubinstein duality
+> • R : Laguerre lemma
+
+Theorem 3.4 
+
+> Existence & Convexity
+
+Theorem 3.5 
+
+> Pseudometric
+
+Theorem 3.7 
+
+> Dispersion Gap
+
+Theorem 5.6  
+
+> Error Bound
+> Figure 5. Proof roadmap for the four main theoretical results of CDOT. The orange banner names the foundational tool (the disintegration theorem), and the four panels list the technical ingredients feeding into each of the navy theorem boxes.
+
+## E. Proof Roadmap 
+
+This appendix collects the technical machinery that supports our four main theoretical results. Before diving into the lemmas, Figure 5 provides a bird’s-eye view of how the pieces fit together. The disintegration theorem (Lemma F.1) at the top underlies the conditional expectation operator Tπ and every coupling-gluing argument used throughout the appendix. The four panels below collect the technical ingredients feeding into each of Theorems 3.4, 3.5, 3.7, and 5.6, with the supporting lemmas and assumptions cited inline. The four theorems group naturally into two layers. Theorems 3.4, 3.5, and 3.7 are population-level structural results: well-posedness and convexity of the CDOT problem, the pseudometric property of d(α)CT , and the precise gap to the Gromov– Wasserstein objective. Each of them rests directly on the disintegration theorem through the conditional expectation operator Tπ , and uses either lower semicontinuity and convexity of ∥ · ∥ 2HS (Theorem 3.4), the contraction and composition properties of Tπ that underpin the triangle inequality (Theorem 3.5), or the Hilbert–Schmidt kernel representation of 
+
+R together with the elementary variance identity (Theorem 3.7). Theorem 5.6 is the empirical-statistical result and splits cleanly into an optimization-error term, controlled by the Frank–Wolfe O(1 /T ) rate (which relies on the convexity guaranteed by Theorem 3.4), and a statistical-error term, whose feature component is handled by Kantorovich–Rubinstein duality (Lemma F.7) under the Lipschitz Assumption 5.4, and whose structural component is controlled by the Laguerre representation (Lemma F.5) under Assumptions 5.2–5.3 together with the stability Assumption 5.5. 
+
+## F. Useful Lemmas 
+
+This section presents useful lemmas to prove our theoretical results. We begin by reviewing the disintegration theorem, which provides the theoretical basis for decomposing joint couplings into conditional probability measures (Markov kernels). Subsequently, we summarize fundamental results in optimal transport theory, covering the existence of optimal couplings, Kantorovich duality, and specific characterizations for semi-discrete transport problems and the Wasserstein-1 distance. Finally, we introduce essential concepts regarding the weak topology of measures and the weak operator topology (WOT), which are requisite for establishing the topological properties of our proposed framework. 18 Convex Distance Operator Transport 
+
+F.1. Disintegration Theorem Lemma F.1 (Disintegration theorem) . Let (X , μ ) and (Y, ν ) be Polish probability spaces, where μ and ν are Borel probability measures. Then, for each joint coupling π ∈ Π( μ, ν ), there exists a μ-a.e. uniquely determined family of probability measures {πx}x∈X on Y such that 
+
+• for every Borel-measurable set B ⊂ Y , the function x 7 → πx(B) is Borel-measurable; 
+
+• for every Borel-measurable function f : X × Y → [0 , ∞],
+
+Z
+
+> X ×Y
+
+f (x, y )π(dx, dy ) = 
+
+Z
+
+> X
+
+Z
+
+> Y
+
+f (x, y )πx(dy )μ(dx ).
+
+The disintegration theorem rigorously establishes the existence of a regular conditional distribution under the topological assumption that the underlying spaces are Polish. The family {πx}x∈X satisfies the definition of a Markov kernel from X to 
+
+Y. We will interpret πx as the conditional distribution of y given x, and adopt the notation π(dy | x) := πx(dy ).
+
+F.2. Optimal Transport 
+
+F.2.1. E XISTENCE AND KANTOROVICH DUALITY 
+
+Lemma F.2 (Existence of an optimal coupling) . Let (X , μ ) and (Y, ν ) be two Polish probability spaces with Borel probability measures μ and ν. Let a : X → R ∪ {−∞} and b : Y → R ∪ {−∞} be two upper semicontinuous functions such that a ∈ L1(X , μ ) and b ∈ L1(Y, ν ). Let c : X × Y → R ∪ { +∞} be a lower semicontinuous cost function, such that 
+
+c(x, y ) ≥ a(x) + b(y) for all x, y . Then there exists an optimal coupling π∗ ∈ Π( μ, ν ) such that 
+
+Z
+
+> X ×Y
+
+c(x, y )π∗(dx, dy ) = inf 
+
+> π∈Π( μ,ν )
+
+Z 
+
+> X ×Y
+
+c(x, y )π(dx, dy )
+
+
+
+=: C(μ, ν ).
+
+Proof. The details can be found in Theorem 4.1 of Villani (2008). 
+
+Definition F.3 (c-convexity in Definition 5.2 of Villani (2008)) . Let X , Y be sets, and c : X × Y → (−∞ , +∞]. A function 
+
+ψ : X → R ∪ { +∞} is said to be c-convex if it is not identically +∞ and there exists ζ : Y → R ∪ {±∞} such that 
+
+∀x ∈ X , ψ(x) = sup 
+
+> y∈Y
+
+(ζ(y) − c(x, y )) .
+
+Then, its c-transform is the function ψc defined by 
+
+∀y ∈ Y , ψc(y) = inf  
+
+> x∈X
+
+(ψ(x) + c(x, y )) .
+
+Lemma F.4 (Kantorovich duality) . Let (X , μ ) and (Y, ν ) be two Polish probability spaces with Borel probability measures 
+
+μ and ν. Let c : X × Y → R be a real-valued lower semicontinuous cost function, such that 
+
+∀(x, y ) ∈ X × Y , c(x, y ) ≥ a(x) + b(y)
+
+for some real-valued upper semicontinuous functions a ∈ L1(X , μ ) and b ∈ L1(Y, ν ). Then, the following duality holds: 
+
+C(μ, ν ) = sup 
+
+> ψ∈L1(μ)
+
+Z 
+
+> Y
+
+ψc(y) ν(dy ) −
+
+Z
+
+> X
+
+ψ(x) μ(dx )
+
+
+
+.
+
+If it is further assumed that the optimal cost C(μ, ν ) is finite and the cost c has a pointwise upper bound, i.e., 
+
+c(x, y ) ≤ cX (x) + cY (y), (cX , c Y ) ∈ L1(μ) × L1(ν),
+
+the dual problem has solutions. Moreover, π ∈ Π( μ, ν ) is optimal if and only if there is a c-convex ψ such that 
+
+ψc(y) − ψ(x) = c(x, y ), for π-almost every (x, y ).
+
+Proof. The details can be found in Theorem 5.10 of Villani (2008). The Kantorovich duality transforms the primal minimization problem over the space of probability measures into a dual maximization problem. The optimality condition ψc(y) − ψ(x) = c(x, y ) enables the characterization of the closed form of optimal transport plans in the semi-discrete problem. 19 Convex Distance Operator Transport 
+
+F.3. Semi-Discrete Optimal Transport Lemma F.5 (Laguerre lemma) . Let (X , d X ) be a compact metric space, PX be a Borel probability measure on X that satisfies Assumptions 5.2 and 5.3, and ˆPX be the empirical probability measure of PX supported on n fixed distinct data points, i.e., 
+
+ˆPX = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+δXi .
+
+Let ˆX := {X1, ..., X n} ⊂ X . Then ( ˆX , ˆPX ) is clearly a Polish probability space. Let (π∗, ψ ∗) be primal and dual optimal solutions for the semi-discrete problem: 
+
+min   
+
+> π∈Π( PX,ˆPX)
+
+Z  
+
+> X × ˆX
+
+dX (x, ˆx)π(dx, d ˆx)
+
+
+
+= max   
+
+> ψ∈L1( ˆX,ˆPX)
+
+Z
+
+> X
+
+ψdX (x)PX (dx ) − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+ψ(Xi)
+
+!
+
+,
+
+where the dX -transform is taken as ψdX (x) = min 1≤j≤n(dX (x, X j ) + ψ(Xj )) . Note that all elements in L1( ˆX , ˆPX ) can be identified with n-dimensional real-valued vectors. For each i = 1 , ..., n , define the Laguerre-like cell Vi by 
+
+Vi := {x ∈ X : dX (x, X i) + ψ∗(Xi) ≤ dX (x, X j ) + ψ∗(Xj ), ∀j} ∪ { Xi}.
+
+Then {Vi}ni=1 forms a PX -a.e. partition of X , satisfies PX (Vi) = 1 /n for all i, and 
+
+π∗ =
+
+> n
+
+X
+
+> i=1
+
+PX ⌊Vi ⊗δXi , PX ⌊Vi (dx ) = IVi (x)PX (dx ),
+
+where IVi is the indicator function of Vi.Proof. Denote by ψ∗ 
+
+> j
+
+:= ψ∗(Xj ). Then, we have the following: 
+
+(ψ∗)dX (x) = min 
+
+> 1≤j≤n
+
+ dX (x, X j ) + ψ∗
+
+> j
+
+.
+
+Now define, for each i = 1 , ..., n ,
+
+˜Vi := x ∈ X : dX (x, X i) + ψ∗ 
+
+> i
+
+≤ dX (x, X j ) + ψ∗ 
+
+> j
+
+, ∀j .
+
+By the no-ties assumption (Assumption 5.3), the sets { ˜Vi}ni=1 form a PX -a.e. partition of X , and moreover for PX -a.e. x
+
+there exists a unique index i(x) such that x ∈ ˜Vi(x).Let π∗ ∈ Π( PX , ˆPX ) be a primal optimal plan. Since the second marginal of π∗ is supported on the finite set {X1, ..., X n},there exist Borel-measurable functions pi : X → [0 , 1] such that 
+
+> n
+
+X
+
+> i=1
+
+pi(x) = 1 for PX -a.e. x, 
+
+and the disintegration of π∗ with respect to the first marginal PX takes the form 
+
+π∗(dx, d ˆx) = 
+
+> n
+
+X
+
+> i=1
+
+pi(x) δXi (dˆx)
+
+| {z }
+
+> =π∗(dˆx|x)
+
+PX (dx ).
+
+We next use complementary slackness. By the Kantorovich duality lemma, the following holds: 
+
+(ψ∗)dX (x) − ψ∗(ˆ x) = dX (x, ˆx), for π∗-a.e. (x, ˆx).
+
+20 Convex Distance Operator Transport 
+
+In particular, for each i and for PX -a.e. x such that pi(x) > 0, we must have 
+
+(ψ∗)dX (x) − ψ∗(Xi) = dX (x, X i).
+
+Equivalently, 
+
+(ψ∗)dX (x) = dX (x, X i) + ψ∗ 
+
+> i
+
+.
+
+But we already have 
+
+(ψ∗)dX (x) = min 
+
+> 1≤j≤n
+
+ dX (x, X j ) + ψ∗
+
+> j
+
+,
+
+so the equality implies that i attains the minimum, i.e., 
+
+pi(x) > 0 =⇒ x ∈ ˜Vi for PX -a.e. x. 
+
+By the no-ties assumption (Assumption 5.3), the minimizer is unique for PX -a.e. x, hence for PX -a.e. x there exists a unique index i(x) such that 
+
+pi(x)(x) = 1 , pj (x) = 0 , (j̸ = i(x)) ,
+
+and necessarily x ∈ ˜Vi(x). Therefore, 
+
+π∗(dx, d ˆx) = 
+
+> n
+
+X
+
+> i=1
+
+I ˜Vi (x) PX (dx ) δXi (dˆx) = 
+
+> n
+
+X
+
+> i=1
+
+PX ⌊ ˜Vi (dx ) δXi (dˆx).
+
+Now we prove the mass constraint PX ( ˜Vi) = 1 /n . Since the second marginal of π∗ is ˆPX , we have for each i,
+
+1
+
+n = ˆPX ({Xi}) = π∗(X × { Xi}) = π∗( ˜Vi × { Xi}) = PX ( ˜Vi).
+
+Finally, define 
+
+Vi := ˜Vi ∪ { Xi}.
+
+Since PX is non-atomic, PX ({Xi}) = 0 , hence PX (Vi) = PX ( ˜Vi) = 1 /n . Moreover, the representation of π∗ remains valid when ˜Vi is replaced by Vi, because PX ⌊Vi and PX ⌊ ˜Vi are equivalent as they differ only on a PX -null set. This completes the proof. Lemma F.5 characterizes the optimal plan via a partition of X into n Laguerre cells Vi. Unlike standard Voronoi tessellations, 
+
+Vi incorporates the optimal dual potential ψ∗(Xi) as an additive weight. Optimality ensures these weights adjust the cell boundaries to be perfectly balanced, capturing exactly 1/n of the mass PX per cell. Figure 6 illustrates the geometric intuition of this result. Here, the generator points and their associated polygonal regions correspond to the samples Xi and the Laguerre cells Vi, respectively. Note that the figure depicts standard Voronoi cells for brevity, which corresponds to the simplified assumption of constant dual potentials (i.e., ψ∗(Xi) = c). As n increases from 100 to 1000 , the spatial extent of each cell shrinks significantly (mass 10 −2 → 10 −3). Since the optimal coupling QX
+
+maps the entire region Vi to a single point Xi, this shrinkage forces the conditional measure QX (·| ˆx) to concentrate tightly around the identity mapping x = ˆ x. Consequently, the probability mass accumulates along the diagonal, asymptotically eliminating the blurring effect. Formalizing this via Markov’s inequality on the W dX 
+
+> 1
+
+-optimal coupling QX ∈ Π( PX , ˆPX ), we have 
+
+P(X, ˆX)∼QX
+
+
+
+dX (X, ˆX) > ε 
+
+
+
+≤ W dX 
+
+> 1
+
+(PX , ˆPX )
+
+ε .
+
+Therefore, provided that the empirical measures converge in the Wasserstein-1 metric, the blurring effect introduced by lifting ˆπ to the continuous space Π( PX , PY ) vanishes asymptotically as the sample size n increases. 21 Convex Distance Operator Transport            
+
+> (a) n= 100 samples. (b) n= 1000 samples.
+> Figure 6. Voronoi tessellations generated from samples drawn from the uniform distribution U([0 ,1] 2).
+
+F.3.1. D UAL FORM OF THE WASSERSTEIN -1 DISTANCE 
+
+Definition F.6 (Wasserstein-p distance) . Let (S, d S ) be a compact metric space. For Borel probability measures μ and ν on 
+
+S, the Wasserstein-p distance ( 1 ≤ p < ∞) is 
+
+W dS 
+
+> p
+
+(μ, ν ) := 
+
+
+
+min 
+
+> π∈Π( μ,ν )
+
+Z
+
+> S×S
+
+dS (x, y )p π(dx, dy )
+
+1/p 
+
+.
+
+We recall the definition of the Wasserstein-p distance from the main text. Since dp 
+
+> S
+
+is continuous and S is compact, the infimum is always attained by Lemma F.2. 
+
+Lemma F.7 (Kantorovich–Rubinstein formula) . Let (X , d X ) be a compact metric space. Then, for any two Borel probability measures μ, ν on X ,
+
+W dX 
+
+> 1
+
+(μ, ν ) = sup 
+
+> ∥ψ∥Lip ≤1
+
+Z 
+
+> X
+
+ψdμ −
+
+Z
+
+> X
+
+ψdν 
+
+
+
+,
+
+where ∥ · ∥ Lip is defined by 
+
+∥ψ∥Lip = sup 
+
+> x̸=y
+
+|ψ(x) − ψ(y)|
+
+dX (x, y ) .
+
+Lemma F.7 provides a crucial simplification of Lemma F.4 when the cost function is a metric dX . In this case, the complex constraint involving the c-transform is relaxed into a global 1-Lipschitz constraint. This duality plays a pivotal role in the proof of Theorem 5.6. By establishing that the feature cost function cf is Lipschitz continuous (Assumption 5.4), we invoke this lemma to directly upper-bound the difference in expected costs by the Wasserstein-1 distance between the empirical and population couplings. 
+
+F.4. Weak Topology 
+
+In this subsection, we introduce the fundamental concepts of weak topology and the weak operator topology (WOT). These topological structures are essential for establishing the lower semicontinuity of the proposed CDOT objective and the pseudometric property of the CDOT discrepancy. 22 Convex Distance Operator Transport 
+
+F.4.1. W EAK TOPOLOGY 
+
+Definition F.8 (Weak topology) . Let (S, B(S)) be a Polish space and P(S) be the set of all Borel probability measures on 
+
+(S, B(S)) . For any f ∈ Cb(S), consider the functional 
+
+ϕf : P(S) → R, ϕf (μ) = 
+
+Z
+
+> S
+
+f (s)μ(ds ).
+
+Let F = {ϕf : f ∈ Cb(S)}. The weak topology on P(S) is defined as the coarsest topology making every functional in F
+
+continuous. Consequently, a net (μα) converges weakly to μ if and only if 
+
+Z
+
+> S
+
+f (s)μα(ds ) →
+
+Z
+
+> S
+
+f (s)μ(ds ), ∀f ∈ Cb(S).
+
+We write μαw
+
+→ μ if (μα) converges weakly to μ.Since the underlying space S is Polish, the space P(S) equipped with the weak topology is also a Polish space (i.e., separable and completely metrizable). This topological structure allows us to utilize powerful convergence results, most notably Prokhorov’s theorem, which states that a subset of probability measures is relatively compact if and only if it is tight. This property is particularly important when analyzing couplings. Let X and Y be Polish spaces and consider Π( μ, ν ) for two fixed Borel probability measures μ ∈ P (X ) and ν ∈ P (Y). Since X and Y are Polish, the measures μ and ν are tight by Ulam’s theorem. Consequently, the collection Π( μ, ν ) is tight in P(X × Y ) because a set of measures on a product space is tight if and only if its marginals are tight. Furthermore, since the constraint of having fixed marginals is closed under weak convergence, Π( μ, ν ) is a closed subset of a compact set. Therefore, Π( μ, ν ) is compact in the weak topology. F.4.2. W EAK OPERATOR TOPOLOGY 
+
+Now we introduce the weak operator topology. Unless stated otherwise, we assume all Hilbert spaces to be real and separable. 
+
+Definition F.9 (Weak operator topology) . Let HX and HY be Hilbert spaces, and let B(HX , HY ) denote the set of bounded linear operators from HX to HY . For x ∈ H X and y ∈ H Y , define the linear functional 
+
+ϕx,y : B(HX , HY ) → R, ϕx,y (T ) = ⟨T x, y ⟩HY .
+
+Let F = {ϕx,y : x ∈ H X , y ∈ H Y }. The weak operator topology (WOT) on B(HX , HY ) is the coarsest topology making every functional in F continuous. Equivalently, a net (Tα) converges to T in WOT if and only if 
+
+⟨Tαx, y ⟩HY → ⟨ T x, y ⟩HY , ∀x ∈ H X , y ∈ H Y .
+
+The WOT plays a role analogous to the weak topology of measures but in the context of linear operators. In infinite-dimensional Hilbert spaces, the closed unit ball is not compact in the operator norm topology (a result known as Riesz’s lemma). However, the unit ball is compact in the WOT (a consequence of the Banach–Alaoglu theorem). This compactness is pivotal for our analysis: it ensures that any uniformly bounded sequence of operators—such as the conditional expectations 
+
+{Tπn } induced by a sequence of couplings—possesses a convergent subsequence in WOT. This property allows us to define limits for operators even when they do not converge in the stronger norm topology. 
+
+F.5. Lower Semicontinuity 
+
+This subsection establishes the lower semicontinuity properties required to guarantee the existence of an optimal solution to the CDOT problem. We recall the definition of lower semicontinuity and the generalized Weierstrass theorem, and show that the squared Hilbert–Schmidt (HS) norm is lower semicontinuous with respect to the weak operator topology. 
+
+Definition F.10 (Lower semicontinuity) . Let (X , τ ) be a topological space. A function f : X → R ∪ {±∞} is said to be 
+
+lower semicontinuous at x0 ∈ X if for every net (xα)α∈A in X such that xα → x0 w.r.t. τ ,
+
+f (x0) ≤ lim inf  
+
+> α
+
+f (xα), where lim inf  
+
+> α
+
+f (xα) := sup 
+
+> α0∈A
+
+inf 
+
+> α⪰α0
+
+f (xα).
+
+We say that f is lower semicontinuous if it is lower semicontinuous at every x0 ∈ X .23 Convex Distance Operator Transport 
+
+Lemma F.11 (Generalized Weierstrass theorem) . Let X be a topological space and K ⊂ X be a nonempty compact set. If f : K → R is a lower semicontinuous function, then f is bounded below and there exists x∗ ∈ K such that 
+
+f (x∗) = inf x∈K f (x).Proof. The proof can be found in Theorem 2.43 of Aliprantis & Border (2006). This theorem generalizes the classical Weierstrass extreme value theorem (which requires continuity) to lower semicontinuous functions. It serves as the primary tool for establishing the existence of optimal solutions in variational problems. Since we have already established that the set of couplings Π( μ, ν ) is compact in the weak topology, proving the lower semicontinuity of our loss function is sufficient to guarantee the existence of an optimal transport plan. 
+
+Lemma F.12. Let HX and HY be Hilbert spaces. Denote by HS( HX , HY ) ⊂ B(HX , HY ) the set of Hilbert–Schmidt operators from HX to HY equipped with the weak operator topology. Then, ∥ · ∥ 2HS is lower semicontinuous in WOT: for any sequence {Tn}∞ 
+
+> n=1
+
+⊂ HS( HX , HY ) that converges to T ∈ HS( HX , HY ) in WOT, it holds that 
+
+∥T ∥2HS ≤ lim inf  
+
+> n→∞
+
+∥Tn∥2HS .
+
+Proof. Let {ei}∞ 
+
+> i=1
+
+and {φj }∞ 
+
+> j=1
+
+be orthonormal bases for HX and HY , respectively. By the definition of the Hilbert– Schmidt norm, we express the norm of T as 
+
+∥T ∥2HS =
+
+> ∞
+
+X
+
+> i=1
+
+∥T e i∥2 
+
+> HY
+
+=
+
+> ∞
+
+X
+
+> i=1
+> ∞
+
+X
+
+> j=1
+
+|⟨ T e i, φ j ⟩HY |2.
+
+By the assumption that Tn → T in WOT, for any fixed basis vectors ei and φj , we have 
+
+lim 
+
+> n→∞
+
+⟨Tnei, φ j ⟩HY = ⟨T e i, φ j ⟩HY =⇒ lim  
+
+> n→∞
+
+|⟨ Tnei, φ j ⟩HY | = |⟨ T e i, φ j ⟩HY | .
+
+Therefore, by Fatou’s lemma, 
+
+∥T ∥2HS = X
+
+> i,j
+
+|⟨ T e i, φ j ⟩HY |2 ≤ lim inf 
+
+> n→∞
+
+X
+
+> i,j
+
+|⟨ Tnei, φ j ⟩HY |2 = lim inf  
+
+> n→∞
+
+∥Tn∥2HS .
+
+This concludes the proof. Lemma F.12 is useful to prove the lower semicontinuity of our structural regularization term, which in turn guarantees the existence of an optimal solution for our CDOT problem. 
+
+## G. Proofs 
+
+This section provides the proofs for our main theoretical results. 
+
+G.1. Derivation of Matrix Representations 
+
+We show that under the empirical measures ˆPX = Pni=1 δXi /n and ˆPY = Pnj=1 δYj /n , the distance and conditional expectation operators (Definitions 3.1 and 3.2) admit the following matrix representations: 
+
+[DˆPX ]ij = dX (Xi, X j )
+
+n , [DˆPY ]ij = dY (Yi, Y j )
+
+n , [Tπ ]ij = nπ ij .
+
+We rigorously derive the representation for the distance operator; the other results follow analogously. Let ˆX = {X1, ..., X n} be the discrete support equipped with a metric dX and the uniform probability measure ˆPX . The function space L2( ˆX , ˆPX ) is an n-dimensional Hilbert space isomorphic to the Euclidean space Rn. Specifically, we consider the canonical bijection φ : L2( ˆX , ˆPX ) → Rn defined by evaluation at the support points: 
+
+f 7 −→ f := 
+
+
+
+f (X1)
+
+...
+
+f (Xn)
+
+ ∈ Rn.
+
+24 Convex Distance Operator Transport 
+
+Since DˆPX is a linear operator on a finite-dimensional space, it admits a unique matrix representation DX ∈ Rn×n satisfying 
+
+φ(DˆPX f ) = DX f for all f . For any i ∈ { 1, ..., n }, the i-th component of the transformed vector is given by the definition of the operator: 
+
+(DˆPX f )( Xi) = 
+
+Z 
+
+> ˆx∈ˆX
+
+dX (Xi, ˆx)f (ˆ x)ˆPX (dˆx)=
+
+> n
+
+X
+
+> j=1
+
+dX (Xi, X j )f (Xj )ˆPX ({Xj })=
+
+> n
+
+X
+
+> j=1
+
+dX (Xi, X j )
+
+n f (Xj ).
+
+On the other hand, from the definition of matrix-vector multiplication, the i-th component is: 
+
+(DX f )i =
+
+> n
+
+X
+
+> j=1
+
+[DX ]ij f (Xj ).
+
+Since this equality holds for any arbitrary function f (and consequently any vector f ), comparing the coefficients of f (Xj )
+
+yields the desired entry-wise equality: 
+
+[DX ]ij = dX (Xi, X j )
+
+n .
+
+G.2. Hilbert–Schmidt Kernel Representation of R(π)
+
+In this subsection, we rigorously derive the integral representation of R(π) in (1). For g ∈ L2(Y, PY ), observe that 
+
+(DPX Tπ g)( x) = E
+
+h
+
+dX (x, X )E [g(Y ) | X]
+
+i
+
+=
+
+Z
+
+> Y
+
+Γ(1)  
+
+> π
+
+(x, y )g(y)PY (dy ),
+
+(Tπ DPY g)( x) = E
+
+h
+
+(DPY g)( Y ) | X = x
+
+i
+
+=
+
+Z
+
+> Y
+
+Γ(2)  
+
+> π
+
+(x, y )g(y)PY (dy ).
+
+Since dX and dY are bounded by 1, DPX Tπ − Tπ DPY is a well-defined Hilbert–Schmidt operator with a kernel Γπ (x, y ):
+
+∥DPX Tπ − Tπ DPY ∥2HS =
+
+Z
+
+> Y
+
+Z
+
+> X
+
+Γπ (x, y )2PX (dx )PY (dy ) ≤ 1.
+
+G.3. Proof for Theorem 3.4 
+
+Proof. The existence follows from the generalized Weierstrass theorem (Lemma F.11), which requires two ingredients: (i) the transport polytope Π( PX , PY ) is nonempty and compact in the weak topology, as discussed in Appendix F.4; and (ii) the CDOT objective Lα( · ; X, Y) is lower semicontinuous on Π( PX , PY ), as established in the following lemma. 
+
+Lemma G.1. Let Lα(π; X, Y) be the CDOT objective as defined in Definition 3.3: 
+
+Lα(π; X, Y) = (1 − α) Eπ
+
+∥fX (X) − fY (Y )∥22
+
+| {z }
+
+> =: F(π;X,Y)
+
++ α
+
+2 ∥DPX Tπ − Tπ DPY ∥2HS 
+
+| {z }
+
+> =: R(π;X,Y)
+
+.
+
+Then, Lα(π; X, Y) is lower semicontinuous. Proof. See Appendix G.7. Combining (i) and (ii), the generalized Weierstrass theorem yields the existence of an optimal coupling π∗ ∈ Π( PX , PY ).To establish convexity, it suffices to show that 
+
+π 7 → ∥ DPX Tπ − Tπ DPY ∥2HS 
+
+25 Convex Distance Operator Transport 
+
+is convex on Π( PX , PY ), since the convexity of the first term is obvious. Let π1, π 2 ∈ Π( PX , PY ) and t ∈ [0 , 1] , and define πt = tπ 1 + (1 − t)π2. Since both π1 and π2 share the same marginals 
+
+PX and PY , the disintegration theorem ensures that we may choose versions of the disintegrations such that 
+
+πt(· | x) = t π 1(· | x) + (1 − t) π2(· | x) for PX -a.e. x ∈ X .
+
+That is, the conditional distribution of Y given X = x under πt is the convex combination of the conditional distributions under π1 and π2. Consequently, for any g ∈ L2(Y, PY ),
+
+(Tπt g)( x) = 
+
+Z
+
+g(y) πt(dy | x) = t
+
+Z
+
+g(y) π1(dy | x) + (1 − t)
+
+Z
+
+g(y) π2(dy | x)= t (Tπ1 g)( x) + (1 − t) ( Tπ2 g)( x),
+
+which shows that Tπt depends affinely on π, i.e., 
+
+Tπt = t T π1 + (1 − t) Tπ2 .
+
+Because DPX and DPY are linear operators, it follows that 
+
+DPX Tπt − Tπt DPY = t (DPX Tπ1 − Tπ1 DPY ) + (1 − t) ( DPX Tπ2 − Tπ2 DPY ).
+
+Denoting Ai := DPX Tπi − Tπi DPY (i = 1 , 2) and At := DPX Tπt − Tπt DPY , we have At = tA 1 + (1 − t)A2. Since 
+
+∥ · ∥ 2HS is clearly convex, we obtain 
+
+∥At∥2HS = ∥tA 1 + (1 − t)A2∥2HS ≤ t ∥A1∥2HS + (1 − t) ∥A2∥2HS .
+
+Therefore, π 7 → ∥ DPX Tπ − Tπ DPY ∥2HS is convex on Π( PX , PY ).
+
+G.4. Proof for Theorem 3.5 
+
+Proof. We need to prove the following properties: for any attributed compact mm spaces X, Y, and Z,
+
+(Non-negativity). d(α)CT (X, Y) ≥ 0.
+
+(Identity). d(α)CT (X, X) = 0 .
+
+(Symmetry). d(α)CT (X, Y) = d(α)CT (Y, X).
+
+(Triangle inequality). d(α)CT (X, Z) ≤ d(α)CT (X, Y) + d(α)CT (Y, Z).
+
+(Non-negativity) & (Identity). The non-negativity and the identity are immediate from the definition. 
+
+(Symmetry). Let π∗ ∈ Π( PX , PY ) be an optimal solution that minimizes Lα(π; X, Y), i.e., 
+
+d(α)CT (X, Y) = Lα(π∗; X, Y)1/2.
+
+Define a bijection φ : Π( PX , PY ) → Π( PY , PX ) by 
+
+φ(π)( A × B) = π(B × A), ∀A ∈ B (Y), ∀B ∈ B (X ).
+
+It suffices to show that for any π ∈ Π( PX , PY ), Lα(π; X, Y) = Lα(φ(π); Y, X). To show this, we prove 
+
+F(π; X, Y) = F(φ(π); Y, X), R(π; X, Y) = R(φ(π); Y, X).
+
+The first claim is clear by the symmetry of the Euclidean norm. For the second claim, we note that the adjoint operator 
+
+T ∗ 
+
+> π
+
+: L2(X , PX ) → L2(Y, PY ) is defined by (T ∗ 
+
+> π
+
+f )( y) = Eπ [f (X) | Y = y] for each f ∈ L2(X , PX ). In particular, 
+
+T ∗ 
+
+> π
+
+= Tφ(π) holds. Thus, 
+
+R(π; X, Y) = ∥DPX Tπ − Tπ DPY ∥2HS = ∥(DPX Tπ − Tπ DPY )∗∥2HS = ∥DPY Tφ(π) − Tφ(π)DPX ∥2HS = R(φ(π); Y, X).
+
+26 Convex Distance Operator Transport 
+
+Since φ is a bijection between Π( PX , PY ) and Π( PY , PX ), the identity Lα(π; X, Y) = Lα(φ(π); Y, X) implies that the two minima coincide. More precisely, one can derive a contradiction by assuming that there exists μ ∈ Π( PY , PX ) such that Lα(μ; Y, X) < Lα(φ(π∗); Y, X). Therefore, taking the square roots yields d(α)CT (X, Y) = d(α)CT (Y, X).
+
+(Triangle inequality). Let πXY ∈ Π( PX , PY ) and πY Z ∈ Π( PY , PZ ) be optimal couplings for d(α)CT (X, Y) and d(α)CT (Y, Z),respectively. Let πXY (dy | x) and πY Z (dz | y) be the Markov kernels of πXY and πY Z , respectively. By the disintegration theorem, we can construct a joint coupling γ ∈ Π( PX , PY , PZ ) such that 
+
+γ(dx, dy, dz ) = PX (dx ) πXY (dy | x) πY Z (dz | y).
+
+Now, denote by πXZ the (X, Z )-marginal of γ, i.e., 
+
+πXZ (dx, dz ) = 
+
+Z
+
+> y∈Y
+
+γ(dx, dy, dz ) = PX (dx )
+
+Z
+
+> y∈Y
+
+πY Z (dz | y)πXY (dy | x)
+
+| {z } 
+
+> =πXZ (dz |x)
+
+.
+
+According to Definition 3.3, d(α)CT (X, Y) is bounded above by the L2-norm of a vector in R2:
+
+d(α)CT (X, Z) ≤
+
+√1 − α F(πXZ ; X, Z)1/2
+
+pα/ 2 R(πXZ ; X, Z)1/2
+
+
+
+> 2
+
+.
+
+For the constructed coupling πXZ , we apply a triangle-type bound for each component. Under the glued coupling 
+
+γ ∈ Π( PX , PY , PZ ) constructed above, the marginals of (X, Y ), (Y, Z ), and (X, Z ) are πXY , πY Z , and πXZ , respectively. Using fX (X) − fZ (Z) = ( fX (X) − fY (Y )) + ( fY (Y ) − fZ (Z)) and Minkowski’s inequality in L2(γ), we obtain 
+
+F(πXZ ; X, Z)1/2 ≤ F (πXY ; X, Y)1/2 + F(πY Z ; Y, Z)1/2.
+
+We show the similar inequality for R(πXZ ; X, Z) by leveraging two properties of the conditional expectation operator: (i) the contraction property ∥Tπ ∥op ≤ 1, and (ii) the composition property TπXZ = TπXY ◦ TπY Z . In fact, the contraction property can be readily shown by using the Jensen inequality: for an arbitrary g ∈ L2(Y, PY ),
+
+∥Tπ g∥2  
+
+> L2(PX)
+
+=
+
+Z
+
+> x∈X
+
+(Eπ [g(Y ) | X = x]) 2 PX (dx ) ≤
+
+Z
+
+> x∈X
+
+Eπ [g(Y )2 | X = x]PX (dx ) = EPY [g(Y )2] = ∥g∥2 
+
+> L2(PY)
+
+.
+
+In addition, to show the composition property, let h ∈ L2(Z, PZ ) be arbitrary. Then observe the following: 
+
+(TπXY TπY Z h)( x) = 
+
+Z
+
+> y∈Y
+
+Z 
+
+> z∈Z
+
+h(z)πY Z (dz | y)
+
+
+
+πXY (dy | x)=
+
+Z
+
+> Z
+
+h(z)πXZ (dz | x)= ( TπXZ h)( x), ∀x ∈ X .
+
+Using these properties, we obtain 
+
+R(πXZ ; X, Z)1/2 = ∥DPX TπXZ − TπXZ DPZ ∥HS 
+
+= ∥DPX TπXY TπY Z − TπXY TπY Z DPZ ∥HS (∵ composition property )= ∥(DPX TπXY − TπXY DPY )TπY Z + TπXY (DPY TπY Z − TπY Z DPZ )∥HS 
+
+≤ ∥ DPX TπXY − TπXY DPY ∥HS ∥TπY Z ∥op + ∥TπXY ∥op ∥DPY TπY Z − TπY Z DPZ ∥HS 
+
+≤ R (πXY ; X, Y)1/2 + R(πY Z ; Y, Z)1/2 (∵ contraction property ).
+
+27 Convex Distance Operator Transport 
+
+Finally, applying Minkowski’s inequality to the vector representation yields: 
+
+d(α)CT (X, Z) ≤
+
+
+
+(1 − α)F(πXZ ; X, Z) + α
+
+2 R(πXZ ; X, Z)
+
+1/2
+
+≤
+
+
+
+(1 − α) F(πXY ; X, Y)1/2 + F(πY Z ; Y, Z)1/22 + α
+
+2
+
+ R(πXY ; X, Y)1/2 + R(πY Z ; Y, Z)1/221/2
+
+≤
+
+
+
+(1 − α)F(πXY ; X, Y) + α
+
+2 R(πXY ; X, Y)
+
+1/2
+
++
+
+
+
+(1 − α)F(πY Z ; Y, Z) + α
+
+2 R(πY Z ; Y, Z)
+
+1/2
+
+= d(α)CT (X, Y) + d(α)CT (Y, Z).
+
+The first inequality holds from the definition of minimum; the second one is obtained by applying the triangle-type bounds for F1/2 and R1/2; the third is the direct result of Minkowski’s inequality (or triangle inequality, equivalently): 
+
+∥a + b∥2 = (( a1 + b1)2 + ( a2 + b2)2)1/2 ≤ (a21 + a22)1/2 + ( b21 + b22)1/2 = ∥a∥2 + ∥b∥2.
+
+This concludes the proof. 
+
+G.5. Proof for Theorem 3.7 
+
+Proof. First, recall the definitions of R(π) and RGW ,2(π): for an arbitrary π ∈ Π( PX , PY ),
+
+R(π) = 
+
+Z
+
+> (x,y )∈X ×Y
+
+Z 
+
+> x′∈X
+
+dX (x, x ′)πy (dx ′) −
+
+Z
+
+> y′∈Y
+
+dY (y, y ′)πx(dy ′)
+
+2
+
+(PX ⊗ PY )( dx, dy ),
+
+RGW ,2(π) = 
+
+Z
+
+> (x,y )∈X ×Y
+
+Z
+
+> (x′,y ′)∈X ×Y
+
+dX (x, x ′) − dY (y, y ′) 2π(dx ′, dy ′)π(dx, dy ).
+
+By the symmetry of metrics dX and dY , RGW ,2 can be equivalently represented as 
+
+RGW ,2(π) = 
+
+Z
+
+> (x,y ′)∈X ×Y
+
+Z
+
+> (x′,y )∈X ×Y
+
+dX (x, x ′) − dY (y′, y ) 2π(dx ′, dy )π(dx, dy ′)=
+
+Z
+
+> y∈Y
+
+Z
+
+> x∈X
+
+Z
+
+> y′∈Y
+
+Z
+
+> x′∈X
+
+dX (x, x ′) − dY (y′, y ) 2π(dx ′ | y)π(dy ′ | x)PX (dx )PY (dy )=
+
+Z
+
+> (x,y )∈X ×Y
+
+Z
+
+> (x′,y ′)∈X ×Y
+
+dX (x, x ′) − dY (y′, y ) 2(πy ⊗ πx)( dx ′, dy ′)
+
+!
+
+(PX ⊗ PY )( dx, dy ),
+
+where the second and third equalities follow from the disintegration theorem and Fubini’s theorem. Now, let μx,y := πy ⊗ πx. Then, by the definition of expectation, 
+
+Eμx,y 
+
+|dX (x, X ) − dY (y, Y )|2 =
+
+Z
+
+> (x′,y ′)∈X ×Y
+
+dX (x, x ′) − dY (y, y ′) 2μx,y (dx ′, dy ′),
+
+
+
+Eμx,y [dX (x, X ) − dY (y, Y )] 
+
+2
+
+=
+
+Z 
+
+> x′∈X
+
+dX (x, x ′)πy (dx ′) −
+
+Z
+
+> y′∈Y
+
+dY (y, y ′)πx(dy ′)
+
+2
+
+.
+
+Thus, considering the basic fact E[Z2] − (E[Z]) 2 = Var[ Z],
+
+Eμx,y 
+
+|dX (x, X ) − dY (y, Y )|2 −
+
+
+
+Eμx,y [dX (x, X ) − dY (y, Y )] 
+
+2
+
+= Var μx,y [dX (x, X ) − dY (y, Y )] .
+
+Moreover, since X and Y are independent in μx,y ,
+
+Var μx,y [dX (x, X ) − dY (y, Y )] = Var πy [dX (x, X )] + Var πx [dY (y, Y )] .
+
+This completes the proof. 28 Convex Distance Operator Transport 
+
+G.6. Proof for Theorem 5.6 
+
+Proof. First, let π∗ 
+
+> n
+
+∈ arg min π∈Π( ˆPX ,ˆPY ) ˆLα(π; X, Y), and let π∗ ∈ arg min π∈Π( PX ,PY ) Lα(π; X, Y) be an optimal coupling that satisfies Assumption 5.5. Then, it follows that 
+
+Lα(Φ n(ˆ π)) − L α(π∗)
+
+≤ Lα(Φ n(ˆ π)) − inf   
+
+> π∈Π( ˆPX,ˆPY)
+
+Lα(Φ n(π)) + inf   
+
+> π∈Π( ˆPX,ˆPY)
+
+Lα(Φ n(π)) − L α(π∗)
+
+≤ Lα(Φ n(ˆ π)) − ˆLα(ˆ π) + ˆLα(ˆ π) − ˆLα(π∗
+
+> n
+
+)
+
++ ˆLα(π∗
+
+> n
+
+) − inf   
+
+> π∈Π( ˆPX,ˆPY)
+
+Lα(Φ n(π)) + inf   
+
+> π∈Π( ˆPX,ˆPY)
+
+Lα(Φ n(π)) − L α(π∗)
+
+≤ ˆLα(ˆ π) − ˆLα(π∗
+
+> n
+
+) + 2 sup   
+
+> π∈Π( ˆPX,ˆPY)
+
+ˆLα(π) − L α(Φ n(π)) + inf   
+
+> π∈Π( ˆPX,ˆPY)
+
+Lα(Φ n(π)) − L α(π∗)
+
+=: E1 + E2 + E3.
+
+## Step 1: Bound for E1.
+
+We first provide the bound for E1, which is the optimization error. 
+
+Lemma G.2. Let {π(t) : t ≥ 0} be the sequence of iterates generated by Algorithm 1 with 
+
+γt = 2
+
+t + 2 ,
+
+for each t. Then, for any t ≥ 1,
+
+ˆLα(π(t)) − ˆLα(π∗
+
+> n
+
+) ≤ 8α n min 
+
+t + 3 
+
+
+
+∥DˆPX ∥op + ∥DˆPY ∥op 
+
+2
+
+.
+
+Proof. See Appendix G.8. Lemma G.2 is a standard result for the convergence of the FW algorithm. Considering that ∥ · ∥ op ≤ ∥ · ∥ ∞ and that the distance operators are symmetric, 
+
+∥DˆPX ∥op ≤ max 
+
+> inX
+
+X
+
+> j=1
+
+[DˆPX ]ij ≤ 1, ∥DˆPY ∥op ≤ 1.
+
+This gives that 
+
+
+
+∥DˆPX ∥op + ∥DˆPY ∥op 
+
+2
+
+≤ 4.
+
+Thus, 
+
+E1 ≤ 32 α n min 
+
+T + 3 . (4) 
+
+## Step 2: Bound for E2.
+
+We now look into E2. Let π ∈ Π( ˆPX , ˆPY ) be arbitrary. Note that Φn(π) can be represented as the following form: 
+
+Φn(π)( dx, dy ) = 
+
+Z
+
+> (ˆ x, ˆy)∈X ×Y
+
+QX (dx | ˆx) QY (dy | ˆy) π(dˆx, d ˆy) = 
+
+> nX
+
+X
+
+> i=1
+> nY
+
+X
+
+> j=1
+
+πij QX (dx | Xi)QY (dy | Yj ). (5) 29 Convex Distance Operator Transport 
+
+Precisely, we may define the Markov kernels QY (dy | ˆy) and QX (dx | ˆx) by using the Laguerre lemma F.5: 
+
+QX (dx | ˆx) = nXnXX
+
+> i=1
+
+PX ⌊Vi (dx )I{Xi}(ˆ x), QY (dy | ˆy) = nYnYX
+
+> j=1
+
+PY ⌊Wj (dy )I{Yj }(ˆ y), (6) where Vi and Wj are the i-th and the j-th Laguerre cells defined for QX and QY , respectively. In fact, Φn is the marginal of a coupling ξ ∈ Π( PX , ˆPX , ˆPY , PY ) defined by 
+
+ξ(dx, d ˆx, d ˆy, dy ) := QY (dy | ˆy)
+
+| {z } 
+
+> ˆPY→PY
+
+QX (dx | ˆx)
+
+| {z } 
+
+> ˆPX→PX
+
+π(dˆx, d ˆy).
+
+In addition, plugging (6) into (5) yields that 
+
+Φn(π)( dx | y) = nYnXX
+
+> i=1
+> nY
+
+X
+
+> j=1
+
+πij QX (dx | Xi)IWj (y) = nYnXX
+
+> i=1
+> nY
+
+X
+
+> j=1
+
+πij IWj (y)
+
+
+
+nX PX ⌊Vi (dx )
+
+
+
+(7) 
+
+Φn(π)( dy | x) = nXnXX
+
+> i=1
+> nY
+
+X
+
+> j=1
+
+πij QY (dy | Yj )IVi (x) = nXnXX
+
+> i=1
+> nY
+
+X
+
+> j=1
+
+πij IVi (x)
+
+
+
+nY PY ⌊Wj (dy )
+
+
+
+. (8) For brevity, let cf (x, y ) := ∥fX (x) − fY (y)∥22. Then, 
+
+|cf (x, y ) − cf (x′, y ′)|≤ (∥fX (x) − fY (y)∥2 + ∥fX (x′) − fY (y′)∥2) |∥ fX (x) − fY (y)∥2 − ∥ fX (x′) − fY (y′)∥2|≤ 2 ( ∥fX (x) − fX (x′)∥2 + ∥fY (y) − fY (y′)∥2)
+
+≤ 2Lf (dX (x, x ′) + dY (y, y ′)) .
+
+The last inequality uses Assumption 5.4 and the fact that diam( M) = 1 . Note that this confirms that cf is a bounded and 
+
+2Lf -Lipschitz function with respect to the metric 
+
+d⊕(( x, y ), (x′, y ′)) := dX (x, x ′) + dY (y, y ′).
+
+Thus, by the duality formula of the Wasserstein-1 distance (Lemma F.7), 
+
+E( ˆX, ˆY )∼π [cf ( ˆX, ˆY )] − E(X,Y )∼Φn(π)[cf (X, Y )] ≤ 2Lf W d⊕ 
+
+> 1
+
+(π, Φn(π)) .
+
+Here W d⊕ 
+
+> 1
+
+(π, Φn(π)) can be decomposed as follows: 
+
+W d⊕ 
+
+> 1
+
+(π, Φn(π)) = inf  
+
+> μ∈Π( π, Φn(π))
+
+E(( ˆX, ˆY ),(X,Y )) ∼μ
+
+h
+
+dX (X, ˆX) + dY (Y, ˆY )
+
+i
+
+≤ E(X, ˆX, ˆY ,Y )∼ξ
+
+h
+
+dX (X, ˆX) + dY (Y, ˆY )
+
+i
+
+= E(X, ˆX)∼QX
+
+h
+
+dX (X, ˆX)
+
+i
+
++ E( ˆY ,Y )∼QY
+
+h
+
+dY (Y, ˆY )
+
+i
+
+= W dX 
+
+> 1
+
+(PX , ˆPX ) + W dY 
+
+> 1
+
+(PY , ˆPY ). (9) The second inequality follows from the definition of infimum; the last equality holds since QX and QY are the optimal couplings that minimize W dX 
+
+> 1
+
+(PX , ˆPX ) and W dY 
+
+> 1
+
+(PY , ˆPY ), respectively. 30 Convex Distance Operator Transport 
+
+We now analyze the structural regularization term: 
+
+∥DˆPX Tπ − Tπ DˆPY ∥2HS − ∥ DPX TΦn(π) − TΦn(π)DPY ∥2HS 
+
+=
+
+Z
+
+> Y
+
+Z
+
+> X
+
+Γπ (x, y )2 ˆPX (dx )ˆPY (dy ) −
+
+Z
+
+> Y
+
+Z
+
+> X
+
+ΓΦn(π)(x, y )2PX (dx )PY (dy )
+
+≤
+
+Z
+
+> Y
+
+Z
+
+> X
+
+(Γ π (x, y )2 − ΓΦn(π)(x, y )2)ˆPX (dx )ˆPY (dy )
+
+| {z }
+
+> =:( A)
+
++
+
+Z
+
+> Y
+
+Z
+
+> X
+
+ΓΦn(π)(x, y )2(ˆPX (dx )ˆPY (dy ) − PX (dx )PY (dy )) 
+
+| {z }
+
+> =:( B)
+
+.
+
+Considering that |Γπ | ≤ 1, (A) is bounded above by 
+
+(A) ≤ 2
+
+Z
+
+> Y
+
+Z
+
+> X
+
+Γπ (x, y ) − ΓΦn(π)(x, y ) ˆPX (dx )ˆPY (dy )= 2
+
+nX nY
+
+X
+
+> i,j
+
+Γπ (Xi, Y j ) − ΓΦn(π)(Xi, Y j )
+
+≤ 2
+
+nX nY
+
+X
+
+> i,j
+
+Γ(1)  
+
+> π
+
+(Xi, Y j ) − Γ(1) Φn(π)(Xi, Y j ) + 2
+
+nX nY
+
+X
+
+> i,j
+
+Γ(2)  
+
+> π
+
+(Xi, Y j ) − Γ(2) Φn(π)(Xi, Y j )
+
+Here Γ(1)  
+
+> π
+
+(Xi, Y j ) and Γ(1) Φn(π)(Xi, Y j ) are well-defined as 
+
+Γ(1)  
+
+> π
+
+(Xi, Y j ) = nYnXX
+
+> i′=1
+
+πi′j dX (Xi, X i′ ),
+
+Γ(1) Φn(π)(Xi, Y j ) = 
+
+Z
+
+> x∈X
+
+dX (Xi, x )Φ n(dx | Yj ) = nYnXX
+
+> i′=1
+
+πi′j
+
+Z
+
+> x∈Vi′
+
+dX (Xi, x )
+
+
+
+nX PX (dx )
+
+
+
+,
+
+where Φn(dx | Yj ) is as defined in (7) . A similar technique also ensures the well-definedness of Γ(2)  
+
+> π
+
+(Xi, Y j ) and 
+
+Γ(2) Φn(π)(Xi, Y j ). Then, 
+
+Γπ (Xi, Y j ) − ΓΦn(π)(Xi, Y j )
+
+≤ nX nYnXX
+
+> i′=1
+
+πi′j
+
+Z
+
+> x∈Vi′
+
+|dX (Xi, x ) − dX (Xi, X i′ )| PX (dx )+ nX nYnYX
+
+> j′=1
+
+πij ′
+
+Z
+
+> y∈Wj′
+
+|dY (Yj , y ) − dY (Yj , Y j′ )| PY (dy ).
+
+Finally, we get 
+
+(A) ≤ 2 X
+
+> i,j,i ′
+
+πi′j
+
+Z
+
+> Vi′
+
+dX (Xi, x ) − dX (Xi, X i′ ) PX (dx ) + 2 X
+
+> i,j,j ′
+
+πij ′
+
+Z
+
+> Wj′
+
+dY (Yj , y ) − dY (Yj , Y j′ ) PY (dy )
+
+≤ 2
+
+nX
+
+X
+
+> i,i ′
+
+Z
+
+> Vi′
+
+dX (Xi, x ) − dX (Xi, X i′ ) PX (dx ) + 2
+
+nY
+
+X
+
+> j,j ′
+
+Z
+
+> Wj′
+
+dY (Yj , y ) − dY (Yj , Y j′ ) PY (dy )
+
+≤ 2
+
+> nX
+
+X
+
+> i′=1
+
+Z
+
+> Vi′
+
+dX (x, X i′ ) PX (dx ) + 2 
+
+> nY
+
+X
+
+> j′=1
+
+Z
+
+> Wj′
+
+dY (y, Y j′ ) PY (dy )= 2  W dX 
+
+> 1
+
+(PX , ˆPX ) + W dY 
+
+> 1
+
+(PY , ˆPY ).
+
+31 Convex Distance Operator Transport 
+
+We now move onto (B):
+
+(B) ≤
+
+Z
+
+> X
+
+Z 
+
+> Y
+
+ΓΦn(π)(x, y )2 ˆPY (dy )
+
+
+
+(ˆPX − PX )( dx )
+
++
+
+Z
+
+> Y
+
+Z 
+
+> X
+
+ΓΦn(π)(x, y )2PX (dx )
+
+
+
+(ˆPY − PY )( dy ) .
+
+Similarly, it suffices to bound the first term by symmetry. Let 
+
+γ(x) := 
+
+Z
+
+> Y
+
+ΓΦn(π)(x, y )2 ˆPY (dy ).
+
+Then, it follows that 
+
+Z
+
+> X
+
+Z 
+
+> Y
+
+ΓΦn(π)(x, y )2 ˆPY (dy )
+
+
+
+(ˆPX − PX )( dx ) = E ˆX∼ˆPX [γ( ˆX)] − EX∼PX [γ(X)] 
+
+=
+
+Z
+
+> X ×X
+
+(γ(ˆ x) − γ(x)) QX (dx, d ˆx)
+
+≤
+
+Z
+
+> X ×X
+
+|γ(ˆ x) − γ(x)| QX (dx, d ˆx).
+
+By the fact that |ΓΦn(π)| ≤ 1, we have 
+
+|γ(ˆ x) − γ(x)| ≤ 2
+
+Z
+
+> Y
+
+ΓΦn(π)(ˆ x, y ) − ΓΦn(π)(x, y ) ˆPY (dy ).
+
+Moreover, 
+
+Z
+
+> Y
+
+ΓΦn(π)(ˆ x, y ) − ΓΦn(π)(x, y ) ˆPY (dy )
+
+≤ 1
+
+nYnYX
+
+> j=1
+
+Z
+
+> x′∈X
+
+|dX (ˆ x, x ′) − dX (x, x ′)|Φn(π)( dx ′ | Yj )+ 1
+
+nYnYX
+
+> j=1
+
+Z
+
+> y′∈Y
+
+dY (Yj , y ′)Φ n(π)( dy ′ | ˆx) −
+
+Z
+
+> y′∈Y
+
+dY (Yj , y ′)Φ n(dy ′ | x) .
+
+For (x, ˆx) ∼ QX , we have ˆx = Xi and x ∈ Vi for some i with probability 1, meaning that both x and ˆx belong to the same cell Vi. We recall the form of Φn(π)( dy | x) in (8): 
+
+Φn(π)( dy | x) = nXnXX
+
+> i=1
+> nY
+
+X
+
+> j=1
+
+πij IVi (x)
+
+
+
+nY PY ⌊Wj (dy )
+
+
+
+.
+
+As a result, Φn(· | x) depends on x only through the indicator IVi (x). Since IVi (x) = IVi (ˆ x) = 1 , the second term in the above upper bound vanishes. In addition, the first term is bounded by dX (ˆ x, x ) by the triangle inequality. This yields that 
+
+Z
+
+> X ×X
+
+|γ(ˆ x) − γ(x)| QX (dx, d ˆx) ≤ 2
+
+Z
+
+> X ×X
+
+dX (ˆ x, x )QX (dx, d ˆx) = 2 W dX 
+
+> 1
+
+(PX , ˆPX ).
+
+Thus, 
+
+(B) ≤ 2
+
+
+
+W dX 
+
+> 1
+
+(PX , ˆPX ) + W dY 
+
+> 1
+
+(PY , ˆPY )
+
+
+
+,
+
+which concludes that 
+
+E2 ≤ 4( Lf + 2)( W dX 
+
+> 1
+
+(PX , ˆPX ) + W dY 
+
+> 1
+
+(PY , ˆPY )) . (10) 32 Convex Distance Operator Transport 
+
+## Step 3: Bound for E3.
+
+To bound E3, let QX ∈ Π( PX , ˆPX ) and QY ∈ Π( PY , ˆPY ) be optimal couplings attaining W dX 
+
+> 1
+
+(PX , ˆPX ) and 
+
+W dY 
+
+> 1
+
+(PY , ˆPY ), respectively. Define Ψn : Π( PX , PY ) → Π( ˆPX , ˆPY ) by 
+
+Ψn(σ)( dˆx, d ˆy) := 
+
+Z
+
+> X ×Y
+
+QX (dˆx | x) QY (dˆy | y) σ(dx, dy ), σ ∈ Π( PX , PY ).
+
+Since Φn(Π( ˆPX , ˆPY )) ⊂ Π( PX , PY ), we may define 
+
+τ := Φ n
+
+ Ψn(π∗) ∈ Π( PX , PY ),
+
+and thus 
+
+0 ≤ E3 ≤ L α(τ ) − L α(π∗) = Lα(τ ) − L α(π∗) .
+
+Analogously to (9), for any π ∈ Π( PX , PY ) we have 
+
+Eπ [cf (X, Y )] − EΦn(Ψ n(π)) [cf (X′, Y ′)] ≤ 4Lf
+
+
+
+W dX 
+
+> 1
+
+(PX , ˆPX ) + W dY 
+
+> 1
+
+(PY , ˆPY )
+
+
+
+,
+
+and in particular this holds for π = π∗. For the structural regularization term, using (1) and |Γπ | ≤ 1, we obtain 
+
+∥DPX Tπ∗ − Tπ∗ DPY ∥2HS − ∥ DPX Tτ − Tτ DPY ∥2HS 
+
+≤
+
+Z
+
+> Y
+
+Z
+
+> X
+
+Γπ∗ (x, y )2 − Γτ (x, y )2 PX (dx ) PY (dy )
+
+≤ 2
+
+Z
+
+> Y
+
+Z
+
+> X
+
+Γπ∗ (x, y ) − Γτ (x, y ) PX (dx ) PY (dy ). (11) We bound the integrand by splitting Γ = Γ (1) − Γ(2) : for PX ⊗ PY -a.e. (x, y ),
+
+Γπ∗ (x, y ) − Γτ (x, y ) ≤ Γ(1)  
+
+> π∗
+
+(x, y ) − Γ(1)  
+
+> τ
+
+(x, y ) + Γ(2)  
+
+> π∗
+
+(x, y ) − Γ(2)  
+
+> τ
+
+(x, y ) .
+
+We only bound the Γ(1) -part; the Γ(2) -part follows by symmetry. To bound Γ(1)  
+
+> π∗
+
+(x, y ) − Γ(1)  
+
+> τ
+
+(x, y ) , we introduce an intermediate term by cell-averaging Γ(1)  
+
+> π∗
+
+(x, ·) along the Laguerre partition induced by the W1-optimal coupling QY . By the Laguerre lemma, we may choose a partition {Wj }nY 
+
+> j=1
+
+such that 
+
+QY (dˆy | y) = 
+
+> nY
+
+X
+
+> j=1
+
+1Wj (y) δYj (dˆy) (PY -a.e. y), PY (Wj ) = 1
+
+nY
+
+.
+
+Define 
+
+¯Γ(1)  
+
+> π∗
+
+(x, y ) := 
+
+> nY
+
+X
+
+> j=1
+
+1Wj (y)
+
+ 1
+
+PY (Wj )
+
+Z
+
+> Wj
+
+Γ(1)  
+
+> π∗
+
+(x, u ) PY (du )
+
+
+
+=
+
+> nY
+
+X
+
+> j=1
+
+1Wj (y)
+
+
+
+nY
+
+Z
+
+> Wj
+
+Γ(1)  
+
+> π∗
+
+(x, u ) PY (du )
+
+
+
+.
+
+(I) Oscillation induced by QY . Recall that QY ∈ Π( PY , ˆPY ) is an optimal coupling for W dY 
+
+> 1
+
+.Then, for PY -a.e. y ∈ Wj , using Assumption 5.5, we have 
+
+Γ(1)  
+
+> π∗
+
+(x, y ) − ¯Γ(1)  
+
+> π∗
+
+(x, y ) = Γ(1)  
+
+> π∗
+
+(x, y ) − nY
+
+Z
+
+> Wj
+
+Γ(1)  
+
+> π∗
+
+(x, u ) PY (du )
+
+≤ nY
+
+Z
+
+> Wj
+
+Γ(1)  
+
+> π∗
+
+(x, y ) − Γ(1)  
+
+> π∗
+
+(x, u ) PY (du )
+
+≤ LW nY
+
+Z
+
+> Wj
+
+dY (y, u ) PY (du ).
+
+33 Convex Distance Operator Transport 
+
+Integrating over (x, y ) ∼ PX ⊗ PY and summing over the cells yields 
+
+Z
+
+> X ×Y
+
+Γ(1)  
+
+> π∗
+
+(x, y ) − ¯Γ(1)  
+
+> π∗
+
+(x, y ) (PX ⊗ PY )( dx, dy ) ≤ LWnYX
+
+> j=1
+
+Z
+
+> X
+
+Z
+
+> Wj
+
+nY
+
+Z
+
+> Wj
+
+dY (y, u ) PY (du ) PY (dy ) PX (dx )= LW nYnYX
+
+> j=1
+
+Z 
+
+> Wj×Wj
+
+dY (y, u ) PY (dy )PY (du )= 2 LW E(Y, ˆY )∼QY
+
+dY (Y, ˆY )
+
+= 2 LW W dY 
+
+> 1
+
+(PY , ˆPY ). (12) The third equality follows by rewriting the within-cell double integral as an expectation under the coupling QY , using the representation 
+
+QY (dy, d ˆy) = 
+
+> nY
+
+X
+
+> j=1
+
+PY ⌊Wj (dy ) δYj (dˆy),
+
+together with the inequality 
+
+dY (y, u ) ≤ dY (y, Y j ) + dY (Yj , u ), y, u ∈ Wj .
+
+(II) Bias induced by QX inside each Wj . Recall that QX ∈ Π( PX , ˆPX ) is an optimal coupling for W dX 
+
+> 1
+
+. Similarly, a Markov kernel QX (dˆx | x) can be chosen as: 
+
+QX (dˆx | x) = 
+
+> nX
+
+X
+
+> i=1
+
+IVi (x)δXi (dˆx).
+
+Define the composed Markov kernel 
+
+KX (dx ′ | x) := 
+
+Z
+
+> ˆx∈X
+
+QX (dx ′ | ˆx) QX (dˆx | x).
+
+Let τ := Φ n(Ψ n(π∗)) . For each j, define the normalized X-marginals on the strip X × Wj :
+
+π∗,X j (dx ) := nY π∗(dx, W j ), τ Xj (dx ) := nY τ (dx, W j ).
+
+Then for any Borel set A ⊂ X ,
+
+τ Xj (A) = nY τ (A × Wj )= nY
+
+Z
+
+> (ˆ x, ˆy)∈X ×Y
+
+QX (A | ˆx)QY (Wj | ˆy)Ψ n(π∗)( dˆx, d ˆy)= nYnXX
+
+> i=1
+> nY
+
+X
+
+> k=1
+
+Ψn(π∗)( {Xi} × { Yk})QX (A | Xi)QY (Wj | Yk)= nYnXX
+
+> i=1
+
+Ψn(π∗)( {Xi} × { Yj }) QX (A | Xi)= nYnXX
+
+> i=1
+
+π∗(Vi × Wj ) QX (A | Xi) = 
+
+Z
+
+> X
+
+KX (A | x) π∗,X j (dx ),
+
+where the last identity uses that KX (· | x) = QX (· | Xi) for x ∈ Vi under the Laguerre representation of QX . Hence 
+
+τ Xj = π∗,X j KX .Consequently, for PY -a.e. y ∈ Wj ,
+
+¯Γ(1)  
+
+> π∗
+
+(x, y ) = 
+
+Z
+
+> X
+
+dX (x, u ) π∗,X j (du ), Γ(1)  
+
+> τ
+
+(x, y ) = 
+
+Z
+
+> X
+
+dX (x, u ) τ Xj (du ).
+
+34 Convex Distance Operator Transport 
+
+Using |dX (x, u ) − dX (x, v )| ≤ dX (u, v ) and the coupling ηj (du, dv ) := π∗,X j (du ) KX (dv | u) ∈ Π( π∗,X j , τ Xj ), we obtain 
+
+¯Γ(1)  
+
+> π∗
+
+(x, y ) − Γ(1)  
+
+> τ
+
+(x, y ) ≤
+
+Z
+
+> X ×X
+
+dX (u, v ) ηj (du, dv ).
+
+Integrating over (x, y ) ∼ PX ⊗ PY and averaging over j yields 
+
+Z
+
+> X ×Y
+
+¯Γ(1)  
+
+> π∗
+
+(x, y ) − Γ(1)  
+
+> τ
+
+(x, y ) (PX ⊗ PY )( dx, dy ) ≤ EKX PX
+
+dX (X, X ′),
+
+where KX PX denotes the joint distribution KX (dx ′ | x)PX (dx ). Construct a joint coupling ν ∈ Π( PX , ˆPX , PX ) by 
+
+ν(dx, d ˆx, dx ′) := QX (dx, d ˆx)QX (dx ′ | ˆx) = QX (dˆx | x)QX (dx ′ | ˆx)PX (dx ).
+
+Then, for (X, ˆX, X ′) ∼ ν, the marginals of (X, ˆX), (X, X ′), and (X′, ˆX) are QX (dx, d ˆx), KX (dx ′ | x)PX (dx ), and 
+
+QX (dx ′, d ˆx), respectively. By applying the triangle inequality, 
+
+EKX PX
+
+dX (X, X ′) ≤ Eν
+
+dX (X, ˆX) + Eν
+
+dX ( ˆX, X ′) = 2 W dX 
+
+> 1
+
+(PX , ˆPX ). (13) Combining (12) and (13), we conclude 
+
+Z
+
+> X ×Y
+
+Γ(1)  
+
+> π∗
+
+(x, y ) − Γ(1)  
+
+> τ
+
+(x, y ) (PX ⊗ PY )( dx, dy ) ≤ 2W dX 
+
+> 1
+
+(PX , ˆPX ) + LW W dY 
+
+> 1
+
+(PY , ˆPY ).
+
+Consequently, we arrive at 
+
+E3 ≤ 4( Lf + 2 LW + 2) 
+
+
+
+W dX 
+
+> 1
+
+(PX , ˆPX ) + W dY 
+
+> 1
+
+(PY , ˆPY )
+
+
+
+. (14) Combining (4), (10), and (14), we obtain 
+
+Lα(Φ n(ˆ π)) − L α(π∗) ≤ 32 α n min 
+
+T + 3 + 4(2 Lf + 2 LW + 4)( W dX 
+
+> 1
+
+(PX , ˆPX ) + W dY 
+
+> 1
+
+(PY , ˆPY )) .
+
+This completes the proof. 
+
+G.7. Proof for Lemma G.1 
+
+Proof. The first term is clearly continuous w.r.t. π: since ∥fX (x) − fY (y)∥22 ∈ Cb(X × Y ), πnw
+
+→ π implies 
+
+Eπn
+
+∥fX (X) − fY (Y )∥22
+
+ =
+
+Z
+
+> X ×Y
+
+∥fX (x) − fY (y)∥22πn(dx, dy ) → Eπ
+
+∥fX (X) − fY (Y )∥22
+
+.
+
+To show that R(π) is lower semicontinuous, we first show that π 7 → Tπ is continuous. Let {πn}∞ 
+
+> n=1
+
+be a sequence that weakly converges to some π.Note that C(X ) ⊂ L2(X , PX ) and C(Y) ⊂ L2(Y, PY ) are both dense due to the compactness of X and Y. In particular, 
+
+C(X ) = Cb(X ) and C(Y) = Cb(Y). Thus, for f ∈ C(X ) and g ∈ C(Y),
+
+⟨Tπn g, f ⟩L2(PX ) =
+
+Z
+
+f (x)g(y)πn(dx, dy ) →
+
+Z
+
+f (x)g(y)π(dx, dy ) = ⟨Tπ g, f ⟩L2(PX ), n → ∞ , (15) which follows from the definition of weak convergence. Since the conditional expectation operators are contractions (i.e., 
+
+∥Tπn ∥op ≤ 1 for all n), the sequence is uniformly bounded. By the density of continuous functions in L2 and the uniform boundedness of {Tπn }, (15) extends to all f ∈ L2(X , PX ) and g ∈ L2(Y, PY ). Thus, πnw
+
+→ π implies Tπn → Tπ in WOT, which also entails 
+
+DPX Tπn − Tπn DPY → DPX Tπ − Tπ DPY , in WOT .
+
+Therefore, by Lemma F.12, we conclude that R(π) is lower semicontinuous. 35 Convex Distance Operator Transport 
+
+G.8. Proof for Lemma G.2 
+
+Proof. First, we obtain the smoothness of ˆLα. Observe that DˆPX and DˆPY are symmetric. Hence, the gradient of ∇ ˆLα(π)
+
+can be calculated as 
+
+(αn X nY )−1∇ ˆLα(π) = D2ˆPX
+
+π + πD 2ˆPY
+
+− 2DˆPX πD ˆPY + const ., 
+
+where the constant does not depend on π. Thus, the triangle inequality and the Cauchy–Schwarz inequality yield that 
+
+(αn X nY )−1 ∇ ˆLα(π1) − ∇ ˆLα(π2) F
+
+≤
+
+
+
+∥DˆPX ∥op + ∥DˆPY ∥op 
+
+2
+
+∥π1 − π2∥F .
+
+Thus, we get 
+
+∇ ˆLα(π1) − ∇ ˆLα(π2) F
+
+≤ α · nmin nmax 
+
+
+
+∥DˆPX ∥op + ∥DˆPY ∥op 
+
+2
+
+∥π1 − π2∥F , (16) where nmin = min {nX , n Y } and nmax = max {nX , n Y }.What remains is to show the convergence of the FW algorithm. Define 
+
+β := α · nmin nmax 
+
+
+
+∥DˆPX ∥op + ∥DˆPY ∥op 
+
+2
+
+.
+
+Let π∗ 
+
+> n
+
+∈ arg min π ˆLα(π), whose existence is guaranteed by the convexity. Then, 
+
+ˆLα(π(t+1) ) − ˆLα(π(t)) ≤ Tr 
+
+
+
+∇ ˆLα(π(t))⊤(π(t+1) − π(t))
+
+
+
++ β
+
+2 ∥π(t+1) − π(t)∥2
+
+> F
+
+= γtTr 
+
+
+
+∇ ˆLα(π(t))⊤(μ(t) − π(t))
+
+
+
++ β
+
+2 ∥π(t+1) − π(t)∥2
+
+> F
+
+≤ γtTr 
+
+
+
+∇ ˆLα(π(t))⊤(π∗ 
+
+> n
+
+− π(t))
+
+
+
++ β
+
+2 ∥π(t+1) − π(t)∥2
+
+> F
+
+≤ γt
+
+ ˆLα(π∗
+
+> n
+
+) − ˆLα(π(t))
+
+
+
++ β
+
+2 ∥π(t+1) − π(t)∥2 
+
+> F
+
+.
+
+The first inequality comes from (16) ; the third inequality is due to the definition of μ(t); and the last inequality is from the convexity of ˆLα.Considering that 
+
+∥π∥2 
+
+> F
+
+= X
+
+> ij
+
+π2 
+
+> ij
+
+≤ (max  
+
+> i,j
+
+πij ) X
+
+> ij
+
+πij = max  
+
+> i,j
+
+πij ≤ 1
+
+nmax 
+
+,
+
+we obtain 
+
+∥π(t+1) − π(t)∥F = γt∥μ(t) − π(t)∥F ≤ 2γt
+
+r 1
+
+nmax 
+
+.
+
+Then, substituting γt = 2 /(t + 2) , it follows that 
+
+ˆLα(π(t+1) ) − ˆLα(π∗
+
+> n
+
+) ≤ (1 − γt)
+
+ ˆLα(π(t)) − ˆLα(π∗
+
+> n
+
+)
+
+
+
++ 2 βγ 2 
+
+> t
+
+· 1
+
+nmax 
+
+= tt + 2 
+
+ ˆLα(π(t)) − ˆLα(π∗
+
+> n
+
+)
+
+
+
++ 8β
+
+(t + 2) 2 · 1
+
+nmax 
+
+.
+
+By this inequality, for t = 0 (where γ0 = 1 ), we have 
+
+ˆLα(π(1) ) − ˆLα(π∗
+
+> n
+
+) ≤ 2β · 1
+
+nmax 
+
+≤ 8β
+
+2 · 1
+
+nmax 
+
+.
+
+36 Convex Distance Operator Transport 
+
+Therefore, using mathematical induction, we arrive at the convergence rate. Assuming ˆLα(π(t)) − ˆLα(π∗
+
+> n
+
+) ≤ 8β/ (( t +2) nmax ), we obtain 
+
+ˆLα(π(t+1) ) − ˆLα(π∗
+
+> n
+
+) ≤
+
+ tt + 2 · 8βt + 2 + 8β
+
+(t + 2) 2
+
+
+
+· 1
+
+nmax 
+
+= 8β(t + 1) (t + 2) 2 · 1
+
+nmax 
+
+≤ 8βt + 3 · 1
+
+nmax 
+
+,
+
+where the last inequality holds since (t + 1)( t + 3) = t2 + 4 t + 3 < t 2 + 4 t + 4 = ( t + 2) 2.
+
+## H. Experimental Details and Additional Results 
+
+This section provides supplementary details regarding the experimental setup and implementation specifics, the discussion of which is postponed in the main text. We also present the formal mathematical definitions of the baseline algorithms and evaluation metrics. Finally, we report comprehensive experimental results on both the synthetic 2D point clouds and the OASIS-3 dataset, including a full comparison of Entropic FGW (EFGW) across varying regularization parameters. 
+
+H.1. Comparison Algorithms 
+
+EFGW introduces an entropic regularization term to the original FGW objective, promoting smoother transport plans and enabling the use of Sinkhorn-based algorithms. Formally, for a regularization parameter ε > 0, the EFGW objective is defined by: 
+
+Lε
+
+> EFGW ,α
+
+(π) := (1 − α)Eπ
+
+∥fX (X) − fY (Y )∥22
+
+ + αEπ⊗π
+
+|dX (X, X ′) − dY (Y, Y ′)|2 + ε · DKL (π | PX ⊗ PY ),
+
+where DKL denotes the Kullback–Leibler (KL) divergence. Let X1, ..., X nX be distinct points in X , and Y1, ..., Y nY be distinct points in Y. For each sample, we observe features 
+
+fX (Xi) and fY (Yj ). In addition, define the empirical probability measures as in the main text. Then, the empirical version of the EFGW objective corresponds to 
+
+ˆLε
+
+> EFGW ,α
+
+(π) := (1 − α)Tr  C⊤ 
+
+> f
+
+π + α
+
+> nX
+
+X
+
+> i,k =1
+> nY
+
+X
+
+> j,l =1
+
+[DX ]ik − [DY ]jl  
+
+> 2
+
+πij πkl + ε
+
+> nX
+
+X
+
+> i=1
+> nY
+
+X
+
+> j=1
+
+πij log 
+
+ πij 
+
+(1 /n X )(1 /n Y )
+
+
+
+,
+
+where π ∈ Π( ˆPX , ˆPY ) is a nX × nY empirical coupling matrix, [Cf ]ij = ∥fX (Xi) − fY (Yj )∥22, [DX ]ik = dX (Xi, X k),and [DY ]jl = dY (Yj , Y l).COPT (Dong & Sawin, 2020) is a graph matching method that produces a vertex coupling by coordinating vertex alignment with graph signal alignment. Let ˆPX = PnX 
+
+> i=1
+
+δXi /n X and ˆPY = PnY 
+
+> j=1
+
+δYj /n Y be the uniform vertex measures. COPT further equips each graph with Gaussian graph-signal measures μX on RnX and μY on RnY constructed from Laplacian pseudoinverses. For a coupling π ∈ Π( ˆPX , ˆPY ), define the COPT objective as 
+
+ˆLCOPT (π) := inf    
+
+> T:T#μX=μY
+
+Z
+
+> g∈RnX
+> nX
+
+X
+
+> i=1
+> nY
+
+X
+
+> j=1
+
+ gi − (T g )j
+
+2 πij μX (dg ),
+
+where g ∈ RnX is a random graph signal on the source graph (with coordinates gi indexed by Xi). The COPT problem is then 
+
+min   
+
+> π∈Π( ˆPX,ˆPY)
+
+ˆLCOPT (π).
+
+The inner infimum selects a signal transport map T that aligns the graph-induced signal distributions, while the outer minimization learns a vertex coupling π consistent with this global structural alignment. Unlike CDOT or EFGW that incorporate node features through an explicit feature cost matrix Cf , COPT does not use node features in our setting and relies solely on structural information induced by the input graphs. We use the resulting minimizer π as the matching output. 37 Convex Distance Operator Transport 
+
+Spectral Matching (Spectral) (Leordeanu & Hebert, 2005) aligns graph structures by comparing the spectral embeddings of their similarity or distance matrices. Let UX and UY be the matrices containing the leading k eigenvectors of the source and target distance matrices, respectively. Spectral seeks a correspondence that minimizes the distance between these spectral embeddings: 
+
+min   
+
+> P∈P
+
+∥UX − P U Y ∥2 
+
+> F
+
+,
+
+where P is the set of permutation matrices. This method relies solely on structural information and is non-iterative, making it computationally efficient but potentially less robust to geometric ambiguities compared to OT-based approaches. IsoRank (Singh et al., 2008) is a global network alignment algorithm based on the intuition that two nodes are similar if their neighbors are similar. It is formulated as an eigenvalue problem similar to PageRank. Formally, let A1 and A2 be the adjacency matrices of the two graphs (normalized to be column-stochastic). The similarity matrix R is computed iteratively via: 
+
+R = αA 1RA ⊤ 
+
+> 2
+
++ (1 − α)H, 
+
+where H is a prior similarity matrix (often uniform or based on node features) and α controls the fusion weight. (Here, α is the IsoRank damping parameter and is distinct from the OT fusion weight used in CDOT/FGW/EFGW.) 
+
+H.2. Synthetic Data Experiments 
+
+We utilize the same synthetic dataset described in Section 6.1, consisting of 2D point clouds with four distinct clusters. In this subsection, we provide implementation details and report comprehensive results on the synthetic 2D point clouds, including a full comparison of Entropic FGW (EFGW) across varying regularization parameters. H.2.1. I MPLEMENTATION DETAILS 
+
+The source and target distributions are sampled from isomorphic mm spaces defined on [0 , 2] 2, and the feature cost Cf is given by the 0-1 penalty based on ground-truth cluster labels. We compare CDOT against FGW, EFGW, IsoRank, and Spectral Matching (Spectral). • FGW & EFGW: We use the POT library (Flamary et al., 2021). For FGW, we adopt the square loss (GW-2) and the default conditional gradient solver ( ot.gromov.fused gromov wasserstein ). For EFGW, we use the Sinkhorn-based solver ( ot.gromov.entropic fused gromov wasserstein ) and vary the regularization parameter ε ∈ { 10 −4, ..., 10 −1}.• IsoRank: We construct the similarity matrices AX and AY from the distance matrices using a Gaussian kernel with 
+
+σ = 1 , such that [A]ij = exp( −d2 
+
+> ij
+
+/2) . These matrices are row-normalized to be stochastic. The prior affinity matrix 
+
+H is derived from the feature cost matrix Cf by setting Hij = 1 − [Cf ]ij , followed by normalization. The final alignment is obtained by applying the Hungarian algorithm (LAP) to the converged similarity matrix R.• Spectral: We implement Spectral by performing eigen-decomposition on the normalized distance matrices DX
+
+and DY . Instead of selecting top k eigenvectors, we use the full eigenmatrices. To mitigate the sign ambiguity of eigenvectors (i.e., v and −v represent the same eigenspace), we compute the cost matrix using the squared Euclidean distance between the absolute values of the eigenvectors. The final permutation is obtained by solving the LAP on this cost matrix. Consistent with the main experiment, we report the mean squared error (MSE) between the source X and the transported target ˆY = N ˆπY over 100 independent trials. All distance matrices are normalized by their maximum values. H.2.2. R ESULTS 
+
+Table 7 presents the comparative results between CDOT and EFGW across varying regularization parameters. When 
+
+α = 0 .0, the problem reduces to matching points based solely on cluster labels. Since points within the same cluster are indistinguishable, CDOT (pure OT) yields a constant MSE of approximately 0.33 . In contrast, EFGW consistently achieves a lower MSE ( ≈ 0.16 ) regardless of the regularization parameter. This is due to the entropic smoothing effect: rather than 38 Convex Distance Operator Transport    
+
+> Table 7. Comparison of MSE (mean ±std) over 100 independent trials. CDOT is compared against Entropic FGW (EFGW) with varying regularization parameters. The best MSE performance for each configuration is highlighted in bold.
+
+CDOT EFGW ( 10 −4) EFGW ( 10 −3) EFGW ( 10 −2) EFGW ( 10 −1)
+
+α n MSE MSE MSE MSE MSE 0.0 100 0.3327 ± 0.01 0.1686 ± 0.01 0.1686 ± 0.01 0.1686 ± 0.01 0.1686 ± 0.01 200 0.3355 ± 0.01 0.1677 ± 0.00 0.1677 ± 0.00 0.1677 ± 0.00 0.1677 ± 0.00 300 0.3326 ± 0.01 0.1676 ± 0.00 0.1676 ± 0.00 0.1676 ± 0.00 0.1676 ± 0.00 400 0.3345 ± 0.01 0.1674 ± 0.00 0.1674 ± 0.00 0.1674 ± 0.00 0.1674 ± 0.00 500 0.3329 ± 0.01 0.1671 ± 0.00 0.1671 ± 0.00 0.1671 ± 0.00 0.1671 ± 0.00 0.5 100 0.0077 ± 0.00 2.6562 ± 0.05 0.0098 ± 0.00 0.0347 ± 0.00 0.1438 ± 0.01 200 0.0040 ± 0.00 2.6684 ± 0.03 0.0054 ± 0.00 0.0334 ± 0.00 0.1436 ± 0.00 300 0.0027 ± 0.00 2.6651 ± 0.03 0.0038 ± 0.00 0.0333 ± 0.00 0.1437 ± 0.00 400 0.0020 ± 0.00 2.6670 ± 0.02 0.0031 ± 0.00 0.0332 ± 0.00 0.1436 ± 0.00 500 0.0016 ± 0.00 2.6666 ± 0.02 2.6666 ± 0.02 0.0330 ± 0.00 0.1434 ± 0.00 1.0 100 0.6743 ± 0.04 2.6562 ± 0.05 1.3286 ± 0.65 1.2439 ± 0.57 0.6665 ± 0.02 200 0.6712 ± 0.02 2.6684 ± 0.03 1.4212 ± 0.60 1.3157 ± 0.60 0.6691 ± 0.01 300 0.6682 ± 0.02 2.6651 ± 0.03 1.3781 ± 0.65 1.2735 ± 0.56 0.6671 ± 0.01 400 0.6688 ± 0.01 2.6670 ± 0.02 1.1405 ± 0.63 1.1384 ± 0.62 0.6682 ± 0.01 500 0.6673 ± 0.01 2.6666 ± 0.02 1.4051 ± 0.70 1.2483 ± 0.66 0.6670 ± 0.01 selecting a single random point, EFGW distributes mass across all valid targets within the cluster. This maps each source point to the centroid (barycenter) of the corresponding target cluster, thereby minimizing the expected squared error. In the fused setting where both feature and geometric constraints are active, CDOT consistently achieves the lowest MSE (≈ 0.002 for n = 400 ), demonstrating the effectiveness of its convex formulation. EFGW exhibits significant sensitivity to the regularization parameter ε. At a low regularization level ( ε = 10 −4), EFGW yields a high MSE of 2.66 , suggesting numerical instability or entrapment in local stationary points, which is typical for non-convex solvers in complex landscapes. While increasing ε to 10 −3 significantly improves performance, it still does not match the precision of CDOT. Further increasing ε leads to over-smoothing, degrading the MSE again. This highlights the difficulty of tuning ε in EFGW, whereas CDOT provides robust performance without such hyperparameters. In the pure geometric setting, the symmetry of the four identical clusters renders the true alignment unidentifiable. Under this regime, CDOT maintains a stable solution with an MSE of approximately 0.67 and a remarkably low standard deviation. Interestingly, EFGW with high regularization ( ε = 10 −1) yields nearly identical performance. This is because both methods essentially converge toward the independent coupling due to the non-identifiability. However, EFGW with lower ε shows high variance and instability, often failing to find a consistent solution. 
+
+H.3. Real Data Experiments on the OASIS-3 Dataset 
+
+In this subsection, we provide supplementary details regarding the experimental setup, mathematical definitions of the metrics, and comprehensive results on the OASIS-3 dataset that are omitted from the main text. H.3.1. G EODESIC AND DIFFUSION DISTANCES 
+
+The geodesic distance between two nodes on a graph G = ( V, E ) is defined as the length of the shortest path connecting them. In the context of weighted graphs (connectomes), edge weights typically represent connection strength (number of fibers). We convert these weights into costs by taking the reciprocal ( 1/w ij ) before computing the shortest paths using Dijkstra’s algorithm. Since brain networks may contain disconnected components, the geodesic distance between disconnected nodes is mathematically infinite. To handle this numerically, we replace infinite values with a finite maximum 39 Convex Distance Operator Transport    
+
+> Table 8. Full comparison of matching accuracy on the OASIS-3 dataset (mean ±std). For EFGW, results across varying regularization parameters ( ε) are provided. The best value for each metric is highlighted in bold.
+
+Metric Method Diffusion Geodesic Topology CDOT (Ours) 0.6136 ± 0.11 0.4640 ± 0.14 –FGW 0.1853 ± 0.03 0.5375 ± 0.16 –EFGW ( ε = 10 −4) 0.4097 ± 0.14 0.0000 ± 0.00 –EFGW ( ε = 10 −3) 0.3342 ± 0.06 0.4583 ± 0.12 –EFGW ( ε = 10 −2) 0.2889 ± 0.05 0.4178 ± 0.10 –EFGW ( ε = 10 −1) 0.2567 ± 0.05 0.3988 ± 0.09 –Spectral – – 0.0737 ± 0.03 IsoRank – – 0.4055 ± 0.09 COPT – – 0.0253 ± 0.01 distance, defined as: 
+
+dij =
+
+(
+
+shortest path (i, j ) if i and j are connected ,
+
+max (u,v )∈E duv otherwise .
+
+Diffusion distance captures the connectivity between nodes based on the probability of transition in a random walk, rather than a single shortest path. It is defined using the heat kernel Ht = exp( −tL), where L is the graph Laplacian and t is the diffusion scale parameter. The diffusion distance between nodes i and j at scale t is the Euclidean distance between their corresponding rows in the heat kernel: 
+
+Dt(i, j ) = ∥Ht(i, ·) − Ht(j, ·)∥2.
+
+Unlike geodesic distance, diffusion distance integrates information from all possible paths of length proportional to t,resulting in a smoother metric that is robust to noise and topological perturbations. It evaluates whether two nodes share similar functional roles (i.e., similar diffusion profiles) within the global network structure. This metric is widely adopted in connectome analysis to capture global information flow and functional geometry (Coifman & Lafon, 2006; Abdelnour et al., 2014). In our experiments, we set the scale t = 1 .H.3.2. I MPLEMENTATION DETAILS 
+
+For node features, we utilize 6 categorical labels derived from the OASIS-3 metadata: hemisphere (left, right, central) and cortical status (cortical, subcortical). These are compared using 0-1 penalty. For the optimization, we set the fusion weight α = 0 .5 for CDOT, FGW, EFGW, and IsoRank to ensure a balanced contribution. We use the square loss 
+
+for the GW term. All matching algorithms are initialized with an independent coupling (product of marginals) and run for T = 200 iterations. We compare CDOT against FGW, EFGW, Spectral, IsoRank, and COPT. For FGW and EFGW, we utilize the POT library. For EFGW, we perform a grid search for the regularization parameter ε ∈ { 10 −4, ..., 10 −1}.SM is implemented by eigen-decomposing the graph Laplacian L = D − A and computing node embeddings from the full set of eigenvectors. To mitigate the sign ambiguity of eigenvectors, we build the cost matrix using squared Euclidean distances between the elementwise absolute values of the eigenvectors. For IsoRank, we incorporate feature information by setting the prior similarity matrix H = 1 − Cf , where Cf is the feature cost matrix. COPT is implemented by constructing the combinatorial Laplacian L = D − A, computing its Moore–Penrose pseudoinverse L† via eigen-decomposition with threshold εpinv = 10 −10 , and optimizing a nonnegative coupling with projected gradient descent combined with Sinkhorn–Knopp marginal scaling. 40 Convex Distance Operator Transport 
+
+H.3.3. R ESULTS 
+
+Table 8 presents the detailed matching accuracy (mean ± standard deviation) across all subject pairs. The results highlight a clear trade-off depending on the geometric representation. FGW performs best under geodesic distance because the shortest-path metric creates a rigid, isometric structure that aligns well with FGW’s quadratic objective. The stark performance gap under diffusion distance (CDOT: 0.6136 vs. FGW: 0.1853) provides critical insight into the behavior of the proposed loss function. Diffusion distance, by definition, averages over all possible paths to capture global information flow. While this yields a robust metric insensitive to topological noise, it essentially acts as a low-pass filter, smoothing out local variations and reducing the variance of pairwise distances. For FGW, this smoothing is detrimental. The GW objective minimizes a quadratic discrepancy, |dX (x, x ′) − dY (y, y ′)|2, which relies heavily on distinct pairwise contrasts (high variance) to lock the alignment. When diffusion smooths the metric, the distance landscape becomes flat, causing the non-convex GW objective to lose discriminative power and get trapped in local stationary points. In contrast, CDOT overcomes this via its operator-based formulation and convexity . First, the distance operator DPX transforms the diffusion metric into a global geometric profile (e.g., mapping a point to its average diffusion distance to the rest of the brain). Even if pairwise contrasts are diminished, these global profiles remain distinct and alignable. CDOT’s structural penalty aligns these global functional geometries directly. Second, and most importantly, the CDOT objective is convex (Theorem 3.4). Unlike FGW, which wanders in the flattened landscape, CDOT effectively utilizes the linear feature term to anchor the solution and guarantees convergence to the global optimum even when the geometric signal is smooth. Regarding topology-based methods, SM shows poor performance (0.0737), implying that purely structural alignment is insufficient. IsoRank, when enhanced with feature information ( H = 1 − Cf ), shows significantly improved performance (0.4055). However, it still falls short of OT-based methods (CDOT and FGW). This suggests that while feature information is critical, IsoRank’s reliance on local neighborhood similarity is less effective for brain registration than OT frameworks, which align graphs based on detailed geometric structures (pairwise distance matrices). 41
