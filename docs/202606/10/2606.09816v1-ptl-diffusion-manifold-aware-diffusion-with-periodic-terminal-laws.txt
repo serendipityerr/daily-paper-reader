@@ -1,0 +1,1980 @@
+Title: PTL-Diffusion: Manifold-Aware Diffusion with Periodic Terminal Laws
+
+URL Source: https://arxiv.org/pdf/2606.09816v1
+
+Published Time: Tue, 09 Jun 2026 02:46:57 GMT
+
+Number of Pages: 34
+
+Markdown Content:
+# PTL-Diffusion: Manifold-Aware Diffusion with Periodic Terminal Laws 
+
+## Danqi Zhuang 1, Jisui Huang 2, Xiaoyue Xi 3, Andrew Kiggins 4,Xiaojie Wang 5,6 , Ke Chen 1,6 , Yue Wu 1,6 
+
+Abstract 
+
+Standard diffusion models typically use a single time-homogeneous Gaussian terminal distribution as the reference law for generation. While this choice is analytically convenient and empirically powerful, it provides little explicit structure for data concentrated near low-dimensional man-ifolds, where different regions of the data distribution may correspond to distinct local geometric or semantic factors. As a result, the reverse model must recover manifold-level structure almost entirely from an un-structured terminal reference distribution. We propose PTL-Diffusion , a proof-of-concept diffusion framework whose forward noising process converges to a nonconstant periodic fam-ily of Gaussian terminal laws rather than to a single invariant Gaussian law. The phase variable acts as a coarse coordinate for organizing varia-tion in the data distribution, and the resulting terminal family provides a structured reference geometry for the reverse process. Unlike a phase-conditioned DDPM, where phase information only enters the denoising network while the forward process remains unchanged, PTL-Diffusion em-beds phase structure directly into the forward noising dynamics. The proposed construction preserves much of the tractability of stan-dard denoising diffusion models. For a periodically forced Ornstein– Uhlenbeck-type forward process, we derive closed-form forward marginals, identify the limiting periodic Gaussian terminal family, and obtain explicit Gaussian reverse posteriors. These formulae allow training with a stan-dard noise-prediction objective. We further introduce an invariant-average regularization term that couples the phase-conditioned reverse dynamics through the averaged periodic reference law. 
+
+> 1
+
+Department of Mathematics and Statistics, University of Strathclyde, Glasgow, UK 
+
+> 2
+
+Centre for Mathematical Imaging Techniques and Department of Mathematical Sciences, University of Liverpool, Liverpool, UK 
+
+> 3
+
+Department of Medical Statistics, London School of Hygiene & Tropical Medicine, Lon-don, UK 
+
+> 4
+
+Unaffiliated; Email: andrewkiggins2000@gmail.com 
+
+> 5
+
+School of Mathematics and Statistics, HNP-LAMA, Central South University, Changsha Hunan, PR China 
+
+> 6
+
+Joint corresponding authors: x.j.wang7@csu.edu.cn; k.chen@strath.ac.uk; yue.wu@strath.ac.uk. 
+
+1 
+
+> arXiv:2606.09816v1 [cs.CV] 8 Jun 2026 Experiments on synthetic torus and cylinder point-cloud benchmarks, together with the Olivetti face dataset, provide proof-of-concept evidence that periodic terminal laws can improve manifold-level distributional match-ing compared with a DDPM baseline under matched denoising archi-tectures. In particular, PTL-Diffusion reduces phase-conditioned errors, feature-space covariance errors, and nearest-neighbour manifold distances. These results suggest that structured terminal reference laws are a promis-ing direction for diffusion models on manifold-supported data, while also highlighting the need for more expressive phase constructions and larger-scale evaluations.
+
+# 1 Introduction 
+
+Generative models play an important role in applications such as image style translation, text-to-image generation, domain adaptation, and data augmenta-tion. Among many generative models, diffusion models [21, 15, 22] have become a central class of methods. They define a forward noising process that gradually destroys data structure and transforms the data distribution into a simple ter-minal reference law. The reverse model is then trained to map samples from this reference law back to the data distribution. Conditional diffusion models can further guide generation by passing class labels, text prompts, or other auxiliary variables to the denoising network [15, 8, 16]. Many high-dimensional datasets encountered in generative modelling are not distributed throughout the ambient Euclidean space. Images of faces, physical states, and stochastic trajectories often concentrate near low-dimensional mani-folds, whose coordinates may encode factors such as identity, illumination, pose, phase, or latent dynamical state. This viewpoint is classical in manifold learn-ing and representation learning [24, 23, 20, 4, 7, 19, 5]. A central challenge for diffusion models is therefore not only to learn a high-dimensional distribution, but also to recover the geometry of the data manifold while generating realistic samples. In most standard diffusion constructions, the terminal reference law is a single time-homogeneous Gaussian distribution. This choice is analytically con-venient and empirically powerful, but it is geometrically unstructured: it does not retain coarse information about the manifold on which the data are concen-trated. Consequently, the reverse process must recover manifold-level structure almost entirely from an essentially homogeneous noise distribution. This can be restrictive for data supported near curved, cyclic, or multi-region manifolds, where different regions of the distribution may correspond to different local geometric or semantic factors. From the viewpoint of manifold theory, a complex manifold is not generally described by one global Euclidean coordinate system; rather, it can be under-stood through local charts, each of which is Euclidean-like. This observation motivates a simple question for diffusion modelling: instead of using one ho-mogeneous Gaussian terminal law, can we use a structured family of Gaussian terminal laws as a coarse reference geometry for different regions or phases of 2the data manifold? We use this chart intuition only as motivation: our method does not explicitly learn a manifold atlas, transition maps, or a Riemannian metric. Rather, it introduces a finite phase-indexed terminal reference family that can act as a tractable coarse approximation to such geometric organization. Recent work has begun to address the interaction between score-based gen-erative modelling and non-Euclidean geometry. For example, Riemannian score-based generative models formulate the diffusion process directly on a manifold rather than in the ambient Euclidean space [6]. More recent manifold-aware gen-erative models use normalizing flows or diffusion/score-based models to learn distributions supported on nonlinear spaces [18, 6, 17]. Our approach is dif-ferent. We remain in the ambient Euclidean space, but modify the terminal reference structure of the forward process itself. Instead of forcing the forward dynamics to converge to a single invariant Gaussian law, we construct a for-ward process whose long-time law is a structured periodic family of Gaussian measures. We propose Periodic Terminal Law Diffusion (PTL-Diffusion), a proof-of-concept diffusion framework whose forward noising dynamics converge to a non-constant P -periodic Gaussian family. The phase variable is used as a coarse co-ordinate for organizing variation in the data distribution. For datasets with in-trinsic cyclic geometry, such as torus or cylinder point-cloud samples, the phase can be chosen from the corresponding angular coordinate. For static image data such as faces, there is no canonical physical phase; instead, we construct a phase index from a low-dimensional descriptor, such as an eigenface coordinate or an illumination statistic. In both cases, the phase should be interpreted as a coarse organizational coordinate, not as an assumption that individual samples are themselves periodic. A schematic overview of the proposed framework is shown in Figure 1. The mathematical motivation comes from the theory of random periodic solutions and periodic measures for stochastic dynamical systems. In general, the long-time object of a stochastic system is not necessarily a stationary dis-tribution, but may instead be a family of random variables or probability mea-sures evolving periodically in time. Random periodic solutions for stochastic semi-flows were developed by [13] and further studied for stochastic partial dif-ferential equations by [11, 10]. Periodic measures and their ergodic properties were investigated by [12]. More recently, random periodic behaviour has also been studied under weaker dissipativity assumptions, including non-uniformly dissipative SDEs and functional SDEs with finite or infinite delay [3], as well as McKean–Vlasov SDEs and their interacting-particle approximations [2]. Nu-merical approximation of random periodic solutions has been studied through Euler–Maruyama and modified Milstein schemes for SDEs [9], backward Euler– Maruyama schemes under monotone drift conditions [25], order-one backward Euler approximations for semilinear SDEs [14], and Galerkin-type exponential integrators for semilinear stochastic evolution equations [26]. These works pro-vide the conceptual background for replacing a single stationary limiting law by a periodically evolving family of laws. Our use of this theory is deliberately different from directly modelling a 3Figure 1: Schematic of PTL-Diffusion. The forward noising process is driven by a periodic terminal reference family rather than by a single invariant Gaussian law. The phase variable acts as a coarse coordinate for the structured terminal family, while the reverse model learns phase-conditioned denoising dynamics coupled by an invariant-average regularization. random periodic path or a functional stochastic differential equation. We do not introduce memory variables or formulate the generative model as a delay equation or an infinite-horizon stochastic integral equation. Instead, we ex-tract a simpler design principle: the forward noising dynamics of a diffusion model may organize their limiting laws into a structured periodic family. In PTL-Diffusion, this family acts as a tractable terminal reference geometry for manifold-supported data. PTL-Diffusion implements this principle through a periodically forced Ornstein– Uhlenbeck-type forward process, inspired by the example illustrated in [26]. Instead of converging to a single Gaussian terminal distribution, the forward process converges phase-wise to a repeating family of P Gaussian terminal laws, 
+
+{μ∗ 
+
+> r
+
+}P −1 
+
+> r=0
+
+, μ∗ 
+
+> r+P
+
+= μ∗ 
+
+> r
+
+. (1) Here μ∗ 
+
+> r
+
+denotes the terminal Gaussian law associated with phase r. The con-dition μ∗ 
+
+> r+P
+
+= μ∗ 
+
+> r
+
+means that the terminal family repeats after P phases. The family is nonconstant when at least two phases have different terminal laws. 4The resulting framework remains close to standard denoising diffusion mod-els. We derive explicit forward marginals and Gaussian reverse posteriors for the periodically forced forward process; see Section 2. This allows the reverse model to be trained using a standard noise-prediction objective. Because the reverse dynamics are indexed by phase, we introduce a phase-conditioned de-noising network using circular sinusoidal phase embeddings. We also impose an invariant-average regularization: although the model learns phase-wise reverse dynamics, the average over phases should remain tied to a coherent averaged reference law. This regularization couples the phase-wise reverse models and reflects the role of the phase average as an invariant object associated with the full periodic cycle. Our work is related to conditional diffusion models, where class labels, text prompts, or other auxiliary variables are supplied to the denoising network while the forward noising process remains unchanged [15, 8, 16]. The phase-conditioned DDPM baseline used in this paper follows this conditioning-only principle: it receives the same phase embedding as PTL-Diffusion, but its for-ward process still converges to one time-homogeneous Gaussian terminal law. PTL-Diffusion differs in that the phase coordinate is used to organize the for-ward reference law itself. Thus the terminal object is a phase-indexed family of measures rather than a single time-homogeneous Gaussian law. This distinction allows us to separate ordinary phase conditioning from the proposed periodic terminal reference structure. This paper should be read as a proof-of-concept study. We do not claim that a periodic terminal family is the correct reference law for all manifold-supported data, nor that a finite phase partition can represent arbitrary manifold geom-etry. The period P is fixed and finite, so the time-indexed or phase-indexed family of laws is represented through finitely many phase classes. This can be restrictive for strongly aperiodic data, continuously drifting nonstationary dis-tributions, or manifolds whose latent geometry cannot be well approximated by a coarse cyclic coordinate. Nevertheless, the finite-period construction pro-vides a controlled and tractable setting in which the terminal reference law is no longer a single invariant Gaussian, while the forward and reverse distributions remain analytically tractable. We evaluate PTL-Diffusion on two types of manifold-supported data. First, we consider synthetic torus and cylinder point-cloud datasets. These examples have explicit embedded-manifold structure and intrinsic angular coordinates, making them controlled benchmarks for testing a phase-indexed terminal ref-erence law. Second, we evaluate the method on the Olivetti face dataset [1], a small-scale image benchmark whose samples lie near a low-dimensional eigen-face manifold. In this case, phase is constructed from a low-dimensional em-bedding of the data. Across these experiments, we compare PTL-Diffusion with standard DDPM and phase-conditioned DDPM baselines under matched de-noising architectures and training budgets, thereby isolating the contribution of the periodic terminal reference law from ordinary phase conditioning. We re-port ambient-space metrics, manifold-feature metrics, phase-conditioned errors, invariant-average errors, and nearest-neighbour distances to the empirical data 5manifold. Our contributions are as follows. 1. We introduce PTL-Diffusion, a diffusion framework whose forward process converges to a nonconstant periodic Gaussian terminal family rather than a single invariant terminal law. 2. We derive closed-form forward marginals and Gaussian reverse posteriors for the periodically forced Ornstein–Uhlenbeck forward process, preserving compatibility with standard denoising-based training (see Section 2.1 and Section 2.2). 3. We introduce a phase-conditioned reverse model and an invariant-average regularization that couples the phase-wise reverse dynamics through the averaged reference law (see Lemma 3 and Section 2.3). 4. We provide proof-of-concept experiments on manifold-supported data, in-cluding point-cloud data on torus and cylinder geometries and a small face-image manifold benchmark, showing that periodic terminal laws can improve manifold-level distributional matching compared with standard Denoising Diffusion Probabilistic Model (DDPM) and phase-conditioned DDPM baselines (see Section 3). 
+
+# 2 Methodology 
+
+This section introduces PTL-Diffusion, a diffusion framework whose forward noising process is designed to approach a phase-indexed family of terminal laws rather than a single time-homogeneous Gaussian reference law. We begin with a tractable periodically forced Ornstein–Uhlenbeck-type recursion and derive its closed-form forward marginals, periodic limiting family, and Gaussian reverse posterior. These results show that the model remains compatible with standard denoising-based training while replacing the terminal reference distribution by a structured periodic family. We then introduce a phase-conditioned reverse model, an invariant-average regularization that couples the phase-wise reverse dynamics, and the corresponding training and sampling algorithms. Finally, we describe how the periodic forcing can be adapted from empirical phase centers when the data lie near a simple manifold or admit a meaningful coarse phase coordinate. 
+
+## 2.1 Periodic OU-type forward dynamics 
+
+In the following, all random variables are defined on a probability space (Ω , F, P), and L(X) denotes the law of a random variable X under P. We write E for ex-pectation with respect to P. When the relevant random variables are indicated in the subscript, for example EX,Y [·], the subscript specifies the variables over 6which the expectation is taken, with all other quantities held fixed or under-stood from context. Equivalently, EX,Y [·] denotes expectation with respect to the joint law L(X, Y ). Fix a period P ∈ N. Given an initial phase r0 ∈ { 0, . . . , P − 1}, we define 
+
+xn+1 = ρx n + br0+n + σε n+1 , (2) where 0 < ρ < 1, σ > 0, ( xn)n ⊂ Rd, εn ∼ N (0 , I d) are i.i.d., ( bn)n∈Z ⊂ Rd is a nonconstant P -periodic forcing: 
+
+bn+P = bn,
+
+and all phase indices are interpreted modulo P . The nonconstant assumption rules out the degenerate stationary case and ensures that the limiting family is genuinely phase-dependent. An example is bn = a sin (2 πn/P ) u, where a ∈ R
+
+controls the forcing amplitude and u ∈ Rd is a fixed direction. This example is nonconstant when P ≥ 3 and au ̸ = 0. The one-step transition is 
+
+q(xn+1 | xn, r 0) = N (ρx n + br0+n, σ 2Id). (3) Thus the forward process remains Gaussian and tractable, as in the standard DDPM, but its drift contains an explicit periodic component. 
+
+Lemma 1 (Forward marginal) . Consider the phase-indexed forward process defined in (2) with initial phase r0. For every n ≥ 1, the conditional forward marginal satisfies 
+
+q(xn | x0, r 0) = N (mn,r 0 (x0), Σn),
+
+where 
+
+mn,r 0 (x0) := ρnx0 +
+
+> n−1
+
+X
+
+> j=0
+
+ρn−1−j br0+j , Σn := σ2 1 − ρ2n
+
+1 − ρ2 Id.
+
+The proof of Lemma 1 is deferred to Appendix A.1. The lemma shows that the periodic forcing changes only the mean of the forward marginal. The covari-ance remains isotropic and admits the same closed-form geometric structure as an OU-type process. For simplicity in the experiments, we use the normalized noise scale σ = p1 − ρ2, so that Σ n = (1 − ρ2n)Id.
+
+Theorem 1 (Periodic limiting family and phase-wise convergence) . Consider the phase-indexed forward process defined in (2) with generic initial phase r.Then there exists a unique P -periodic Gaussian family 
+
+{μ∗ 
+
+> r
+
+}P −1 
+
+> r=0
+
+, μ∗ 
+
+> r
+
+= N (m∗ 
+
+> r
+
+, Σ∗), μ∗ 
+
+> r+P
+
+= μ∗ 
+
+> r
+
+,
+
+with 
+
+m∗ 
+
+> r
+
+=
+
+> ∞
+
+X
+
+> j=0
+
+ρj br−1−j , Σ∗ = σ2
+
+1 − ρ2 Id. (4) 7The family is nonconstant whenever the periodic forcing produces at least two distinct limiting means. One forward step advances the family by one phase: 
+
+xn ∼ μ∗ 
+
+> r
+
+=⇒ xn+1 ∼ μ∗
+
+> r+1
+
+,
+
+where phase indices are understood modulo P .Moreover, for any initial distribution ν0 with finite second moment and ini-tial phase r0,
+
+lim  
+
+> n→∞
+
+W1
+
+
+
+L(xn), μ ∗   
+
+> r0+n(mod P)
+
+
+
+= 0 , (5) 
+
+where, for any pair of probability measures μ and ν on Rd with finite first mo-ments, W1 denotes the Wasserstein-1 distance between them over the set of all their couplings Γ( μ, ν ):
+
+W1(μ, ν ) := inf 
+
+> γ∈Γ( μ,ν )
+
+Z
+
+> Rd×Rd
+
+|x − y| γ(d x, dy).
+
+Equivalently, the law of the forward process converges along each phase subse-quence to the corresponding member of the periodic terminal family. That is, for each fixed target phase r ∈ { 0, . . . , P − 1},
+
+L(xnℓ ) ⇒ μ∗ 
+
+> r
+
+as ℓ → ∞ ,
+
+whenever r0 + nℓ ≡ r (mod P ).
+
+The proof of Theorem 1 is deferred to Appendix A.2. This theorem gives the main structural property of the proposed forward process. Since 0 < ρ < 1, the effect of the initial condition is exponentially damped. Equivalently, one may view the limiting law by starting the recursion far in the past and letting the starting time tend to −∞ ; this is the pull-back viewpoint. In this limit, the initial condition disappears, but the periodic forcing leaves a phase-dependent contribution to the mean. The terminal reference object is therefore not a single Gaussian law, but a P -periodic family of Gaussian laws. 
+
+## 2.2 Reverse posterior and phase-conditioned reverse model 
+
+Since both the one-step transition and the forward marginal are Gaussian, the reverse posterior is also Gaussian. In the phase-indexed forward process (2), the forcing at the transition from xn to xn+1 is br0+n, where r0 is the initial phase of the data sample. Hence the reverse posterior is conditioned on both x0 and 
+
+r0.
+
+Lemma 2 (Gaussian reverse posterior) . For the phase-indexed forward process 
+
+(2) with r = r0 and n ≥ 1, the reverse posterior has the form 
+
+q(xn | xn+1 , x 0, r 0) = N
+
+eμn,r 0 (xn+1 , x 0), eΣn
+
+
+
+,
+
+where 
+
+eΣn = σ2 1 − ρ2n
+
+1 − ρ2( n+1) Id,
+
+8and 
+
+eμn,r 0 (xn+1 , x 0) = eΣn
+
+
+
+Σ−1 
+
+> n
+
+mn,r 0 (x0) + ρσ2 (xn+1 − br0+n)
+
+
+
+.
+
+Equivalently, using the forward noise variable ε defined by 
+
+xn+1 = mn+1 ,r 0 (x0) + σ
+
+s
+
+1 − ρ2( n+1) 
+
+1 − ρ2 ε, ε ∼ N (0 , I d),
+
+the posterior mean can be written as 
+
+eμn,r 0 (xn+1 , ε ) = 1
+
+ρ (xn+1 − br0+n) − κnε, 
+
+where 
+
+κn = σp1 − ρ2
+
+ρp1 − ρ2( n+1) .
+
+This noise form is directly analogous to the parameterization used in de-noising diffusion models. It allows us to train a neural network to predict the Gaussian noise while preserving the periodic forward structure. The proof of Lemma 2 is deferred to Appendix A.3. For the phase-conditioned reverse model, let rn = r0 + n (mod P ) denote the phase of the noisy variable xn at diffusion depth n. Since the phase variable is circular, we encode it using ϕ(r) =  sin 2πr P , cos 2πr P
+
+. The learned reverse kernel for the step from depth n to depth n − 1 is 
+
+pθ (xn−1 | xn, n, r n) = N
+
+
+
+μθ (xn, n, r n), eΣn−1
+
+
+
+,
+
+where 
+
+μθ (xn, n, r n) = 1
+
+ρ (xn − brn−1) − κn−1εθ (xn, n, ϕ (rn)) .
+
+Here rn − 1 is understood modulo P , and κn−1 is the reverse-noise coefficient from Lemma 2. The phase-conditioned network learns a family of reverse dynamics indexed by the current phase rn. This is more structured than merely adding an arbi-trary time embedding: the phase corresponds to the member μ∗ 
+
+> rn
+
+of the limiting periodic family. 
+
+## 2.3 Invariant-average principle 
+
+The phase-conditioned reverse model should not learn P unrelated reverse pro-cesses. The periodic family should remain tied to a coherent averaged reference law. This motivates an invariant-average regularization. Since the terminal family is periodic rather than stationary, no single phase law μ∗ 
+
+> r
+
+is invariant under one forward step on Rd. To make the invariant object explicit, we include the phase as part of the state and consider the lifted Markov chain on {0, . . . , P − 1} × Rd.9Lemma 3 (Invariant average on the lifted phase space) . Let {μ∗ 
+
+> r
+
+}P −1 
+
+> r=0
+
+be the 
+
+P -periodic terminal family from Theorem 1, and let {Kr }P −1 
+
+> r=0
+
+be Markov kernels satisfying 
+
+Kr μ∗ 
+
+> r
+
+= μ∗
+
+> r+1
+
+, r = 0 , . . . , P − 1,
+
+with indices understood modulo P . Define the lifted Markov kernel on {0, . . . , P −
+
+1} × Rd by 
+
+K (r, x ), {r + 1 } × A = Kr (x, A ).
+
+Then 
+
+Π∗ = 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+δr ⊗ μ∗
+
+> r
+
+is invariant under K. Its marginal on Rd is 
+
+¯μ∗ = 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+μ∗ 
+
+> r
+
+.
+
+We call ¯μ∗ the invariant-average reference law associated with the periodic ter-minal family. It is a phase mixture on Rd, not generally a single Gaussian law or an invariant law for a phase-forgetting one-step kernel. 
+
+Thus ¯ μ∗ should be understood as the state-space marginal of an invariant measure on the lifted phase space. It is not generally itself an invariant law for a phase-forgetting one-step Markov kernel on Rd.This result provides the theoretical basis for the regularization term used below. It enforces that the learned periodic family has a meaningful invariant average rather than arbitrary phase-wise behavior. The proof of Lemma 3 is deferred to Appendix A.4. 
+
+## 2.4 Training objective and algorithms 
+
+The preceding results give an explicit Gaussian noising process with a phase-indexed terminal reference law. We now turn this construction into a trainable diffusion model. The key point is that, unlike a standard DDPM whose forward process contracts toward a single isotropic Gaussian, the PTL forward process contracts toward a periodic family of Gaussian laws indexed by phase. Training therefore requires two pieces of information: the diffusion depth and the current phase of the noisy sample. The denoising network is trained to predict the Gaussian noise in the closed-form forward marginal, while the invariant-average term couples the phase-conditioned denoisers so that they do not behave as unrelated models across phases. The phase-conditioned denoising loss is 
+
+Lphase = Ex0,ε,n,r 0
+
+h
+
+|ε − εθ (xn, n, ϕ (rn)) |2i
+
+, rn = r0 + n (mod P ).
+
+This term trains the model to recover the reverse dynamics at each phase. For the invariant-average regularization, we use centered periodic forcing satisfying 10 P −1 PP −1 
+
+> s=0
+
+bs = 0; the data-adapted construction below enforces this condi-tion. The regularization is a shared-noise phase-average penalty motivated by Lemma 3: 
+
+Lavg = Ex0,ε,n,r 0
+
+ 1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+εθ (xn, n, ϕ (s)) − ε
+
+> 2
+
+ , (6) Although the reverse model is phase-conditioned, the phase-wise terminal laws should remain coupled through the averaged reference law ¯ μ∗. The full objective is 
+
+L = Lphase + λLavg , λ > 0. (7) The first term learns the phase-specific reverse dynamics. The second term couples the phases by enforcing that their average recovers the invariant-average reverse structure. This distinguishes the proposed method from a standard diffusion model with an additional phase embedding. The derivation is deferred to Appendix A.5. 
+
+Data-adapted periodic forcing. For manifold-supported data, the periodic forcing can be constructed from empirical phase centers. Suppose each training sample xi is assigned a phase ri ∈ { 0, . . . , P − 1}. Let 
+
+cr = 1
+
+|I r |
+
+X
+
+> i∈I r
+
+xi, Ir = {i : ri = r}. (8) To ensure compatibility with the invariant-average principle, we work in cen-tered coordinates. Let ¯c = 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+cr , ˜cr = cr − ¯c. 
+
+We then define 
+
+br = ˜ cr+1 − ρ˜cr , br+P = br . (9) This choice makes the deterministic part of the forward dynamics transport centered phase centers cyclically: if xk = ˜ cr , then ρx k + br = ˜ cr+1 . Moreover, 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+br = 0 , (10) which is the condition needed for the invariant-average regularization. In par-ticular, the data-adapted forcing defined in Eq. (9) satisfies the assumptions of Theorem 1 whenever the centered empirical phase centers are not all identical. The algorithms below summarize the implementation of this construction. Algorithm 1 uses the closed-form forward marginal from Lemma 1, so noisy samples can be generated directly at an arbitrary diffusion depth without it-erating through all intermediate steps. Algorithm 2 implements the learned reverse chain. At each reverse step, the network is conditioned on the phase of 11 Algorithm 1 PTL forward noising process 
+
+Require: Training data {xi, r i}Ni=1 , period P , contraction ρ ∈ (0 , 1), maximum diffusion depth K. 
+
+> 1:
+
+Estimate phase centers cr via Eq. (8).  
+
+> 2:
+
+Define periodic forcing br via Eq. (9).  
+
+> 3:
+
+Precompute offsets 
+
+a0,r = 0 , ak+1 ,r = ρa k,r + br+k, k = 0 , . . . , K − 1. 
+
+> 4:
+
+Sample ( x0, r 0) from the training set, k ∼ Unif {1, . . . , K }, and ε ∼ N (0 , I d).  
+
+> 5:
+
+Generate the noisy sample by the direct PTL marginal 
+
+xk = ρkx0 + ak,r 0 + p1 − ρ2k ε.  
+
+> 6:
+
+Set the current phase 
+
+rk = r0 + k (mod P ). 
+
+> 7:
+
+return (xk, r k, ε ). the current noisy state, while the deterministic forcing term corresponds to the phase of the previous forward transition. Algorithm 1 is justified by the closed-form marginal 
+
+xk = ρkx0 +
+
+> k−1
+
+X
+
+> j=0
+
+ρk−1−j br0+j + p1 − ρ2k ε, 
+
+where we use the normalized choice σ = p1 − ρ2. The precomputed offset ak,r 
+
+is exactly the deterministic forcing contribution 
+
+ak,r =
+
+> k−1
+
+X
+
+> j=0
+
+ρk−1−j br+j .
+
+Thus the algorithm samples exactly from q(xk | x0, r 0). Algorithm 2 follows the Gaussian reverse parameterization from Lemma 2. In the reverse step from xk+1 to xk, the noisy input xk+1 has phase rk+1 , so the denoiser is conditioned on ϕ(rk+1 ). However, the forward transition from xk to 
+
+xk+1 used the forcing brk ; hence the reverse mean subtracts brk . The coefficient 
+
+κk is the scalar multiplying the predicted noise in the Gaussian reverse posterior, and ˜ σ2 
+
+> k
+
+is the chosen reverse variance. 
+
+# 3 Experiments 
+
+## 3.1 Overview 
+
+We evaluate PTL-Diffusion as a diffusion model for manifold-structured data. The central hypothesis is that replacing the single Gaussian terminal law of 12 Algorithm 2 Sampling from PTL-Diffusion 
+
+Require: Trained denoiser εθ , period P , diffusion depth K, contraction ρ, pe-riodic forcing {br }P −1 
+
+> r=0
+
+, reverse variance schedule {˜σ2
+
+> k
+
+}K−1 
+
+> k=0
+
+. 
+
+> 1:
+
+Sample an initial phase r0 ∼ Unif {0, . . . , P − 1} and set rK = r0 +
+
+K (mod P ).  
+
+> 2:
+
+Sample xK from the finite-depth terminal approximation 
+
+xK ∼ N  aK,r 0 , (1 − ρ2K )Id
+
+
+
+with the terminal phase rK = r0 + K (mod P ).  
+
+> 3:
+
+for k = K − 1, K − 2, . . . , 0 do  
+
+> 4:
+
+Set rk = rK − (K − k) (mod P ).  
+
+> 5:
+
+Predict noise ˆε = εθ (xk+1 , k + 1 , ϕ (rk+1 )) . 
+
+> 6:
+
+Compute the reverse mean 
+
+μθ (xk+1 , k + 1 , r k+1 ) = 1
+
+ρ (xk+1 − brk ) − κk ˆε, 
+
+where κk is the scalar coefficient from the Gaussian reverse posterior.  
+
+> 7:
+
+Sample 
+
+xk = μθ (xk+1 , k + 1 , r k+1 ) + ˜ σkz, z ∼ N (0 , I d),
+
+with z = 0 at the final step if deterministic sampling is used.  
+
+> 8:
+
+end for  
+
+> 9:
+
+return x0.DDPM by a phase-indexed periodic terminal family gives the forward process a better coarse geometry for data concentrated near a low-dimensional manifold. We consider two experimental settings. First, we use synthetic manifold data, where the phase coordinate and target geometry are known, to verify that PTL-Diffusion recovers phase-conditioned structure and the invariant-average law. Second, we evaluate on the Olivetti face dataset, where images lie near a low-dimensional eigenface manifold. Within each dataset, DDPM, phase-conditioned DDPM, PTL-Diffusion, and PTL-Diffusion without invariant-average regularization use the same denoising backbone and training budget. Thus performance differences can be attributed to the forward reference law, phase conditioning, and invariant-average regular-ization rather than to model capacity. We conducted all experiments on a server running Ubuntu 24.04.4 LTS 64-bit. The server features 376 GiB of memory and two Intel ® Xeon ® Silver 4108 CPUs @ 1.80 GHz with 16 physical cores and 32 logical CPUs, and an NVIDIA A100-PCIE-40GB GPU, providing a robust computational environment for the applications. The implementation was based on PyTorch 2.6.0 with CUDA 12.4 13 support. 
+
+## 3.2 Models and ablations 
+
+We compare the following models. 1. DDPM. A standard diffusion baseline whose forward noising process con-verges to a single time-homogeneous Gaussian terminal reference law. 2. Phase-conditioned DDPM (Phase-DDPM). A diffusion baseline with the same standard forward noising process as DDPM, so that its terminal reference law remains a single time-homogeneous Gaussian distribution. Unlike DDPM, its denoising network also receives the sinusoidal phase embedding as an additional input. This baseline tests whether any im-provement comes merely from phase conditioning in the reverse model, rather than from the periodic terminal law used in PTL-Diffusion. 3. PTL-Diffusion. The full proposed model uses the periodic forward law, sinusoidal phase embedding, and invariant-average regularization in (6). This is the main model evaluated in our proof-of-concept experiments. 4. PTL-Diffusion without invariant-average regularization (PTL-Diffusion w/o reg.). The model uses both the periodic forward law and the phase em-bedding, but removes Lavg defined in (6). This tests whether the phase-wise reverse models become unstable or incoherent without the invariant-average principle. The ablation study compares the last two models above. 
+
+## 3.3 Manifold-based sample generation 
+
+We first evaluate PTL-Diffusion on synthetic datasets supported near simple embedded manifolds. These experiments are designed as controlled proof-of-concept tests: the target geometry is known, an intrinsic cyclic coordinate is available, and we can directly assess whether generated samples remain close to the prescribed manifold. 
+
+Torus point-cloud benchmark. For the torus benchmark, we generate i.i.d. samples on the embedded torus T2 = S1 × S1 ⊂ R4. We sample θ(1) ∼
+
+Unif(0 , 2π) and set 
+
+θ(2) = 2 θ(1) + ξ (mod 2 π), ξ ∼ N (0 , σ 2 
+
+> θ
+
+),
+
+before embedding each sample as 
+
+X =
+
+
+
+cos θ(1) , sin θ(1) , cos θ(2) , sin θ(2) 
+
++ η, η ∼ N (0 , σ 2
+
+> x
+
+I4).
+
+The phase label is obtained by binning θ(1) into P cyclic phase bins. 14 Cylinder point-cloud benchmark. For the cylinder benchmark, we gener-ate i.i.d. samples near the embedded cylindrical surface S1 × [−h/ 2, h/ 2] ⊂ R3.We sample the angular and height variables as 
+
+θ ∼ Unif(0 , 2π), z ∼ Unif 
+
+
+
+− h
+
+2 , h
+
+2
+
+
+
+,
+
+where h denotes the cylinder height. Each sample is then embedded into R3 by 
+
+X = (cos θ, sin θ, z ) + η, η ∼ N (0 , σ 2
+
+> x
+
+I3).
+
+The phase label is obtained by binning the S1 coordinate θ into P cyclic phase bins. 
+
+Evaluation. The evaluation focuses on three aspects: ambient distributional fidelity, manifold consistency, and phase recovery. First, we report the coordinate-wise marginal Wasserstein-1 distance 
+
+EW1 = 1
+
+d
+
+> d
+
+X
+
+> j=1
+
+W1
+
+
+
+{x(j) 
+
+> i
+
+}Ni=1 , {ˆx(j) 
+
+> i
+
+}Mi=1 
+
+
+
+,
+
+where {xi}Ni=1 are real samples and {ˆxi}Mi=1 are generated samples. This mea-sures marginal fidelity in the ambient Euclidean coordinates. Second, we compare dependence structure through the empirical correlation error 
+
+Ecorr = 1
+
+d2 ∥Creal − Cgen ∥1 ,
+
+where Creal and Cgen are the empirical correlation matrices of the real and generated samples, respectively, and ∥A∥1 denotes the entrywise matrix ℓ1 norm, i.e., 
+
+∥A∥1 =
+
+> d
+
+X
+
+> i=1
+> d
+
+X
+
+> j=1
+
+|Aij |.
+
+Third, because the true manifolds are known, we directly measure manifold constraint violations. For the torus, we define 
+
+Etorus = Eˆx
+
+ (ˆ x21 + ˆ x22) − 1 + (ˆ x23 + ˆ x24) − 1  .
+
+For the cylinder, we define 
+
+Ecyl = Eˆx
+
+ (ˆ x21 + ˆ x22) − 1  .
+
+These quantities measure whether generated samples remain close to the em-bedded torus or cylinder. Finally, we evaluate phase recovery. For a generated torus sample, we infer the first circular phase by ˆr(ˆ x) = 
+
+ P
+
+2π atan2(ˆ x2, ˆx1)
+
+
+
+(mod P ).
+
+15 Let preal (r) and pgen (r) be the empirical phase histograms. We report 
+
+Ephase-TV = 12 
+
+> P−1
+
+X
+
+> r=0
+
+|preal (r) − pgen (r)| .
+
+We also report the phase-conditioned distributional error 
+
+Ephase = 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+D(νr , ˆνr ),
+
+where νr and ˆ νr are the real and generated laws conditioned on phase r. In practice, D is implemented as a moment-based or Wasserstein distance in the observed embedding space. The invariant-average principle is evaluated by 
+
+Eavg = D 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+νr , 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+ˆνr
+
+!
+
+.
+
+This metric directly tests whether the averaged generated phase family matches the averaged real reference law. 
+
+Experiment setup. For both datasets, we compare DDPM, Phase-DDPM, PTL-Diffusion without regularization, and full PTL-Diffusion. We use the same denoising backbone and training budget for all models. For each dataset, 12000 samples were used for training and 3000 samples were used for evaluation. All models were trained for 60 epochs under the same training configuration to ensure a fair comparison. For PTL-diffusion and its variants, the periodic pa-rameter is set to P = 30. After training, generated samples were drawn from each model and compared with the target data distribution both visually and quantitatively. For the quantitative evaluation, the reported results were com-puted over 10 independent sampling runs and presented as mean ± standard deviation. Lower metric values indicate a closer match between the generated and target distributions. 
+
+Model comparison. Fig. 2 shows the generated samples on the torus and cylinder datasets after 60 training epochs. For both datasets, the conventional DDPM fails to preserve the underlying periodic geometry and tends to generate samples concentrated around a non-periodic Gaussian-like cloud. By introduc-ing phase information into the denoising network, Phase-DDPM produces more structured samples than DDPM and partially recovers the circular patterns in both datasets. This indicates that phase conditioning itself provides useful in-formation for learning periodic data distributions. However, Phase-DDPM still does not fully preserve the target manifold geometry, especially in the torus projections and the cylinder height distribution. In contrast, PTL-Diffusion produces samples that are much better aligned with the circular and periodic structures of the target distributions. On the 16 torus dataset, PTL-Diffusion successfully recovers the ring-shaped projections on both S1 components, whereas DDPM produces scattered samples without clear periodic structure. Similarly, on the cylinder dataset, PTL-Diffusion cap-tures both the circular cross-section and the distribution along the cylinder height, while DDPM again loses the periodic structure and generates samples mainly around the center. The quantitative results further support the visual observations. As shown in Tables 1 and 2, Phase-DDPM improves upon DDPM on most synthetic metrics, confirming that adding phase conditioning to the denoising network is benefi-cial in this controlled setting. For example, on the torus dataset, EW1 decreases from 0 .159 for DDPM to 0 .109 for Phase-DDPM, and Ephase decreases from 0.240 to 0 .167. On the cylinder dataset, Phase-DDPM also reduces EW1 from 0.148 to 0 .084 and Eavg from 0 .145 to 0 .080. Nevertheless, the PTL-Diffusion variants achieve stronger overall performance, particularly on geometry-related metrics. For the torus dataset, PTL-Diffusion further reduces EW1 to 0 .043, 
+
+Ephase to 0 .057, and Eavg to 0 .039. For the cylinder dataset, PTL-Diffusion ob-tains a much lower cylinder constraint error than Phase-DDPM, reducing Ecyl 
+
+from 0 .341 to 0 .135, and also achieves a lower overall average error of 0 .076. These results suggest that the improvement of the PTL-Diffusion variants can-not be explained merely by providing phase information to the neural network. Instead, the periodic forward formulation plays an important role in preserving the intrinsic geometry of periodic domains. 17 (a) Torus dataset 
+
+> (b) Cylinder dataset
+
+Figure 2: Sample comparison on the torus and cylinder datasets after 60 training epochs. For the torus dataset, the columns show samples generated by DDPM and PTL-Diffusion from left to right, while the upper and lower panels show the projections onto the first and second S1 components of the torus, respectively. For the cylinder dataset, the plots show samples generated by DDPM and PTL-Diffusion, where the upper row shows the circular cross-section and the lower row shows the distribution along the cylinder height. 18 Table 1: Quantitative comparison on the torus dataset over 10 independent sampling runs. Results are reported as mean ± standard deviation. Lower values indicate better performance for all metrics. Metric DDPM Phase-DDPM PTL-Diffusion PTL-Diffusion w/o reg.                                                                         
+
+> EW10.159 ±0.003 0.109 ±0.002 0.043 ±0.002 0.043 ±0.003
+> Ecorr 0.026 ±0.005 0.015 ±0.004 0.016 ±0.002 0.017 ±0.004
+> Ephase-TV 0.059 ±0.007 0.057 ±0.007 0.052 ±0.005 0.056 ±0.007
+> Etorus 1.319 ±0.015 0.879 ±0.012 0.496 ±0.005 0.486 ±0.006
+> Ephase 0.240 ±0.003 0.167 ±0.003 0.057 ±0.001 0.057 ±0.001
+> Eavg 0.159 ±0.003 0.107 ±0.002 0.039 ±0.001 0.038 ±0.001
+
+Table 2: Quantitative comparison on the cylinder dataset over 10 independent sampling runs. Results are reported as mean ± standard deviation. Lower values indicate better performance for all metrics. Metric DDPM Phase-DDPM PTL-Diffusion PTL-Diffusion w/o reg.                                                                         
+
+> EW10.148 ±0.003 0.084 ±0.003 0.086 ±0.005 0.087 ±0.003
+> Ecorr 0.014 ±0.006 0.015 ±0.004 0.013 ±0.004 0.014 ±0.004
+> Ephase-TV 0.064 ±0.008 0.055 ±0.007 0.056 ±0.007 0.059 ±0.006
+> Ecyl 0.715 ±0.012 0.341 ±0.004 0.135 ±0.002 0.128 ±0.002
+> Ephase 0.188 ±0.003 0.107 ±0.002 0.085 ±0.002 0.084 ±0.001
+> Eavg 0.145 ±0.004 0.080 ±0.001 0.076 ±0.002 0.077 ±0.002
+
+Ablation study. The ablation results using PTL-Diffusion without regular-ization show that the model still performs competitively, and in some metrics it obtains slightly lower numerical values than the fully regularized version. How-ever, the differences between PTL-Diffusion and its non-regularized variant are relatively small compared with the large performance gap between DDPM and the proposed periodic models. This suggests that the main performance gain comes from the periodic diffusion formulation itself, while the regularization term provides additional control over the learned representation and can help stabilize the training behavior. 
+
+Sensitivity analysis. Figure 3 investigates the influence of the periodic pa-rameter P on the performance of PTL-Diffusion for the torus and cylinder datasets. For both datasets, the relevant manifold-constraint error ( Etorus or Ecyl )decreases substantially as P increases from a small value, indicating that an overly coarse phase discretization is insufficient to capture the underlying peri-odic geometry. This effect is particularly pronounced for the cylinder dataset, where Ecyl drops rapidly from P = 5 to around P = 20 and then decreases more gradually. A similar trend is observed on the torus dataset, although the torus constraint error remains larger overall, reflecting the more complex peri-odic structure of the torus geometry. In contrast, both EW1 and Ecorr are much less sensitive to P .In our experiments, P = 30 is therefore adopted as a practical default, since it lies in the stable region where further increases in P provide only limited 19 additional improvement. 
+
+Figure 3: Sensitivity analysis of PTL-Diffusion under different periodic parame-ters P : (a) reports the results on the torus dataset, while (b) reports the results on the cylinder dataset. For each value of P , the model is evaluated over 10 independent sampling runs, and the plotted values represent the mean perfor-mance. 
+
+## 3.4 Face dataset generation 
+
+We next evaluate PTL-Diffusion on the Olivetti face dataset [1] as a small-scale image-manifold benchmark. The dataset contains 400 grayscale face images of size 64 × 64 from 40 subjects. As shown in Figs. 4a and 4b, the dataset con-tains both inter-subject variations across different individuals and intra-subject variations for the same person. Although the images lie in a 4096-dimensional ambient space, their dominant variability is well captured by a low-dimensional eigenface/PCA representation. We therefore use this dataset to test whether PTL-Diffusion improves generation on data concentrated near an empirical face manifold. 20 (a) Ten sample face images from different subjects 
+
+> (b) Multiple images of the same subjects
+
+Figure 4: Examples from the Olivetti faces dataset: (a) shows ten face images selected from different subjects, illustrating inter-subject variation; (b) shows multiple images of the same subjects, illustrating intra-subject variation caused by changes in expression, pose, and viewing conditions. 
+
+Phase construction. Since Olivetti is not a dynamical system with a physical time phase, we construct the phase variable from the data manifold itself. In this experiment, the periodic parameter is set to P = 16. We first fit PCA on the training images and project each image xi to its first two principal components, 
+
+zi = ( zi, 1, z i, 2) = FPCA (xi).
+
+The phase label is then defined by the angular coordinate 
+
+ri =
+
+ P
+
+2π atan2( zi, 2, z i, 1)
+
+
+
+(mod P ).
+
+This construction treats phase as a coarse coordinate on the empirical eigenface manifold, rather than as physical time. Given the phase labels, we estimate phase centers using Eq. (8) and use the centered data-adapted forcing from Eq. (9). Thus the deterministic part of the PTL forward process transports the centered phase center ˜ cr toward ˜ cr+1 while preserving the zero-mean forcing condition in Eq. (10). 
+
+Evaluation. For Olivetti, standard large-scale image metrics such as FID are less reliable because the dataset contains only 400 grayscale images. We there-fore use metrics tailored to small face-manifold generation. First, we compute a pixel-level marginal Wasserstein-1 distance. After flat-tening images into R4096 , we define 
+
+Epixel = 1
+
+|J | 
+
+X
+
+> j∈J
+
+W1
+
+
+
+{x(j) 
+
+> i
+
+}Ni=1 , {ˆx(j) 
+
+> i
+
+}Mi=1 
+
+
+
+,
+
+21 where J is either the full set of pixel coordinates or a fixed random subset. This measures ambient grayscale fidelity. Second, we evaluate distributional matching in eigenface space. Let FPCA 
+
+be the PCA map fitted on training images, and define 
+
+zi = FPCA (xi), ˆzi = FPCA (ˆ xi),
+
+with corresponding means μz and μˆz , and covariances Σ z and Σ ˆz . We report the eigenface mean error 
+
+EPCA-mean = |μz − μˆz | ,
+
+and the eigenface covariance error 
+
+EPCA-cov = 1
+
+dPCA 
+
+∥Σz − Σˆz ∥F ,
+
+where ∥A∥F is the Frobenius norm of a matrix A, and dPCA ∈ N is the dimension of the PCA space. These metrics measure whether generated samples match the location and shape of the empirical face manifold. Third, we compute the nearest-neighbor distance from generated samples to the training set in PCA space: 
+
+ENN = 1
+
+M
+
+> M
+
+X
+
+> i=1
+
+min 
+
+> 1≤j≤Ntrain
+
+ˆzi − ztrain  
+
+> j
+
+.
+
+This metric acts as a small-data proxy for manifold fidelity: lower values indicate that generated samples lie closer to the empirical face manifold. Finally, we evaluate low-frequency illumination statistics. Let B(·) be a fixed Gaussian blur or low-pass filter, and let GPCA be a PCA map fitted to blurred training images. We define 
+
+ℓi = GPCA (B(xi)) and ˆℓi = GPCA (B(ˆ xi)) ,
+
+with corresponding means μℓ and μˆℓ, and covariances Σ ℓ and Σ ˆℓ. We report 
+
+ELF-mean = μℓ − μˆℓ and ELF-cov = 1
+
+dLF 
+
+Σℓ − Σˆℓ F ,
+
+where dLF ∈ N is the dimension of the corresponding PCA space. These metrics target coarse illumination and shading structure rather than high-frequency pixel details. 
+
+Model comparison. The Olivetti faces experiments were conducted for 5000 training epochs for all four models compared. Table 3 reports the quantitative comparison among DDPM, Phase-DDPM, PTL-Diffusion, and PTL-Diffusion without regularization. 22 Table 3: Quantitative comparison on the Olivetti faces dataset over 10 indepen-dent sampling runs. Results are reported as mean ± standard deviation. Lower values indicate better performance for all metrics. Metric DDPM Phase-DDPM PTL-Diffusion PTL-Diffusion w/o reg.                                                                         
+
+> Epixel 0.228 ±0.006 0.233 ±0.006 0.110 ±0.004 0.122 ±0.004
+> EPCA-mean 11 .338 ±0.174 12 .120 ±0.161 5.707 ±0.278 6.881 ±0.281
+> EPCA-cov 2.956 ±0.019 2.956 ±0.022 1.517 ±0.132 1.546 ±0.116
+> ENN 9.813 ±0.113 10 .183 ±0.114 7.782 ±0.246 7.326 ±0.265
+> ELF-mean 10 .636 ±0.186 11 .409 ±0.173 5.292 ±0.304 6.402 ±0.367
+> ELF-cov 5.477 ±0.040 5.474 ±0.045 2.513 ±0.304 2.508 ±0.267
+
+Overall, PTL-Diffusion achieves substantially lower errors than the conven-tional DDPM and Phase-DDPM across all evaluation metrics, indicating that the proposed periodic terminal-law formulation is also effective for structured image data. For example, the pixel-level error Epixel is reduced from 0 .228 for DDPM and 0 .233 for Phase-DDPM to 0 .110 for PTL-Diffusion. Similarly, the PCA-based mean error decreases from 11 .338 for DDPM and 12 .120 for Phase-DDPM to 5 .707, and the LF-mean error decreases from 11 .409 to 5 .292. These improvements suggest that PTL-Diffusion can better capture both low-level im-age similarity and higher-level structural features of the face images. It is also worth noting that Phase-DDPM does not consistently improve over the conventional DDPM on the Olivetti dataset. Although it uses phase infor-mation, its errors are close to or slightly higher than those of DDPM on several metrics, such as Epixel , EPCA-mean , ENN , and ELF-mean . This suggests that simply adding a phase embedding to the denoising network is not sufficient to improve generation quality for this image dataset. In contrast, PTL-Diffusion modifies the diffusion process itself through the periodic latent formulation, which leads to a more effective representation of the structured face distribu-tion. Fig. 5 further illustrates the face generation process at different training epochs. At the early stage of training, all models produce noisy and poorly structured outputs. As training progresses, DDPM gradually learns coarse fa-cial patterns, while Phase-DDPM shows slightly more structured intermediate samples than DDPM in some epochs but remains relatively blurred. By compar-ison, PTL-Diffusion produces clearer and more face-like samples after sufficient training, with more recognizable facial contours and smoother image structures. 23 Figure 5: Comparison of face generation progress: columns show selected train-ing epochs, and the rows show DDPM, Phase-DDPM, PTL-Diffusion, and PTL-Diffusion without regularization from top to bottom. 
+
+Ablation study. As shown in Table 3, the two variants achieve comparable performance on the Olivetti faces dataset. The regularized PTL-Diffusion model obtains slightly lower errors on Epixel , EPCA-mean , EPCA-cov , and ELF-mean , while the variant without regularization gives marginally lower values on ENN and 
+
+ELF-cov .
+
+# 4 Discussion and Conclusion 
+
+We introduced PTL-Diffusion, a diffusion framework in which the forward nois-ing process converges to a nonconstant periodic family of Gaussian terminal laws rather than to a single time-homogeneous Gaussian reference distribution. The motivation is to provide the reverse model with a structured terminal reference geometry when the data are concentrated near a low-dimensional manifold or admit a meaningful coarse phase coordinate. In this sense, the phase variable is not used merely as an auxiliary conditioning input to the denoising network; it is built into the reference dynamics of the diffusion process itself. The proposed construction can be viewed as a coarse, chart-inspired way of organizing the terminal reference law. A manifold may require several local coordinate descriptions rather than a single global Euclidean coordinate system. PTL-Diffusion does not explicitly learn manifold charts, transition maps, or a Riemannian metric. Instead, it uses a finite phase-indexed family of Gaussian terminal laws as a tractable approximation to this local organization. The phase variable acts as a coarse descriptor of variation in the data, while the periodic terminal family provides different reference laws for different phase classes. The proposed construction preserves much of the tractability of standard de-noising diffusion models. For the periodically forced Ornstein–Uhlenbeck-type forward process, we derived closed-form forward marginals, identified the limit-ing periodic Gaussian family, and obtained explicit Gaussian reverse posteriors. These formulae allow the model to be trained using a standard noise-prediction 24 objective, while replacing the usual single terminal law by a phase-indexed refer-ence family. We also introduced an invariant-average regularization term, which couples the phase-conditioned reverse dynamics by enforcing consistency with the averaged periodic reference law. This regularization allows phase-wise flex-ibility while discouraging the learned phase-conditioned reverse processes from becoming unrelated. A key distinction from phase-conditioned DDPM is that PTL-Diffusion changes the forward reference law, not only the input variables of the reverse model. In a phase-conditioned DDPM, the phase label may enter the denoising net-work, but the forward process still destroys all samples toward the same time-homogeneous Gaussian terminal distribution. By contrast, PTL-Diffusion uses a forward process whose limiting object is the periodic family {μ∗ 
+
+> r
+
+}P −1 
+
+> r=0
+
+. Thus, phase information is encoded in the noising dynamics and terminal geometry, rather than being left entirely for the neural network to recover during reverse denoising. This provides a stronger structural inductive bias, especially when the data admit a meaningful coarse phase representation. Our experiments provide a proof-of-concept validation of this principle. On synthetic torus and cylinder benchmarks, PTL-Diffusion improves manifold-level distributional matching and phase-conditioned recovery compared with DDPM and phase-conditioned DDPM baselines under matched denoising ar-chitectures. On the Olivetti face benchmark, the method also shows improved feature-level and manifold-neighbourhood metrics, suggesting that periodic ter-minal laws can act as a useful inductive bias beyond explicitly periodic sample paths. The main limitation of the present construction is that the period P is fixed and finite. This means that the time-indexed or phase-indexed family of laws is represented through finitely many phase classes, which may be restrictive for strongly aperiodic data, continuously drifting nonstationary distributions, or manifolds whose latent geometry cannot be well approximated by a coarse cyclic coordinate. A related limitation is that the phase descriptor used in the current experiments is fixed before training, for example by an angular coordinate or a low-dimensional embedding. Therefore, the proposed periodic terminal family should be understood as a controlled structural approximation rather than a universally expressive model of nonstationarity or manifold geometry. Nevertheless, these restrictions are also what make the framework math-ematically transparent and computationally tractable. The finite-period con-struction gives a concrete setting in which the terminal reference law is no longer a single invariant Gaussian, while the forward and reverse distributions remain analytically tractable. More expressive variants could learn the phase coordinate, adapt the period P , use multiple or hierarchical periods, replace the Gaussian periodic family by richer structured terminal laws, or combine the proposed construction with modern U-Net, transformer, or latent-diffusion backbones. A natural next direction is large-scale image generation, including face datasets such as CelebA, where phase variables may correspond to coarse factors such as pose, illumination, expression, or identity-related manifold coordinates. Such 25 experiments would test whether the benefits observed in the present proof-of-concept setting persist when PTL-Diffusion is integrated with stronger architec-tures and larger datasets. They would also clarify when a finite phase partition is sufficient and when a more flexible learned or continuous phase representation is needed. 
+
+# References 
+
+[1] AT&T Laboratories Cambridge. The olivetti faces dataset. 
+
+https://scikit-learn.org/stable/modules/generated/sklearn. datasets.fetch_olivetti_faces.html .[2] Jianhai Bao, Goncalo Dos Reis, and Yue Wu. The random periodic so-lutions for mckean-vlasov stochastic differential equations. arXiv preprint arXiv:2408.17242 , 2024. [3] Jianhai Bao and Yue Wu. Random periodic solutions for stochas-tic differential equations with non-uniform dissipativity. arXiv preprint arXiv:2202.09771 , 2022. [4] Mikhail Belkin and Partha Niyogi. Laplacian eigenmaps for dimensionality reduction and data representation. Neural Computation , 15(6):1373–1396, 2003. [5] Yoshua Bengio, Aaron Courville, and Pascal Vincent. Representation learn-ing: A review and new perspectives. IEEE Transactions on Pattern Anal-ysis and Machine Intelligence , 35(8):1798–1828, 2013. [6] Valentin De Bortoli, Emile Mathieu, Michael John Hutchinson, James Thornton, Yee Whye Teh, and Arnaud Doucet. Riemannian score-based generative modelling. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho, editors, Advances in Neural Information Processing Systems , 2022. [7] Ronald R. Coifman and St´ ephane Lafon. Diffusion maps. Applied and Com-putational Harmonic Analysis , 21(1):5–30, 2006. Special Issue: Diffusion Maps and Wavelets. [8] Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. In Advances in Neural Information Processing Systems ,volume 34, pages 8780–8794, 2021. [9] Chunrong Feng, Yu Liu, and Huaizhong Zhao. Numerical approximation of random periodic solutions of stochastic differential equations. Zeitschrift f¨ ur angewandte Mathematik und Physik , 68(5):119, 2017. [10] Chunrong Feng, Yue Wu, and Huaizhong Zhao. Anticipating random pe-riodic solutions—i. sdes with multiplicative linear noise. Journal of Func-tional Analysis , 271(2):365–417, 2016. 26 [11] Chunrong Feng and Huaizhong Zhao. Random periodic solutions of spdes via integral equations and wiener–sobolev compact embedding. Journal of Functional Analysis , 262(10):4377–4422, 2012. [12] Chunrong Feng and Huaizhong Zhao. Random periodic processes, periodic measures and ergodicity. Journal of Differential Equations , 269(9):7382– 7428, 2020. [13] Chunrong Feng, Huaizhong Zhao, and Bo Zhou. Pathwise random peri-odic solutions of stochastic differential equations. Journal of Differential Equations , 251(1):119–149, 2011. [14] Yujia Guo, Xiaojie Wang, and Yue Wu. Order-one convergence of the back-ward euler method for random periodic solutions of semilinear sdes. Dis-crete and Continuous Dynamical Systems - Series B , 30:3222–3242, 2025. [15] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion proba-bilistic models. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin, editors, Advances in Neural Information Processing Systems ,volume 33, pages 6840–6851. Curran Associates, Inc., 2020. [16] Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. arXiv preprint arXiv:2207.12598 , 2022. [17] Chin-Wei Huang, Milad Aghajohari, Joey Bose, Prakash Panangaden, and Aaron Courville. Riemannian diffusion models, 2022. [18] Emile Mathieu and Maximilian Nickel. Riemannian continuous normalizing flows. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin, editors, Advances in Neural Information Processing Systems , volume 33, pages 2503–2515. Curran Associates, Inc., 2020. [19] Hariharan Narayanan and Sanjoy Mitter. Sample complexity of testing the manifold hypothesis. In J. Lafferty, C. Williams, J. Shawe-Taylor, R. Zemel, and A. Culotta, editors, Advances in Neural Information Processing Sys-tems , volume 23. Curran Associates, Inc., 2010. [20] Sam T. Roweis and Lawrence K. Saul. Nonlinear dimensionality reduction by locally linear embedding. Science , 290(5500):2323–2326, 2000. [21] Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Gan-guli. Deep unsupervised learning using nonequilibrium thermodynamics. In Francis Bach and David Blei, editors, Proceedings of the 32nd International Conference on Machine Learning , volume 37 of Proceedings of Machine Learning Research , pages 2256–2265, Lille, France, 07–09 Jul 2015. PMLR. [22] Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In 9th International Conference on Learn-ing Representations, ICLR 2021, Virtual Event, Austria, May 3-7, 2021 .OpenReview.net, 2021. 27 [23] Joshua B. Tenenbaum, Vin de Silva, and John C. Langford. A global geometric framework for nonlinear dimensionality reduction. Science ,290(5500):2319–2323, 2000. [24] Matthew Turk and Alex Pentland. Eigenfaces for recognition. Journal of Cognitive Neuroscience , 3(1):71–86, 01 1991. [25] Yue Wu. Backward euler–maruyama method for the random periodic so-lution of a stochastic differential equation with a monotone drift. Journal of Theoretical Probability , 36(1):605–622, 2023. [26] Yue Wu and Chenggui Yuan. The galerkin analysis for the random periodic solution of semilinear stochastic evolution equations. Journal of Theoretical Probability , 37(1):133–159, 2024. 
+
+# A Proofs 
+
+## A.1 Proof of Lemma 1 
+
+Proof. Recall the phase-indexed forward recursion 
+
+xn+1 = ρx n + br0+n + σε n+1 ,
+
+where εn ∼ N (0 , I d) are independent and the phase indices are understood modulo P .Unrolling the recursion gives 
+
+xn = ρnx0 +
+
+> n−1
+
+X
+
+> j=0
+
+ρn−1−j br0+j + σ
+
+> n
+
+X
+
+> j=1
+
+ρn−j εj .
+
+Conditional on ( x0, r 0), the first two terms are deterministic and the last term is a linear combination of independent Gaussian random variables. Hence xn |
+
+x0, r 0 is Gaussian: 
+
+q(xn | x0, r 0) = N (mn,r 0 (x0), Σn),
+
+with 
+
+mn,r 0 (x0) = ρnx0 +
+
+> n−1
+
+X
+
+> j=0
+
+ρn−1−j br0+j ,
+
+and Σn = σ2
+
+> n
+
+X
+
+> j=1
+
+ρ2( n−j)Id = σ2
+
+> n−1
+
+X
+
+> ℓ=0
+
+ρ2ℓId = σ2 1 − ρ2n
+
+1 − ρ2 Id.
+
+This proves the claimed forward marginal. 28 A.2 Proof of Theorem 1 
+
+Proof. The argument follows the same pull-back idea as the periodically forced Ornstein–Uhlenbeck example in [26]: the limiting object is obtained by starting the recursion in the remote past and letting the initial condition be forgotten. We first use the absolute phase convention r0 = 0; a general initial phase is obtained by replacing bk with the shifted forcing br0+k throughout. Extend the forcing periodically to all integer times by setting br+P = br .For m < n , write the solution started from xm at time m as 
+
+xm,x m 
+
+> n
+
+= ρn−mxm +
+
+> n−1
+
+X
+
+> k=m
+
+ρn−1−kbk + σ
+
+> n−1
+
+X
+
+> k=m
+
+ρn−1−kεk+1 .
+
+Since 0 < ρ < 1, the contribution of the initial condition vanishes as m →−∞ . The deterministic series converges absolutely because ( bk) is bounded and P 
+
+> j≥0
+
+ρj < ∞, while the Gaussian series converges in L2 because its tail variance is σ2d P 
+
+> j≥M
+
+ρ2j → 0. Hence the pull-back limit 
+
+x∗ 
+
+> n
+
+:= 
+
+> ∞
+
+X
+
+> j=0
+
+ρj bn−1−j + σ
+
+> ∞
+
+X
+
+> j=0
+
+ρj εn−j
+
+is well defined. Its law depends on n only through the phase r = n (mod P ). Therefore define 
+
+μ∗ 
+
+> r
+
+:= L(x∗
+
+> n
+
+), r = n (mod P ).
+
+Since the noise variables are i.i.d. standard Gaussian, μ∗ 
+
+> r
+
+is Gaussian with 
+
+m∗ 
+
+> r
+
+=
+
+> ∞
+
+X
+
+> j=0
+
+ρj br−1−j , Σ∗ = σ2
+
+> ∞
+
+X
+
+> j=0
+
+ρ2j Id = σ2
+
+1 − ρ2 Id.
+
+Thus 
+
+μ∗ 
+
+> r
+
+= N (m∗ 
+
+> r
+
+, Σ∗).
+
+The family is P -periodic. Indeed, using br+P = br ,
+
+m∗ 
+
+> r+P
+
+=
+
+> ∞
+
+X
+
+> j=0
+
+ρj br+P −1−j =
+
+> ∞
+
+X
+
+> j=0
+
+ρj br−1−j = m∗ 
+
+> r
+
+,
+
+and Σ ∗ is independent of r. Hence μ∗ 
+
+> r+P
+
+= μ∗ 
+
+> r
+
+. The family is nonconstant whenever the forcing is nonconstant: if m∗ 
+
+> r
+
+were independent of r, then the phase-advance mean recursion m∗ 
+
+> r+1
+
+= ρm ∗ 
+
+> r
+
++ br would force br = (1 − ρ)m∗ 
+
+> r
+
+to be independent of r, a contradiction. We next verify the phase-advance property. If x∗ 
+
+> n
+
+∼ μ∗ 
+
+> r
+
+, where r = n (mod P ), then 
+
+x∗ 
+
+> n+1
+
+= ρx ∗ 
+
+> n
+
++ bn + σε n+1 .
+
+29 This follows directly from the infinite-past representation: 
+
+ρx ∗ 
+
+> n
+
++ bn + σε n+1 = ρ
+
+> ∞
+
+X
+
+> j=0
+
+ρj bn−1−j + bn + σρ 
+
+> ∞
+
+X
+
+> j=0
+
+ρj εn−j + σε n+1 
+
+=
+
+> ∞
+
+X
+
+> j=0
+
+ρj bn−j + σ
+
+> ∞
+
+X
+
+> j=0
+
+ρj εn+1 −j = x∗
+
+> n+1
+
+.
+
+Therefore one forward step maps μ∗ 
+
+> r
+
+to μ∗
+
+> r+1
+
+, with indices understood modulo 
+
+P .It remains to show attraction to this family. Let x0 ∼ ν0 have finite second moment, let x0,x 0 
+
+> n
+
+be the process started from x0 at time 0, and let x∗ 
+
+> n
+
+be the pull-back stationary periodic version constructed above using the same future noise variables ε1, . . . , ε n. Then 
+
+x0,x 0 
+
+> n
+
+− x∗ 
+
+> n
+
+= ρnx0 − ρnx∗
+
+> 0
+
+,
+
+where 
+
+x∗ 
+
+> 0
+
+=
+
+> ∞
+
+X
+
+> j=0
+
+ρj b−1−j + σ
+
+> ∞
+
+X
+
+> j=0
+
+ρj ε−j .
+
+Consequently, 
+
+E|x0,x 0 
+
+> n
+
+− x∗
+
+> n
+
+|2 = ρ2nE|x0 − x∗
+
+> 0
+
+|2 −→ 0.
+
+By the definition of the Wasserstein-1 distance and the above coupling, 
+
+W1
+
+
+
+L(x0,x 0 
+
+> n
+
+), μ ∗   
+
+> n(mod P)
+
+
+
+≤  E|x0,x 0 
+
+> n
+
+− x∗
+
+> n
+
+|2 1/2 −→ 0.
+
+Thus the law of the forward process converges in W1 to the corresponding phase of the periodic terminal family. In particular, it also converges weakly along each fixed phase subsequence. Replacing bk by the shifted forcing br0+k gives the general initial phase state-ment 
+
+W1
+
+
+
+L(xn), μ ∗   
+
+> r0+n(mod P)
+
+
+
+−→ 0.
+
+In particular, along any subsequence satisfying r0 + nℓ ≡ r (mod P ), 
+
+L(xnℓ ) ⇒ μ∗ 
+
+> r
+
+as ℓ → ∞ .
+
+Finally, uniqueness follows from the same contraction argument. Suppose 
+
+{νr }P −1 
+
+> r=0
+
+is another P -periodic Gaussian family propagated by the same transi-tion kernels. Let ur and Γ r denote its phase-wise means and covariances. After one full period, Γr = ρ2P Γr + σ2 
+
+> P−1
+
+X
+
+> j=0
+
+ρ2j Id,
+
+30 so Γr = σ2
+
+1 − ρ2 Id.
+
+Similarly, comparing the mean recursion with that of m∗ 
+
+> r
+
+, the difference dr =
+
+ur − m∗ 
+
+> r
+
+satisfies 
+
+dr = ρP dr .
+
+Since 0 < ρ < 1, dr = 0. Thus ur = m∗ 
+
+> r
+
+and Γ r = Σ ∗ for every phase r, proving uniqueness. 
+
+## A.3 Proof of Lemma 2 
+
+Proof. Fix x0 and the initial phase r0. By Lemma 1, the forward marginal is 
+
+q(xn | x0, r 0) = N (mn,r 0 (x0), Σn) ,
+
+where Σn = σ2 1 − ρ2n
+
+1 − ρ2 Id.
+
+The one-step transition from xn to xn+1 is 
+
+q(xn+1 | xn, r 0) = N  ρx n + br0+n, σ 2Id
+
+ .
+
+Equivalently, 
+
+q
+
+ xn+1 − br0+n
+
+ρ
+
+
+
+= N
+
+
+
+xn, σ2
+
+ρ2 Id
+
+
+
+.
+
+Since both q(xn | x0, r 0) and q(xn+1 | xn, r 0) are Gaussian, Bayes’ rule gives 
+
+q(xn | xn+1 , x 0, r 0) ∝ q(xn+1 | xn, r 0)q(xn | x0, r 0)
+
+∝ exp 
+
+
+
+− 12σ2 |xn+1 − br0+n − ρx n|2
+
+
+
+× exp 
+
+
+
+− 12 ∥xn − mn,r 0 (x0)∥2Σ−1
+
+> n
+
+
+
+,
+
+where ∥v∥2 
+
+> A
+
+:= v⊤Av for any positive definite matrix A. Collecting the quadratic terms in xn, the posterior precision is 
+
+eΣ−1 
+
+> n
+
+= Σ −1 
+
+> n
+
++ ρ2
+
+σ2 Id.
+
+Therefore, 
+
+eΣn =
+
+
+
+Σ−1 
+
+> n
+
++ ρ2
+
+σ2 Id
+
+−1
+
+=
+
+ 1 − ρ2
+
+σ2(1 − ρ2n) Id + ρ2
+
+σ2 Id
+
+−1
+
+= σ2 1 − ρ2n
+
+1 − ρ2( n+1) Id.
+
+The corresponding posterior mean is 
+
+eμn,r 0 (xn+1 , x 0) = eΣn
+
+
+
+Σ−1 
+
+> n
+
+mn,r 0 (x0) + ρσ2 (xn+1 − br0+n)
+
+
+
+.
+
+31 This proves the Gaussian posterior formula. It remains to derive the equivalent noise-parameterized form. By the forward marginal at time n + 1, 
+
+xn+1 = mn+1 ,r 0 (x0) + σ
+
+s
+
+1 − ρ2( n+1) 
+
+1 − ρ2 ε, ε ∼ N (0 , I d).
+
+Using the recursion for the forward mean, 
+
+mn+1 ,r 0 (x0) = ρm n,r 0 (x0) + br0+n,
+
+we get 1
+
+ρ (xn+1 − br0+n) = mn,r 0 (x0) + σρ
+
+s
+
+1 − ρ2( n+1) 
+
+1 − ρ2 ε. 
+
+Conditional on fixed ( x0, r 0), the variables xn and xn+1 are affine functions of the Gaussian noise vector ( ε1, . . . , ε n+1 ). Hence ( xn, x n+1 ) | (x0, r 0) is jointly Gaussian. We may also use the Gaussian regression formula. In this case, Cov( xn, x n+1 | x0, r 0) = ρΣn, Var( xn+1 | x0, r 0) = Σ n+1 .
+
+Hence 
+
+eμn,r 0 (xn+1 , x 0) = mn,r 0 (x0) + ρΣnΣ−1 
+
+> n+1
+
+(xn+1 − mn+1 ,r 0 (x0)) .
+
+Substituting the noise representation of xn+1 yields 
+
+eμn,r 0 (xn+1 , x 0) = mn,r 0 (x0) + ρ σ2 1 −ρ2n
+
+> 1−ρ2
+
+σ2 1 −ρ2( n+1) 
+
+> 1−ρ2
+
+σ
+
+s
+
+1 − ρ2( n+1) 
+
+1 − ρ2 ε. 
+
+Equivalently, 
+
+eμn,r 0 (xn+1 , x 0) = mn,r 0 (x0) + ρσ (1 − ρ2n)
+
+p1 − ρ2p1 − ρ2( n+1) ε. 
+
+Comparing this expression with 1
+
+ρ (xn+1 − br0+n) = mn,r 0 (x0) + σρ
+
+s
+
+1 − ρ2( n+1) 
+
+1 − ρ2 ε, 
+
+we obtain 
+
+eμn,r 0 (xn+1 , ε ) = 1
+
+ρ (xn+1 − br0+n) − κnε, 
+
+where 
+
+κn = σρ
+
+s
+
+1 − ρ2( n+1) 
+
+1 − ρ2 − ρσ (1 − ρ2n)
+
+p1 − ρ2p1 − ρ2( n+1) = σp1 − ρ2
+
+ρp1 − ρ2( n+1) .
+
+This proves the claimed noise-parameterized posterior mean. 32 A.4 Proof of Lemma 3 
+
+Proof. It is enough to test invariance against an arbitrary bounded measurable function f : {0, . . . , P − 1} × Rd → R. By definition of the lifted kernel K,
+
+Z
+
+Kf (r, x ) Π ∗(d r, dx) = 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+Z
+
+> Rd
+
+Kf (r, x ) μ∗ 
+
+> r
+
+(d x)= 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+Z
+
+> Rd
+
+Z
+
+> Rd
+
+f (r + 1 , y ) Kr (x, dy) μ∗ 
+
+> r
+
+(d x).
+
+Since Kr μ∗ 
+
+> r
+
+= μ∗
+
+> r+1
+
+, we have 
+
+Z
+
+> Rd
+
+Kr (x, dy) μ∗ 
+
+> r
+
+(d x) = μ∗
+
+> r+1
+
+(d y).
+
+Therefore, 
+
+Z
+
+Kf (r, x ) Π ∗(d r, dx) = 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+Z
+
+> Rd
+
+f (r + 1 , y ) μ∗
+
+> r+1
+
+(d y)= 1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+Z
+
+> Rd
+
+f (s, y ) μ∗ 
+
+> s
+
+(d y),
+
+where in the last equality we relabelled s = r + 1 modulo P . Hence 
+
+Z
+
+Kf dΠ ∗ =
+
+Z
+
+f dΠ ∗.
+
+Thus Π ∗ is invariant under the lifted Markov kernel K.Finally, the marginal of Π ∗ on Rd is obtained by summing out the phase coordinate. For any Borel set A ⊆ Rd,Π∗({0, . . . , P − 1} × A) = 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+(δr ⊗ μ∗ 
+
+> r
+
+)( {0, . . . , P − 1} × A) = 1
+
+P 
+
+> P−1
+
+X
+
+> r=0
+
+μ∗ 
+
+> r
+
+(A).
+
+Therefore the Rd-marginal is ¯ μ∗ = 1
+
+> P
+
+PP −1 
+
+> r=0
+
+μ∗ 
+
+> r
+
+. This proves the claim. 
+
+## A.5 Derivation of the invariant-average regularization 
+
+We derive the invariant-average regularization from a shared-noise phase average of the reverse mean using the same indexing as the training objective in Eq. (6). This is a counterfactual phase-average calculation: for a fixed noisy state xn
+
+and forward noise variable ε, we evaluate the reverse-mean formula over all phase labels. It is not claiming that the exact posterior for every phase has the same residual for the same observed xn. For a sample with initial phase r0, the current phase at diffusion depth n is 
+
+rn = r0 + n (mod P ).
+
+33 Consider the reverse step from xn to xn−1, where the forward transition into 
+
+xn used the forcing brn−1. The learned reverse mean at current phase rn is 
+
+μθ (xn, n, r n) = 1
+
+ρ (xn − brn−1) − κn−1εθ (xn, n, ϕ (rn)) .
+
+To express the invariant-average principle, we average the learned reverse mean over all possible current phases. Using s as the phase index, define ¯μθ (xn, n ) := 1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+ 1
+
+ρ (xn − bs−1) − κn−1εθ (xn, n, ϕ (s)) 
+
+
+
+.
+
+Therefore, ¯μθ (xn, n ) = 1
+
+ρ xn − 1
+
+ρP  
+
+> P−1
+
+X
+
+> s=0
+
+bs−1 − κn−1
+
+1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+εθ (xn, n, ϕ (s)) .
+
+For the centered periodic forcing used in PTL-Diffusion, 1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+bs−1 = 1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+bs = 0 ,
+
+as in Eq. (10). Hence ¯μθ (xn, n ) = 1
+
+ρ xn − κn−1
+
+1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+εθ (xn, n, ϕ (s)) .
+
+The corresponding shared-noise target reverse mean is 
+
+eμn−1,r 0 (xn, ε ) = 1
+
+ρ (xn − brn−1) − κn−1ε. 
+
+Averaging this target reverse mean over phases gives ¯eμn−1(xn, ε ) := 1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+ 1
+
+ρ (xn − bs−1) − κn−1ε
+
+
+
+.
+
+Using again 1
+
+> P
+
+PP −1 
+
+> s=0
+
+bs = 0, we obtain ¯eμn−1(xn, ε ) = 1
+
+ρ xn − κn−1ε. 
+
+Thus, ¯μθ (xn, n ) − ¯eμn−1(xn, ε ) = −κn−1
+
+1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+εθ (xn, n, ϕ (s)) − ε
+
+!
+
+.
+
+Therefore, matching averaged reverse means is equivalent, up to the scalar factor 
+
+κ2
+
+> n−1
+
+, to the invariant-average denoising regularization 
+
+Lavg = Ex0,ε,n,r 0
+
+ 1
+
+P 
+
+> P−1
+
+X
+
+> s=0
+
+εθ (xn, n, ϕ (s)) − ε
+
+> 2
+
+ .
+
+34
