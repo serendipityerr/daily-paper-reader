@@ -1,0 +1,325 @@
+Title: FreeBridge: Variational Schrödinger Bridges for Cellular Transition Dynamics
+
+URL Source: https://arxiv.org/pdf/2606.11286v1
+
+Published Time: Thu, 11 Jun 2026 00:06:14 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# FreeBridge: Variational Schrödinger Bridges for Cellular Transition Dynamics 
+
+Xurui Wang 1,2⋆, Qin Ren 1⋆, Jun Ma 3, Haibin Ling 1, and Chenyu You 1⋆⋆  
+
+> 1
+
+Stony Brook University, Stony Brook, NY, USA 
+
+chenyu.you@stonybrook.edu  
+
+> 2
+
+University of Toronto, Toronto, ON, Canada  
+
+> 3
+
+University Health Network, Toronto, ON, Canada 
+
+Abstract. High-content imaging assays quantify cellular responses to chemical and genetic perturbations, yet continuous trajectories of in-dividual cells are unobservable because cells are chemically fixed at acquisition. Perturbation modeling therefore reduces to inferring stochas-tic transport between control and treated populations observed only as separate marginals. While recent generative models achieve strong end-point alignment, boundary consistency does not determine intermediate evolution: multiple stochastic processes may connect identical marginals while traversing regions unsupported by observed single-cell morphologies. We introduce FreeBridge , a Schrödinger Bridge formulation for single-cell transition modeling under endpoint-only supervision. FreeBridge defines atomic states as instance-segmented single-cell representations, establishing a fixed cellular manifold, and learns stochastic transport con-strained within this geometry via empirical latent support regularization. Across BBBC021, RxRx1, and JUMP, FreeBridge maintains competitive or improved endpoint fidelity and mechanism-of-action retention under a unified evaluation protocol; on BBBC021, it further reduces intermediate support violations. These findings highlight the importance of geometric grounding for biologically interpretable perturbation dynamics. Project page: https://y-research-sbu.github.io/FreeBridge/ .
+
+Keywords: High-Content Imaging · Cellular Morphology Modeling ·
+
+Schrödinger Bridges · Perturbation Dynamics 
+
+## 1 Introduction 
+
+Building a virtual cell capable of simulating cellular responses in silico has long been a central aspiration in quantitative cell biology [ 19 ]. Image-based profiling enables large-scale measurement of morphological responses under chemical and genetic perturbations [ 5, 15 ]. The emergence of large perturbation atlases such as RxRx1 and JUMP [ 23 , 6 ], together with recent efforts to integrate artificial intelligence into virtual cell construction [ 4], creates an opportunity to model perturbation dynamics directly from imaging data.  
+
+> ⋆
+
+Equal contribution.  
+
+> ⋆⋆
+
+Corresponding author. 
+
+> arXiv:2606.11286v1 [cs.LG] 9 Jun 2026
+
+2 X. Wang, Q. Ren et al. Overall          
+
+> FID (↓)
+> Condition
+> FID (↓)
+> Overall
+> KID (↓)
+> Condition
+> KID (↓)
+> FreeBridge CellFlux
+> PhenDiff IMPA
+> Target Cell
+> Single -Cell
+> Frozen
+> Encoder
+> Constraint
+> State Unit
+> Mask Crop
+> Transition Rule Trajectory Geometry
+> Source Cell Drift
+> Cell
+> Engine
+> Unconstrained
+> Path
+> Constrained
+> Path
+> ab
+
+Fig. 1: Overview of FreeBridge. (a) Multi-cell microscopy images are segmented into atomic single-cell states, forming the State Unit. Each crop is embedded as 
+
+z = ϕ(x), defining control and perturbed endpoint distributions. On this fixed latent geometry, FreeBridge learns a time-conditioned drift uθ (z, t, c ) to model Schrödinger Bridge transport, with an empirical support cost V (z) regularizing intermediate states. (b) On BBBC021, FreeBridge achieves lower overall and condition-level FID and KID than PhenDiff, IMPA, and CellFlux under the unified single-cell protocol. Recent generative models learn mappings between control and perturbed distributions. Diffusion models [ 9,20 ,17 ,22 ], flow matching [ 12 ,14 ,24 ], and mor-phology predictors including PhenDiff, IMPA, and CellFlux [ 3, 16 , 25 ] achieve high endpoint fidelity by framing perturbation prediction as distribution-to-distribution transformation. However, high-content assays measure chemically fixed cells; individual trajectories are unobservable, and only marginal endpoint distributions are available. Infinitely many stochastic processes can connect iden-tical marginals [ 7, 11 ], so endpoint alignment does not determine intermediate evolution. Most existing methods optimize distribution-level objectives to match control and perturbed populations [ 9, 12 , 3, 25 , 16 ]. While effective for endpoint realism, such formulations leave intermediate cellular structure underdetermined. The notion of an atomic cellular state is often implicit and entangled with population-level statistics, so intermediate samples may satisfy FID [ 8] or KID [ 2] while traversing regions weakly supported by observed single-cell morphologies. A perturbation model therefore requires an explicit definition of admissible cellular states together with a transition rule constrained within that state space. We describe this structure as a Cell Engine , comprising a state unit and a transi-tion mechanism. Atomic states are instantiated as instance-segmented single-cell representations [ 21 ], establishing a geometrically grounded manifold independent of population composition. On this manifold, perturbation dynamics are mod-eled through a Schrödinger Bridge-inspired stochastic transport process [ 7, 11 ], regularized by empirical latent support constraints grounded in nonparametric density estimation [18,1]. FreeBridge: Variational Schrödinger Bridges 3
+
+Based on this formulation, we develop FreeBridge , a constrained stochastic transport framework for single-cell transition modeling under endpoint-only super-vision. An overview of FreeBridge is shown in Fig. 1. By explicitly separating state specification from stochastic transport and grounding stochastic evolution within an empirically supported cellular manifold, FreeBridge constrains intermediate trajectories while preserving endpoint fidelity. Evaluations on BBBC021 [ 15 ], RxRx1 [ 23 ], and JUMP [ 6] show competitive or improved generative perfor-mance relative to prior distribution-alignment approaches [ 3,16 , 25 ]; on BBBC021, FreeBridge further reduces intermediate support violations. 
+
+## 2 Method 
+
+2.1 Overview: FreeBridge as Cell Engine 
+
+High-content screening provides endpoint populations of single cells under control and perturbed conditions. Because imaging requires chemical fixation, per-cell temporal trajectories are not observable. Perturbation modeling is therefore formulated as an endpoint-constrained stochastic transport problem between empirical single-cell distributions rather than as identity-preserving evolution. As illustrated in Fig. 1(a), we develop FreeBridge under a Cell Engine for-mulation that separates cellular state specification from stochastic transport. The 
+
+State Unit defines the admissible geometry of valid single-cell representations. The Transition Rule models entropy-regularized stochastic transport within that fixed geometry. This separation ensures that dynamical learning does not implicitly redefine the underlying notion of a biologically valid cellular state. 
+
+2.2 State Unit: Explicit Single-Cell Geometry 
+
+The State Unit specifies the atomic representation of a cellular state. We extract instance-segmented single-cell crops using Cellpose [ 21 ], ensuring that each ob-servation corresponds to a physically identifiable cell rather than a field-level mixture. Each crop x is embedded using a fixed encoder ϕ : X → Rd, producing a latent representation: z = ϕ(x). The encoder is frozen during transport learning so that the latent geometry is defined prior to learning the Transition Rule. Let 
+
+μ denote the distribution of control single-cell images and νc the distribution under perturbation condition c. Their pushforwards under ϕ are 
+
+μz = ϕ♯μ, νc,z = ϕ♯νc. (1) To characterize the empirically supported cellular manifold, we construct a latent support bank 
+
+Zemp = {ϕ(xi)}Ni=1 . (2) Regions near Zemp correspond to morphologies observed in real data. 4 X. Wang, Q. Ren et al. 
+
+2.3 Transition Rule: Schrödinger Bridge Transport 
+
+Given the fixed geometry defined by the State Unit, the Transition Rule specifies stochastic transport between μz and νc,z . We model latent dynamics via the controlled stochastic differential equation: 
+
+dZ t = ut(Zt) dt + σ dW t, Z0 ∼ μz . (3) The objective is to identify a drift field ut such that: 
+
+Z1 ∼ νc,z . (4) Endpoint-only marginal matching is underdetermined before a reference process or path criterion is specified. A classical Schrödinger Bridge becomes well-defined once a Brownian reference process and boundary marginals are fixed: 
+
+min  
+
+> Pu
+
+KL( Pu∥P0) s.t. Z0 ∼ μz , Z 1 ∼ νc,z , (5) which is equivalent to the stochastic control objective [7] 
+
+min  
+
+> u
+
+E
+
+ 12σ2
+
+Z 10
+
+∥ut(Zt)∥2dt 
+
+
+
+. (6) FreeBridge follows this endpoint-constrained bridge view but augments it with a data-driven state cost that anchors intermediate paths to the empirical cellular morphology manifold, yielding a generalized Schrödinger Bridge formulation with task-specific state cost [ 13 ]. The stochastic term σdW t captures intrinsic cellular heterogeneity. Deterministic transport yields a single trajectory per initial state, whereas the stochastic formulation permits condition-consistent variability. 
+
+2.4 Geometric Regularization of Intermediate Dynamics 
+
+Once the boundary marginals are fixed, the intermediate marginals of the bridge are determined by the chosen reference process; departing from a purely diffusive reference therefore requires an explicit path criterion. In cellular modeling, in-termediate states correspond to putative morphologies along the perturbation response and should remain consistent with empirically observed single-cell struc-tures. We therefore anchor stochastic transport to the geometry defined by the State Unit. For any latent state z, define the empirical support distance: 
+
+demp (z) = min 
+
+> zi∈Z emp
+
+∥z − zi∥. (7) This nearest-neighbor statistic [ 1] serves as a nonparametric proxy for density support [ 18 ]. Regions distant from Zemp correspond to latent configurations not supported by observed cells. We penalize deviations along the trajectory: 
+
+Lsupport = E
+
+Z 10
+
+demp (Zt)2dt 
+
+
+
+. (8) FreeBridge: Variational Schrödinger Bridges 5
+
+This regularization biases intermediate marginals toward empirically supported regions without imposing sample-level pairing constraints (Fig. 2). 
+
+Practical estimation. Direct evaluation of demp (z) against the full support bank requires O(N ) comparisons per query. During training, we approximate the population support using the union of control and perturbed embeddings in the current minibatch, ZB = {z(i)0 }Bi=1 ∪ { z(i)1 }Bi=1 . For each intermediate state Z(i) 
+
+> t
+
+,we compute 
+
+bdemp (Z(i) 
+
+> t
+
+) = min  
+
+> zj∈Z B
+
+∥Z(i) 
+
+> t
+
+− zj ∥2. (9) This yields a stochastic minibatch approximation to the population state-cost term under i.i.d. sampling. The pairwise distances are computed with batched matrix operations ( torch.cdist ), resulting in O(B2) batch complexity. The nearest-neighbor index is treated as non-differentiable, while gradients propagate through the selected squared distance. 
+
+Interior Dynamics of Schrödinger Bridges. The Schrödinger Bridge con-strains boundary marginals; given a fixed reference process, the interior marginals are then determined, so altering the empirical morphology of intermediate states requires an explicit state cost rather than endpoint supervision alone [ 7, 11 ]. End-point alignment therefore does not, by itself, fix the desired transition geometry on the data manifold. Figure 2 shows this effect on a synthetic manifold. Even when boundary distributions coincide, transport under a diffusive reference may traverse sparsely supported regions of latent space. Such trajectories preserve endpoint statistics yet alter interior structure. The support regularization restricts stochastic evolution to the empirical cellular manifold. 
+
+2.5 FreeBridge Objective 
+
+The FreeBridge objective is defined as a generalized Schrödinger Bridge with task-specific state cost Vt(z) = λ d emp (z)2:
+
+min  
+
+> u
+
+E
+
+ 12σ2
+
+Z 10
+
+∥ut(Zt)∥2dt + λ
+
+Z 10
+
+demp (Zt)2dt 
+
+
+
+s.t. Z0 ∼ μz , Z 1 ∼ νc,z .
+
+(10) 
+
+Intra-batch pairing for endpoint supervision. Endpoint populations are unpaired, but training requires batch-level tuples. For each condition c, we sample 
+
+{z(i)0 }Bi=1 ∼ μz and {z(i)1 }Bi=1 ∼ νc,z independently and pair them by index after random shuffling. This stochastic coupling is used for optimization only and does not impose identity-level correspondence or constrain intermediate dynamics. 
+
+2.6 Numerical Approximation and Optimization 
+
+We parameterize the drift as uθ (z, t, c ) using a time-conditioned neural network. The continuous process is discretized via Euler–Maruyama: 
+
+Zt+∆t = Zt + uθ (Zt, t, c )∆t + σ√∆t ϵ, ϵ ∼ N (0 , I ). (11) 6 X. Wang, Q. Ren et al. FreeBridge  Baseline             
+
+> w/o constraint w/ constraint
+> 𝟎 .𝟎𝟎 𝟎 .𝟐𝟓 𝟎 .𝟓𝟎 𝟎 .𝟕𝟓 𝟏 .𝟎𝟎 𝒕 =
+> Enters Void
+> (Artifacts )
+> Stays on Manifold
+> (Realistic )
+
+Fig. 2: Intermediate trajectories under endpoint-constrained transport. 
+
+Columns show increasing time along the stochastic evolution. Top (unconstrained): endpoints align, but intermediate states traverse low-support regions. Bottom (FreeBridge): support regularization prevents such excursions and preserves trajectory consistency. With K Euler–Maruyama steps and ∆t = 1 /K , the training objective is approxi-mated as 
+
+bL(θ) = 1
+
+B
+
+> B
+
+X
+
+> i=1
+> K−1
+
+X
+
+> k=0
+
+ ∆t 
+
+2σ2 ∥uθ (Z(i) 
+
+> tk
+
+, t k, c )∥22 + λ∆t bdemp (Z(i) 
+
+> tk
+
+)2
+
+
+
++ Lend , (12) where the endpoint term Lend aligns the terminal generated batch with samples from νc,z in the same latent metric used for evaluation. All endpoint samples are drawn independently; the random intra-batch pairing is used only as an optimization device and does not imply observed cell-level correspondences. 
+
+## 3 Experiments 
+
+3.1 Experimental Setup Datasets and Baselines. We evaluate FreeBridge on three widely used high-content imaging benchmarks: BBBC021 [ 15 ], RxRx1 [ 23 ], and JUMP [ 6]. These datasets cover chemical and genetic perturbations across multiple experimental conditions. We compare against recent morphology prediction methods, including PhenDiff [3], IMPA [16], and CellFlux [25]. 
+
+Implementation Details. All methods are evaluated under a unified single-cell pipeline. Images are instance-segmented and cropped using the same preprocessing procedure. This ensures that differences in performance arise from transition modeling rather than data preparation. The encoder ϕ is a frozen ResNet-50 backbone (latent dimension d = 2048 ), and latent embeddings are precomputed for all segmented single-cell crops ( 96 ×96 ). The drift network is a time-conditioned multilayer perceptron (hidden width 512 , 6 layers) that takes (z, t, c ) as input. We optimize with Adam [ 10 ] using batch size B = 256 , learning rate 3 × 10 −4, and 
+
+K = 50 Euler–Maruyama discretization steps during training, with a minibatch FreeBridge: Variational Schrödinger Bridges 7
+
+Table 1: Quantitative comparison across datasets (5k generated samples per condition). We report overall and condition-level FID/KID together with the Support Violation Rate ( Rviol ). All methods are evaluated under an identical single-cell preprocessing and inference protocol. FreeBridge achieves improved endpoint fidelity while maintaining lower intermediate support violations.                                                                    
+
+> BBBC021 RxRx1 JUMP Method FID o↓FID c↓KID o↓KID c↓Rviol ↓FID o↓FID c↓KID o↓KID c↓FID o↓FID c↓KID o↓KID c↓
+> PhenDiff 48.25 107.50 3.08 3.26 0.38 67.12 175.62 5.28 5.34 48.57 126.52 5.13 5.23 IMPA 33.91 75.76 2.74 2.79 0.34 39.94 163.91 2.89 2.87 14.81 101.03 1.10 1.00 CellFlux 18.72 56.80 1.62 1.59 0.31 33.00 162.85 2.40 2.41 9.00 83.21 0.65 0.67 FreeBridge 15.35 47.28 1.10 1.02 0.11 28.94 147.33 1.98 2.03 8.51 79.05 0.59 0.53
+
+support bank described in Sec. 2. The support weight λbank , diffusion noise σ, and inference budget follow the default configuration; sensitivity to each is reported in Fig. 4. All reported metrics use 5k generated samples per condition and are averaged over three random seeds. Endpoint fidelity is measured using Fréchet Inception Distance (FID) [ 8 ] and Kernel Inception Distance (KID) [ 2]. To assess trajectory consistency, we report the Support Violation Rate ( Rviol ), defined as the proportion of intermediate states whose feature representations fall outside the empirical morphology support. Because fixed-cell assays do not provide observed single-cell trajectories, no metric can directly verify true temporal ordering at the individual-cell level; Rviol is therefore a support-feasibility metric and should not be interpreted as direct evidence of biological temporal correctness. Semantic retention is evaluated using Mechanism-of-Action (MoA) classification accuracy obtained from a linear probe trained on real perturbed samples. Unless otherwise stated, official hyperparameters are used for baseline methods. 
+
+3.2 Results Quantitative and Qualitative Comparisons. Table 1 reports quantitative results across datasets. Fig. 1(b) provides a compact summary on BBBC021. FreeBridge achieves strongest endpoint fidelity on all three benchmarks un-der the matched evaluation protocol. In addition to improvements in FID and KID, FreeBridge exhibits substantially lower Rviol on BBBC021, indicating that intermediate states remain closer to empirically observed morphology regions. Fig-ure 3 shows representative examples on BBBC021. The visual patterns align with quantitative results, with clearer preservation of compound-specific morphology. 
+
+Intermediate Trajectory Consistency. As illustrated in Fig. 2, endpoint alignment alone does not constrain interior geometry. On real data, models without geometric anchoring may enter low-support regions of the single-cell manifold at intermediate times, producing distortions not captured by endpoint metrics. Table 2 quantifies this effect: increasing λbank reduces both the feasibility energy Efeas and the support violation rate Rviol , confirming that the support prior improves intermediate validity. As noted above, this measures support feasibility rather than verified temporal ordering. 8 X. Wang, Q. Ren et al. 
+
+Table 2: Trajectory feasibility on BBBC021. All variants share identical architectures and differ only in the support weight λbank . Metrics are computed over T = 11 time points per trajectory and reported as the median over three seeds. Higher λbank improves geometric feasibility. Lower is better. 
+
+Variant Efeas ↓R viol ↓
+
+λbank = 0 (Unconstrained) 2.48 0.31 FreeBridge ( λbank = 0 .3) 1.85 0.19 
+
+FreeBridge (Default, λbank = 0 .5) 1.32 0.11 Target PhenDiff IMPA CellFlux FreeBridge 
+
+> Demecolcine
+> Mevinolin
+> Lovastatin
+
+Fig. 3: Qualitative comparison of endpoint morphology on BBBC021. 
+
+Representative single-cell crops for two perturbations are shown. Columns display real targets and samples from IMPA, PhenDiff, CellFlux, and FreeBridge under the unified pipeline. FreeBridge preserves compound-specific structures (e.g., nu-clear compaction under Demecolcine and cytoplasmic shrinkage under Mevinolin), whereas baselines show texture smoothing or incomplete perturbation patterns. 
+
+Semantic Retention. We further evaluate MoA classification accuracy to quantify preservation of condition-specific information. On BBBC021, removing geometric regularization reduces MoA accuracy from 72 .08% to 65 .08% , indicating constraining intermediate evolution contributes to preserving mechanistic signal. 
+
+3.3 Ablation Effect of Regularizations. Table 3 reports ablation results on BBBC021. Removing instance segmentation degrades both fidelity and MoA accuracy, sug-gesting that explicit single-cell state specification improves conditional modeling. Removing the support regularization increases Rviol and reduces semantic re-tention. These observations are consistent with the role of explicit single-cell geometry and geometric regularization in constraining intermediate evolution. 
+
+Hyperparameter Sensitivity. Fig. 4 shows sensitivity to the support weight 
+
+λbank , diffusion noise σ, and inference steps. Performance remains stable across a range of settings, with moderate λbank values providing improved MoA retention while maintaining endpoint fidelity. FreeBridge: Variational Schrödinger Bridges 9
+
+Table 3: Ablation study on BBBC021. We examine the effect of removing intra-batch pairing, support regularization, and instance segmentation. Both geometric anchoring and explicit single-cell state specification contribute to improved fidelity and semantic retention. Full-model results are from an independent ablation run and may differ marginally from Table 1. 
+
+Variant FID o ↓FID c ↓MoA ↑KID o ↓
+
+w/o intra-batch pairing 19.94 60.81 63.27 1.81 w/o support cost V (·) 17.18 54.37 65.08 1.55 w/o instance segmentation 28.54 82.15 51.34 2.45 Full model 15.37 47.41 72.08 1.13 FID O ↓   
+
+> FID C ↓KID O ↓
+> MoA  ↑
+> Inference steps 𝑵𝑭𝑬 Base noise level 𝝈 Support Weight 𝝀 𝒃𝒂𝒏𝒌
+> FID O ↓
+> FID C ↓
+> FID O ↓
+> FID C ↓
+> MoA  ↑
+> MoA  ↑
+> KID O ↓
+> KID O ↓
+
+Fig. 4: Hyperparameter sensitivity on BBBC021. Performance is evaluated as a function of the support weight λbank , diffusion noise σ, and inference steps (NFE). Results indicate stable endpoint fidelity across a range of settings, with improved semantic retention at moderate regularization strength. 
+
+## 4 Conclusion 
+
+We introduced FreeBridge, a Schrödinger Bridge formulation for single-cell transi-tion modeling under endpoint-only supervision. By coupling entropy-regularized stochastic transport with explicit single-cell state geometry, FreeBridge links distribution-level alignment with trajectory-level consistency within empirically observed morphology space. Across multiple large-scale perturbation benchmarks, FreeBridge improves endpoint fidelity under a unified evaluation protocol; on BBBC021, it further reduces intermediate support violations. These findings suggest that modeling biological transitions requires not only boundary alignment but also explicit geometric grounding of intermediate evolution. Such a formu-lation offers a principled basis for virtual cell simulation and related transition modeling problems. 
+
+Limitations and cost. FreeBridge relies on a frozen encoder to define the latent cellular geometry; morphological factors absent from encoder pretraining may therefore not be recoverable through transport learning alone. The support-distance computation uses batched pairwise distances and scales as O(B2) with minibatch size. This cost is manageable at the batch sizes used here, but larger support banks may require approximate nearest-neighbor search or memory-aware batching. 10 X. Wang, Q. Ren et al. 
+
+Disclosure of Interests. The authors have no competing interests to declare that are relevant to the content of this article. 
+
+## References 
+
+1. Biau, G., Devroye, L.: Lectures on the nearest neighbor method, vol. 246. Springer (2015) 2. Bińkowski, M., Sutherland, D.J., Arbel, M., Gretton, A.: Demystifying mmd gans. arXiv preprint arXiv:1801.01401 (2018) 3. Bourou, A., Boyer, T., Gheisari, M., Daupin, K., Dubreuil, V., De Thonel, A., Mezger, V., Genovesio, A.: Phendiff: Revealing subtle phenotypes with diffusion models in real images. In: International Conference on Medical Image Computing and Computer-Assisted Intervention. pp. 358–367. Springer (2024) 4. Bunne, C., Roohani, Y., Rosen, Y., Gupta, A., Zhang, X., Roed, M., Alexandrov, T., AlQuraishi, M., Brennan, P., Burkhardt, D.B., et al.: How to build the virtual cell with artificial intelligence: Priorities and opportunities. Cell 187 (25), 7045–7063 (2024) 5. Carpenter, A.E.: Image-based chemical screening. Nature Chemical Biology 3(8), 461–465 (2007) 6. Chandrasekaran, S.N., Ackerman, J., Alix, E., Ando, D.M., Arevalo, J., Bennion, M., Boisseau, N., Borowa, A., Boyd, J.D., Brino, L., et al.: Jump cell painting dataset: morphological impact of 136,000 chemical and genetic perturbations. BioRxiv pp. 2023–03 (2023) 7. Chen, Y., Georgiou, T.T., Pavon, M.: On the relation between optimal transport and schrödinger bridges: A stochastic control viewpoint. Journal of Optimization Theory and Applications 169 (2), 671–691 (2016) 8. Heusel, M., Ramsauer, H., Unterthiner, T., Nessler, B., Hochreiter, S.: Gans trained by a two time-scale update rule converge to a local nash equilibrium. Advances in neural information processing systems 30 (2017) 9. Ho, J., Jain, A., Abbeel, P.: Denoising diffusion probabilistic models. Advances in neural information processing systems 33 , 6840–6851 (2020) 10. Kingma, D.P., Ba, J.: Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 (2014) 11. Léonard, C.: A survey of the schrödinger problem and some of its connections with optimal transport. arXiv preprint arXiv:1308.0215 (2013) 12. Lipman, Y., Chen, R.T., Ben-Hamu, H., Nickel, M., Le, M.: Flow matching for generative modeling. arXiv preprint arXiv:2210.02747 (2022) 13. Liu, G.H., Lipman, Y., Nickel, M., Karrer, B., Theodorou, E., Chen, R.T.: Gen-eralized schrödinger bridge matching. In: International Conference on Learning Representations. vol. 2024, pp. 14527–14552 (2024) 14. Liu, X., Gong, C., Liu, Q.: Flow straight and fast: Learning to generate and transfer data with rectified flow. arXiv preprint arXiv:2209.03003 (2022) 15. Ljosa, V., Sokolnicki, K.L., Carpenter, A.E.: Annotated high-throughput microscopy image sets for validation. Nature methods 9(7), 637 (2012) 16. Palma, A., Theis, F.J., Lotfollahi, M.: Predicting cell morphological responses to perturbations using generative modeling. Nature Communications 16 (1), 505 (2025) 17. Ren, Q., Wang, Y., Guo, L., Zhang, W., Fan, Z., You, C.: Scale where it matters: Training-free localized scaling for diffusion models. arXiv preprint arXiv:2511.19917 (2025) FreeBridge: Variational Schrödinger Bridges 11 18. Silverman, B.W.: Density estimation for statistics and data analysis. Routledge (2018) 19. Slepchenko, B.M., Schaff, J.C., Macara, I., Loew, L.M.: Quantitative cell biology with the virtual cell. Trends in cell biology 13 (11), 570–576 (2003) 20. Song, Y., Sohl-Dickstein, J., Kingma, D.P., Kumar, A., Ermon, S., Poole, B.: Score-based generative modeling through stochastic differential equations. arXiv preprint arXiv:2011.13456 (2020) 21. Stringer, C., Wang, T., Michaelos, M., Pachitariu, M.: Cellpose: a generalist algo-rithm for cellular segmentation. Nature methods 18 (1), 100–106 (2021) 22. Sun, S., Wang, Y., Zhang, H., Xiong, Y., Ren, Q., Fang, R., Xie, X., You, C.: Ouroboros: Single-step diffusion models for cycle-consistent forward and inverse rendering. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (2025) 23. Sypetkowski, M., Rezanejad, M., Saberian, S., Kraus, O., Urbanik, J., Taylor, J., Mabey, B., Victors, M., Yosinski, J., Sereshkeh, A.R., et al.: Rxrx1: A dataset for evaluating experimental batch correction methods. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (2023) 24. Wang, Y., Ma, Y., Li, W., You, C.: Let eeg models learn eeg. In: International conference on machine learning (2026) 25. Zhang, Y., Su, Y., Wang, C., Li, T., Wefers, Z., Nirschl, J., Burgess, J., Ding, D., Lozano, A., Lundberg, E., et al.: Cellflux: Simulating cellular morphology changes via flow matching. arXiv preprint arXiv:2502.09775 (2025)
