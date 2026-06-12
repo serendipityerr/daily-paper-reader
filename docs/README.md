@@ -6,32 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-11
-- 运行时间：2026-06-11 21:46:52 UTC
+- 最新运行日期：2026-06-12
+- 运行时间：2026-06-12 21:16:06 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：3
-- 速读区：1
+- 本次总论文数：2
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日聚焦变分薛定谔桥在细胞动态建模中的应用，并探讨有限状态下的熵耗散理论。值得细读《FreeBridge》和《Nonlocal Onsager Operators》，两者均获9.0分，分别从变分方法和非局域算子角度推进了Schrödinger桥理论。建议普通读者优先从《FreeBridge》入手，理解其如何将桥方法用于细胞分化轨迹推断。
-- 详情：[/202606/11/README](/202606/11/README)
+今日速读两篇论文，分别聚焦熵最优传输的同质性检验与复杂系统的一阶轨迹匹配预测。最值得关注的是基于熵最优传输的两样本检验方法（7.0分），以及快速集合预测混沌系统的技术（6.0分）。优先阅读第一篇，其在统计推断中的理论创新和实际应用潜力更突出。
+- 详情：[/202606/12/README](/202606/12/README)
 
 ### 精读区论文标签
-1. [FreeBridge: Variational Schrödinger Bridges for Cellular Transition Dynamics](/202606/11/2606.11286v1-freebridge-variational-schrdinger-bridges-for-cellular-transition-dynamics)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：用于细胞迁移动力学的Schrödinger桥公式
-2. [Nonlocal Onsager Operators and Entropy Dissipation for Finite-State Schrödinger Bridges](/202606/11/2606.11513v1-nonlocal-onsager-operators-and-entropy-dissipation-for-finite-state-schrdinger-bridges)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：直接研究有限状态空间的Schrödinger桥问题与熵耗散
-3. [Path convergence in diffusion models](/202606/11/2606.12161v1-path-convergence-in-diffusion-models)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：扩散模型路径在目标与参考分布之间插值
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [SheafStain: Sheaf-Theoretic Schrödinger Bridge for Spatially and Biologically Coherent Virtual Staining](/202606/11/2606.11846v1-sheafstain-sheaf-theoretic-schrdinger-bridge-for-spatially-and-biologically-coherent-virtual-staining)  
+1. [Two-Sample Homogeneity Test via Entropic Optimal Transport](/202606/12/2606.10767v1-two-sample-homogeneity-test-via-entropic-optimal-transport)  
    标签：评分：7.0/10、query:diff-bridge
-   evidence：将薛定谔桥应用于虚拟染色，通过层论解决空间连续性问题；与薛定谔桥方法相关。
+   evidence：使用熵正则化最优传输，这是薛定谔桥问题的核心
+2. [First-Order Trajectory Matching: Fast Ensemble Predictions of Chaotic, Turbulent, Stochastic Systems](/202606/12/2606.11138v1-first-order-trajectory-matching-fast-ensemble-predictions-of-chaotic-turbulent-stochastic-systems)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：通过轨迹匹配学习概率质量传输，类似于构造分布之间的扩散桥
 
 
 <div class="dpr-home-promo-card">
