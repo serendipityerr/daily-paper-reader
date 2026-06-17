@@ -1,0 +1,541 @@
+Title: Feynman Kac Reweighted Schrödinger Bridge Matching for Surface-Based Tau PET Harmonization
+
+URL Source: https://arxiv.org/pdf/2606.17420v1
+
+Published Time: Wed, 17 Jun 2026 00:41:54 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+> IEEE TRANSACTIONS AND JOURNALS TEMPLATE 1
+
+# Feynman–Kac Reweighted Schr ¨ odinger Bridge Matching for Surface-based Tau PET Harmonization 
+
+Jianwei Zhang, Xinyu Nie, Jiaxin Yue, and Yonggang Shi 
+
+Abstract — Tau PET imaging is central to tracking Alzheimer’s disease progression, but systematic differ-ences between scanners, protocols, and radiotracers across sites introduce nonbiological variability that inflates biomarker variance, reduces sensitivity to disease effects, and can bias downstream clinical assessments. Harmo-nization methods aim to remove these site-induced shifts while preserving biologically meaningful signal, yet exist-ing approaches struggle when source and target cohorts differ in subgroup composition, risking conflation of site ef-fects with biological variation such as tau-positivity status. We propose the Feynman–Kac Reweighted Schr ¨ odinger Bridge Matching (FKRSBM) model to address this problem. Rather than routing data through a Gaussian noise prior as in diffusion-based methods, FKRSBM learns a direct stochastic transport process between source and target distributions via entropy-regularized optimal transport. To enforce biologically consistent transport, FKRSBM incor-porates a subgroup-aware endpoint proposal derived from a Feynman–Kac reweighting of the reference bridge mea-sure, implemented entirely through stratified importance sampling at the data level and requiring no changes to the underlying bridge-matching solver or network architec-ture. For surface-based neuroimaging, FKRSBM employs a spherical convolutional backbone operating on cortical meshes to perform vertex-level harmonization. We eval-uate the method on tau PET SUVR maps, harmonizing PI-2620 data from the HABS-HD cohort into the AV-1451 domain of ADNI. Compared against ComBat, CycleGAN, a diffusion-based method (DF), and unregularized Diffusion Schr ¨ odinger Bridge Matching (DSBM), FKRSBM achieves superior distributional alignment, reduced tau-positivity sign mismatch, stronger APOE ε4 subgroup alignment, and improved downstream disease classification performance. 
+
+Index Terms — Neuroimaging harmonization, Schr ¨ odinger bridge, Feynman–Kac reweighting, tau PET, cortical surface, entropy-regularized optimal transport, unpaired domain translation. 
+
+I. I NTRODUCTION This work was supported by the National Institutes of Health (NIH) under grants R01EB022744, RF1AG077578, RF1AG064584, U19AG078109, P30AG066530 and S10OD032285. Jianwei Zhang, Xinyu Nie, Jiaxin Yue, and Yonggang Shi are with the Stevens Neuroimaging and Informatics Institute, University of Southern California, Los Angeles, CA 90089 USA. Jianwei Zhang, Jiaxin Yue, and Yonggang Shi are with the Ming Hsieh Department of Electrical and Computer Engineering of Viterbi School of Engineering, University of Southern California, Los Angeles, CA 90089 USA. Yonggang Shi is also with the Alfred E. Mann Department of Biomedical Engineering of Viterbi School of Engineering, University of Southern California, Los Angeles, CA, USA. Corresponding author: Yonggang Shi. Email: yshi@loni.usc.edu. 
+
+# AGGREGATING neuroimaging data across multiple sites is essential for increasing statistical power and capturing biological heterogeneity in large-scale brain studies. How-ever, multi-site studies are confounded by scanner effects, systematic variations in image intensity, contrast, and noise caused by differences in hardware, field strengths, radiotracers, and acquisition protocols [1]. These non-biological variances inflate biomarker variance and reduce sensitivity to subtle disease effects [2], [3], and can introduce systematic bias when site distributions covary with biological variables [4]. The problem is compounded in machine learning pipelines, where models risk learning site identity rather than clinically relevant signal [5]. These challenges are especially acute for surface-based analyses, where the high sensitivity of cortical metrics to tissue contrast makes them particularly vulnerable to scanner-induced bias [2]. In practice, harmonization typically needs to operate in an unpaired setting, since acquiring large traveling cohorts of subjects scanned at every site under every protocol is logistically and financially challenging. Most multi-site datasets consequently share few or no common subjects, favoring methods that can align entire distributions without relying on subject-level correspondences. Several families of methods have been proposed for un-paired harmonization. Statistical methods such as ComBat [2], [3] model scanner effects as linear transformations. While effective for low-dimensional summaries, they assume Gaus-sian effects, treat features independently, and cannot capture nonlinear interactions between the source of variation and the underlying data structure [6], [7]. Recently, Deep learning methods have lifted the linearity restriction but have introduced new issues. CycleGANs [8]–[10] enforce cycle-consistency for unpaired translation but suffer from training instabil-ity and mode collapse that can suppress input variability. Disentanglement-based approaches [11]–[14] seek to separate content from style, but true unsupervised disentanglement is theoretically unattainable without strong inductive biases [15], and the ELBO objective trades reconstruction fidelity for latent regularity [16]. Diffusion-based translation via SDEdit [17] relies on noise injection to erase domain-specific characteris-tics before denoising into the target domain, but calibrating the noise level presents an inherent tradeoff between domain adaptation and content preservation. Unpaired harmonization can be formulated as aligning a source distribution π0 with a target distribution π1 without paired samples. We adopt the Schr¨ odinger Bridge (SB) frame- 
+
+> arXiv:2606.17420v1 [eess.IV] 16 Jun 2026 2IEEE TRANSACTIONS AND JOURNALS TEMPLATE
+
+work, an entropy-regularized optimal transport formulation over stochastic processes, to learn a direct source-to-target harmonization path between the two distributions [18]. In contrast to cycle-consistency or noise-routing approaches, SB provides a principled distributional alignment objective while preserving the source image as a structural prior throughout the transport process [19], [20]. Detailed comparisons with related translation frameworks are provided in the Method section. Despite these strengths, two open problems remain before SB can be applied to surface-based neuroimaging harmo-nization. First, SB-based harmonization on cortical surface data remains underexplored, where the non-Euclidean mesh topology demands geometry-aware architectures. Second, and more fundamentally, common DSBM-style deep learning im-plementations pair source and target endpoints by sampling independently from the product coupling π0 ⊗ π1, treating every cross-site pairing as equally plausible. This agnostic coupling ignores covariate structure. When the two sites differ in subgroup composition (e.g., different proportions of tau-positive and tau-negative subjects), the transport can map samples from one clinical subgroup toward a different subgroup in the target simply because the latter is more prevalent. The resulting harmonized data would conflate tracer differences with biological differences, defeating the purpose of harmonization. What is needed is a mechanism to constrain 
+
+the bridge endpoints so that the transport respects known covariate labels. Recent theoretical work on soft-constrained Schr¨ odinger bridges [21] shows that replacing hard terminal constraints with penalty functions yields well-posed problems with quantitative convergence guarantees, providing a princi-pled foundation for such constraints. In this work, we propose the Feynman–Kac Reweighted Schr¨ odinger Bridge Matching (FKRSBM) model, a frame-work that addresses both gaps. Our contributions are twofold: 1) Schr¨ odinger Bridge on the cortical surface domain. 
+
+We introduce an SB-based harmonization framework operating on cortical surface meshes. A spherical con-volutional backbone [22] respects the non-Euclidean geometry of the cortex, preserving surface topology. 2) Endpoint-constrained transport. We formulate an endpoint-regularized SB objective that augments the standard KL minimization with a penalty Φ encoding covariate structure, preventing the transport from conflat-ing site effects with biological variation. We show that the resulting source-anchored conditional reweighting can be implemented as standard bridge matching under a Feynman–Kac reweighted endpoint proposal obtained via Radon–Nikod´ ym reweighting, with an interpretable parameter λ controlling the strength of the constraint. Crucially, the Feynman–Kac reweighting operates en-tirely at the data-sampling level (via reweighted impor-tance sampling), requiring no changes to the DSBM solver or network architecture. This modular design means that any future improvement to the SB solvers can be incorporated without modifying the endpoint constraint. Operationally, FKRSBM trains a bridge-matching model by          
+
+> Fig. 1. Distributional and spatial differences between tau PET trac-ers. Left: Bar plots of scan-level mean left hemisphere cortical SUVR for PI-2620 (HABS-HD, blue) and AV-1451 (ADNI, orange) show a significant shift in central tendency (Mann–Whitney U,p < 0.001 ), with AV-1451 yielding systematically higher SUVR values. Right: Cohort-averaged SUVR projected onto the lateral cortical surface reveals tracer-specific spatial signal patterns, motivating the need for harmonization across tracers.
+
+drawing Brownian-bridge samples from endpoint pairs whose target endpoint is selected by a covariate-aware Feynman– Kac reweighted proposal, then harmonizes a source surface by integrating the learned stochastic dynamics into the tar-get tracer domain. We evaluate the method on unpaired tau PET SUVR maps, harmonizing HABS-HD PI-2620 data to the ADNI AV-1451 domain. Across image-level and region-level evaluations, FKRSBM achieves the strongest overall distributional alignment, lowest residual site separability, and best tau-subgroup consistency among ComBat [23], Cycle-GAN [10], DF [24], and unregularized DSBM [20] baselines, while preserving subject-level cortical patterns. These results indicate that Feynman–Kac reweighting of the reference bridge measure improves SB harmonization not only theoretically, but also in practical cross-tracer tau PET experiments. 
+
+II. M ETHOD 
+
+A. Problem Formulation 
+
+Let π0 and π1 denote the source and target data dis-tributions, respectively, with samples represented as x ∈
+
+Rd. In the unpaired harmonization setting, no subject-level correspondence is available across domains. The goal is to map samples from π0 toward the target distribution π1 while reducing acquisition-related variability and preserving biolog-ically meaningful variation. We formulate this task within the Schr¨ odinger Bridge framework. This section first reviews the standard Schr¨ odinger Bridge problem and bridge match-ing, then introduces a covariate-informed endpoint regular-ization, establishes its equivalence to bridge matching under a Feynman–Kac reweighted reference bridge measure, and derives the resulting training and inference procedures. 
+
+B. Background: Schr ¨ odinger Bridge and Bridge Matching  
+
+> 1) The Schr ¨ odinger Bridge Problem:
+
+Let Ω denote the space of continuous trajectories {xt}t∈[0 ,1] with xt ∈ Rd, and let 
+
+Wϵ be a reference Wiener measure with diffusion scale ϵ. The Schr¨ odinger Bridge (SB) problem seeks a path measure Q∗AUTHOR et al. : TITLE 3                 
+
+> Fig. 2. Overview of the proposed Feynman–Kac Reweighted Schr ¨ odinger Bridge (FKRSBM) for cross-tracer tau PET harmonization. Top:
+> Schematic of the bridge between source ( X0, PI-2620) and target ( X1, AV-1451) tau distributions. The DSBM (dashed purple) transports mass between marginals without regard to biological subgroup, producing crossing trajectories that mix subjects across subgroups. FKRSBM (solid teal) reweights the endpoint coupling so that trajectories preferentially connect subjects sharing the same biological subgroup (tau positive vs. negative), yielding straighter, subgroup-consistent paths while preserving the path-space dynamics. Middle (Training stage): At each iteration, a time tand a Brownian-bridge sample Xtare drawn from a Feynman–Kac reweighted endpoint coupling, and a hierarchical surface network operating across icosahedral resolutions (ico 3–6) predicts the drift vθ(t, X t), regressed against the analytic bridge drift. Bottom (Inference stage): A source SUVR map is harmonized by integrating the learned SDE from t= 0 to t= 1 , producing a trajectory of intermediate cortical maps that terminates in the target tracer space.
+
+that interpolates between π0 and π1 while remaining as close as possible to Wϵ in KL divergence: 
+
+Q∗ = argmin 
+
+> Q∈P(Ω)
+> Q0=π0, Q 1=π1
+
+KL( Q ∥ Wϵ). (1) The solution Q∗ can be represented as an Itˆ o diffusion sharing the same diffusion coefficient as the reference process: 
+
+dx t = b∗(t, x t) dt + √ϵ dW t, (2) where Wt is standard Brownian motion and b∗(t, x ) is the optimal drift. Intuitively, Eq. (1) selects, among all stochastic processes connecting π0 to π1, the one that deviates minimally from pure Brownian motion. 
+
+2) Structure of the Optimal Solution: When the marginals are point masses π0 = δx0 and π1 = δx1 , the solution reduces to the Brownian bridge connecting x0 to x1. For general non-degenerate marginals, Q∗ is a mixture of Brownian bridges : the joint endpoint distribution (x0, x 1) follows an optimal entropic coupling γ∗ ∈ Π( π0, π 1), and conditional on (x0, x 1) ∼ γ∗, the intermediate trajectory {xt}t∈(0 ,1) 
+
+follows a Brownian bridge from x0 to x1. This decomposition separates the problem into two parts: (i) learning the coupling 
+
+γ∗ between marginals, and (ii) the conditional path dynamics, which are analytically tractable as Brownian bridges. The optimal drift takes the form 
+
+b∗(t, x ) = ϵ∇x log φ(t, x ), (3) where φ(t, x ) is a space–time harmonic function associated with π1. This corresponds to a Doob h-transform of the Wiener process. In practice, φ(t, x ) is unavailable in closed form for complex, high-dimensional distributions. 
+
+3) Bridge Matching: Rather than estimating the Schr¨ odinger potential φ explicitly, bridge matching [25] learns the transport dynamics by regressing a parameterized drift vθ (t, x ) onto the conditional drift of Brownian bridges connecting samples from the two endpoint marginals. Specifically, for endpoint pairs 
+
+(X0, X 1) and an intermediate bridge sample Xt, the model is trained at randomly sampled times t ∈ (0 , 1) by minimizing 
+
+L(θ) = E
+
+h
+
+∥vθ (t, X t) − vBB (t, X t; X0, X 1)∥22
+
+i
+
+, (4) where the Brownian bridge drift conditioned on endpoints 
+
+(X0, X 1) is given by 
+
+vBB (t, x ; X0, X 1) = X1 − x
+
+1 − t . (5) The intermediate state Xt = (1 − t)X0 + tX 1 + pϵt (1 − t)Z
+
+with Z ∼ N (0 , I ) is sampled from the corresponding condi-tional Brownian bridge. The Diffusion Schr¨ odinger Bridge Matching (DSBM) framework [20], [25] operationalizes this idea by alternating between forward and backward bridge constructions and fitting the drift via regression. 4 IEEE TRANSACTIONS AND JOURNALS TEMPLATE 
+
+C. Endpoint-Regularized Schr ¨ odinger Bridge 
+
+The DSBM-style bridge matching loss in Eq. (4) is com-monly estimated by sampling endpoint pairs independently from the product measure π0 ⊗ π1. In the context of multi-site neuroimaging, this means the model treats all cross-site pair-ings as equally plausible, for example, a tau-negative subject from site A is just as likely to be paired with a tau-positive subject from site B as with a tau-negative subject from site B. When sites differ in the composition of tau-positive and tau-negative subjects, such agnostic pairing can bias the learned transport, conflating site effects with biological variation. To address this, we introduce an endpoint penalty Φ : Rd ×
+
+Rd → R that encodes prior knowledge about which pairings are biologically meaningful. We then define an endpoint-regularized SB objective that augments the standard KL mini-mization with a penalty on the expected value of Φ under the learned path measure. We first define a reference path mea-sure R as an independent mixture of Brownian bridges. Let 
+
+Wx0→x1 denote the Brownian bridge path measure connecting 
+
+x0 to x1 with diffusion scale inherited from Wϵ. The reference measure is: 
+
+R(·) = 
+
+Z
+
+> Rd×Rd
+
+Wx0→x1 (·) π0(dx 0) π1(dx 1). (6) Under R, the endpoints are drawn independently: (X0, X 1) ∼
+
+π0 ⊗ π1. This is the implicit reference used by product-pairing DSBM [25] training. For a penalty strength λ ≥ 0, we seek a path measure that stays close to the reference R while penalizing biologically implausible endpoint pairings: 
+
+P ⋆λ ∈ argmin  
+
+> P≪RP0=π0
+
+n
+
+KL( P ∥ R) + λ EP [Φ( X0, X 1)] 
+
+o
+
+, (7) where P ≪ R denotes that P is absolutely continuous with respect to R, and the constraint P0 = π0 fixes the source marginal. Here, λ is the weight that adjusts the penalty level, and Φ( X0, X 1) scores how implausible a pairing (X0, X 1) is: the KL term keeps P close to the independent bridge mixture, while the penalty term discourages endpoint pairs with high Φ.As λ increases, the solution increasingly favors path measures whose endpoint pairs have low penalty Φ—i.e., biologically consistent pairings. The key question is then how to solve Eq. (7) in practice. We show next that this regularized objective admits an implementation as standard bridge matching under a Feynman–Kac reweighted reference bridge measure. 
+
+D. Feynman–Kac Reweighting of the Reference Bridge Measure 
+
+The key observation is that the source-anchored endpoint penalty in Eq. (7) can be absorbed into the reference path measure through a Feynman–Kac-type exponential reweight-ing. Classical Feynman–Kac theory describes how a reference stochastic process can be modified by multiplying its path measure by an exponential potential functional [26]. In our setting, the potential is not a running cost accumulated along the path; instead, it is an endpoint potential Φ( X0, X 1) that encodes biological compatibility between a source and tar-get sample. This endpoint-potential reweighting changes the endpoint coupling used to construct the bridge mixture, while leaving the conditional Brownian bridge law between any fixed endpoint pair unchanged. Define the source-anchored Feynman–Kac reweighted ref-erence Rλ via the Radon–Nikod´ ym derivative [27]: 
+
+dR λ
+
+dR (ω) = exp  − λΦ( X0(ω), X 1(ω)) 
+
+Zλ(X0(ω)) , (8) where the source-conditional normalizing constant is 
+
+Zλ(x0) := EX1∼π1
+
+ exp  − λΦ( x0, X 1) . (9) The Feynman–Kac factor reweights trajectories in R accord-ing to the compatibility of their endpoints: paths connecting well-matched pairs with low Φ receive higher weight, whereas paths connecting mismatched pairs are downweighted. The normalization is conditional on X0, so the source marginal remains π0 while the target endpoint is sampled from a biased conditional proposal. Crucially, the potential depends only on the endpoints (X0, X 1) and not on intermediate states along the path. Therefore, the reweighting modifies the endpoint law but does not modify the Brownian bridge dynamics conditioned on each endpoint pair. We formalize this through three propositions. 
+
+Proposition 1 (Endpoint regularization equals Feynman–Kac reweightin 
+
+For any P ≪ R with P0 = π0,
+
+KL( P ∥ Rλ) = KL( P ∥ R) + λ EP [Φ( X0, X 1)] + EX0∼π0 [log Zλ(X0)] . (10) Consequently, minimizing the regularized objective in Eq. (7) is equivalent to minimizing KL( P ∥ Rλ).
+
+Proof: By definition of KL divergence and the Radon– Nikod´ ym chain rule, 
+
+KL( P ∥ Rλ) = EP
+
+
+
+log dP dR λ
+
+
+
+= EP
+
+
+
+log dP dR + log dR dR λ
+
+
+
+. (11) From Eq. (8), the inverse Radon–Nikod´ ym derivative is 
+
+dR dR λ
+
+(ω) = Zλ(X0(ω)) exp  λΦ( X0(ω), X 1(ω)) . (12) Substituting and expanding: 
+
+KL( P ∥ Rλ) = KL( P ∥ R)+ λ EP [Φ( X0, X 1)] + EP [log Zλ(X0)] .
+
+(13) Since P0 = π0, the final term equals EX0∼π0 [log Zλ(X0)] 
+
+and is independent of the conditional endpoint proposal. Minimizing KL( P ∥ Rλ) over P is equivalent to minimizing Eq. (7). 
+
+Proposition 2 (Endpoint proposal under the Feynman–Kac reweighted 
+
+The endpoint distribution under Rλ has source marginal π0
+
+and target conditional 
+
+rλ
+
+> 1|0
+
+(x1 | x0) = e−λΦ( x0,x 1) π1(x1)
+
+Zλ(x0) . (14) AUTHOR et al. : TITLE 5
+
+Proof: Let A ∈ B (Rd × Rd) be a measurable endpoint set. Applying Eq. (8): 
+
+Rλ
+
+ (X0, X 1) ∈ A
+
+= ER
+
+
+
+1{(X0,X 1)∈A}
+
+dR λ
+
+dR 
+
+
+
+= ER
+
+
+
+1{(X0,X 1)∈A}
+
+e−λΦ( X0,X 1)
+
+Zλ(X0)
+
+
+
+. (15) Since (X0, X 1) ∼ π0 ⊗ π1 under R and the denominator depends only on x0:
+
+Rλ
+
+ (X0, X 1) ∈ A
+
+=
+
+Z
+
+> A
+
+e−λΦ( x0,x 1)
+
+Zλ(x0) π0(dx 0) π1(dx 1), (16) establishing Eq. (14). Proposition 2 shows that the Feynman–Kac reweighting modifies the conditional proposal for endpoints: rather than drawing target endpoints independently of the source sample, the reweighted reference favors pairings with low penalty Φ.For instance, when Φ penalizes tau-positivity mismatch, the Feynman–Kac reweighted proposal preferentially pairs tau-positive subjects with tau-positive subjects and tau-negative subjects with tau-negative subjects across sites. 
+
+Proposition 3 (Conditional bridge dynamics are unchanged): 
+
+For any endpoints (x0, x 1),
+
+Rλ(· | X0 = x0, X 1 = x1) = Wx0→x1 (·). (17) 
+
+Proof: Let B ⊆ Ω be measurable in the path-space sigma-algebra. By Bayes’ rule: 
+
+Rλ(B | X0 = x0, X 1 = x1)= ER
+
+1B 1{X0=x0,X 1=x1} dR λ
+
+> dR
+
+
+
+ER
+
+1{X0=x0,X 1=x1} dR λ
+
+> dR
+
+ . (18) Since dR λ 
+
+> dR
+
+∝ exp( −λΦ( X0, X 1)) depends only on (X0, X 1),it is constant when conditioning on (X0, X 1) = ( x0, x 1) and cancels: 
+
+Rλ(B | X0 = x0, X 1 = x1)= R(B | X0 = x0, X 1 = x1). (19) By definition of R in Eq. (6), R(· | X0 = x0, X 1 = x1) = 
+
+Wx0→x1 (·).Proposition 3 is critical for practical implementation: the Feynman–Kac reweighting changes which endpoint pairs are favored but does not alter the Brownian bridge dynamics between any given pair. This means the bridge matching regression target vBB remains the same—only the sampling distribution over endpoint pairs changes. 
+
+E. Feynman–Kac Reweighted DSBM: Objective and Algorithm 
+
+The preceding identities justify implementing the source-anchored endpoint penalty by performing standard bridge matching under the conditional endpoint proposal induced by the Feynman–Kac reweighted reference Rλ. The reweighted objective requires sampling from Rλ. One way to view the reweighting is to sample from the unreweighted product mea-sure (X0, X 1) ∼ π0⊗π1 and correct via importance weighting. Let ˜w = exp( −λΦ( X0, X 1)) and the resulting Feynman–Kac reweighted DSBM objective Lλ(θ) is given by: 
+
+EX0∼π0
+
+ EX1∼π1
+
+h
+
+˜w(X0, X 1) Et,X t|X0,X 1
+
+∥vθ − vBB ∥22
+
+i
+
+EX1∼π1 [ ˜ w(X0, X 1)] 
+
+ .
+
+(20) However, this weighted estimator is inefficient when λ is large: label-mismatched pairs receive very small weights but still require a full forward and backward pass. Our implementation therefore moves the importance weights into the sampling distribution. For each source sample x0, we sample the target endpoint from the empirical conditional proposal 
+
+qλ(x1 | x0) = exp[ −λΦ( x0, x 1)] ˆ π1(x1)
+
+P 
+
+> x′
+> 1∈D 1
+
+exp[ −λΦ( x0, x ′
+
+> 1
+
+)] ˆ π1(x′
+
+> 1
+
+) , (21) where D1 denotes the target training set and ˆπ1 is its empirical measure. The bridge-matching loss is then evaluated without an explicit per-sample weight, because the endpoint pairs are already drawn from the Feynman–Kac reweighted proposal. This is the sampling-based form of importance sampling: com-putational effort is concentrated on pairs with non-negligible reweighting weight rather than spent on pairs whose gradients would be nearly zero. 
+
+1) Endpoint Penalty Design: The endpoint penalty 
+
+Φ( x0, x 1) encodes prior knowledge about which cross-distribution pairings are semantically meaningful. Because the penalty enters only through the importance weights 
+
+˜w = exp( −λΦ) and does not receive gradients, its design is flexible and can incorporate arbitrary covariate information. For the tau PET harmonization task, where sites differ in the proportion of tau-positive and tau-negative subjects, we define Φ as a tau-positivity mismatch penalty: 
+
+Φ( x0, x 1) = 1[g(x0)̸ = g(x1)] , (22) where g(·) ∈ {τ +, τ −} denotes the tau positivity label associated with each sample, determined by thresholding the regional SUVR values using the standard criterion described in Section III-A. Under this penalty, same-group pairs receive weight ˜w = 1 while cross-group pairs receive weight ˜w =
+
+e−λ, which decreases with λ. This encourages the transport to align each tau-positivity subgroup with its target counterpart rather than with the target marginal as a whole. More generally, Φ can incorporate multiple covariates as a weighted sum of mismatch terms, or encode feature-space distances between samples. The modular design allows prac-titioners to specify domain-appropriate constraints without modifying the underlying transport algorithm. 
+
+2) Feynman–Kac Reweighted Sampling for Efficient Training: 
+
+While the weighted view in Eq. (20) is useful conceptually, it can be computationally wasteful in practice due to near zero gradient pass due to small weight from large lambda. The training objective estimated by the implemented sampler is 
+
+Lλ(θ) = EX0∼ˆπ0 EX1∼qλ(·| X0)
+
+h
+
+Et,X t|X0,X 1
+
+∥vθ − vBB ∥22
+
+i
+
+.
+
+(23) 6 IEEE TRANSACTIONS AND JOURNALS TEMPLATE 
+
+This is the configuration used for the reported FKRSBM experiments. Following the DSBM framework [20], training proceeds in two stages. In the pretraining stage, endpoint pairs are drawn from the reweighted endpoint proposal (Eq. (21)) and the model learns an initial drift by regressing toward Brownian bridge velocities. In the finetuning stage, the model generates self-consistent endpoints by solving the learned SDE forward and backward from samples drawn by the same endpoint proposal, and refines the drift using the resulting bridge-matching regression targets. An exponential moving average (EMA) of the parameters is maintained throughout for stable trajectory generation. Algorithm 1 summarizes the complete procedure. 
+
+F. Inference via SDE Sampling 
+
+At inference time, given a source sample x0 ∼ π0, we generate the harmonized output by simulating the learned stochastic differential equation from t = 0 to t = 1 . Because the Schr¨ odinger Bridge solution is inherently a diffusion pro-cess (Eq. (2)), we retain the stochastic dynamics at inference and solve: 
+
+dx t = vθ (t, x t) dt + √ϵ dW t, x0 ∼ π0, t ∈ [0 , 1] . (24) The harmonized sample is ˆx1 = xt=1 , the solution evaluated at t = 1 . We solve Eq. (24) numerically using the Euler– Maruyama method with N uniformly spaced steps. At each step k = 0 , 1, . . . , N − 1 with step size h = 1 /N :
+
+xtk+1 = xtk +h·vθ (tk, x tk )+ √ϵh ξ k, ξk ∼ N (0 , I d), (25) where tk = k/N . In all experiments, we use N = 100 steps, which provides a stable tradeoff between integration accuracy and computational cost. 
+
+G. Implementation 
+
+The backbone network is a conditional surface U-Net (CUNet) composed of spherical convolution layers [22] ar-ranged in an encoder–decoder architecture on the sixth-order icosahedral mesh. We use channel widths [32 , 64 , 128 , 256] ,latent dimension 256, group normalization, ReLU activations in convolutional blocks, and sinusoidal time embeddings in-jected into residual blocks. No auxiliary clinical condition is provided to the CUNet; the endpoint reweighting is im-plemented entirely through the tau-positivity-aware sampler. Before input to the network, data goes through a log transform to suppress abnormally high SUVR values. For noise term 
+
+ϵ and reweighting strength λ, our model uses ϵ = 0.01 
+
+and λ = 4 picked from grid search results. The model is trained at batch size 16 in pretraining for 20,000 iterations and batch size 4 in finetuning for 10,000 iterations. Both inference and finetune use 100 sampling steps, SDE inference, EMA decay 0.999, and post-translation surface smoothing with σ = 0 .05 . The learning rates used in pretraining and finetuning are 10 −4 and 10 −5, respectively. The best model is selected based on validation-set performance metrics as in Table II. All experiments were conducted on an NVIDIA RTX A6000 GPU with 48 GB of memory. 
+
+Algorithm 1: Feynman–Kac Reweighted Schr¨ odinger Bridge Matching 
+
+Input: Source and target datasets D0, D1;tau-positivity labels g; diffusion scale ϵ;reweighting strength λ; pretrain steps Npre ;finetune steps Nfine ; batch size B; EMA decay 
+
+γ.Initialize forward and backward drifts vfθ , v bθ ;
+
+θEMA ← θ;Optionally oversample minority tau-positivity groups in D0 and D1;
+
+// Stage 1: Pretrain with Feynman--Kac reweighted endpoint sampling 
+
+for n = 1 , . . . , N pre do 
+
+Draw source batch X1: B 
+
+> 0
+
+from D0;For each Xi
+
+> 0
+
+, sample Xi 
+
+> 1
+
+from qλ(· | Xi
+
+> 0
+
+) in Eq. (21); 
+
+t ∼ Unif([0 , 1]) ⊗B ; Z ∼ N (0 , I d)⊗B ;
+
+Xt ← (1 − t)X0 + tX 1 + pϵt (1 − t)Z;Update vfθ and vbθ using the unweighted bridge-matching MSE to the analytic forward and backward Brownian-bridge drifts; 
+
+θEMA ← γ θ EMA + (1 −γ) θ;
+
+end 
+
+// Stage 2: Finetune with self-consistent dynamics 
+
+for n = 1 , . . . , N fine do 
+
+Draw reweighted endpoint batch (X1: B 
+
+> 0
+
+, X 1: B 
+
+> 1
+
+) as above; 
+
+bX1 ← forward SDE from X0 using vfθEMA 
+
+(Eq. (24)); 
+
+bX0 ← backward SDE from X1 using vbθEMA ;
+
+t ∼ Unif([0 , 1]) ⊗B ; Z ∼ N (0 , I d)⊗B ;
+
+X(a) 
+
+> t
+
+← Interp t( bX0, X 1, Z );
+
+X(b) 
+
+> t
+
+← Interp t(X0, bX1, Z );Update vfθ on bridges ( bX0, X 1) and vbθ on bridges 
+
+(X0, bX1) using unweighted MSE; 
+
+θEMA ← γ θ EMA + (1 −γ) θ;
+
+end 
+
+// Inference 
+
+Given x0 ∼ π0, simulate SDE (Eq. (24)) with vθEMA 
+
+from t = 0 to t = 1 to obtain harmonized ˆx1;
+
+Output: Parameters (θ, θ EMA )
+
+III. R ESULTS 
+
+A. Dataset and Preprocessing 
+
+For the tau PET harmonization experiments, we utilized two public datasets: the Health and Aging Brain Study Health Disparities (HABS-HD) [28] and the Alzheimer’s Disease Neuroimaging Initiative (ADNI) [29]. Each raw tau PET acquisition consisted of six consecutive 5-minute frames (30 minutes total), beginning approximately 75 minutes after tracer AUTHOR et al. : TITLE 7
+
+injection. All frames are coregistered to the first frame and averaged to create the average PET image. Then the PET image is processed through PETSurfer [30] along with the temporally closest T1w image processed by the FreeSurfer pipeline [31]. The standard uptake value ratio (SUVR) was calculated by dividing the raw tau signal by the mean signal from the inferior cerebellum. The SUVR values are resampled to the cortical surface obtained from T1 using mri vol2surf 
+
+command in FreeSurfer. Because tau PET data suffers from off-target binding where signals from extracerebral tissue such as the meninges contaminate the cortical signal, we apply artifact removal [24] to the SUVR feature map. The feature map is then resampled to a 6th-order icosahedron surface through the mri surf2surf command. The tau positivity is computed by thresholding the mean cortical SUVR by the method in [32]. The statistics of datasets are shown in Table I.                                
+
+> TABLE I SUBJECT -LEVEL DEMOGRAPHICS ,SCAN COUNTS ,AND DATA SPLITS FOR THE HABS-HD AND ADNI TAU PET DATASETS USED IN THE
+> SUVR HARMONIZATION EXPERIMENT . CN: C OGNITIVELY NORMAL ;MCI: M ILD COGNITIVE IMPAIRMENT ; AD: A LZHEIMER ’SDISEASE .SPLITS FOLLOW A 6/2/2 RATIO ON THE SUBJECT LEVEL .
+> Attribute HABS-HD ADNI
+> N (Subjects) 1797 826 Number of Scans 2459 1480 Tracer Types PI-2620 AV-1451 Age (Mean ± SD, years) 66.2 ± 8.7 74.3 ± 8.1 Sex (M / F) 1105 / 692 417 / 409 Diagnosis (CN / MCI / AD) 1323 / 385 / 89 460 / 283 / 83 Train / Val / Test 1078 / 359 / 360 496 / 165 / 165
+
+B. Tau PET SUVR Harmonization Across Tracers 
+
+We designate HABS-HD as the source domain and ADNI as the target domain. This choice is motivated by ADNI’s standardized diagnostic protocols and by the widespread use of AV-1451 (Flortaucipir) as a tau PET tracer in Alzheimer’s disease research. The objective is to harmonize HABS-HD PI-2620 SUVR maps into the ADNI AV-1451 target domain. Both datasets are split into train/validation/test sets separately, as shown in Table I. The model is trained on the training set and validated on the validation set for model selection. All reported metrics are computed on the held-out test set. We compare our model with ComBat [23], surface-based Cycle-GAN [10], surface DDPM-based harmonization (DF) [24], and the unregularized Diffusion Schr¨ odinger Bridge matching (DSBM). 
+
+1) Harmonization Evaluation: The quantitative results are shown in Table II. We evaluate image-level harmonization using Pearson Correlation Coefficient (PCC) between each source image and its harmonized output to assess pattern preservation and Wasserstein Distance (WD) between the harmonized and target distributions to assess distributional alignment in the unpaired setting. The left and right hemi-spheres are evaluated separately. Residual site separability is quantified using the absolute Somers’ D of a site classifier (SVM on ROI mean features) ( |D| = |2 · AUC − 1|), where values closer to zero indicate stronger site-effect removal. We also report WD within tau-positive and tau-negative subgroups to evaluate whether harmonization aligns distributions at the subgroup level. Table II shows that our model provides the best overall distributional alignment, the lowest residual site separability, and the strongest tau-subgroup alignment among the evaluated methods in both hemispheres, while preserving source spatial patterns at a PCC comparable to competing harmonization methods. For qualitative evaluation, we plotted SUVR maps of example subjects in Figure 3. The three rows show representative subjects with different tau-burden patterns, including high temporal tau pathology and lower-SUVR cases with more subtle temporal elevation. Due to the distributional difference between AV-1451 (target) and PI-2620 (source), SUVR values are expected to increase after harmonization. FKRSBM and DSBM generally preserve the topography of pathology, whereas CycleGAN and DF show visible artifacts or loss of detail in some examples. Figure 4 presents the results as grouped bar plots. Across the reported ROIs and subgroups, our model shows the closest alignment to the target in both mean and variance. ComBat corrects the global mean shift but, owing to its location–scale assumption, leaves residual biases where the tracer-induced shift is nonlinear or region-dependent. CycleGAN aligns ROI means while substantially compressing variance, consistent with mode-collapse-like reduction; this is most pronounced in the tau-positive subgroup (bottom row), where the higher dynamic range exposes the limited expressiveness of the cycle-consistency constraint. DF yields shifted means and inflated variance in several ROIs, attenuating fine regional structure. The DSBM improves overall mean alignment but shows systematic under- or over-correction in the stratified rows, particularly for tau-positive subjects, where product endpoint sampling conflates tracer effects with tau-burden subgroups during transport. In contrast, our model uses the Feynman–Kac reweighting to steer transport toward tau-subgroup-consistent pairings, yielding harmonized per-ROI means and standard deviations that more closely track the target across all three strata. 
+
+2) Tau Positivity Preservation: A clinically meaningful har-monization should align the tau positivity status of individual subjects. Each HABS-HD hemisphere is assigned a binary tau label (positive or negative) using the standard definition described in Section III-A. After harmonizing the HABS-HD SUVR maps into the ADNI domain, we recompute tau pos-itivity using the ADNI-derived cutoff and compare the post-harmonization label with the original pre-harmonization label. A status flip—tau-positive becoming negative or vice versa— indicates that the harmonization has altered the biological signal sufficiently to change a subject’s clinical categorization. Table III reports the results for 503 test hemispheres. FKRSBM has the lowest mismatch rate in this comparison: 2.6% (13/503) in the left hemisphere and 3.0% (15/503) in the right hemisphere. The direction of flips is also balanced, with roughly comparable numbers of pos →neg and neg →pos er-rors, suggesting no systematic bias in either direction. In con-trast, the DSBM produces the highest mismatch rate (17.5% left, 13.3% right), with a strong asymmetry: the majority of flips are neg →pos, consistent with product endpoint sampling 8 IEEE TRANSACTIONS AND JOURNALS TEMPLATE 
+
+TABLE II QUANTITATIVE COMPARISON OF HARMONIZATION METHODS . M ETRICS INCLUDE WASSERSTEIN DISTANCE (↓), PCC ( ↑), ABSOLUTE SOMERS ’ D  
+
+> OF SITE CLASSIFICATION
+
+(↓), AND WASSERSTEIN DISTANCE WITHIN TAU -POSITIVE AND TAU -NEGATIVE SUBGROUPS (↓). S OMERS ’ D = 2 ·AUC −1;  
+
+> VALUES NEAR
+
+0 INDICATE SITE -INDISTINGUISHABLE HARMONIZATION . B OLD INDICATES BEST .
+
+Left Hemisphere Right Hemisphere 
+
+Method WD ↓ PCC ↑ |D| ↓ WD τpos ↓ WD τneg ↓ WD ↓ PCC ↑ |D| ↓ WD τpos ↓ WD τneg ↓
+
+ComBat 0.0619 0.9517 0.3314 0.2296 0.0493 0.0357 0.9605 0.1824 0.1076 0.0327 CycleGAN 0.0601 0.9468 0.0700 0.3628 0.1578 0.0631 0.9547 0.6140 0.1430 0.0942 DF 0.1254 0.9244 0.7600 0.4279 0.2069 0.1946 0.9414 0.3960 0.3705 0.3685 DSBM 0.0496 0.9359 0.1694 0.1187 0.0627 0.0285 0.9484 0.1520 0.0935 0.0449 FKRSBM 0.0079 0.9519 0.0696 0.0486 0.0043 0.0100 0.9503 0.0504 0.0376 0.0072 
+
+Fig. 3. Harmonization visualization for three representative HABS-HD subjects and harmonized outputs produced by ComBat, CycleGAN, DF, DSBM and FKRSBM. The rows illustrate examples with different tau-burden patterns, including clear temporal tau pathology and lower-SUVR cases with subtler temporal elevation. 0.0               
+
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> ROI mean  Source ComBat CycleGAN DF DSBM FKRSBM(Ours) Target
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> ROI mean
+> superiortemporal middletemporal inferiortemporal bankssts fusiform transversetemporal entorhinal temporalpole parahippocampal
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> ROI mean
+
+Fig. 4. Temporal Region-level harmonization comparison across Desikan–Killiany ROIs. Each group of bars shows the mean SUVR for a single ROI in temporal lobe, with error bars denoting standard deviation. The three rows correspond to the overall test set (top), the tau-negative subgroup (middle), and the tau-positive subgroup (bottom). TABLE III TAU POSITIVITY SIGN MISMATCH ANALYSIS AFTER HARMONIZATION . POS →NEG AND NEG →POS INDICATE THE DIRECTION OF STATUS FLIPS .
+
+Left Hemisphere Right Hemisphere 
+
+Method n total n mismatch mismatch pct pos →neg neg →pos n total n mismatch mismatch pct pos →neg neg →pos ComBat 503 33 6.6% 0 33 503 26 5.2% 0 26 CycleGAN 503 36 7.2% 36 0 503 34 6.8% 34 0DF 503 35 7.0% 35 0 503 38 7.6% 38 0DSBM 503 88 17.5% 18 70 503 67 13.3% 16 51 FKRSBM 503 13 2.6% 9 4 503 15 3.0% 4 11 AUTHOR et al. : TITLE 9
+
+TABLE IV DOWNSTREAM DIAGNOSTIC SEPARABILITY ON THE COMBINED TEST SET . B EST RESULT PER COLUMN IN BOLD .                                                         
+
+> Method CN vs AD CN vs MCI vs AD F1 Acc. Spec. Sens. F1 Acc. Spec. Sens. Unharmonized 0.7404 ±0.0275 0.7657 ±0.0186 0.8625 ±0.0123 0.6871 ±0.0398 0.5314 ±0.0301 0.5410 ±0.0276 0.7739 ±0.0129 0.5474 ±0.0267
+> ComBat 0.7426 ±0.0115 0.7690 ±0.0121 0.8649 ±0.0333 0.6846 ±0.0174 0.5122 ±0.0333 0.5220 ±0.0325 0.7629 ±0.0156 0.5258 ±0.0315
+> CycleGAN 0.7373 ±0.0332 0.7659 ±0.0283 0.8743 ±0.0242 0.6793 ±0.0367 0.5175 ±0.0382 0.5278 ±0.0383 0.7675 ±0.0167 0.5366 ±0.0360
+> DF 0.7360 ±0.0439 0.7698 ±0.0302 0.8877 ±0.0254 0.6692 ±0.0632 0.4914 ±0.0422 0.4953 ±0.0456 0.7497 ±0.0225 0.5009 ±0.0439
+> DSBM 0.7286 ±0.0456 0.7541 ±0.0370 0.8400 ±0.0349 0.6839 ±0.0524 0.5095 ±0.0427 0.5212 ±0.0468 0.7628 ±0.0213 0.5244 ±0.0436
+> FKRSBM 0.8019 ±0.0373 0.8169 ±0.0304 0.8832 ±0.0231 0.7621 ±0.0477 0.5794 ±0.0639 0.5862 ±0.0602 0.7952 ±0.0289 0.5888 ±0.0596
+
+Fig. 5. Subgroup alignment by APOE ε4 status. Each column corresponds to a harmonization method; the two rows show APOE ε4 non-carriers (top) and carriers (bottom). Within each panel, boxplots compare the mean tau SUVR of the harmonized HABS-HD data (colored) with the target ADNI data (blue) for the left and right hemispheres. The Kolmogorov–Smirnov (KS) statistic between the harmonized and target distributions is reported at the top of each panel; lower values indicate better distributional alignment. 
+
+in DSBM-style training transporting some tau-negative sub-jects toward higher-SUVR regions of the target distribution. This is the failure mode that the Feynman–Kac reweighting is designed to reduce. ComBat exhibits moderate mismatch rates (6.6% left, 5.2% right) with all flips in the neg →pos direction, consistent with an upward shift that pushes borderline-negative subjects above the positivity threshold. CycleGAN shows a comparable mismatch rate (7.2% left, 6.8% right) but with flips exclusively in the pos →neg direction, consistent with the variance compression observed in the ROI-level analysis. The low and balanced mismatch rate of FKRSBM suggests that Feynman–Kac reweighted transport better preserves tau-positivity subgroup structure during harmonization. 
+
+3) Downstream Clinical Assessment: To assess whether har-monization aligns clinically relevant biological stratification beyond the tau-positivity label, we perform a diagnostic clas-sification experiment and a subgroup analysis based on APOE 
+
+ε4 carrier status, a major genetic risk factor for Alzheimer’s disease. APOE ε4 carrier status is not used during training. Figure 5 shows boxplots of mean tau SUVR for APOE 
+
+ε4 non-carriers (top row) and carriers (bottom row) across all methods, with the target ADNI distribution shown in blue. Among all methods, FKRSBM achieves the lowest KS statistics in all panels except right-hemisphere carriers, where ComBat is slightly better, indicating that the harmonized distributions more closely match the target within each genetic subgroup. Importantly, FKRSBM preserves the expected biological ordering: APOE ε4 carriers consistently show higher mean SUVR than non-carriers after harmonization, mirroring the pattern observed in the target ADNI data. This supports the interpretation that the Feynman–Kac reweighted transport reduces tracer-induced site effects without collapsing the bio-logically meaningful separation between genetic risk groups. We further evaluate whether the harmonized data improves pooled-domain diagnostic separability. For each hemisphere, the surface SUVR map is reduced to a feature vector of Desikan–Killiany ROI means. A support vector machine (SVM) classifier is trained on the combined (harmonized HABS-HD ∪ ADNI) test set for two tasks: CN vs. AD and the three-class CN vs. MCI vs. AD problem. This analy-sis is intended as a downstream statistical-power probe: if harmonization reduces site- or tracer-related variability while retaining disease-related signal, pooled data should support better diagnostic separation. Because the diagnostic groups are imbalanced, we subsample each class to match the size of the smallest class. To ensure robustness, we repeat this random subsampling procedure across 5 independent random seeds and report the mean and standard deviation of F1 score, accuracy, specificity, and sensitivity from 3-fold cross-validation. The folds are split at the subject level to prevent data leakage from subjects with multiple scans. Table IV presents the results. FKRSBM yields the highest F1 score across two tasks. The superior performance metrics indicate that our model can better support downstream clinical tasks. 10 IEEE TRANSACTIONS AND JOURNALS TEMPLATE 
+
+IV. C ONCLUSION 
+
+We presented Feynman–Kac Reweighted Schr¨ odinger Bridge Matching (FKRSBM), a surface-based harmonization framework that combines Schr¨ odinger Bridge matching with a tau-positivity-aware endpoint proposal. The Feynman–Kac reweighting is implemented at the sampling level, so it pre-serves the Brownian bridge regression target and the underly-ing DSBM architecture while concentrating training on bio-logically plausible source–target pairs. In cross-tracer tau PET harmonization from HABS-HD PI-2620 to ADNI AV-1451, FKRSBM improved distributional alignment, tau-positivity preservation, APOE subgroup alignment, and pooled-domain diagnostic separability relative to the evaluated baselines. These results suggest that endpoint-aware coupling is im-portant when unpaired source and target cohorts differ in biological subgroup composition. Future work should extend the method to multi-site harmonization, continuous covariates, and other surface-based imaging modalities. 
+
+REFERENCES 
+
+[1] J.-P. Fortin, D. Parker, B. Tunc ¸, T. Watanabe, M. A. Elliott, K. Ruparel, D. R. Roalf, T. D. Satterthwaite, R. C. Gur, R. E. Gur, R. T. Schultz, R. Verma, and R. T. Shinohara, “Harmonization of multi-site diffusion tensor imaging data,” NeuroImage , vol. 161, pp. 149–170, 2017. [2] J.-P. Fortin, N. Cullen, Y. I. Sheline, W. D. Taylor, I. Aselcioglu, P. A. Cook, P. Adams, C. Cooper, M. Fava, P. J. McGrath et al. ,“Harmonization of cortical thickness measurements across scanners and sites,” Neuroimage , vol. 167, pp. 104–120, 2018. [3] W. E. Johnson, C. Li, and A. Rabinovic, “Adjusting batch effects in mi-croarray expression data using empirical Bayes methods,” Biostatistics ,vol. 8, no. 1, pp. 118–127, 2007. [4] G. Varoquaux and V. Cheplygina, “Machine learning for medical imag-ing: methodological failures and recommendations for the future,” NPJ digital medicine , vol. 5, no. 1, p. 48, 2022. [5] Y. Ganin, E. Ustinova, H. Ajakan, P. Germain, H. Larochelle, F. Lavi-olette, M. Marchand, and V. Lempitsky, “Domain-adversarial training of neural networks,” in Journal of Machine Learning Research , vol. 17, no. 59, 2016, pp. 1–35. [6] A. F. Marquand, I. Rezek, J. Buitelaar, and C. F. Beckmann, “Un-derstanding heterogeneity in clinical cohorts using normative models: Beyond case-control studies,” Biological Psychiatry , vol. 80, no. 7, pp. 552–561, 2016. [7] S. Kang, S.-W. Kim, J.-K. Seong, and A. D. N. Initiative, “Disentan-gling brain atrophy heterogeneity in Alzheimer’s disease: A deep self-supervised approach with interpretable latent space,” NeuroImage , vol. 297, p. 120737, 2024. [8] J.-Y. Zhu, T. Park, P. Isola, and A. A. Efros, “Unpaired image-to-image translation using cycle-consistent adversarial networks,” in Proceedings of the IEEE International Conference on Computer Vision (ICCV) , 2017. [9] B. E. Dewey, C. Zhao, J. C. Reinhold, A. Carass, K. C. Fitzgerald, E. S. Sotirchos, S. Saidha, J. Oh, D. L. Pham, P. A. Calabresi et al. ,“Deepharmony: A deep learning approach to contrast harmonization across scanner changes,” Magnetic resonance imaging , vol. 64, pp. 160– 170, 2019. [10] C. Zhao, A. Carass, J. Lee, Y. He, and J. L. Prince, “Harmonization of multi-site diffusion mri data via a cycle-consistent adversarial net-work,” in International Conference on Medical Image Computing and Computer-Assisted Intervention . Springer, 2019, pp. 159–167. [11] A. H. Jha, S. Anand, M. Singh, and V. Veeravasarapu, “Disentangling factors of variation with cycle-consistent variational auto-encoders,” 
+
+arXiv preprint arXiv:1804.10469 , 2018. [12] D. Moyer, G. Ver Steeg, C. M. Tax, and P. M. Thompson, “Scanner invariant representations for weakly supervised domain adaptation with adversarial learning,” in International Conference on Medical Image Computing and Computer-Assisted Intervention . Springer, 2020, pp. 3–13. [13] L. Zuo, B. E. Dewey, Y. Liu, Y. He, S. D. Newsome, E. M. Mowry, S. M. Resnick, J. L. Prince, and A. Carass, “Information-based disentan-gled representation learning for unsupervised mr harmonization,” IEEE Transactions on Medical Imaging , vol. 40, no. 11, pp. 3095–3107, 2021. [14] N. K. Dinsdale, M. Jenkinson, and A. I. Namburete, “Deep learning-based unlearning of dataset bias for mri harmonisation and confound removal,” NeuroImage , vol. 228, p. 117689, 2021. [15] F. Locatello, S. Bauer, M. Lucic, G. Raetsch, S. Gelly, B. Sch¨ olkopf, and O. Bachem, “Challenging common assumptions in the unsupervised learning of disentangled representations,” in International Conference on Machine Learning . PMLR, 2019, pp. 4114–4124. [16] C. P. Burgess, I. Higgins, A. Pal, L. Matthey, N. Watters, G. Desjardins, and A. Lerchner, “Understanding disentangling in β-vae,” arXiv preprint arXiv:1804.03599 , 2018. [17] C. Meng, Y. He, Y. Song, J. Song, J. Wu, J.-Y. Zhu, and S. Ermon, “Sdedit: Guided image synthesis and editing with stochastic differential equations,” in International Conference on Learning Representations ,2021. [18] V. De Bortoli, J. Thornton, J. Heng, and A. Doucet, “Diffusion schr¨ odinger bridge with applications to score-based generative model-ing,” in Advances in Neural Information Processing Systems (NeurIPS) ,2021. [19] G.-H. Liu, A. Vahdat, D.-A. Huang, E. A. Theodorou, W. Nie, and A. Anandkumar, “I 2sb: Image-to-image schr¨ odinger bridge,” in Inter-national Conference on Machine Learning . PMLR, 2023, pp. 21 228– 21 248. [20] V. De Bortoli, I. Korshunova, A. Mnih, and A. Doucet, “Schr¨ odinger bridge flow for unpaired data translation,” arXiv preprint arXiv:2409.09347 , 2024. [21] J. Ma, Y. Tan, and R. Xu, “Schr¨ odinger bridge for generative AI: Soft-constrained formulation and convergence analysis,” arXiv preprint arXiv:2510.11829 , 2025. [22] F. Zhao, Z. Wu, L. Wang, W. Lin, J. H. Gilmore, S. Xia, D. Shen, and G. Li, “Spherical deformable u-net: Application to cortical surface parcellation and development prediction,” IEEE Transactions on Medical Imaging , vol. 40, no. 4, pp. 1217–1228, 2021. [23] J.-P. Fortin, N. Cullen, Y. I. Sheline, W. D. Taylor, I. Aselcioglu, P. A. Cook, P. Adams, C. Cooper, M. Fava, P. J. McGrath, M. McInnis, M. L. Phillips, M. H. Trivedi, M. M. Weissman, and R. T. Shinohara, “Harmonization of cortical thickness measurements across scanners and sites,” NeuroImage , vol. 167, pp. 104–120, 2018. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S105381191730931X [24] J. Yue, J. Zhang, L. Zhong, Y. Shi, A. D. N. Initiative et al. , “Tau pet harmonization via surface-based diffusion model,” in 2025 IEEE 22nd International Symposium on Biomedical Imaging (ISBI) . IEEE, 2025, pp. 1–5. [25] Y. Shi, V. De Bortoli, A. Campbell, and A. Doucet, “Diffusion schr¨ odinger bridge matching,” Advances in Neural Information Process-ing Systems , vol. 36, pp. 62 183–62 223, 2023. [26] P. Moral, Feynman-Kac formulae: genealogical and interacting particle systems with applications . Springer, 2004. [27] P. Billingsley, Probability and Measure , 3rd ed., ser. Wiley Series in Probability and Mathematical Statistics. New York: John Wiley & Sons, 1995. [28] S. E. O’Bryant et al. , “The health & aging brain among latino elders (HABLE) study methods and participant characteristics,” Alzheimer’s & Dementia: Diagnosis, Assessment & Disease Monitoring , vol. 13, no. 1, p. e12202, 2021. [29] S. Mueller et al. , “The Alzheimer’s disease neuroimaging initiative,” 
+
+Neuroimaging Clinics of North America , vol. 15, no. 4, pp. 869–877, 11 2005. [30] D. N. Greve, C. Svarer, P. M. Fisher, L. Feng, A. E. Hansen, W. Baare, B. Rosen, B. Fischl, and G. M. Knudsen, “Cortical surface-based analysis reduces bias and variance in kinetic modeling of brain pet data,” 
+
+Neuroimage , vol. 92, pp. 225–236, 2014. [31] B. Fischl, “Freesurfer,” Neuroimage , vol. 62, no. 2, pp. 774–781, 2012. [32] C. R. Jack, D. A. Bennett, K. Blennow, M. C. Carrillo, B. Dunn, S. B. Haeberlein, D. M. Holtzman, W. Jagust, F. Jessen, J. Karlawish, E. Liu, J. L. Molinuevo, T. Montine, C. Phelps, K. P. Rankin, C. C. Rowe, P. Scheltens, E. Siemers, H. M. Snyder, and R. Sperling, “Nia-aa research framework: Toward a biological definition of alzheimer’s disease,” Alzheimer’s & Dementia , vol. 14, no. 4, pp. 535–562, 2018.

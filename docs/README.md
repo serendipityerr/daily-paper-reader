@@ -6,28 +6,28 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-16
-- 运行时间：2026-06-16 22:07:57 UTC
+- 最新运行日期：2026-06-17
+- 运行时间：2026-06-17 21:39:12 UTC
 - 运行状态：成功
 - 本次总论文数：2
 - 精读区：1
 - 速读区：1
 
 ### 今日简报（AI）
-1) 今日精读高分论文《Topological Flow Matching》（9.0分），速读一篇随机热方程相关论文（6.0分）。
-2) 最值得关注的方向是拓扑流匹配在生成模型中的新框架，尤其适用于复杂几何结构的数据建模。
-3) 建议普通读者从该论文的代码或综述切入，快速把握拓扑方法与流匹配结合的核心思想。
-- 详情：[/202606/16/README](/202606/16/README)
+今日精读高评分论文《Feynman Kac Reweighted Schrödinger Bridge Matching for Surface-Based Tau PET Harmonization》，速读《Towards More General Control of Diffusion Models Using Jeffrey Guidance》。  
+重点推荐表面tau PET图像协调的精密方法，以及探索扩散模型更通用的控制策略。  
+建议优先精读评分9.0的协调方法，再基于速读研究扩散模型控制的扩展方向。
+- 详情：[/202606/17/README](/202606/17/README)
 
 ### 精读区论文标签
-1. [Topological Flow Matching](/202606/16/2606.15897v1-topological-flow-matching)  
+1. [Feynman Kac Reweighted Schrödinger Bridge Matching for Surface-Based Tau PET Harmonization](/202606/17/2606.17420v1-feynman-kac-reweighted-schrdinger-bridge-matching-for-surface-based-tau-pet-harmonization)  
    标签：评分：9.0/10、query:diff-bridge
-   evidence：将流匹配解释为退化薛定谔桥问题
+   evidence：使用薛定谔桥匹配进行图像标准化
 
 ### 速读区论文标签
-1. [On Skorokhod Problems for Reflected and Singular Stochastic Heat Equations](/202606/16/2606.11951v1-on-skorokhod-problems-for-reflected-and-singular-stochastic-heat-equations)  
+1. [Towards More General Control of Diffusion Models Using Jeffrey Guidance](/202606/17/2606.13240v1-towards-more-general-control-of-diffusion-models-using-jeffrey-guidance)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：布朗桥与Skorokhod问题
+   evidence：控制扩散模型输出到指定目标分布
 
 
 <div class="dpr-home-promo-card">
