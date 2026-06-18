@@ -6,28 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-17
-- 运行时间：2026-06-17 21:39:12 UTC
+- 最新运行日期：2026-06-18
+- 运行时间：2026-06-18 21:45:05 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：3
 - 精读区：1
-- 速读区：1
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读高评分论文《Feynman Kac Reweighted Schrödinger Bridge Matching for Surface-Based Tau PET Harmonization》，速读《Towards More General Control of Diffusion Models Using Jeffrey Guidance》。  
-重点推荐表面tau PET图像协调的精密方法，以及探索扩散模型更通用的控制策略。  
-建议优先精读评分9.0的协调方法，再基于速读研究扩散模型控制的扩展方向。
-- 详情：[/202606/17/README](/202606/17/README)
+今日日报聚焦生成模型前沿，精读一篇关于随机热力学与SDE生成模型的论文，速读两篇扩散模型优化工作。最值得关注的是《Stochastic Thermodynamics and SDE-based Generative Models》（8.0分），其将热力学视角引入生成模型；另两篇分别探讨扩散同步的变分测试优化和扩散流匹配的KL界改进。建议优先精读评分最高的论文，理解热力学与生成建模的交叉思路。
+- 详情：[/202606/18/README](/202606/18/README)
 
 ### 精读区论文标签
-1. [Feynman Kac Reweighted Schrödinger Bridge Matching for Surface-Based Tau PET Harmonization](/202606/17/2606.17420v1-feynman-kac-reweighted-schrdinger-bridge-matching-for-surface-based-tau-pet-harmonization)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：使用薛定谔桥匹配进行图像标准化
+1. [Stochastic Thermodynamics and SDE-based Generative Models](/202606/18/2606.18290v1-stochastic-thermodynamics-and-sde-based-generative-models)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：为薛定谔桥和扩散模型提供了热力学框架
 
 ### 速读区论文标签
-1. [Towards More General Control of Diffusion Models Using Jeffrey Guidance](/202606/17/2606.13240v1-towards-more-general-control-of-diffusion-models-using-jeffrey-guidance)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：控制扩散模型输出到指定目标分布
+1. [Variational Test-time Optimization for Diffusion Synchronization](/202606/18/2606.15614v1-variational-test-time-optimization-for-diffusion-synchronization)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：通过最优控制协调多个扩散轨迹，类似于桥接过程
+2. [Diffusion Flow Matching: Dimension-Improved KL Bounds and Wasserstein Guarantees](/202606/18/2606.16610v1-diffusion-flow-matching-dimension-improved-kl-bounds-and-wasserstein-guarantees)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：扩散流匹配的理论保证，与构造桥相关
 
 
 <div class="dpr-home-promo-card">
