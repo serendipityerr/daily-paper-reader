@@ -6,28 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-19
-- 运行时间：2026-06-19 21:17:50 UTC
+- 最新运行日期：2026-06-20
+- 运行时间：2026-06-20 20:36:11 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：1
+- 本次总论文数：1
+- 精读区：0
 - 速读区：1
 
 ### 今日简报（AI）
-1) 今日精读一篇评分8.0的视觉语言模型微调新范式，速读一篇评分6.0的生成模型匹配方法。
-2) 《Timage》通过将文本嵌入图像实现微调，值得关注；速读的PF算子匹配方法对生成建模有启发。
-3) 建议优先细读《Timage》把握前沿微调思路，再酌情翻阅速读文献补充生成模型知识。
-- 详情：[/202606/19/README](/202606/19/README)
+今日读到一篇关于扩散流匹配的论文，获得7.0分评价，该工作在KL界和Wasserstein保证上做出了改进。主要亮点是维度依赖性的KL界提升，以及从Wasserstein距离角度对生成质量的更优保障。如果你关注扩散模型理论基础，可深读其近似误差分析，或对比与传统扩散模型的性能改进。
+- 详情：[/202606/20/README](/202606/20/README)
 
 ### 精读区论文标签
-1. [Timage: A Generative Text-in-Image Paradigm for Fine-Tuning Vision-Language Models](/202606/19/2606.19944v1-timage-a-generative-text-in-image-paradigm-for-fine-tuning-vision-language-models)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：约束薛定谔桥（cSB）用于文本-图像叠加中的最优输运
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Perron--Frobenius Operator Matching for Generative Modeling](/202606/19/2606.17465v1-perron--frobenius-operator-matching-for-generative-modeling)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：通过算子匹配统一流、扩散和跳跃模型，与用于生成建模的随机桥过程相关
+1. [Diffusion Flow Matching: Dimension-Improved KL Bounds and Wasserstein Guarantees](/202606/20/2606.16610v1-diffusion-flow-matching-dimension-improved-kl-bounds-and-wasserstein-guarantees)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：扩散流匹配的最优传输与Wasserstein保证
 
 
 <div class="dpr-home-promo-card">
