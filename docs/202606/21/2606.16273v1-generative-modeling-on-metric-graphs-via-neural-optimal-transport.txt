@@ -1,0 +1,1739 @@
+Title: Generative Modeling on Metric Graphs via Neural Optimal Transport
+
+URL Source: https://arxiv.org/pdf/2606.16273v1
+
+Published Time: Tue, 16 Jun 2026 02:16:10 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+# Generative Modeling on Metric Graphs via Neural Optimal Transport 
+
+Alessandro Micheli ∗
+
+Imperial College London London, UK 
+
+a.micheli19@imperial.ac.uk 
+
+Yueqi Cao ∗
+
+KTH Royal Institute of Technology Stockholm, Sweden 
+
+yueqic@kth.se 
+
+Anthea Monod †
+
+Imperial College London London, UK 
+
+a.monod@imperial.ac.uk 
+
+Samir Bhatt †
+
+Imperial College London London, UK Statens Serum Institut Copenhagen, Denmark University of Copenhagen Copenhagen, Denmark 
+
+s.bhatt@imperial.ac.uk 
+
+## Abstract 
+
+We introduce, to our knowledge, the first deep generative modeling framework for probability distributions continuously supported on compact metric graphs. Given source and target measures on a metric graph, our method embeds the graph into a smooth ambient space, solves an entropic Kantorovich problem via a neural semidual parameterization, and projects generated samples back onto the original graph. We study two embedded geometries: an extrinsic Euclidean realization and the intrinsic tropical Abel–Jacobi embedding into the Jacobian torus. In both cases, the resulting generator is graph-supported by construction. We prove that, in the joint limit of increasing neural expressivity, the learned generator converges weakly to a valid transport coupling between the original graph measures. Empirically, across a range of geometrically distinct graphs, our method matches or improves upon heuristic transport baselines based on discrete graph OT, while scaling more favorably. Finally, we demonstrate scalability on real-world urban mobility data by training our model on one million Uber pickup locations in Manhattan, New York City. 
+
+## 1 Introduction 
+
+Many scientific and geometric datasets are naturally supported on networks: road systems, vas-cular structures, river networks, and skeletonized shapes all give rise to data distributed over one-dimensional geometric domains [ 5, 22 , 19 , 11 , 20 ]. A natural model for such domains is a metric graph , where edges carry lengths and are treated as continuous intervals. This model retains the geometry of positions along edges while encoding the connectivity of the underlying network [ 6, 7]. Generative modelling on metric graphs therefore requires more than generating points in an ambient Euclidean space: samples should remain supported on the graph and respect the metric geometry of the domain. 
+
+> ∗These authors contributed equally to this work.
+> †These authors jointly supervised this work. Preprint.
+> arXiv:2606.16273v1 [stat.ML] 15 Jun 2026
+
+Optimal transport (OT) provides a principled framework for comparing probability measures and constructing transport mechanisms between them [ 24 , 2, 3]. Recent neural OT methods have made these ideas scalable for high-dimensional continuous domains [ 13 , 21 , 14 , 9 , 1], but they are not directly designed for probability distributions supported on metric graphs. A common workaround is to discretize the metric graph and solve OT on the resulting finite graph. While this makes the problem computationally accessible, it replaces continuous graph-supported distributions by mesh-dependent approximations and can scale poorly as the discretization is refined [ 12 , 15 , 4 ]. These limitations motivate a continuous, graph-supported neural OT framework that can exploit smooth ambient structure without losing the geometry of the original metric graph. We introduce, to our knowledge, the first deep generative modelling framework for probability distributions continuously supported on compact metric graphs. Given source and target measures 
+
+PΓ, QΓ ∈ P (Γ) , our method embeds the graph into a smooth ambient space, solves an entropic Kantorovich problem between the embedded measures using a neural semidual parameterization [ 10 , 23 , 16 ], and then maps generated samples back to the original graph. The method follows the pipeline 
+
+Γ Ψ
+
+−−→ M ΨEntropic Neural OT 
+
+−−−−−−−−−−−−−→ M Ψ
+
+> ρΓΨ
+
+−−−→ Γ.
+
+Thus the learning problem is carried out in a smooth ambient geometry, while the final generator is supported on the original metric graph by construction. Our formulation is plan-based rather than map-based. After embedding, the pushforward measures 
+
+Ψ#PΓ and Ψ#QΓ remain supported on the embedded graph and are typically singular with respect to ambient volume. We do not mollify these input measures into ambient densities, nor do we rely on Brenier-type regularity. Instead, we solve entropic OT directly between the embedded graph-supported measures. The learned Schrödinger potential induces a Gibbs conditional law over target samples. To obtain continuous generative outputs rather than samples restricted to target atoms, we smooth this conditional law using the ambient heat kernel. Since heat-smoothed samples need not lie on the embedded graph, we recover graph-supported samples by nearest projection onto the embedded graph followed by the inverse embedding. The choice of embedding determines the geometry in which transport is learned. We study two complementary choices. The first is an extrinsic Euclidean realization ι : Γ → Rm, which is natural when the graph is observed with coordinates, as in road networks or embedded skeletons. The second is the tropical Abel–Jacobi embedding Φp : Γ → J(Γ) into the tropical Jacobian torus [ 18 , 6, 8]. This embedding depends only on the edge lengths and cycle structure of the metric graph, and therefore provides an intrinsic alternative to a particular Euclidean drawing. These two choices allow us to compare an extrinsic ambient geometry with an intrinsic tropical geometry within the same neural OT framework. We prove that, in the joint limit of increasing neural expressivity and vanishing heat scale, the heat-smoothed projection–pullback generator converges weakly to a valid transport coupling in 
+
+Π( PΓ, QΓ). Consequently, although the method learns and smooths conditionals in an ambient space, the limiting object is a bona fide coupling between the original graph-supported measures. Empirically, we evaluate our method on a range of geometrically distinct metric graphs. Our approach improves upon heuristic transport baselines based on discrete graph OT, while scaling comparably than these baselines. We further demonstrate scalability on real-world urban mobility data by training our model on one million Uber pickup locations in Manhattan, New York City. 
+
+Our contributions are as follows. We introduce, to our knowledge, the first deep generative modelling framework for probability distributions continuously supported on compact metric graphs. Our approach embeds the graph into a smooth ambient space, solves a plan-based entropic neural OT problem between the embedded graph-supported measures, and recovers graph-supported samples through a projection–pullback generator. We develop the framework for two ambient transport geometries: an extrinsic Euclidean realization and the intrinsic tropical Abel–Jacobi embedding into the tropical Jacobian torus. We prove that, as neural expressivity increases, the resulting generator converges weakly to a valid coupling between the original graph measures. Empirically, we show that the method improves upon heuristic baselines based on discrete graph OT while scaling more favorably, and we demonstrate its scalability to real-wrold data by training it on one million Uber pickup locations in Manhattan, New York City. 22 Background 
+
+Our construction combines geometry from metric graphs with neural entropic optimal transport. We first recall the metric graph formalism and introduce the two embedding geometries used throughout the paper: an extrinsic Euclidean realization and the intrinsic tropical Abel–Jacobi embedding into the tropical Jacobian torus. We then review the semidual formulation of entropic OT, its neural parameterization, and the heat-smoothed conditional sampling procedure used by our generator. 
+
+Metric Graphs and Their Embeddings. A metric graph is a one-dimensional geodesic metric space obtained by assigning a positive length to each edge of a finite connected graph. Concretely, let 
+
+G = ( V, E ) be a finite connected graph and let ℓ : E → R>0 be a length function. The associated metric graph Γ is constructed by gluing a closed interval [0 , ℓ (e)] for each e ∈ E according to the incidence relations of G. The distance dΓ(x, y ) between points x, y ∈ Γ is defined as the length of the shortest continuous path in Γ connecting them. We refer to (G, ℓ ) as a model of Γ. An edge is called a bridge if its removal disconnects the underlying graph. Throughout this paper we restrict to compact metric graphs. For any metric graph Γ, we represent its points through an embedding into a smooth ambient space 
+
+Ψ : Γ −→ M Ψ.
+
+The first natural choice is the Euclidean realization 
+
+ι : Γ −→ Rm,
+
+for example the planar coordinates of a road network [ 22 ]. This embedding is efficient for com-putation, however, the extrinsic distances in Rm can be small even when the graph distance is large. The second embedding is the tropical Abel–Jacobi embedding [8 , 6 ], an intrinsic embedding de-termined by the edge lengths and cycle structure of the metric graph. It maps Γ into its tropical Jacobian, a flat torus, and is the metric-graph analogue of the classical Abel–Jacobi map in complex algebraic geometry. We recall only the ingredients needed for our construction; further details are given in Appendix A. Computing this distance requires minimizing over the lattice Λ, i.e., solving a closest-vector problem (CVP) in the Jacobian lattice. Exact CVP is exponential in the lattice dimension in the worst case, so this distance can become computationally expensive for high-genus graphs; see [8, Section 5] for further details. Fix a basepoint p ∈ Γ and denote by Φp the corresponding tropical Abel–Jacobi map. On each edge 
+
+e ∼= [0 , ℓ (e)] , the map takes the form 
+
+Φp(t) = [ αe + βe t],
+
+for vectors αe, β e ∈ Rg , so the image Φp(Γ) ⊂ TΛ is a finite union of wrapped line segments. We use the following notation for either embedding geometry: 
+
+(MΨ, d Ψ, Ψ) = 
+
+((Rm, ∥ · − · ∥ 2, ι ), Euclidean embedding ,
+
+(TΛ, d TΛ,Ξ, Φp), tropical Abel–Jacobi embedding .
+
+In both cases, the embedded graph Ψ(Γ) is the support on which the input measures live, while MΨ
+
+provides the smooth ambient geometry used for optimal transport and sampling. 
+
+Entropic Riemannian Optimal Transport and Neural Sampling. We briefly recall the entropic Riemannian OT framework of [ 17 ], specialized to the notation used in this paper. Let (M, g) be a complete p-dimensional Riemannian manifold with geodesic distance d, and let P(M) denote the set of Borel probability measures on M. We use the quadratic geodesic cost 
+
+c(x, y ) = 12 d(x, y )2.
+
+For ε > 0 and μ, ν ∈ P (M) with c ∈ L1(μ ⊗ ν), the entropically regularized OT problem is 
+
+OT ε(μ, ν ) = inf 
+
+> π∈Π( μ,ν )
+
+Z 
+
+> M×M
+
+c(x, y ) dπ (x, y ) + ε KL( π | μ ⊗ ν)
+
+
+
+. (1) 3Unlike map-valued Monge formulations, the entropic problem naturally returns a coupling, or equivalently, after disintegration with respect to μ, a conditional transport law. The problem (1) admits an equivalent semidual formulation: the optimization can be reduced to a single target-side dual potential g : M → R. Given such a potential, the source-side dual potential is determined by the soft c-transform below. At optimality, this pair of dual potentials is called the pair of Schrödinger potentials. For g : M → R, define 
+
+f εg (x) = −ε log 
+
+Z
+
+> M
+
+exp 
+
+ g(y) − c(x, y )
+
+ε
+
+
+
+dν (y). (2) The semidual objective is 
+
+Jε(g) = 
+
+Z
+
+> M
+
+g dν +
+
+Z
+
+> M
+
+f εg dμ, (3) and, with the supremum taken over admissible potentials, 
+
+OT ε(μ, ν ) = sup 
+
+> g
+
+Jε(g). (4) It was shown in [ 17 ] that, under suitable expressivity assumptions, the optimizer of the semidual problem (4) , equivalently the optimal target-side Schrödinger potential, can be approximated by restricting the admissible potentials to a neural function class. Since Schrödinger potentials are defined only up to additive constants, we fix this gauge freedom by centering the parameterized potential. Given a feature map φ : M → Rn and a neural network aθ : Rn → R, set 
+
+hθ := aθ ◦ φ, gθ = hθ −
+
+Z
+
+hθ dν. 
+
+Then R gθ dν = 0 . The corresponding source-side potential is f εθ := f εgθ , where f εgθ is the soft 
+
+c-transform in (2). The model is trained by maximizing the restricted semidual objective 
+
+max  
+
+> θ
+
+Jε(gθ ).
+
+For a trained parameter θ, the learned conditional law is 
+
+πεθ,x (dy ) = exp 
+
+ f εθ (x) + gθ (y) − c(x, y )
+
+ε
+
+
+
+dν (y), (5) which is normalized by the definition of f εθ .Together with the source measure, this gives the learned joint law 
+
+πεθ (dx, dy ) = μ(dx )πεθ,x (dy ).
+
+Under the expressivity assumptions of [ 17 ], these learned joint laws approximate the optimal entropic OT plan as the neural function class becomes increasingly expressive. If ν = PMj=1 bj δyj is empirical, then direct sampling from πεθ,x returns one of the observed target atoms. To obtain continuous output laws, we smooth these conditionals by the heat semigroup. Let pt be the heat kernel on M and let vol be the Riemannian volume measure. For t > 0, define 
+
+Qεθ,t (x, dz ) = 
+
+Z 
+
+> M
+
+pt(y, z ) πεθ,x (dy )
+
+
+
+vol( dz ). (6) Then Qεθ,t (x, ·) is absolutely continuous with respect to ambient volume and is not restricted to sampled target atoms. In the empirical case, it is a heat-kernel mixture centered at the atoms {yj }Mj=1 ,with mixture weights given by the Gibbs conditional. 
+
+## 3 Graph-Supported Generative Modeling via Neural Optimal Transport 
+
+Let Γ be a compact metric graph, and let PΓ, QΓ ∈ P (Γ) be source and target measures, where P(Γ) 
+
+denotes the set of Borel probability measures supported on Γ. Our goal is to learn a graph-supported generative mechanism from PΓ to QΓ. The method follows the pipeline 
+
+Γ Ψ
+
+−−→ M Ψentropic neural OT 
+
+−−−−−−−−−−−−−→ M Ψ
+
+> ρΓΨ
+
+−−−→ Γ.
+
+We now describe the three components of this construction; see Figure 1 for an illustration of the full pipeline. 4Metric graph Γ 
+
+Tropical embedding Φ p(Γ) 
+
+Euclidean embedding ι(Γ) 
+
+Tropical output on Γ 
+
+Euclidean output on Γ    
+
+> Φp#
+> ι#
+> ρΓΦp
+> ρΓ
+> ι
+> source target recovered
+
+Figure 1: Blue and red denote the source and target measures PΓ and QΓ on the metric graph Γ. We compare the two embeddings used in this work: the tropical Abel–Jacobi map Φp : Γ → J(Γ) and the Euclidean realization ι : Γ → R2. In each embedded space, a neural entropic OT model generates heat-smoothed samples, which are mapped back to the graph by the recovery map ρΓΨ. Purple denotes the recovered graph-supported output. 
+
+Embedding the Graph. Let Ψ : Γ → M Ψ be one of the embeddings introduced in Section 2. We use the embedded quadratic cost 
+
+cΨ(u, v ) = 12 dΨ(u, v )2, u, v ∈ M Ψ.
+
+For graphs with bridges, the tropical embedding is applied after the bridge augmentation described in Appendix B, so that the graph can be recovered from its embedded image. For either choice of Ψ, we push forward the measures 
+
+PΨ := Ψ #PΓ, QΨ := Ψ #QΓ. (7) These measures are supported on the embedded graph Ψ(Γ) and are typically singular with respect to ambient volume. 
+
+Learning the Embedded Transport Law. We apply the neural entropic OT construction of Section 2 with 
+
+(M, μ, ν, c ) = ( MΨ, PΨ, QΨ, c Ψ).
+
+The corresponding embedded entropic problem is 
+
+OT Ψ 
+
+> ε
+
+= inf 
+
+> π∈Π( PΨ,QΨ)
+
+Z 
+
+cΨ(u, v ) dπ (u, v ) + εKL( π | PΨ ⊗ QΨ)
+
+
+
+. (8) We parameterize the target-side Schrödinger potential by a neural network gθ : MΨ → R. Let 
+
+f εθ, Ψ denote the corresponding embedded soft cΨ-transform. After training, the learned embedded conditional law is 
+
+πεθ, Ψ,u (dv ) = exp 
+
+ f εθ, Ψ(u) + gθ (v) − cΨ(u, v )
+
+ε
+
+
+
+dQΨ(v).
+
+We then smooth this embedded conditional using the heat kernel of MΨ. Applying (6) with heat kernel pΨ 
+
+> t
+
+gives 
+
+Qεθ, Ψ,t (u, dz ) = 
+
+Z 
+
+> MΨ
+
+pΨ 
+
+> t
+
+(v, z )πεθ, Ψ,u (dv )
+
+
+
+vol Ψ(dz ), t > 0. (9) Samples from Qεθ, Ψ,t (u, ·) are continuous ambient samples in MΨ. For t > 0, they need not lie on the embedded graph Ψ(Γ) , which motivates the projection–pullback step below. 5Recovering Graph-Supported Samples. The inverse Ψ−1 is defined only on the embedded graph 
+
+Ψ(Γ) . Since heat-smoothed samples live in the ambient space MΨ, we first project them onto Ψ(Γ) 
+
+and then apply the inverse embedding. Define the recovery map 
+
+ρΓΨ := Ψ −1 ◦ proj Ψ(Γ) : MΨ → Γ, (10) where 
+
+proj Ψ(Γ) (z) ∈ arg min 
+
+> s∈Ψ(Γ)
+
+dΨ(z, s )
+
+is the nearest-point projection, with a fixed measurable tie-breaking rule when the minimizer is not unique. Details of the projection algorithm are given in Appendix C.1. The final generator is obtained by pushing the heat-smoothed embedded conditional through ρΓΨ.Equivalently, for x ∼ PΓ, we sample 
+
+z ∼ Qεθ, Ψ,t (Ψ( x), ·), y = ρΓΨ(z).
+
+The induced graph-supported transport law is 
+
+πε, Ψ
+
+> θ, Γ,t
+
+(dx, dy ) = PΓ(dx )  ρΓΨ
+
+
+
+> #
+
+Qεθ, Ψ,t 
+
+ Ψ( x), ·(dy ), (11) which is supported on Γ × Γ by construction. 
+
+## 4 Theoretical Guarantees 
+
+We now state the recovery guarantee for the graph-supported generator. The result shows that, in the joint limit of increasing neural expressivity and vanishing heat scale, the learned heat-smoothed projection–pullback generator recovers a valid transport coupling from PΓ to QΓ. The proof is given in Appendix E.1. Fix ε > 0 and one of the embeddings Ψ : Γ → M Ψ from Section 2. In both embedding geometries, 
+
+Ψ is injective onto its image: this is assumed for the Euclidean realization and ensured for the tropical Abel–Jacobi embedding by the bridge augmentation in Appendix B. Hence Ψ−1 : Ψ(Γ) → Γ is well-defined. Let π⋆ε, Ψ be the optimizer of the embedded entropic OT problem (8) . Since PΨ = Ψ #PΓ
+
+and QΨ = Ψ #QΓ, the pullback 
+
+π⋆, Ψ 
+
+> ε, Γ
+
+:= (Ψ −1, Ψ−1)#π⋆ε, Ψ (12) belongs to Π( PΓ, QΓ).We now specify the neural potential class. Let KQΨ := spt( QΨ) ⊂ Ψ(Γ) . Following [ 17 ], we take target-side potentials from a centered pullback class. Let φΨ : KQΨ → Rn be a continuous injective feature map and let F ⊂ C(Rn, R) be a function class. Define 
+
+CQΨ (φ∗
+
+> Ψ
+
+F) := 
+
+
+
+a ◦ φΨ −
+
+Z
+
+a ◦ φΨ dQΨ : a ∈ F 
+
+
+
+.
+
+When F is dense in C(Rn, R) under the ucc topology, the recovery result of [ 17 ] gives sequences of neural potentials in CQΨ (φ∗
+
+> Ψ
+
+F) whose induced embedded Gibbs laws recover the embedded entropic coupling. For the two ambient geometries considered in this paper, the heat-kernel assumption is automatic: Rm and the flat torus TΛ are complete and stochastically complete, and their heat kernels form approximate identities as t ↓ 0.Let πεm, Ψ denote the embedded Gibbs law induced by a potential gm ∈ CQΨ (φ∗
+
+> Ψ
+
+F), and let πε, Ψ
+
+> m, Γ,t
+
+denote the graph-supported heat-smoothed transport law generated by the procedure in Section 3. Under these assumptions, the recovery result of [ 17 ] ensures the existence of neural potentials in 
+
+CQΨ (φ∗
+
+> Ψ
+
+F) whose induced embedded Gibbs laws converge in total variation to π⋆ε, Ψ.
+
+Theorem 4.1 (Graph-supported recovery) . Assume that F is dense in C(Rn, R) under the ucc topology and that φΨ : KQΨ → Rn is continuous and injective. Then there exists a sequence of neural potentials 
+
+gm ∈ CQΨ (φ∗
+
+> Ψ
+
+F)
+
+6whose induced embedded Gibbs laws satisfy 
+
+∥πεm, Ψ − π⋆ε, Ψ∥TV −→ 0.
+
+Moreover, there exist sequences mk → ∞ and tk ↓ 0 such that 
+
+πε, Ψ  
+
+> mk,Γ,t k
+
+⇀ π ⋆, Ψ 
+
+> ε, Γ
+
+(k → ∞ ). (13) 
+
+In particular, the learned heat-smoothed generator, followed by the recovery map ρΓΨ, recovers in the joint limit a valid transport coupling from PΓ to QΓ.
+
+## 5 Experiments 
+
+We evaluate our graph-supported neural OT framework in three complementary settings. First, we test transport fidelity on controlled intrinsic-geometry benchmarks, comparing tropical Abel–Jacobi and ambient Euclidean embeddings against heuristic baselines based on discrete graph OT. Second, we study computational scaling in time, memory, and inference throughput as graph resolution and support size increase. Third, we demonstrate scalability on real graph-supported urban mobility data, where observations lie continuously along edge interiors rather than only at vertices. Across experiments, the neural potential is parameterized using feature maps φΨ adapted to the chosen ambient geometry: for the tropical Abel–Jacobi geometry we use a Gromov feature embedding on the Jacobian torus, while for the Euclidean geometry we consider both Riemannian log features and Gromov features. Full implementation details, dataset construction, and additional experimental results are deferred to Appendix C. The code will be released publicly and is currently submitted as supplementary material for double-blind review .
+
+5.1 Metric Graph Geometry Benchmarks 
+
+We first evaluate the proposed neural OT framework on controlled synthetic benchmarks across four metric graph geometries: a theta graph, a wheel graph, a rectangular grid, and a small planar road graph. Source and target distributions are continuous graph-supported measures, typically truncated Gaussian densities on edge interiors, with the target mode relocated to a geometrically distinct part of the graph. These benchmarks test transport across homologically distinct branches, cyclic and radial structure, multiple shortest-path routes, and irregular road network geometry. We compare against two source-aware pushforward baselines: a node-interpolation baseline, which solves vertex-level graph OT and extends the resulting map to edge interiors, and an ambient pushforward baseline, which computes Euclidean barycentric images before projecting outputs back to the graph. We evaluate two neural variants: a tropical Abel–Jacobi model using the Jacobian representation with the tropical metric, and an ambient Euclidean model using the same training and extraction pipeline in the Euclidean embedding. The reference target distribution is a deterministic quadrature approximation of the analytical graph-supported target measure; full construction details are given in Appendix C.2. We report intrinsic graph Wasserstein errors W Γ1 and W Γ2 against the deterministic reference measure, together with edgewise density and CDF L1 errors. Figure 2 reports each neural method’s error relative to the stronger of the two heuristic baselines for each benchmark and metric; values below one therefore indicate improvement over both heuristics. Across all metric-graph benchmarks, both neural OT variants consistently reduce error relative to the best heuristic baseline, with most improvements falling outside the ±5% effective-tie band. The tropical Abel–Jacobi and ambient Euclidean neural variants perform comparably overall, suggesting that the main gain in this experiment comes from learning an amortized entropic transport rule rather than from a uniform advantage of one embedding geometry over the other. Full absolute accuracy results for all methods are provided in Appendix C.2. 
+
+5.2 Scalability Analysis 
+
+A central motivation for using amortized neural transport on metric graphs is computational. Methods based on explicit pairwise graph costs become expensive as the number of source and target samples increases, since intrinsic shortest-path distances must be evaluated on increasingly large support pairs. Our neural formulation instead trains a parametric transport model using minibatches and applies the learned rule to held-out source samples by batched inference. To study this scaling behavior, we 7Theta Grid Wheel Road             
+
+> 0.05
+> 0.1
+> 0.2
+> 0.5
+> 1
+> 1.25
+> Error / best heuristics error  best heuristics
+> ±5% tie band
+> W1
+> Theta Grid Wheel Road
+> W2
+> Theta Grid Wheel Road
+> Density L1
+> Theta Grid Wheel Road
+> Edge CDF L1
+> Neural Euclidean Neural Tropical
+
+Figure 2: Relative error normalized by the best heuristics baseline (better of Ambient / Node-interp pushforward) for each (benchmark, metric). Faint points are individual seeds (n=5); markers are mean ± SEM. Shaded band marks ±5% of the reference (effective tie). Lower is better; both neural methods consistently improve over the best heuristics. Table 1: Million-sample Uber NYC pickup generation on the Manhattan road metric graph. All neural models are trained on 10 6 source samples and 10 6 snapped training pickups. Generation uses 
+
+M = 131 ,072 source queries and a decoder support of 131 ,072 target atoms. Graph W1/W 2 and density L1 are evaluated against held-out test pickups; Wasserstein metrics use a fixed 16 ,384 -point Sinkhorn subsample for tractability. The Eval. noise floor row scores two independent subsamples of the held-out test pickups against each other under the identical 16 ,384 -point Sinkhorn budget — the irreducible discrepancy from finite test-set sampling that lower-bounds what any method can attain. Method Graph W1 ↓ Graph W2 ↓ Density L1 ↓ Edge CDF L1 ↓
+
+Eval. noise floor 0.542 ± 0.007 0.720 ± 0.010 0.257 ± 0.002 0.263 ± 0.002 
+
+Ambient pushforward 7.273 ± 0.103 4.738 ± 0.106 1.398 ± 0.008 1.954 ± 0.024 
+
+Node interpolation 10.048 ± 0.138 8.029 ± 0.252 1.717 ± 0.008 2.598 ± 0.019 
+
+Neural Euclidean (Log) 2.134 ± 0.032 1.167 ± 0.020 0.538 ± 0.002 0.706 ± 0.005 
+
+Neural Euclidean (Gromov) 0.662 ± 0.010 0.808 ± 0.015 0.345 ± 0.001 0.385 ± 0.004 
+
+reuse the synthetic metric-graph benchmarks from Section 5.1: theta, wheel, grid, and road graphs with continuous edge-supported source and target measures. We vary the training support size 
+
+ntrain ∈ { 128 , 256 , 512 , 1024 },
+
+and evaluate each fitted method on held-out source samples against the same deterministic quadrature approximation of the analytical target law used in Section 5.1. We report intrinsic graph Wasserstein error W Γ1 as the primary accuracy metric, with additional metrics deferred to Appendix C.3. To isolate method cost from evaluation overhead, we measure fit time and peak GPU memory without running the reference Sinkhorn solve used for evaluation. Figure 4 summarizes the sample-size scaling results. The learned neural OT methods retain their accuracy advantage over the node-interpolation and ambient pushforward heuristics as the support size varies, while their memory use is controlled by minibatching and chunked evaluation rather than by materializing a full pairwise cost matrix. The tropical Abel–Jacobi and ambient Euclidean neural variants again exhibit similar accuracy trends, indicating that both provide viable amortized embeddings for graph-supported transport. 
+
+5.3 Real-World Graph-Supported Generation on Manhattan Uber Pickups 
+
+We evaluate our graph-supported neural OT framework on real urban mobility data derived from the 2014 NYC Uber pickup records. Our goal is to study large-scale spatial density generation on a metric graph: given a simple length-uniform source measure on the road network, the model learns to generate samples from the empirical pickup distribution supported on the same graph. This experiment is intended as a real-data scalability stress test rather than a controlled topology-identification benchmark. Unlike the synthetic Q1/Q2 experiments, the target law is not analytically specified; it is the empirical distribution of observed pickup events after map matching to a Manhattan 8(a) 
+
+> Test Pickup Density
+> (b)
+> Neural Euclidean Transported Density
+> 10 −1
+> 10 0
+> 10 1
+> Edge density per 10,000 samples (log scale)
+
+Figure 3: Manhattan road graph at the million-sample scale: per-edge density of (a) held-out test pickups and (b) points transported by Neural Euclidean (Gromov). Quantitative graph metrics are reported in Table 1. road metric graph. The task should therefore be understood as graph-supported spatial density generation, not temporal forecasting: the model is not conditioned on date, weather, or time. The training target measure consists of 10 6 Uber pickup locations sampled from the training days, while the source measure is a length-uniform distribution on the Manhattan road graph with the same number of samples. Train and test pickups are drawn from disjoint calendar days to avoid temporal correlation between fitting and evaluation. The resulting bridge-augmented metric graph has first Betti number g = 2416 , making the tropical Abel–Jacobi model impractical at this scale. We therefore train the neural Euclidean graph generator, which represents points by their projected road coordinates and recovers outputs by nearest-polyline projection. Dense support-dependent OT baselines cannot be run at the full million-sample scale: a Sinkhorn solve with 10 6 source and 10 6 target atoms would require 10 12 pairwise costs before iterations. Accordingly, the heuristic baselines are trained on a restricted support of 16 ,384 samples. All methods are evaluated on a separate held-out evaluation set of 131 ,072 graph-supported samples drawn from the test days. Table 1 reports the resulting held-out graph distributional metrics, while Figure 3 visualizes the recovered spatial density on the Manhattan road network. The generated samples recover the dominant pickup structure on the Manhattan graph rather than placing mass uniformly over roads or off-network, supporting the claim that the proposed pipeline scales to million-sample empirical target measures while producing realistic graph-supported samples. 
+
+## 6 Discussion and Limitations 
+
+We introduced an embedded neural OT framework for generative modelling of probability distribu-tions continuously supported on compact metric graphs. The method solves a plan-based entropic OT problem after embedding the graph into a smooth ambient space, then recovers graph-supported samples through a heat-smoothed projection–pullback map. This avoids replacing the metric graph by a purely discrete object: learned conditionals are trained against graph-supported measures, and generated samples lie on edge interiors rather than only at vertices. The framework applies to both extrinsic Euclidean realizations and the intrinsic tropical Abel–Jacobi embedding, enabling the same learning pipeline across transport geometries. Empirically, both neural variants improve over heuristic baselines based on discrete graph OT on controlled benchmarks, while the Euclidean model scales to the million-sample Manhattan experiment where dense graph OT baselines are impractical. 9Several limitations remain. The theoretical guarantee is asymptotic: it shows recovery as neural expressivity increases and the heat scale vanishes, but does not provide finite-sample or optimization rates, nor explicit rules for choosing the entropic regularization and heat scale. At finite heat time, the graph-supported transport law need not have the exact target marginal, since heat smoothing moves mass off the embedded graph before projection. The projection–pullback step also relies on nearest-point projection, which can be non-unique away from the graph. Finally, the real-data experiment should be viewed as graph-supported spatial density generation rather than forecasting or causal modelling: the Uber model is not conditioned on time, weather, events, or other covariates. Extending the framework to conditional or dynamically evolving graph-supported distributions is a natural direction for future work. 
+
+## Acknowledgements 
+
+S.B. acknowledges support from the Novo Nordisk Foundation via The Novo Nordisk Young Investigator Award (NNF20OC0059309). S.B. acknowledges support from The Eric and Wendy Schmidt Fund For Strategic Innovation via the Schmidt Polymath Award (G-22-63345) which also supports A.Micheli. S.B. acknowledges support from the Novo Nordisk Foundation via the Global Pathogen Analysis Platform (GPAP) (NNF26SA0109818). Y.C. is supported by Digital Futures Postdoctoral Fellowship. A.Monod is supported by the EPSRC AI Hub on Mathematical Foundations of Intelligence: An “Erlangen Programme” for AI No. EP/Y028872/1. 
+
+## Contribution Statements 
+
+Author contributions are reported using the CRediT (Contributor Roles Taxonomy). • Alessandro Micheli : Conceptualization; Methodology; Software; Formal analysis; Super-vision; Investigation; Project administration; Visualization; Validation; Writing – original draft; Writing – review & editing. • Yueqi Cao : Formal analysis; Writing – original draft; Writing – review & editing. • Anthea Monod : Writing – original draft; Writing – review & editing. • Samir Bhatt : Software; Funding acquisition; Resources; Visualization; Validation; Writing – original draft; Writing – review & editing. 
+
+## References 
+
+[1] Jason Altschuler, Jonathan Weed, and Philippe Rigollet. Near-linear time approximation algo-rithms for optimal transport via sinkhorn iteration. Advances in neural information processing systems , 30, 2017. [2] Luigi Ambrosio, Elia Brué, and Daniele Semola. Lectures on Optimal Transport . Springer Nature Switzerland, 2021. [3] Luigi Ambrosio and Nicola Gigli. A user’s guide to optimal transport. In Modelling and Optimisation of Flows on Networks: Cetraro, Italy 2009, Editors: Benedetto Piccoli, Michel Rascle , pages 1–155. Springer, 2012. [4] Mario Arioli and Michele Benzi. A finite element method for quantum graphs. IMA Journal of Numerical Analysis , 38(3):1119–1163, 2018. [5] Chiara Bachechi and Laura Po. Road network graph representation for traffic analysis and routing. In European Conference on Advances in Databases and Information Systems , pages 75–89. Springer, 2022. [6] Matthew Baker and Xander Faber. Metric properties of the tropical Abel–Jacobi map. Journal of Algebraic Combinatorics , 33(3):349–381, 2011. [7] Dmitri Burago, Yuri Burago, Sergei Ivanov, et al. A Course in Metric Geometry , volume 33. American Mathematical Society Providence, 2001. 10 [8] Yueqi Cao and Anthea Monod. Computing the tropical Abel–Jacobi transform and tropical distances for metric graphs, 2025. Preprint. Available online at https://arxiv.org/abs/ 2504.11619 .[9] Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transportation distances. 
+
+Advances in neural information processing systems , 26, 2013. [10] Marco Cuturi and Gabriel Peyré. Semidual regularized optimal transport. SIAM Review ,60(4):941–965, 2018. [11] Peter Sheridan Dodds and Daniel H Rothman. Geometry of river networks. I. scaling, fluctua-tions, and deviations. Physical Review E , 63(1):016115, 2000. [12] Montacer Essid and Justin Solomon. Quadratically regularized optimal transport on graphs. 
+
+SIAM Journal on Scientific Computing , 40(4):A1961–A1986, 2018. [13] Jonathan Geuter, Gregor Kornhardt, Ingimar Tomasson, and Vaios Laschos. Universal Neural Optimal Transport. In Forty-second International Conference on Machine Learning , 2025. [14] Ashok Makkuva, Amirhossein Taghvaei, Sewoong Oh, and Jason Lee. Optimal transport mapping via input convex neural networks. In Proceedings of the 37th International Conference on Machine Learning , volume 119, pages 6672–6681. PMLR, 2020. [15] Andrew TT McRae, Colin J Cotter, and Chris J Budd. Optimal-transport–based mesh adap-tivity on the plane and sphere using finite elements. SIAM Journal on Scientific Computing ,40(2):A1121–A1148, 2018. [16] Alessandro Micheli, Yueqi Cao, Anthea Monod, and Samir Bhatt. Riemannian neural optimal transport, 2026. Preprint. Available online at https://arxiv.org/abs/2602.03566 .[17] Alessandro Micheli, Silvia Sapora, Anthea Monod, and Samir Bhatt. Entropic Riemannian neural optimal transport, 2026. Preprint. Available online at https://arxiv.org/abs/2605. 04255 .[18] Grigory Mikhalkin and Ilia Zharkov. Tropical curves, their Jacobians and Theta functions. 
+
+Contemporary Mathematics , 465:203–230, 2008. [19] Johannes Reichold, Marco Stampanoni, Anna Lena Keller, Alfred Buck, Patrick Jenny, and Bruno Weber. Vascular graph model to simulate the cerebral blood flow in realistic vascular networks. Journal of Cerebral Blood Flow & Metabolism , 29(8):1429–1443, 2009. [20] Freek Reinders, Melvin ED Jacobson, and Frits H Post. Skeleton graph generation for feature shape description. In Data Visualization 2000: Proceedings of the Joint EUROGRAPHICS and IEEE TCVG Symposium on Visualization in Amsterdam, The Netherlands, May 29–30, 2000 ,pages 73–82. Springer, 2000. [21] Litu Rout, Alexander Korotin, and Evgeny Burnaev. Generative modeling with optimal transport maps. In International Conference on Learning Representations , 2022. [22] Cem Unsalan and Beril Sirmacek. Road network detection using probabilistic and graph theoretical methods. IEEE Transactions on Geoscience and Remote Sensing , 50(11):4441–4453, 2012. [23] Adrien Vacher and François-Xavier Vialard. Semi-dual unbalanced quadratic optimal trans-port: fast statistical rates and convergent algorithm. In Proceedings of the 40th International Conference on Machine Learning , pages 34734–34758, 2023. [24] Cedric Villani. Optimal transport: old and new . Springer, 2009. 11 A Review on Metric Graphs 
+
+A.1 Geodesic Distance 
+
+A finite metric graph is a triple Γ = ( V, E, ℓ ) consisting of a finite, connected graph (V, E ) and a length function ℓ : E → (0 , ∞), e 7 → ℓe. We realize Γ as the topological 1–dimensional CW-complex obtained by replacing each edge e = {u, v } ∈ E with a copy of the closed interval [0 , ℓ e]
+
+and identifying its endpoints with the incident vertices u and v.To make the metric explicit, for each edge e ∈ E fix an isometry (arc-length parametrization) 
+
+ψe : [0 , ℓ e] → e ⊂ Γ. If γ : [ a, b ] → Γ is a continuous path, define its length by 
+
+length( γ) := sup 
+
+n mX
+
+> i=1
+
+de
+
+ γ(ti−1), γ (ti) : a = t0 < t 1 < · · · < t m = b, m ∈ N
+
+o
+
+,
+
+where de denotes the usual Euclidean distance along the unique edge containing the image of 
+
+γ([ ti−1, t i]) (and the sum is taken over a partition refined so that each subpath lies in a single edge). Equivalently, after refining the partition so that each segment of γ is contained in one edge e, write 
+
+γ|[ti−1,t i] = ψe ◦ αi with αi : [ ti−1, t i] → [0 , ℓ e] absolutely continuous; then 
+
+length( γ) = 
+
+> m
+
+X
+
+> i=1
+
+Z ti
+
+> ti−1
+
+|α′
+
+> i
+
+(t)| dt, 
+
+and this value does not depend on the chosen parametrizations. The path metric dΓ is then defined by 
+
+dΓ(x, y ) := inf length( γ) : γ is a continuous path in Γ from x to y .
+
+A.2 Construction of Tropical Embedding Tropical Harmonic Forms. By fixing a combinatorial model G, a tropical harmonic 1-form can be identified as a collection ω = ( ωe)e∈E of constant functions on the oriented edges, and such that the 
+
+Kirchhoff (balancing) condition holds at every vertex v ∈ V :
+
+X
+
+> e∈E(v)
+
+σ(v, e ) ae = 0 ,
+
+where E(v) denotes the set of edges incident to v, and σ(v, e ) ∈ { +1 , −1} equals +1 if the chosen orientation on e points away from v and −1 if it points into v. The space of harmonic 1-forms on Γ
+
+is denoted by Ω1harm (Γ) .For any ω ∈ Ω1harm (Γ) and any piecewise C1 path γ in Γ, the path integral R 
+
+> γ
+
+ω is defined edgewise. Integration over cycles induces pairing 
+
+H1(Γ; R) × Ω1harm (Γ) → R, ([ σ], ω ) 7 →
+
+Z
+
+> σ
+
+ω, 
+
+and hence the tropical period map 
+
+Per : H1(Γ; R) −→ Ω1harm (Γ) ∗, Per([ σ])( ω) := 
+
+Z
+
+> σ
+
+ω. 
+
+The tropical Period map is vector space isomorphism. In particular, it maps the homology group 
+
+H1(Γ; Z) to a full-rank lattice in Ω1harm (Γ) ∗, denoted by Λper := Per  H1(Γ; Z).
+
+Tropical Polarization and Tropical Jacobian. The length function on Γ induces positive weights on each combinatorial model G, which further defines an inner product on the chain space C1(G; R)
+
+by D X 
+
+> e∈E
+
+ae e, X
+
+> e∈E
+
+be e
+
+E
+
+> ℓ
+
+:= X
+
+> e∈E
+
+aebe ℓe,
+
+which restricts to an inner product on the closed subspace H1(G; R) ⊆ C1(G; R). Since the inner product is invariant to edge subdivision, it is well-defined on H1(Γ; R) for the metric graph Γ. Via 12 the tropical period map Per , the inner product is pushed forward to Ω1
+
+> harm
+
+(Γ) ∗, which is known as the 
+
+tropical polarization 
+
+⟨α, β ⟩trop := 
+
+D
+
+Per −1(α), Per −1(β)
+
+E
+
+> ℓ
+
+, α, β ∈ Ω1harm (Γ) ∗. (14) The tropical Jacobian of Γ is the quotient torus 
+
+J(Γ) := Ω 1harm (Γ) ∗Λper ∼= H1(Γ; R)H1(Γ; Z), (15) equipped with the induced flat metric coming from the polarization ⟨· , ·⟩ trop on Ω1harm (Γ) ∗.We shall consider the following two representations of the tropical Jacobian under bases: (1) Choosing a Z-basis {σ1, . . . , σ g } of H1(Γ; Z) gives identifications 
+
+H1(Γ; Z) ∼= Zg , H1(Γ; R) ∼= Rg ,
+
+under which the inner product ⟨· , ·⟩ ℓ is represented by the positive definite matrix Σ = [ ⟨σi, σ j ⟩ℓ]i,j .The flat torus is isometric to the tropical Jacobian by construction; (2) Let Ω1harm (Γ) Z be the lattice of tropical harmonic 1-forms with integer coefficients. A Z-basis 
+
+{σ1, . . . , σ g } of H1(Γ; Z) canonically determines a Z-basis {ω1, . . . , ω g } of Ω1harm (Γ) Z, which gives identifications 
+
+Ω1harm (Γ) ∗ 
+
+> Z
+
+∼= Zg , Ω1harm (Γ) ∗ ∼= Rg .
+
+Via the tropical period map, the lattice Λper is given by 
+
+Λper = span Z{Per( σ1), · · · , Per( σg )},
+
+where each Per( σi) is a g-dimensional vector in Rg . Denote the corresponding matrix by Λ. The tropical polarization ⟨· , ·⟩ trop is represented by the matrix Ξ = Λ T ΣΛ .
+
+Tropical Abel–Jacobi Map. Fix a basepoint p ∈ Γ. The tropical Abel–Jacobi map Φp : Γ → J(Γ) 
+
+sends any point x ∈ Γ to the integral operator over a path from p to x. That is, 
+
+Φp(x) := 
+
+h
+
+ω 7 −→ 
+
+Z
+
+> γ
+
+ω
+
+i
+
+∈ Ω1harm (Γ) ∗/Λper ,
+
+where γ is any path from p to x. This is well-defined because two such paths differ by a cycle in 
+
+H1(Γ; Z), hence their associated functionals differ by an element of Λper . Changing the basepoint translates Φp by a constant element of J(Γ) .A key property of the tropical Abel–Jacobi map is that Φp is affine along edges. To make this explicit, fix an edge e ∈ E(Γ) and an arc-length parametrization φe : [0 , ℓ e] → e. Under fixed basis we have identification J(Γ) ∼= Rg /Λ. Let π : Rg → Rg /Λ be the quotient map. Then the restriction 
+
+f := Φ p ◦ φe : [0 , ℓ e] → TΛ
+
+admits an affine lift to Rg : there exist eze ∈ Rg and ue ∈ Rg such that 
+
+π(eze + tu e) = Φ p(φe(t)) for all t ∈ [0 , ℓ e]. (16) In particular, 
+
+Φp(e) = π(Se), Se := {eze + tu e : t ∈ [0 , ℓ e]} ⊂ Rg , (17) so Φp(e) is the image under π of a Euclidean line segment. 13 B Bridge Elimination by Parallel-Edge Augmentation 
+
+The results in the main text are stated for bridgeless metric graphs because bridges are the only obstruction to the injectivity of the tropical Abel–Jacobi map. In this appendix we reduce the general case to the bridgeless one by a canonical augmentation: for each bridge we add a single parallel 
+
+(“virtual”) edge. Crucially, when the virtual edges are no shorter than the original bridges, this augmentation de-bridges a metric graph while preserving all pairwise geodesic distances between points of the original graph. 
+
+B.1 Parallel-Edge Augmentation 
+
+Let Γ be a connected metric graph obtained from a finite connected combinatorial graph G = ( V, E )
+
+and a length function ℓ : E → (0 , ∞) by identifying each edge e ∈ E with the interval [0 , ℓ (e)] and gluing endpoints according to the incidence relations. For an edge e we write e◦ := (0 , ℓ (e)) for its interior. 
+
+Definition B.1. An edge b ∈ E is a bridge of Γ if the topological space Γ \ b◦ is disconnected. We denote by B(Γ) ⊆ E the set of bridges. For each bridge b ∈ B(Γ) with endpoints ∂b = {ub, v b}, add a new edge ¯b connecting the same two endpoints. We call ¯b a virtual edge and choose its length to be 
+
+ℓ(¯b) := ℓ(b) + δ, δ ≥ 0. (18) In practice, one may take δ = 0 , allowing δ > 0 makes the virtual edge strictly longer while preserving the arguments below. The augmented metric graph is 
+
+eΓ := Γ ∪ [
+
+> b∈B(Γ)
+
+¯b, (19) equipped with the induced shortest-path metric deΓ. We write 
+
+ι : Γ ,→ eΓ
+
+for the canonical inclusion, and 
+
+Evirt := [
+
+> b∈B(Γ)
+
+¯b
+
+for the union of all virtual edges. The new edge ¯b turns the old bridge b into a two-edge cycle. Thus neither b nor ¯b can disconnect the augmented graph when removed. Edges that were not bridges before remain non-bridges after adding more paths. This gives the following basic property. 
+
+Lemma B.2. The metric graph eΓ has no bridges. 
+
+The proof of Lemma B.2 is postponed to Appendix E.2. For any δ ≥ 0, the augmentation does not change shortest-path distances between points of the original graph. In particular, for δ = 0 , distances are preserved even though shortest paths in eΓ may fail to be unique because one can swap b and ¯b at equal cost. In fact we can show that ι is an isometric embedding as stated in the following Lemma. 
+
+Lemma B.3. Assume ℓ(¯b) ≥ ℓ(b) for all b ∈ B(Γ) . Then for all x, y ∈ Γ,
+
+deΓ
+
+ ι(x), ι (y) = dΓ(x, y ).
+
+In particular, ι is an isometric embedding of (Γ , d Γ) into (eΓ, d eΓ).
+
+The proof of Lemma B.3 is postponed to Appendix E.3. We also define a retraction r : eΓ → Γ as follows: Fix arc-length parametrizations ψb : [0 , ℓ (b)] → b
+
+and ψ¯b : [0 , ℓ (¯b)] → ¯b such that ψb(0) = ψ¯b(0) = ub and ψb(ℓ(b)) = ψ¯b(ℓ(¯b)) = vb. On the original subgraph Γ ⊂ eΓ, we set r|Γ = id Γ. On each virtual edge ¯b, define r in arc-length coordinates by 
+
+r ψ¯b(¯ s) := ψb
+
+ ℓ(b)
+
+ℓ(¯b) ¯s
+
+
+
+, ¯s ∈ [0 , ℓ (¯b)] . (20) 14 By construction, r agrees with the identity on Γ, hence it is a left inverse of inclusion: 
+
+r ◦ ι = id Γ. (21) Notice that r is continuous on each edge and the endpoint conditions ensure that the definitions match at vertices, so r is continuous on all of eΓ. Assuming δ ≥ 0, since on each virtual edge ¯b,the map ¯s 7 → (ℓ(b)/ℓ (¯b)) ¯ s has slope ℓ(b)/ℓ (¯b) ≤ 1, so r|¯b is 1-Lipschitz with respect to arc-length distance along the edge. Since the shortest-path metric on eΓ is obtained by minimizing lengths of piecewise-edge paths, it follows that r is globally 1-Lipschitz: 
+
+dΓ
+
+ r(x), r (y) ≤ deΓ(x, y ), x, y ∈ eΓ.
+
+B.2 Pushforward Measures 
+
+Next we show that augmentation of edges will not affect optimal transport on the original metric graph. Let PΓ, QΓ be Borel probability measures on Γ. We have pushforward measures on eΓ induced by ι:
+
+ePΓ := ι#PΓ, eQΓ := ι#QΓ. (22) Equivalently, for every Borel set A ⊂ eΓ,
+
+ePΓ(A) = PΓ
+
+ ι−1(A), eQΓ(A) = QΓ
+
+ ι−1(A).
+
+Since ι(Γ) ∩ Evirt = ∅, we have ι−1(Evirt ) = ∅, hence the pushforward measures charge no virtual mass: 
+
+ePΓ(Evirt ) = eQΓ(Evirt ) = 0 . (23) Moreover, because r ◦ ι = id Γ (cf. (21) ), we recover the original measures after pushing forward by 
+
+r. Concretely, for every Borel set B ⊂ Γ,
+
+(r# ePΓ)( B) = ePΓ
+
+ r−1(B) = PΓ
+
+ ι−1(r−1(B))  = PΓ
+
+ (r ◦ ι)−1(B) = PΓ(B),
+
+and hence r# ePΓ = PΓ, and similarly r# eQΓ = QΓ.. The same observation applies to transport plans. If eπ ∈ Π( ePΓ, eQΓ) is any coupling on eΓ, define 
+
+π := ( r × r)# eπ. (24) Then π is a coupling of PΓ and QΓ. Indeed, for any Borel set A ⊂ Γ,
+
+π(A × Γ) = eπ (r × r)−1(A × Γ)  = eπ r−1(A) × eΓ = ePΓ
+
+ r−1(A) = ( r# ePΓ)( A) = PΓ(A),
+
+and similarly π(Γ × B) = QΓ(B) for all Borel B ⊂ Γ. Hence π ∈ Π( PΓ, QΓ).
+
+Remark B.4 . Assume δ ≥ 0. By Lemma B.3, for any cost of the form c(x, y ) = h(dΓ(x, y )) with 
+
+h : R+ → R+, one has 
+
+c(x, y ) = h(dΓ(x, y )) = h deΓ
+
+ ι(x), ι (y) .
+
+Hence, when both marginals are supported on ι(Γ) , optimization problems posed on Γ and on eΓ with such costs have the same objective value, while eΓ is bridgeless by Lemma B.2. 
+
+B.3 Compatibility with Optimal Transport 
+
+We now explain how the augmentation interacts with the torus formulation in the main text. Since eΓ
+
+is bridgeless, the tropical Abel–Jacobi map 
+
+eΦp : eΓ → T˜g
+
+is defined as in the bridgeless setting. Here ˜g = g + |B(Γ) | since adding one parallel edge for each bridge increases the first Betti number by 1.15 Physical Torus Marginals. We isolate the part of the torus image coming from the original graph by defining the physical curve 
+
+eΦp(Γ) := eΦp(ι(Γ)) ⊂ eΦp(eΓ) , (25) and the corresponding torus marginals 
+
+ePJ := ( eΦp)# ePΓ, eQJ := ( eΦp)# eQΓ.
+
+Lemma B.5. The measures ePJ and eQJ are supported on eΦp(Γ) .
+
+The proof of Lemma B.5 is postponed to Appendix E.4. Consider the entropic OT problem of (1) . By Lemma B.5, both marginals are supported on the 
+
+physical curve eΦp(Γ) ⊂ T˜g . Consequently, any coupling between them (and hence any optimal plan) cannot place mass outside the physical part of the torus. 
+
+Lemma B.6. Every π ∈ Π( ePJ, eQJ) is concentrated on eΦp(Γ) × eΦp(Γ) ; equivalently, 
+
+π
+
+ T˜g × T˜g  \  eΦp(Γ) × eΦp(Γ) 
+
+= 0 .
+
+The proof of Lemma B.6 is postponed to Appendix E.5. If a coupling on eΓ has null measure on virtual edges, it descends to be a coupling on Γ. Therefore, we are able to show that parallel-edge augmentation does not change optimal transport plans. 
+
+Proposition B.7. Let π⋆J be an optimal plan for (1) . Then there exists a plan eπ⋆ 
+
+> Γ
+
+∈ Π( ePΓ, eQΓ) such that 
+
+(eΦp × eΦp)# eπ⋆ 
+
+> Γ
+
+= π⋆J . (26) 
+
+Moreover, eπ⋆ 
+
+> Γ
+
+is concentrated on ι(Γ) × ι(Γ) , and therefore 
+
+eπ⋆
+
+> Γ
+
+ Evirt × eΓ = eπ⋆
+
+> Γ
+
+ eΓ × Evirt 
+
+ = 0 .
+
+Identifying ι(Γ) with Γ, the restriction of eπ⋆ 
+
+> Γ
+
+defines a coupling π⋆ 
+
+> Γ
+
+∈ Π( PΓ, QΓ) on the original graph. 
+
+The proof of Proposition B.7 is postponed to Appendix E.6. 16 C Implementation Details 
+
+C.1 Metric Graph Embedding, Projection, and Inversion 
+
+This subsection records the graph-level maps used in the experiments. Here the embedding refers to the map 
+
+Ψ : Γ → M Ψ
+
+that sends a point of the metric graph into the ambient computational space in which the OT problem is solved. The neural feature map φΨ : MΨ → Rn, used to parameterize the Schrödinger potential, is described at the end of the subsection. 
+
+Euclidean Embedding and Recovery. For the Euclidean geometry, Ψ = ι and MΨ = R2. The metric graph is embedded by its stored vertex positions. If pu, p v ∈ R2 are the positions of the endpoints of an edge e = ( u, v ), and if a graph point lies at arclength s ∈ [0 , ℓ (e)] from u, then 
+
+ι(e, s ) = (1 − α)pu + αp v , α = sℓ(e) .
+
+Vertices are embedded as ι(u) = pu. The Euclidean embedded cost is 
+
+cι(u, v ) = 12 ∥u − v∥22, u, v ∈ R2.
+
+For the synthetic graphs, edges are straight chords, so this is the actual drawing of the graph. For road graphs with curved OSM geometry, the implementation uses the corresponding polyline-aware interpolator and projector. After Euclidean transport extraction, a sample is an ambient point z ∈ R2. The recovery map 
+
+ρΓ 
+
+> ι
+
+= ι−1 ◦ proj ι(Γ) : R2 → Γ
+
+is implemented by nearest-segment projection. Explicitly, 
+
+(e⋆, α ⋆) ∈ arg min  
+
+> e=( u,v ), α ∈[0 ,1]
+
+z −  (1 − α)pu + αp v
+
+ 22 .
+
+For a fixed edge e = ( u, v ), the minimizing parameter is 
+
+αe = clip [0 ,1] 
+
+ ⟨z − pu, p v − pu⟩∥pv − pu∥22
+
+
+
+.
+
+The implementation evaluates this quantity over all edges and selects the edge with smallest squared residual. The recovered graph point is the endpoint u if α⋆ is numerically 0, the endpoint v if α⋆ is numerically 1, and otherwise the edge-interior point (e⋆, s ⋆) with 
+
+s⋆ = α⋆ℓ(e⋆).
+
+Thus Euclidean projection and Euclidean inversion are combined in the recovery map ρΓ 
+
+> ι
+
+.
+
+Tropical Abel–Jacobi Embedding. For the tropical geometry, Ψ = Φ p and MΨ = TΛ, the tropical Jacobian torus. We choose a spanning tree T , a base vertex p, and the fundamental-cycle basis determined by the non-tree edges. Let g be the genus of Γ. The implementation first computes vertex Abel–Jacobi coordinates in a chosen lift of the Jacobian. In the notation of the code, these raw coordinates are 
+
+A = CT LT Y ⊤ 
+
+> T
+
+∈ Rg×| V |,
+
+where CT is the reduced cycle-edge incidence matrix on tree edges, LT is the diagonal matrix of tree-edge lengths, and YT is the basepoint-to-vertex path-edge incidence matrix in the spanning tree. Thus Av ∈ Rg is the raw Abel–Jacobi coordinate of vertex v relative to p.The period matrix is 
+
+Q = CT LT C⊤ 
+
+> T
+
++ LG,
+
+where LG is the diagonal matrix of the non-tree edge lengths. In the notation of the main text, this matrix gives the torus metric matrix Ξ. Raw coordinates have period lattice QZg . In the implementation, we work in fractional unit-lattice coordinates 
+
+ξ = Q−1A (mod Zg ), ξ ∈ Rg /Zg .
+
+17 In these coordinates, the tropical torus distance is 
+
+dTΛ,Ξ(ξ, η )2 = min  
+
+> n∈Zg
+
+(ξ − η − n)⊤Q(ξ − η − n).
+
+For a point on an edge, the Abel–Jacobi coordinate is obtained by affine interpolation in a lifted edge model. Each oriented edge e has a lifted start Ue ∈ Rg and lifted direction de ∈ Rg in fractional coordinates. For tree edges, 
+
+de = ξend( e) − ξstart( e).
+
+For the non-tree edge corresponding to cycle j,
+
+de = ℓ(e) Q−1ej .
+
+Hence a graph point at normalized edge coordinate α = s/ℓ (e) maps to 
+
+Φp(e, s ) = Ue + αd e
+
+ ∈ Rg /Zg .
+
+Tropical Projection and Inversion. After tropical transport extraction, a sample is a torus point 
+
+ξ ∈ Rg /Zg . The recovery map 
+
+ρΓΦp = Φ −1 
+
+> p
+
+◦ proj Φp(Γ) : TΛ → Γ
+
+is implemented by solving a lifted closest-segment problem: 
+
+(e⋆, α ⋆, n ⋆) ∈ arg min  
+
+> e, α ∈[0 ,1] , n ∈Zg
+
+∥ξ − Ue − n − αd e∥2 
+
+> Q
+
+, ∥r∥2 
+
+> Q
+
+:= r⊤Qr. 
+
+For fixed (e, n ), the optimal edge parameter has a closed form, 
+
+αe,n = clip [0 ,1] 
+
+ (ξ − Ue − n)⊤Qd e
+
+d⊤ 
+
+> e
+
+Qd e
+
+
+
+,
+
+so the only non-trivial degree of freedom is the integer shift n.
+
+Certified-exact bounded-box enumeration. The default implementation enumerates n over a bounded integer box n ∈ [−r, r ]g and, for each (e, n ), evaluates the closed-form clipped αe,n and the resulting residual; the global (e⋆, n ⋆) is the argmin over edges and shifts. This enumeration is certified exact 
+
+once r reaches the spectral certified radius 
+
+rcert (Q) = 
+
+l 12
+
+pg λ max (Q)/λ min (Q) − 12
+
+m
+
+,
+
+because any candidate n′ outside the box satisfies ∥ξ − Ue − n′ − αd e∥Q ≥ ∥ n′∥−1 
+
+> Q−1
+
+/2 > r ⋆Q, where 
+
+r⋆Q bounds the interior-box residual. 
+
+High-genus fallback. When a benchmark’s effective genus exceeds the cap of 7, the certified box becomes prohibitively large ( |n| = O((2 r + 1) g )) and the implementation auto-switches to a Babai nearest-plane solver on an LLL-reduced basis. 
+
+Decoder output. The same closest-segment problem implements both projection onto Φp(Γ) and inversion back to the metric graph. Given ξ, the decoder returns the edge e⋆, edge coordinate α⋆,lattice shift n⋆, and residual 
+
+r⋆ = ∥ξ − Ue⋆ − n⋆ − α⋆de⋆ ∥Q .
+
+If r⋆ is below numerical tolerance, ξ is treated as lying on the Abel–Jacobi image of the graph; otherwise the same minimizer gives the nearest point on Φp(Γ) . The decoded graph point is 
+
+(e⋆, s ⋆), s⋆ = α⋆ℓ(e⋆),
+
+with endpoint snapping when α⋆ is numerically 0 or 1.
+
+Neural Feature Maps. The preceding paragraphs describe the graph-to-ambient maps Ψ and the corresponding recovery maps ρΓΨ. The neural potential is parameterized using a feature map 
+
+φΨ : MΨ → Rn.
+
+For the tropical Abel–Jacobi geometry, we use a Gromov distance feature map on the Jacobian torus: the features of a point are its geodesic distances to a fixed set of landmark points, typically embedded vertices, with source samples used to fill any remaining landmark slots. For the Euclidean geometry, we consider both Riemannian log features and Gromov distance features. In R2, the log feature at a reference point ¯x is simply x 7 → x − ¯x.18 C.2 Implementation Details for Metric Graph Geometry Benchmarks 
+
+This subsection gives the implementation details for the synthetic metric-graph geometry experiment in Section 5.1. Since the goal of this experiment is to evaluate graph-supported sample generation 
+
+and the induced target-measure recovery on metric graphs, every method is evaluated through the graph-supported measure bν induced by its transported or generated samples. The reference object is the true continuous target law ν = QΓ, approximated by a deterministic graph-supported quadrature rule shared across all methods and seeds. 
+
+Experiment Protocol. Each benchmark consists of a metric graph Γ = ( V, E, ℓ ), a source prob-ability measure μ, and a target probability measure ν, both supported on Γ. The target measure is constructed analytically by moving the source mode to a different part of the graph, so that evaluation can be performed against a deterministic quadrature approximation of the true target law rather than against a finite Monte Carlo sample. For each benchmark and seed, we draw three independent samples: 
+
+Xtrain ∼ μ⊗ntrain , Ytrain ∼ ν⊗ntrain , Xeval ∼ μ⊗ntest .
+
+The source-aware methods fit a transport rule using (Xtrain , Y train ), and are then evaluated by applying the fitted rule to the held-out source batch Xeval . This train/eval split prevents source-aware methods from being evaluated on the same source samples used to fit their transport plan. The full experimental configuration uses 
+
+ntrain = 2048 , ntest = 512 , nref = 10 ,000 ,
+
+with five seeds 0, 1, 2, 3, 4. The smoke configuration uses ntrain = 128 , ntest = 64 , nref = 512 , and a single seed; it additionally shrinks the neural-training schedule ( nsteps = 30 , batch size 64 ) and the evaluation discretisation ( 8 bins per edge, 100 Sinkhorn iterations) so that the end-to-end pipeline runs in seconds. Unless otherwise stated, the full configuration uses 128 bins per edge, and graph Wasserstein metrics use entropic Sinkhorn with regularisation 10 −3 and 400 iterations. 
+
+Graph-Supported Probability Measures. Each synthetic source or target law is represented as a probability measure supported on a compact metric graph Γ = ( V, E, ℓ ). Every edge e ∈ E is identified with an interval [0 , ℓ e], with canonical arc-length parametrisation 
+
+ι : [0 , ℓ e] −→ Γ.
+
+A graph point is represented either by a vertex v ∈ V , or by an edge–arc-length pair (e, s ) with 
+
+s ∈ [0 , ℓ e].The measures used in the first experiment are mixtures of edge-continuous components and, optionally, vertex atoms: 
+
+PΓ =
+
+> Redge
+
+X
+
+> r=1
+
+αr (ιer )#ρr +
+
+> Rvert
+
+X
+
+> u=1
+
+βu δvu , αr , β u ≥ 0, X
+
+> r
+
+αr + X
+
+> u
+
+βu = 1 .
+
+Here ρr is a one-dimensional density on the edge interval [0 , ℓ er ]. In the benchmarks, the source and target components are typically truncated Gaussian edge densities, 
+
+ρe,μ,σ (s) = exp 
+
+
+
+− (s−μ)2
+
+> 2σ2
+
+
+
+1{0≤s≤ℓe}
+
+R ℓe 
+
+> 0
+
+exp 
+
+
+
+− (t−μ)2
+
+> 2σ2
+
+
+
+dt .
+
+The implementation also supports uniform edge densities, triangular edge densities, and vertex atoms. The target law ν = QΓ is obtained from the source law by relocating the edge-supported mode to a different graph region, for example across theta branches, wheel spokes, grid corners, or road-network hotspot edges. Graph points are represented in code either as a vertex u ∈ V , or as (( u, v ), s ), meaning the point at arc-length s ∈ [0 , ℓ uv ] from u along edge (u, v ). Reverse orientations are handled consistently: a component stored on (v, u ) is evaluated on (u, v ) by the coordinate transformation s 7 → ℓuv − s.19 Synthetic Benchmarks. The default experiment sweep uses four graph families. All edge weights are metric lengths. For synthetic graphs embedded in R2, edge weights are the Euclidean lengths of the corresponding line segments. 
+
+Theta graph. The theta benchmark uses Θ( k = 3) with two interior vertices per branch. The source is a truncated Gaussian on an internal edge of branch 0, and the target is the corresponding truncated Gaussian on an internal edge of branch 2. This benchmark tests transport across homologically distinct branches. 
+
+Wheel graph. The wheel benchmark uses a wheel graph with six vertices, one hub and five rim vertices. The source is a truncated Gaussian on one spoke, and the target is a truncated Gaussian on a non-adjacent spoke. This graph has multiple cycles and tests whether methods respect the radial/cyclic structure. 
+
+Grid graph. The grid benchmark uses a 3 × 3 rectangular grid. The source is placed on an edge near the bottom-left corner and the target on an edge near the top-right corner. This benchmark tests transport across a graph with several homotopy-equivalent routes. 
+
+Road graph. The road benchmark is a small random planar graph generated from a Delaunay triangulation with 10 nodes, then pruned while preserving connectivity. The source is placed on an edge near one corner of the embedding and the target on an edge near the diagonal corner. After bridge augmentation the effective Jacobian-torus dimension can reach g ≈ 8; the implementation handles this via a high-genus fallback rule described below, so that the experimental protocol works on Road without manual configuration. 
+
+Deterministic Reference Measure. For evaluation, we do not use a Monte Carlo draw from the target as the reference. Instead, for each benchmark we build a deterministic quadrature approximation of the analytical target law ν. For every target edge component with normalised mass αr , we allocate a number of midpoint quadrature nodes proportional to αr , evaluate the one-dimensional density on that grid, and renormalise the quadrature weights on that edge. The reference measure has the form 
+
+νref =
+
+> Kref
+
+X
+
+> k=1
+
+wkδzk , X
+
+> k
+
+wk = 1 .
+
+Vertex atoms, when present, are included exactly with their normalised masses. This reference is built once per benchmark and reused for every seed and method, so metric variation reflects method and training variability rather than reference-sampling noise. 
+
+Methods. The main comparison includes three source-aware baselines, the Neural Tropical method and two Neural Euclidean baselines (Log and Gromov embedding, respectively). 
+
+Node-interpolation pushforward. This baseline first snaps source and target samples to their nearest vertices and solves vertex-level entropic OT with intrinsic graph cost 
+
+cΓ(u, v ) = 12 dΓ(u, v )2.
+
+The resulting vertex-level barycentric images are extended to edge-interior source points by linear interpolation along the source edge. A second optional ambient Euclidean Sinkhorn assignment maps the interpolated positions toward the full target sample support before projecting back to the graph. 
+
+Ambient Euclidean pushforward. This baseline embeds source and target graph points in the ambient 
+
+R2 plane, solves entropic OT with squared Euclidean cost 
+
+cR2 (x, y ) = 12 ∥x − y∥2,
+
+forms barycentric images, and projects the resulting ambient points back to the nearest point on the graph. 
+
+Neural tropical method. This method maps graph points into the tropical Jacobian torus via the Abel–Jacobi map 
+
+Φ : Γ −→ Jac(Γ) .
+
+After choosing a cycle basis, the Jacobian is represented as a flat torus 
+
+Jac(Γ) ∼= Rg /Zg
+
+20 equipped with the tropical metric matrix Q. We train an entropic semi-dual potential on the torus using the cost 
+
+cJac (x, y ) = 12 min  
+
+> n∈Zg
+
+(x − y − n)⊤Q(x − y − n).
+
+Given a held-out source point x, the learned potential defines a Gibbs conditional distribution Px( · )
+
+over the lifted target support. The experiment uses a heat-smoothed sampling decoder: rather than reading off the conditional argmax, we draw a torus point from 
+
+qt(z) = X
+
+> j
+
+Px(j) pt(yj , z ),
+
+where pt is the torus heat kernel and the heat time scales linearly with the entropic temperature, 
+
+t = α ε with the small constant α = 3 ×10 −3. The Varadhan-matching choice α = 12 over-smooths catastrophically on the small synthetic supports used in the first experiment because the Brownian standard deviation √2t = √α ε becomes comparable to the inter-atom spacing on the lifted target support and the sample crosses to neighbouring edges; the small-α regime keeps the smoothing within the resident edge so that final-projection accuracy is preserved. The torus draw is then projected back to the graph image by solving the inverse Abel–Jacobi projection problem discussed in Appendix C.1. 
+
+Neural Euclidean methods. The Euclidean ablation uses the same neural entropic OT training loop, learning rate, batch size, adaptive regularisation rule, and heat-smoothed sampling decoder as the neural tropical method. The only change is the ambient geometry: source and target samples are represented in R2, the cost is squared Euclidean distance, and the final output is projected back to the graph in the ambient plane. This isolates the effect of the Abel–Jacobi / tropical-Jacobian inductive bias. 
+
+Adaptive Entropic Regularisation. All source-aware methods use the same adaptive entropic regularisation convention. For each method, we compute a cost matrix on a random subsample of at most 256 source points and 256 target points, using that method’s own geometry and cost. The entropic temperature is then set to 
+
+ε = λ · median( C), λ = 0 .01 .
+
+This prevents a fixed absolute value of ε from favouring one geometry simply because its cost scale is smaller. If adaptive regularisation is disabled, the implementation falls back to the absolute temperatures specified in the configuration. 
+
+Evaluation Metrics. We report four metrics comparing a predicted graph-supported measure ˆν
+
+with the deterministic reference νref .
+
+Graph Wasserstein distances. The primary native-form metrics are entropic approximations of intrinsic graph Wasserstein distances: 
+
+W Γ1 (ˆ ν, ν ref ) and W Γ2 (ˆ ν, ν ref ).
+
+Both use the exact graph geodesic distance dΓ between graph points. For edge-interior points, the distance is computed as the minimum over the four endpoint-routed paths, with the direct same-edge arc-length included as an additional candidate. Thus alternate routes through the graph are correctly accounted for even when two points lie on the same edge. For W1, the Sinkhorn cost matrix is Cij = dΓ(xi, y j ). For W2, the cost matrix is Cij = dΓ(xi, y j )2,and the square root of the optimal transport cost is returned. 
+
+Edgewise density L1. To compare density-like behaviour, both measures are binned onto a common edge-bin grid. Let ρˆν and ρref denote the piecewise-constant densities induced on this grid. We compute 
+
+∥ρˆν − ρref ∥L1(Γ) = X
+
+> e∈E
+
+Z
+
+> e
+
+|ρˆν (s) − ρref (s)| ds. 
+
+Vertex mass is split evenly across incident endpoint bins. 21 Edgewise CDF L1. For each edge e, we compute the cumulative mass functions induced by the common edge bins and integrate the absolute CDF error along the edge: 
+
+X
+
+> e∈E
+
+Z ℓe
+
+> 0
+
+|Fˆν,e (s) − Fref ,e (s)| ds. 
+
+This metric is less sensitive than density L1 to small within-edge shifts while still detecting whether mass is placed on the correct edge and in the correct region. 
+
+Tropical Abel–Jacobi Implementation. The Abel–Jacobi implementation precomputes the period matrix Q, its inverse, vertex Abel–Jacobi coordinates, and lifted edge starts / directions. For tree edges, the lifted edge direction is the difference of the lifted endpoint coordinates. For non-tree edges, the lifted direction is determined by the corresponding cycle-basis coordinate and the metric edge length. The implementation orients each non-tree edge so that the forward map and inverse projection are consistent. The forward map is implemented by locating each ambient graph point on its supporting edge, inter-polating the Abel–Jacobi coordinate along that edge, and converting to fractional torus coordinates. The inverse / projection map solves the edge / lattice least-squares problem described above. Graphs with bridges can be augmented by adding a virtual parallel half-edge path through a midpoint, creating a small cycle for each bridge. This gives bridge-supported mass a representation in the Jacobian torus. After tropical projection on the augmented graph, predicted positions are snapped back to the original graph for evaluation. 
+
+Numerical and Implementation Notes. All Sinkhorn solves use the log-domain implementation from OTT-JAX for numerical stability. Neural methods use JAX/JIT-compiled kernels for the Abel– Jacobi forward map, torus CVP computations, and inverse projection. Evaluation and projection are chunked to control GPU memory: the default roster uses an eval-time transport chunk of 64 ,a one-shot ψ(y) precomputation chunk of 256 , and an Abel–Jacobi projection chunk of 16 ; these chunks affect only memory scheduling, not the mathematical estimator. In the default roster, the neural methods use 
+
+batch_size = 256 , n_steps = 3000 , learning_rate = 10 −2,
+
+with cosine learning-rate decay enabled. Checkpointing can be enabled to save one neural potential per benchmark and seed. 
+
+C.3 Implementation Details for Scaling Analysis 
+
+This experiment reuses the synthetic metric-graph geometry benchmarks and method implementations from the first synthetic experiment, but changes the experimental question from “which method recovers the target measure best?” to “how do accuracy, runtime, and memory scale as the number of training samples?” The code therefore separates accuracy evaluation from scaling measurement :accuracy runs compute graph-level discrepancies against a deterministic reference target, while scaling runs measure only the cost of fitting and applying the method, deliberately excluding the expensive reference-evaluation Sinkhorn solve. 
+
+Benchmarks and Sample-Size Sweep. The main sample-size sweep uses the same four benchmark instances as the the first experiment sweep (theta graph, grid graph, wheel graph and road graph) with first Betti numbers g = 2 , 4, 5, ≥ 7 respectively (Road graph’s effective genus depends on bridge augmentation). The training sizes are 
+
+ntrain ∈ { 128 , 256 , 512 , 1024 },
+
+and each cell is repeated over seeds 
+
+{0, 1, 2}.
+
+For each seed, we draw independent source-training, target-training, and held-out source-evaluation samples. Methods are fit on ({xi}ntrain  
+
+> i=1
+
+, {yj }ntrain  
+
+> j=1
+
+) and then evaluated by transporting a held-out source cloud of size ntest = 512 , inherited from the first experiment configuration. 22 Methods. The roster in this experiment contains the following source-aware methods: Ambient pushforward, Node Interpolation, NeuralEuclidean (with Log embedding), NeuralEuclidean(with Gromov embedding), NeuralTropical. The first two are deterministic pushforward baselines. N EU -
+
+> RAL
+
+EUCLIDEAN appears as two ablation variants that share architecture and training schedule but differ in the input embedding: N EURAL EUCLIDEAN (L OG ) uses a logarithmic embedding in R2
+
+(centering at a base point) with LayerNorm disabled, while N EURAL EUCLIDEAN (G ROMOV ) uses a graph-distance landmark embedding with LayerNorm enabled. Both are ambient-Euclidean ablations of the Jacobian-torus method N EURAL TROPICAL .
+
+Adaptive Regularisation and Chunking. For methods using entropic OT, the regularisation scale is selected as 
+
+ε = 0 .01 median( C),
+
+where the median is computed on a fixed 256 × 256 random subsample of the relevant cost matrix for that method. This keeps the temperature comparable across graph families and prevents a full 
+
+n2train median-cost matrix from being materialised only to tune ε.The neural methods use chunked evaluation to keep peak memory bounded. In the default config-uration, the transported source-evaluation batch is split into chunks of size 64 , the one-shot ψ(y)
+
+precomputation is split into chunks of size 256 , and Abel–Jacobi projection is split into chunks of size 
+
+16 . These chunks affect only memory scheduling; they do not change the mathematical estimator. 
+
+Tropical CVP and Projection. The tropical methods use the same Abel–Jacobi data structures as Q1. The default CVP method is exact whenever the certified lattice-search radius is within the configured budget. When a graph’s effective genus exceeds the cap, the implementation falls back to a scalable Babai nearest-plane solver on an LLL-reduced basis; this avoids silently treating a fixed small search box as exact. Approximate CVP variants based on LLL or BKZ can also be selected through the configuration, but the default Q2 sweep uses the same production-safe settings as Q1. In practice, this means Theta ( g = 2 ), Grid ( g = 4 ), and Wheel ( g = 5 ) run with exact CVP, while Road (effective g ≥ 7 after bridge augmentation) auto-falls back to Babai nearest plane solver. 
+
+Accuracy Sweep. The accuracy runner computes graph-level error as a function of ntrain . For each benchmark, a deterministic edgewise quadrature reference is built once from the analytical target measure QΓ and shared across methods and seeds: 
+
+Nref = 10 ,000 
+
+quadrature nodes. The vertex-distance matrix Dvv is precomputed once per benchmark and reused by every (method , seed) cell. Each predicted graph-supported measure bν is compared to this reference using the same metrics as Q1: 
+
+W1(bν, QΓ), W2(bν, QΓ), ∥bρ − ρ∥L1(Γ) ,
+
+and the edgewise CDF L1 diagnostic. The reference is seed-independent, so all (method , seed) cells are scored against the same target object and metric variance is attributable to method/training noise alone. 
+
+Scaling Sweep and Memory Measurement. In the scaling sweep, we measure method fit time and peak GPU memory without calling the reference-evaluation routine. This is intentional: evaluating 
+
+W1 or W2 against the Nref = 10 ,000 quadrature reference would materialise an ntrain × Nref cost matrix on the GPU, causing the memory measurement to reflect evaluation overhead rather than the cost of the method itself. Peak memory is measured in isolated worker processes. JAX exposes its device-memory statistics as a process-monotone counter, with no in-process reset of the recorded peak: once a process has allocated memory at any point in its lifetime, the reported peak stays at that high-water mark even after the work that triggered it has been freed. Running multiple cells in the same process therefore contaminates later peaks with earlier transient allocations. To avoid this, the scaling orchestrator launches a fresh subprocess for each combination of benchmark, method, and training size, so every measurement starts from a peak of zero. Each subprocess runs all seeds for its cell and records a single cell-level peak-memory value. 23 In the plots, peak memory is deduplicated to one row per cell before aggregation, so the seed rows that share a single subprocess are not treated as independent memory measurements. Before stopping the fit-time timer, the worker also forces JAX to finish all asynchronous device work — it walks the pytree of returned arrays and blocks on each leaf — so that the recorded runtime reflects actual completion rather than the moment the dispatch queue was filled. The reported scaling time is therefore an end-to-end method-call time for the worker process, and includes JIT compilation on the first seed plus warm-cache execution on later seeds. 
+
+C.4 Implementation Details for Real-World Graph-Supported Generation on Manhattan Uber Pickups 
+
+This subsection gives implementation details for the real-data experiment on Uber NYC pickups. Unlike in the other two experiments, where the target law is synthetic and analytically specified, in this experiment uses a large empirical target measure supported on snapped pickup locations on a Manhattan road graph. The purpose of the experiment is to test whether the proposed neural graph-transport pipeline can scale to a million-sample empirical target distribution while producing realistic graph-supported target measures. 
+
+Data Source and Preprocessing. We use the 2014 Uber NYC pickup records from April through September. Each pickup is represented by a timestamp and a latitude–longitude coordinate. We restrict the spatial domain to Manhattan below 110th Street. The retained region is represented as a polygon in longitude–latitude coordinates, and pickups outside this polygon are discarded before graph snapping. The road graph is obtained from OpenStreetMap using the drivable road network inside the same Manhattan region. The graph is projected to a metric coordinate system in metres, simplified to an undirected metric graph, and pruned to its largest connected component. Parallel road geometries are deduplicated by retaining the shortest projected polyline between each undirected node pair, and degree-one leaves are iteratively removed. Each retained road edge stores its projected polyline geometry and metric length in metres. Pickups are snapped to the nearest retained road polyline using a spatial index. For a pickup assigned to edge e = ( u, v ), we record both the edge index and the normalised arc-length coordinate 
+
+α ∈ [0 , 1] ,
+
+where α = 0 corresponds to u and α = 1 corresponds to v in the stored edge orientation. Pickups with snap distance larger than 50 metres are discarded. In the main data split, this preprocessing yields 2,267 ,487 training pickups, 361 ,466 validation pickups, and 690 ,939 test pickups after polygon clipping and snap filtering, for 3,319 ,892 usable pickups over 183 calendar days. 
+
+Bridge Augmentation and Graph Representation. The Manhattan graph is bridge-augmented during preprocessing. This produces the metric graph used by all downstream methods, and the methods considered are configured not to apply a second internal bridge augmentation. The aug-mented graph used in the main run has approximately 3.0k nodes, 5.4k edges, and first Betti number 
+
+g = 2416 . This genus is far beyond the range where exact closest-vector enumeration on the Jacobian torus is feasible. Although the metric graph contains virtual bridge-augmentation edges, density visualisations and edgewise histogram metrics are reported on the retained real road polylines. Points landing on virtual edges are collapsed back to their corresponding real road edge before edgewise binning. 
+
+Train/Validation/Test Split. The main experiment split is a random day-level split. Calendar days, not individual pickups, are partitioned into train, validation, and test sets with fractions 
+
+70% /10% /20% . Thus all pickups from the same calendar day belong to a single split, avoiding leakage of same-day demand patterns between training and testing. 
+
+Source and Target Measures. The empirical target measure ν is supported on snapped Uber pickup graph points from the training split. The source measure μ is a synthetic length-proportional uniform measure on the real road edges. For the million-run experiment, we use 
+
+Ntarget = 10 6, Nsource = 10 6.
+
+24 The target support is subsampled without replacement from the training pickups, and the source support is sampled uniformly along real road edges. 
+
+Decoder Support and Generated Measure. Training support size and decoder support size are kept separate. This is important at million-sample scale: using all 10 6 target points as the post-training Gibbs support would make the conditional transport matrix prohibitively large. After training, the learned entropic transport kernel is evaluated on a bounded decoder support 
+
+Kdec = 131 ,072 
+
+sampled from the target training support. The generated measure is formed from 
+
+M = 131 ,072 
+
+held-out source query points sampled uniformly along the graph. For a source query xi and decoder atom yj , the learned conditional Gibbs weights have the form 
+
+Pθ (yj | xi) ∝ exp 
+
+ ψθ (yj ) − c(xi, y j )
+
+ε
+
+
+
+, yj ∈ Ydec .
+
+The final predicted measure bνθ is the graph-supported empirical measure obtained by decoding the learned conditional distribution at the M source query points. 
+
+Method Roster at Million Scale. The million-scale roster is Neural Euclidean (with Log Embed-ding), Neural Euclidean(with Gromov Embedding), Ambient pushforward and Node Interpolation baselines plus two reference rows: Eval. noise floor (test-test) and uniform-road (length-proportional uniform measure). The two source-aware non-neural baselines (Ambient pushforward, Node Interpolation) cannot be run at the full 10 6-point training support without OOM, because their dense N × N ambient Sinkhorn cost matrix would require tens of gigabytes. We therefore subsample the (μ, ν, μ eval ) tuples down to a baseline support cap 
+
+Nbaseline = 16 ,384 
+
+matching NW below; neural methods continue to see the full 10 6-point training supports. 
+
+Neural Models. The neural Euclidean baseline represents graph points by their projected polyline coordinates in R2. The input position function is polyline-aware: snapped graph points are mapped to the actual point on the retained road polyline rather than to a chord interpolation between graph vertices. The Euclidean model therefore uses the correct Manhattan road geometry at both input and output projection stages. Unless otherwise stated, neural potentials are multilayer perceptrons with SiLU activations and scalar output, hidden dimensions (512 , 512 , 512 , 512) . The two Euclidean variants share the same architecture and training schedule but differ in their input embedding: Neural Euclidean (Log) uses a logarithmic embedding in R2 (centering at a base point) with LayerNorm disabled, matching the con-trolled ablation protocol in the other experiments; Neural Euclidean (Gromov) uses a graph-distance landmark embedding with LayerNorm enabled, which is the preset that wins on the Manhattan benchmark. 
+
+Regularisation and Optimisation. The entropic OT temperature is selected adaptively for each method unless an explicit value is provided. Specifically, if ε is not fixed, we set 
+
+ε = λ · median( C),
+
+where C is a method-specific training cost subsample. We use distinct multipliers for the neural training Sinkhorn and the source-aware baseline training Sinkhorn: 
+
+λneural = 10 −2, λbaseline = 0 .30 .
+
+The baseline value λbaseline = 0 .30 is justified by an ε-sweep on the source-aware baselines at million scale. This mirrors the adaptive temperature scheme used in the synthetic experiments and avoids using a fixed temperature across graphs with different metric scales. For million-scale runs, the neural optimizer uses minibatches of size B = 1024 . The production preset trains for T = 3000 steps with cosine learning-rate decay from initial rate 3 · 10 −3, corresponding to 
+
+B · T = 3 ,072 ,000 target draws ≈ 3.07 full passes over the 10 6-point empirical target support. 25 Evaluation Reference. The held-out reference measure is built from snapped test pickups. The main million-scale run uses 
+
+Neval = 131 ,072 
+
+test pickups as the reference support. Since the dense Sinkhorn cost matrix for 131 ,072 × 131 ,072 
+
+atoms would require tens of gigabytes of memory, Wasserstein metrics are computed on a fixed subsample of size 
+
+NW = 16 ,384 .
+
+Metrics. Q3 reports intrinsic graph Wasserstein metrics, edge-density metrics, and optional spatial coverage diagnostics. The Wasserstein metrics are computed using the same graph-supported entropic evaluation pipeline as in the first experiment: 
+
+W1(bνθ , ν test ), W2(bνθ , ν test ).
+
+The evaluation Sinkhorn regularisation is adaptive, 
+
+εeval = λeval · median( Deval ), λeval = 10 −3,
+
+unless explicitly overridden. Density-style metrics are computed by binning mass along the real road polylines. Edgewise density 
+
+L1 error compares the generated and held-out test densities on a common edgewise binning, and edgewise CDF L1 compares cumulative mass along each edge. The bin count is derived from a target bin length in metres, using the median retained road-edge length to select an effective bins-per-edge value. 
+
+Reference Rows: Noise Floor and Uniform-Road Baseline. We report two non-trainable reference rows alongside the trained methods. The eval. noise floor is a test–test reference: we draw two independent subsamples of size 
+
+Nnoise = 32 ,768 
+
+from the held-out test pickups and evaluate the same graph metrics between them under the identical 
+
+NW = 16 ,384 -point Sinkhorn budget. This estimates the irreducible discrepancy from finite test-set sampling and lower-bounds the score any method can attain at the chosen evaluation resolution. The uniform-road reference is the length-proportional uniform measure on the real road edges; it represents an uninformed baseline that ignores demand structure. Both reference rows use the same adaptive evaluation regularisation as the trained methods. 26 D Additional Experimental Results 
+
+D.1 Additional Results for Metric Graph Geometry Benchmarks 
+
+Table 2: Full absolute accuracy results. Each entry reports mean ± SEM over five random seeds. Lower is better. Best result per benchmark/metric is in bold ; second-best is underlined. 
+
+Benchmark Method Graph W1 Graph W2 Density L1 Edgewise CDF L1
+
+Theta Ambient pushforward 0.0466 ± 0.0004 0.0625 ± 0.0005 0.8322 ± 0.0062 0.0466 ± 0.0004 
+
+Node interpolation 0.0465 ± 0.0004 0.0624 ± 0.0004 0.8365 ± 0.0088 0.0465 ± 0.0004 
+
+Neural Eucl. (Log) 0.0037 ± 0.0003 0.0231 ± 0.0001 0.3254 ± 0.0056 0.0053 ± 0.0005 
+
+Neural Eucl. (Gromov) 0.0037 ± 0.0003 0.0231 ± 0.0001 0.3256 ± 0.0055 0.0053 ± 0.0004 
+
+Neural Tropical 0.0043 ± 0.0002 0.0234 ± 0.0003 0.3175 ± 0.0079 0.0058 ± 0.0008 
+
+Grid Ambient pushforward 0.0491 ± 0.0007 0.0660 ± 0.0010 0.5655 ± 0.0102 0.0491 ± 0.0007 
+
+Node interpolation 0.0491 ± 0.0003 0.0659 ± 0.0006 0.5590 ± 0.0074 0.0491 ± 0.0003 
+
+Neural Eucl. (Log) 0.0045 ± 0.0002 0.0241 ± 0.0004 0.3125 ± 0.0149 0.0074 ± 0.0012 
+
+Neural Eucl. (Gromov) 0.0044 ± 0.0002 0.0237 ± 0.0003 0.3136 ± 0.0124 0.0063 ± 0.0008 
+
+Neural Tropical 0.0048 ± 0.0002 0.0246 ± 0.0005 0.3454 ± 0.0134 0.0089 ± 0.0012 
+
+Wheel Ambient pushforward 0.0152 ± 0.0013 0.0354 ± 0.0010 0.3447 ± 0.0077 0.0214 ± 0.0007 
+
+Node interpolation 0.0389 ± 0.0007 0.0543 ± 0.0009 0.4583 ± 0.0139 0.0389 ± 0.0007 
+
+Neural Eucl. (Log) 0.0050 ± 0.0003 0.0259 ± 0.0013 0.3301 ± 0.0139 0.0116 ± 0.0025 
+
+Neural Eucl. (Gromov) 0.0051 ± 0.0003 0.0263 ± 0.0016 0.3312 ± 0.0131 0.0120 ± 0.0029 
+
+Neural Tropical 0.0055 ± 0.0003 0.0261 ± 0.0015 0.3577 ± 0.0136 0.0114 ± 0.0024 
+
+Road Ambient pushforward 0.2232 ± 0.0024 0.2743 ± 0.0031 0.7757 ± 0.0042 0.2241 ± 0.0020 
+
+Node interpolation 0.1808 ± 0.0049 0.2434 ± 0.0027 0.6838 ± 0.0122 0.1995 ± 0.0022 
+
+Neural Eucl. (Log) 0.0110 ± 0.0005 0.0371 ± 0.0023 0.3938 ± 0.0141 0.0381 ± 0.0051 
+
+Neural Eucl. (Gromov) 0.0109 ± 0.0006 0.0380 ± 0.0023 0.3994 ± 0.0122 0.0393 ± 0.0051 
+
+Neural Tropical 0.0138 ± 0.0020 0.0439 ± 0.0044 0.4132 ± 0.0169 0.0417 ± 0.0030 
+
+D.2 Additional Results for Scalability Analysis D.3 Additional Results for Real-World Graph-Supported Generation on Manhattan Uber Pickups 
+
+Table 3: Generation time on the Manhattan road metric graph. Method Time (s) ↓
+
+Eval. noise floor 21.9 ± 1.4 
+
+Ambient pushforward 35.0 ± 0.2 
+
+Node interpolation 136.8 ± 1.7 
+
+Neural Euclidean (Log) 105.9 ± 0.9 
+
+Neural Euclidean (Gromov) 112.4 ± 2.2 
+
+27 10 −2
+
+10 −1
+
+Theta Grid Wheel Road 
+
+10 1
+
+10 2
+
+10 2
+
+10 3
+
+10 4
+
+256 1024 
+
+Support size n
+
+10 0
+
+10 1
+
+10 2
+
+10 3
+
+256 1024 
+
+Support size n
+
+256 1024 
+
+Support size n
+
+256 1024 
+
+Support size n     
+
+> Graph  W1 ↓Runtime (s)  ↓Memory (MB)  ↓Throughput (pts/s)  ↑
+> Ambient Node interp. Graph OT Euc.-Log Euc.-Gromov Tropical
+
+Figure 4: Rows: graph W1 against the analytical target (lower is better), fit-time wall clock (lower is better), peak GPU memory (lower is better), and inference throughput ntrain /fit_time (higher is better). Columns: the four Q2 graph families ordered by first Betti number, g = 2 (Theta), g = 4 
+
+(Grid), g = 5 (Wheel), and g ≥ 7 (Road, with bridge augmentation). Each panel shows one curve per method; lines are the mean across 3 seeds. 28 E Proofs 
+
+E.1 Proof of Theorem 4.1 
+
+Proof. Fix the embedding Ψ : Γ → M Ψ. Since Γ is compact and MΨ is Hausdorff, the continuous injective map Ψ : Γ → M Ψ is a homeomorphism onto its image Ψ(Γ) . Hence 
+
+Ψ−1 : Ψ(Γ) → Γ
+
+is well-defined and continuous. By the assumptions that F is dense in C(Rn, R) under the ucc topology and that φΨ : KQΨ → Rn
+
+is continuous and injective, the recovery result of [17, Theorem 4.1], applied with 
+
+(M, μ, ν, c ) = ( MΨ, PΨ, QΨ, c Ψ),
+
+gives a sequence 
+
+gm ∈ CQΨ (φ∗
+
+> Ψ
+
+F)
+
+whose induced embedded Gibbs laws satisfy 
+
+∥πεm, Ψ − π⋆ε, Ψ∥TV −→ 0.
+
+Let Πεm, Ψ,t denote the embedded heat-smoothed joint law before projection: 
+
+Πεm, Ψ,t (du, dz ) = PΨ(du ) Qεm, Ψ,t (u, dz ),
+
+where Qεm, Ψ,t is obtained by heat-smoothing the embedded conditional induced by gm. Let Π⋆ε, Ψ,t 
+
+denote the corresponding heat-smoothed version of the embedded entropic optimizer π⋆ε, Ψ. Since heat smoothing is a Markov kernel acting on the second coordinate, it is total-variation contractive. Hence, for every t > 0,
+
+∥Πεm, Ψ,t − Π⋆ε, Ψ,t ∥TV ≤ ∥ πεm, Ψ − π⋆ε, Ψ∥TV −→ 0.
+
+For the two ambient geometries considered in this paper, namely Euclidean space and the flat torus, the heat kernel is an approximate identity. Therefore 
+
+Π⋆ε, Ψ,t ⇀ π ⋆ε, Ψ (t ↓ 0) .
+
+Consequently, for any sequence tm ↓ 0,
+
+Πεm, Ψ,t m ⇀ π ⋆ε, Ψ. (27) It remains to pass this convergence through the projection–pullback map. Recall that 
+
+ρΓΨ = Ψ −1 ◦ proj Ψ(Γ) : MΨ → Γ,
+
+where proj Ψ(Γ) is a fixed measurable nearest-point projection onto Ψ(Γ) . Define 
+
+GΨ : MΨ × M Ψ → Γ × Γ, GΨ(u, z ) =  ρΓΨ(u), ρ ΓΨ(z).
+
+The graph-supported law generated by the algorithm is 
+
+πε, Ψ 
+
+> m, Γ,t m
+
+= ( GΨ)#Πεm, Ψ,t m .
+
+Indeed, disintegrating 
+
+Πεm, Ψ,t m (du, dz ) = PΨ(du )Qεm, Ψ,t m (u, dz )
+
+and using ρΓΨ(Ψ( x)) = x gives 
+
+πε, Ψ 
+
+> m, Γ,t m
+
+(dx, dy ) = PΓ(dx ) ( ρΓΨ)#Qεm, Ψ,t m (Ψ( x), ·)( dy ),
+
+which is the graph-supported law defined by the projection–pullback procedure. We next verify that the continuous mapping theorem applies to the measurable map GΨ. Since 
+
+π⋆ε, Ψ ∈ Π( PΨ, QΨ) and both marginals are supported on Ψ(Γ) ,
+
+π⋆ε, Ψ
+
+ Ψ(Γ) × Ψ(Γ)  = 1 .
+
+29 Thus it suffices to show that GΨ is continuous at every point of Ψ(Γ) × Ψ(Γ) .Let v ∈ Ψ(Γ) and let zn → v in MΨ. Set 
+
+sn := proj Ψ(Γ) (zn).
+
+Since v ∈ Ψ(Γ) is an admissible comparison point, nearest-point optimality gives 
+
+dΨ(sn, z n) ≤ dΨ(v, z n).
+
+Hence 
+
+dΨ(sn, v ) ≤ dΨ(sn, z n) + dΨ(zn, v ) ≤ 2dΨ(zn, v ) → 0.
+
+Therefore 
+
+proj Ψ(Γ) (zn) → v. 
+
+Since Ψ−1 is continuous on Ψ(Γ) , it follows that 
+
+ρΓΨ(zn) = Ψ −1 proj Ψ(Γ) (zn) → Ψ−1(v).
+
+Thus ρΓΨ is continuous at every point of Ψ(Γ) . Consequently, GΨ is continuous at every point of 
+
+Ψ(Γ) × Ψ(Γ) . If DGΨ denotes the discontinuity set of GΨ, then 
+
+π⋆ε, Ψ(DGΨ ) = 0 .
+
+By the mapping theorem for weak convergence applied to (27), 
+
+(GΨ)#Πεm, Ψ,t m ⇀ (GΨ)#π⋆ε, Ψ.
+
+The left-hand side is πε, Ψ 
+
+> m, Γ,t m
+
+. On the support of π⋆ε, Ψ, both coordinates lie in Ψ(Γ) , so 
+
+GΨ(u, v ) = (Ψ −1(u), Ψ−1(v)) .
+
+Therefore 
+
+(GΨ)#π⋆ε, Ψ = (Ψ −1, Ψ−1)#π⋆ε, Ψ = π⋆, Ψ 
+
+> ε, Γ
+
+.
+
+Thus 
+
+πε, Ψ 
+
+> m, Γ,t m
+
+⇀ π ⋆, Ψ 
+
+> ε, Γ
+
+.
+
+Taking, for example, mk = k and any sequence tk ↓ 0 gives 
+
+πε, Ψ  
+
+> mk,Γ,t k
+
+⇀ π ⋆, Ψ 
+
+> ε, Γ
+
+.
+
+Finally, since π⋆ε, Ψ ∈ Π( PΨ, QΨ) with PΨ = Ψ #PΓ and QΨ = Ψ #QΓ, the pullback 
+
+π⋆, Ψ 
+
+> ε, Γ
+
+= (Ψ −1, Ψ−1)#π⋆ε, Ψ
+
+has marginals PΓ and QΓ. Hence 
+
+π⋆, Ψ 
+
+> ε, Γ
+
+∈ Π( PΓ, QΓ).
+
+This proves the claim. 
+
+E.2 Proof of Lemma B.2 
+
+Proof. Recall that an edge e is a bridge of a connected metric graph if and only if eΓ\e◦ is disconnected. We show that this never happens in eΓ.Let e be any edge of eΓ. We distinguish three cases. 
+
+(i) e = ¯b is a virtual edge. By construction, ¯b connects the same endpoints ub, v b as the corresponding bridge b ∈ B(Γ) . Hence b and ¯b give two distinct ub–vb paths in eΓ, and therefore ¯b lies on the (simple) cycle b ∪ ¯b. In particular, removing ¯b◦ does not separate ub from vb (they remain connected through b), so eΓ \ ¯b◦ is connected. 
+
+(ii) e = b is an original bridge of Γ. As in (i), the union b ∪ ¯b is a cycle in eΓ. Thus ub and vb remain connected after removing b◦ (via ¯b), and the graph cannot disconnect: eΓ \ b◦ is connected. 
+
+(iii) e is an original non-bridge edge of Γ. Since e is not a bridge in Γ, the space Γ \ e◦ is connected. Moreover, Γ \ e◦ embeds naturally as a subspace of eΓ \ e◦, because the augmentation only adds extra edges and does not remove any existing ones. A connected subspace cannot become disconnected by adding more edges/paths, hence eΓ \ e◦ is connected. In all cases, eΓ \ e◦ is connected, so eΓ has no bridges. 30 E.3 Proof of Lemma B.3 
+
+Proof. Because Γ is a subgraph of eΓ, every path in Γ is also a path in eΓ. Taking infima over path lengths immediately gives 
+
+deΓ(ι(x), ι (y)) ≤ dΓ(x, y ).
+
+We prove the reverse inequality by showing that any eΓ-path between ι(x) and ι(y) can be modified into a Γ-path of no greater length. Let γ be a rectifiable path in eΓ from ι(x) to ι(y). Consider any connected sub-arc of γ contained in a virtual edge ¯b. Its endpoints are two points p, q ∈ ¯b
+
+(possibly equal, possibly vertices, and not necessarily the endpoints of ¯b). Using the fixed arc-length parametrizations, identify ¯b with [0 , ℓ (¯b)] and b with [0 , ℓ (b)] so that corresponding endpoints match. Since ℓ(¯b) ≥ ℓ(b), setting δ = ℓ(¯b) − ℓ(b) ≥ 0, the map 
+
+Tb : [0 , ℓ (¯b)] → [0 , ℓ (b)] , Tb(t) := min {t, ℓ (b)},
+
+is 1-Lipschitz and preserves the common endpoint at 0 (and collapses only the extra tail if δ > 0). Pushing the segment of γ in ¯b forward by Tb yields a path in b connecting the corresponding points in b whose length is no larger than the original segment in ¯b. Replacing each maximal sub-arc of γ
+
+lying in any virtual edge in this way produces a new path γ′ ⊂ Γ from x to y with 
+
+len( γ′) ≤ len( γ).
+
+Since γ was arbitrary, taking the infimum over all eΓ-paths gives 
+
+dΓ(x, y ) ≤ deΓ(ι(x), ι (y)) .
+
+Together with the first inequality this proves deΓ(ι(x), ι (y)) = dΓ(x, y ), i.e. ι is an isometric embed-ding. 
+
+E.4 Proof of Lemma B.5 
+
+Proof. By construction, ePΓ = ι#PΓ and eQΓ = ι#QΓ, hence supp( ePΓ) ⊂ ι(Γ) and supp( eQΓ) ⊂
+
+ι(Γ) . Equivalently, for every Borel set A ⊂ eΓ disjoint from ι(Γ) we have ePΓ(A) = eQΓ(A) = 0 .Let B ⊂ T˜g be a Borel set disjoint from eΦp(ι(Γ)) . Then (eΦp)−1(B) ∩ ι(Γ) = ∅, so 
+
+ePJ(B) = ePΓ
+
+ (eΦp)−1(B) = 0 , eQJ(B) = eQΓ
+
+ (eΦp)−1(B) = 0 .
+
+Thus both pushforward measures assign zero mass to every Borel set disjoint from eΦp(Γ) , i.e. they are supported on eΦp(Γ) .
+
+E.5 Proof of Lemma B.6 
+
+Proof. Set S := eΦp(Γ) and A := T˜g \ S. Let π ∈ Π( ePJ, eQJ). Since the first marginal of π is ePJ,we have 
+
+π(A × T˜g ) = ePJ(A) = 0 ,
+
+and similarly, because the second marginal is eQJ,
+
+π(T˜g × A) = eQJ(A) = 0 .
+
+Therefore 
+
+π
+
+ T˜g × T˜g  \ (S × S)
+
+
+
+≤ π(A × T˜g ) + π(T˜g × A) = 0 ,
+
+which proves that π is concentrated on S × S.
+
+E.6 Proof of Proposition B.7 
+
+Proof. Existence of eπ⋆ 
+
+> Γ
+
+satisfying (26) is exactly the bridgeless result applied to eΓ. The zero-virtual-mass property follows because both marginals are supported on ι(Γ) , so any coupling between them is supported on ι(Γ) × ι(Γ) . Finally, identifying ι(Γ) with Γ gives the claimed coupling on the original graph. 31

@@ -6,24 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-20
-- 运行时间：2026-06-20 20:36:11 UTC
+- 最新运行日期：2026-06-21
+- 运行时间：2026-06-21 21:09:47 UTC
 - 运行状态：成功
 - 本次总论文数：1
 - 精读区：0
 - 速读区：1
 
 ### 今日简报（AI）
-今日读到一篇关于扩散流匹配的论文，获得7.0分评价，该工作在KL界和Wasserstein保证上做出了改进。主要亮点是维度依赖性的KL界提升，以及从Wasserstein距离角度对生成质量的更优保障。如果你关注扩散模型理论基础，可深读其近似误差分析，或对比与传统扩散模型的性能改进。
-- 详情：[/202606/20/README](/202606/20/README)
+今日速读了一篇关于度量图生成建模的论文，得分7.0/10。  
+该研究使用神经最优传输方法，为图数据生成提供了新思路。  
+可进一步关注此法在结构化数据生成中的实际效果与扩展。
+- 详情：[/202606/21/README](/202606/21/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Diffusion Flow Matching: Dimension-Improved KL Bounds and Wasserstein Guarantees](/202606/20/2606.16610v1-diffusion-flow-matching-dimension-improved-kl-bounds-and-wasserstein-guarantees)  
+1. [Generative Modeling on Metric Graphs via Neural Optimal Transport](/202606/21/2606.16273v1-generative-modeling-on-metric-graphs-via-neural-optimal-transport)  
    标签：评分：7.0/10、query:diff-bridge
-   evidence：扩散流匹配的最优传输与Wasserstein保证
+   evidence：度量图上源和目标测度之间的神经最优传输
 
 
 <div class="dpr-home-promo-card">
