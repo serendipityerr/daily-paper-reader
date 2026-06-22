@@ -6,26 +6,31 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-21
-- 运行时间：2026-06-21 21:09:47 UTC
+- 最新运行日期：2026-06-22
+- 运行时间：2026-06-22 22:28:50 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：0
-- 速读区：1
+- 本次总论文数：3
+- 精读区：1
+- 速读区：2
 
 ### 今日简报（AI）
-今日速读了一篇关于度量图生成建模的论文，得分7.0/10。  
-该研究使用神经最优传输方法，为图数据生成提供了新思路。  
-可进一步关注此法在结构化数据生成中的实际效果与扩展。
-- 详情：[/202606/21/README](/202606/21/README)
+今日精读8.0分扩散模型得分匹配热力学论文，速读生成建模的Perron-Frobenius算子匹配与Kolmogorov回归。  
+最值得关注：得分匹配的随机热力学解释（精读论文）及扩散策略的鲁棒性（Kolmogorov回归）。  
+建议先掌握扩散模型基础，再深入精读论文探讨的热力学视角，速读论文可作为应用延伸。
+- 详情：[/202606/22/README](/202606/22/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Stochastic Thermodynamics of Score Matching in Diffusion Models](/202606/22/2606.17252v1-stochastic-thermodynamics-of-score-matching-in-diffusion-models)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：为扩散模型中的分数匹配提供随机热力学框架，为用分数模型求解薛定谔桥奠定了基础
 
 ### 速读区论文标签
-1. [Generative Modeling on Metric Graphs via Neural Optimal Transport](/202606/21/2606.16273v1-generative-modeling-on-metric-graphs-via-neural-optimal-transport)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：度量图上源和目标测度之间的神经最优传输
+1. [Perron--Frobenius Operator Matching for Generative Modeling](/202606/22/2606.17465v1-perron--frobenius-operator-matching-for-generative-modeling)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：Perron-Frobenius算子匹配统一了生成建模中的流、扩散和跳跃模型
+2. [Kolmogorov Regression for Robust Diffusion Policies](/202606/22/2606.18186v1-kolmogorov-regression-for-robust-diffusion-policies)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：使用向后Kolmogorov方程和Cameron-Martin空间，与扩散过程的路径积分表述相关
 
 
 <div class="dpr-home-promo-card">

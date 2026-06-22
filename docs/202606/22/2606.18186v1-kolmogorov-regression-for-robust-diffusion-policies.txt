@@ -1,0 +1,2125 @@
+Title: Kolmogorov Regression for Robust Diffusion Policies
+
+URL Source: https://arxiv.org/pdf/2606.18186v1
+
+Published Time: Wed, 17 Jun 2026 01:21:24 GMT
+
+Number of Pages: 32
+
+Markdown Content:
+# Kolmogorov Regression for Robust Diffusion Policies 
+
+Lekan Molu 
+
+Bala Cynwyd, PA 19004 
+
+lekanmolu@scriptedonachip.com 
+
+## Abstract 
+
+Finite-dimensional (FD) diffusion policies exhibit temporal drift owing to dis-cretization artifacts that degrade long-horizon performance (when deployed on physical systems). We introduce a backward Kolmogorov equation that lifts diffusion policies to a Cameron-Martin space — a subset of the Hilbert space. Es-sentially, replacing stochastic score matching with a deterministic boundary-value PDE problem. Our core innovation thrives on Gaussian measure theory whereupon the diffusion noise covariance operator is realized from a colored noise distribution which prescribes a notion of regularity on samples from the model at inference time. We train the diffusion model with a derived precision-weighted Cameron-Martin loss and a Kolmogorov residual is introduced as a PDE diagnostic during inference. These substitutions yield (i) convergence guarantees where the bound’s constants depend on the effective rank of the kernel rather than action dimension, (ii) improved trajectory regularity via spectral weighting, and (iii) a deterministic failure detector without reward signals. Validation across two application domains demonstrates substantial improvements: on the PushT manipulation benchmark, the Cameron-Martin loss achieves a 17% improvement in maximum episode reward (0.95 vs. 0.78 for MSE) and 67 .6% reduction in inter-step drifts during inference via the introduced residual magnitude. Similarly, on a 6-station manufacturing line with constant work-in-process (CONWIP) flow control, we achieve 28 .4% 
+
+lower RMSE than classical LSTM baselines; a high starvation-event recall ( 1.0
+
+in test cycles), and effective bottleneck identification (Precision@1 = 1.0 in test set, 13 × signal-to-noise ratio). We then certify the dispatch policies with Hamil-ton–Jacobi reachability theory which reduces deadlock events by 96% compared to uncontrolled dispatch over 100 simulated runs ( 351 events prevented). 
+
+## 1 Introduction 
+
+Diffusion models are one of the dominant paradigms for learning policies for open-ended embodiment systems — from anthropomorphic robots [Chi et al., 2023, Intelligence et al., 2025, Barreiros et al., 2025] to autonomous vehicles [Nvidia, 2025], they provide improved performance when mapping high-dimensional visual observations to continuous action trajectories. The diffusion core design principle is to learn the underlying probability distribution of an observable so that future data samples similar to the observation can be generated in a controllable manner. It has stimulated scalable learning of robot visuomotor policies [Kim et al., 2024, Intelligence et al., 2025] from imitation learning in finite-spaces [Billard and Grollman, 2012] ( Rn, 1 ≤ n < 8) to function-space behavior cloning [Ross et al., 2011]. By gradually corrupting the observable into total noise in a forward phase; then transforming the noise back to the observable in a reverse process, it learns the intermediate family of distributions so that recovering the observable amounts to sampling (e.g. by integrating a stochastic gradient Langevin dynamical system [Lai et al., 2025]) along a continuous generative trajectory. 
+
+> Preprint.
+> arXiv:2606.18186v1 [cs.LG] 16 Jun 2026
+
+Most diffusion works take the score-based energy-modeling view for recovering the observable’s probability distribution [Song and Ermon, 2020, Hyvärinen and Dayan, 2005], in finite dimensions (FD). Its distribution is realized by extremizing the expected squared distance between the gradients of the observable and its model’s log-densities. In a forward Ornstein-Uhlenbeck (OU) diffusion process, a denoising diffusion probabilistic model (DDPM) [Ho et al., 2020, Sohl-Dickstein et al., 2015] may corrupt the observable with (Gaussian) noise in the limit of high-dimensional data (e.g. , in Rd); its model then denoises the noisy artifacts in the reverse OU process [Øksendal and Øksendal, 2003, Pavliotis, 2014]. By discretizing the problem space first (e.g. images to pixels [Sohl-Dickstein et al., 2015, Ho et al., 2020] or continuous spatio-temporal behaviors to text [Kim et al., 2024]), an SDE integration algorithm can recover action samples. This discretize-data-before-diffusion scheme misaligns policies from the underlying continuous autonomous system dynamics since such policies are trained on grid artifacts where grid resolution engenders interpolation errors that compound across trajectory rollouts. This causes instability in applications of diffusion to safety-critical real-world deployment systems. While this effect is mild in image generation, it causes performance gaps in visuomotor and real-world deployment loops where small state errors have pronounced effects on physical behavior and multi-agent settings. In practice, this may result in poor long-horizon planning execution [Liao et al., 2025]. [De Bortoli, 2022] established Wasserstein distance convergence bounds of order one between the diffusion model’s target and generative distributions. [Chen et al., 2023], working in a FD L2 score space provided a logarithmic bound on the sampling steps for the exponential integrator under finite second moments, a eΘ( ϵ20)1 KL divergence error, where ϵ20 denotes the average L2 score-estimation error, without requiring log-concavity or global smoothness assumptions. As such, discretization and score-estimation errors accumulate along the reverse diffusion trajectory, with complexity scaling adversely as the prediction horizon and low-noise regime increase. In control settings, this manifests as temporal inconsistency in action predictions and high variance in closed-loop performance across seeds and trials. A principled control-oriented approximation should therefore represent the distribution over admissible trajectories directly in function space—including their relative likelihoods—while deferring discretization as long as possible. 
+
+Contributions : Our work makes four novel contributions to infinite-dimensional (ID) diffusion policy learning: (1) Kolmogorov PDEs: We ground diffusion policies in the backward Kolmogorov equation (BKE), replacing stochastic score matching with a deterministic boundary-value problem. The BKE avoids density-based formulations that fail in infinite dimensions, and yields convergence guarantees where the constants depend on the effective rank of the covariance operator, not the action dimension. (2) Three-point algorithmic instantiation: We show that the infinite-dimensional framework reduces to three minimal substitutions in standard DDPM: (a) colored forward noise η = LN ξ where 
+
+LN = chol( GN ) is the Cholesky factor of the Matérn Gram matrix, GN [Abramowitz and Stegun, 1965]; (b) precision-weighted Cameron-Martin loss LCM = E[∥C−1/2 
+
+> μ
+
+(ηθ − η)∥2
+
+> H
+
+]; and (c) colored reverse noise using the same LN at inference. No network architecture changes are required, enabling easy adoption. (3) Kolmogorov residual for diagnostics: We introduce the Kolmogorov residual as a deterministic, oracle-free signal for detecting policy failure and anomalies. This measure of PDE violation provides interpretable diagnostics unavailable in standard DDPM. (4) Multi-domain validation: On the popular PushT manipulation benchmark [Florence et al., 2022], we observe a 17% success improvement (0.95 vs. 0.78), 67.6% residual reduction. On manufacturing (6-station CONWIP): 28.4% RMSE improvement, strong anomaly detection (13× SNR). Integration with Hamilton-Jacobi reachability enables safety-guided dispatch with 96% deadlock reduction. A logical reading of this article is structured as follows: background and preliminaries are discussed in Appendix A and related works in Appendix B. Section 2 develops the infinite-dimensional backward Kolmogorov diffusion framework and our three-point algorithmic contribution. Section 3 presents the empirical validation on manufacturing and manipulation systems, while section 4 concludes the paper. The core details of our innovations are in Appendix C, our algorithmic elucidation is presented in Appendix D and further numerical results on niche manufacturing flow forecasting scenarios appear in Appendix E.     
+
+> 1Where ϵ20denotes the average L2score-estimation error.
+
+22 Infinite-Dimensional BKE Diffusion 
+
+We ground our contributions on Gaussian measure theory and the backward Kolmogorov equation (BKE) (see Appendix A), to avoid direct density-based score matching in infinite-dimensional spaces, where the absence of a canonical Lebesgue reference measure complicates Euclidean score formulations and amplifies discretization variance. All proofs, supporting propositions and corollaries may be found in Appendix C. The core innovation rests upon three minimal substitutions to the standard denoising diffusion probabilistic models (or DDPM), each justified by measure-theoretic necessity: 1.) We replace standard white (Gaussian) noise η ∼ N (0 , I ) with colored noise η = LN ξ where ξ ∼ N (0 , I ),
+
+K is the discretized Gram matrix of the Matérn kernel k(t, s ), and LN = chol( K) is its Cholesky factor. This colored noise respects the covariance structure of the action distribution, yielding smooth, physically plausible trajectories and avoiding abrupt velocity discontinuities typical of white-noise perturbations. 2.) We replace the standard mean-squared-error loss with the precision-weighted (Cameron-Martin) loss, LCM = E
+
+
+
+C−1/2 
+
+> μ
+
+(ηθ − η) 2
+
+> H
+
+
+
+, where Cμ is the covariance operator 
+
+Cμ : H → H . This inverse covariance operator weighting is a consequence of Theorem 2 (Radon-Nikodym), ensuring that the denoising loss preserves the measure-theoretic structure (Corollary 3) of the underlying noise distribution; it achieves dimension-independent convergence (Corollary § C.2). 3.) During inference, we replace white noise with colored reverse noise η = LN ξ (same LN as training), maintaining consistency with the covariance structure throughout the sampling trajectory. 
+
+These three substitutions preserve the denoising network architecture entirely, with no structural mod-ifications required. The results include (i) smooth, physically plausible trajectories; (ii) convergence guarantees independent of discretization dimension under stated assumptions; and (iii) PDE-based diagnostics via the Kolmogorov residual. The neural network architecture remains unchanged as we only modify the noise distribution and loss function. 
+
+2.1 Function Space and Covariance Structure 
+
+Action trajectories a : [0 , T ] → Rda are posed in the Hilbert space H = L2([0 , T ], Rda ) of square-integrable functions, equipped with the standard inner product (see (A.7) ). The natural prior on this space is a Gaussian measure μ0 = N (0 , C μ), with the covariance operator Cμ that is defined via a kernel function k(t, s ) (A.6) . In practice, we leverage the Matérn covariance kernel in decomposing the Cμ-operator. We utilize the Gram matrix, K ∈ RN ×N with K = k(xt, x s), such that the regularity of sampled action paths is governed by the smoothness of k [Rasmussen and Williams, 2006]. In our work, we found the 3/2-Matérn kernel, 
+
+k(t, s ) = σ2 1 + 
+
+√3|t − s|
+
+ℓ
+
+!
+
+exp −√3|t − s|
+
+ℓ
+
+!
+
+, (1) to be most suited to our applications, where the length scale ℓ > 0, and σ2, the variance, controls the amplitude (set to 1 in our formulation). This yields C1 sample paths for real-world processes where continuous physical phenomena must avoid impulsive forces and contact instabilities. The Cameron-Martin space of the Gaussian μ0 is the subspace 
+
+HC =
+
+n
+
+f ∈ H : ∥f ∥HC := ∥C −1/2f ∥H < ∞
+
+o
+
+, (2) equipped with the inner product ⟨f, g ⟩HC = ⟨f, C−1g⟩H. This is the unique subspace of H wherein absolute continuity of the Gaussian measure is preserved under translation [Cameron and Martin, 1944]. Denoising operates within this geometrically correct subspace. The mismatch between isotropic Euclidean losses and covariance-aware function-space geometry is consistent with the dimension-dependent degradation observed in finite-dimensional DDPM analyses. 
+
+2.2 Forward (OU) Process and the Backward Kolmogorov Characterization 
+
+The forward diffusion process is the Ornstein-Uhlenbeck (OU) semigroup on H,
+
+dX t = − 12 Xt dt + dW Cμ 
+
+> t
+
+, X0 ∼ μdata := a0 ∈ H (3) 3where W Cμ 
+
+> t
+
+is a trace-class (Proposition 2), self-adjoint, non-negative covariance operator, and W Cμ
+
+> t
+
+is the Cμ-Wiener process (see Def. 4), with spectral representation, W Cμ 
+
+> t
+
+= P∞
+
+> k=1
+
+√λk ωk(t) ek,.Here {(λk, e k)} are the Mercer eigenpairs [Riesz, F., Nagy, B.Sz., 1990] of Cμ and {ωk} are independent standard Brownian motions. The series converges in L2(Ω; H) because of the trace class condition, Tr (Cμ) = P 
+
+> k
+
+λk < ∞ (See Corollary 3). The OU process is measure-preserving in distribution: as t → ∞ , Xt converges to the prior N (0 , C). The conditional distribution at any time 
+
+s < t is Gaussian, 
+
+Xs | X0 = a0 ∼ N 
+
+
+
+e−s/ 2a0, (1 − e−s)Cμ
+
+
+
+, (4) with mean decaying exponentially toward zero and covariance growing monotonically toward the prior. Process (3) corrupts any clean action a0 ∈ H into pure colored noise N (0 , C μ) as t → ∞ ,on discrete FD Euclidean spaces Rd [Song and Ermon, 2019]. As d → ∞ , the algorithm’s stability deteriorates owing to the increasing refinement of discretization parameters. 
+
+Since Gaussian measures on H possess no Lebesgue density in infinite dimensions, the Euclidean score ∇x log ps(x) cannot be defined classically. Therefore, we employ the backward Kolmogorov equation (BKE) to define an induced score as a Cameron–Martin logarithmic derivative, which is measure-theoretically well-defined and recoverable from the PDE solution: For the measure space 
+
+(Ω , F, μ ) and Markov stochastic events Xt =: X, define Ms := u(Xs, s ), where u, the Chapman-Kolmogorov value function operator (A.15) is a martingale on [0 , t ]. Applying Itô’s formula to 
+
+u(Xs, s ) in infinite dimensions and invoking the martingale property dM s = 0 (in the drift sense) gives 
+
+∂u ∂s + Lu = 0 . (5) where its generator L = − 12 x · ∇ + 12 Cμ · ∇ 2. Substituting the OU drift − 12 x yields the BKE for the OU process.                                       
+
+> Backward Kolmogorov Equation
+> For any measurable functional f:H → R, the conditional expectation u(x, s ) := E[f(Xt)|Xs=x]
+> satisfies the backward Kolmogorov PDE,
+> −∂u ∂s (x, s ) =
+> 
+> −12x, ∇xu(x, s )
+> 
+> H
+> + 12 Tr Cμ· ∇ 2u(x, s ),u(x, t ) = f(x),(6) with terminal condition u(x, t ) = f(x)and integrated backward in time from s=tto s= 0 .The Cameron–Martin score (the induced logarithmic derivative under the Gaussian measure) is then recovered as ∇xlog ps(x) = C−1
+> μ∇xu(x, s ), which is well-defined on the Cameron–Martin space
+> HCμwhere absolute continuity is preserved.
+
+The derivation of (6) is given in the appendix. This definition is grounded in measure theory that requires no densities. This substitution replaces score-matching, which is an inherently stochastic objective prone to variance explosion with a deterministic boundary-value problem admitting efficient numerical solution via adjoint methods, thus eliminating the Monte Carlo instability that plagues standard diffusion frameworks. 
+
+2.3 Dimension-Independent Convergence Guarantees 
+
+The core advantage of the infinite-dimensional formulation manifests in its convergence rate, which decouples from problem dimension entirely. 
+
+Theorem 1 (Dimension-Independent Convergence) . Let μdata be a probability measure on H =
+
+L2([0 , T ], Rda ) with finite second moment and full support, and let μθ denote the distribution of trajectories generated by the infinite-dimensional diffusion policy trained with Cameron-Martin loss 
+
+LCM (θ). Then the total variation distance between μθ and μdata satisfies 
+
+∥μθ − μdata ∥TV ≤ C1
+
+pLCM (θ) + C2e−T / 2, (7) 
+
+where the constants C1, C 2 > 0 depend on Tr( Cμ) but are otherwise independent of the discretization resolution, planning horizon T , or action dimension da.
+
+4This result is contrary to finite-dimensional DDPM, whose convergence rate degrades as O(√d) with action dimension d. The exponentially decaying residual term e−T / 2 suggests that the theoretical approximation error is negligible for long horizons: the bound predicts comparable residuals for policies trained and deployed at matched horizons. Importantly, this bound’s dependence on Tr( Cμ)
+
+rather than da or discretization dimension is the key distinction: FD methods inherently require re-training when horizon or action dimension change, while the ID framework’s convergence guarantee is independent of these parameters. 
+
+2.4 Inference-time Diagnostics via the Kolmogorov Residual 
+
+Equation (3) describes the stochastic evolution of individual paths through noise. Evaluating the quality of a learned policy from the SDE alone requires many averaged Monte Carlo trajectory simulations with convergence checks. This is expensive, noisy, and offers no deterministic analytic handle on the denoising learner of the true conditional expectation (A.15). The BKE (6) is a deterministic PDE that the value function (A.15) must satisfy. Everything about the denoising distribution including the score, transition density, the conditional expectation are encoded in u and governed by a deterministic differential equation. For any learned function ˆu(x, s ) that approximates the value function, the backward Kolmogorov equation imposes the constraint 
+
+∂ ˆu∂s +
+
+
+
+− 12 x, ∇x ˆu
+
+
+
+> H
+
++ 12 Tr Cμ · ∇ 2 ˆu = 0 . (8) The violation of this identity is measure by the Kolmogorov residual ,
+
+R(ˆ u) := ∂ ˆu∂s +
+
+
+
+− 12 x, ∇x ˆu
+
+
+
+> H
+
++ 12 Tr Cμ · ∇ 2 ˆu
+
+> H
+
+. (9) (See Appendix C.5 for the derivation of this form.) The learned denoising network ηθ (xt, t ) predicts the noise in the Cameron-Martin norm and we construct ˆu(x, s ) as the numerically integrated prediction: ˆu(x, s ) = E[R ts ηθ (Xτ , τ )dτ | Xs = x].During learning, gradients are computed via automatic differentiation over the action space. Hessian traces Tr[ Cμ · ∇ 2 ˆu] are estimated using Hutchinson trace estimation with Gaussian probes to avoid explicit Hessian computation. The residual is evaluated at sample points (x, s ) drawn from rollouts. 
+
+Observe : (i) The residual R(ˆ u(x, s )) is computed at a single point (x, s ) from a sampled trajectory by evaluating the network and its derivatives via automatic differentiation. It is not an expectation over data, and carries no Monte Carlo variance beyond the single-sample approximation. Contrast this with the training loss LCM (θ) = E[· · · ], which averages over batches. (ii) Computing R(ˆ u)
+
+requires only (a) the current state x and time s, (b) forward and backward pass through the network (automatic differentiation), and (c) the learned weights θ. We do not need a policy rollout, trajectory simulation, a new data collection, or task reward. This enables on-demand diagnostics at inference time. (iii) The residual is defined purely in terms of the function ˆu and its derivatives, regardless of the network architecture used to parameterize it. It serves as a universal failure detector: any denoising network that violates the BKE will show high residuals. When ˆu solves the BKE exactly, R(ˆ u) = 0 . Nonzero residuals indicate departures from the BKE constraint. High residuals correlate with downstream failure modes such as visuomotor control rollout instability, action sequence drift during manipulation, or infeasible trajectories’ planning. By monitoring the residual at inference time, we obtain a deterministic, unsupervised indicator of policy behavior without requiring task feedback. The entire algorithm is tabulated in Appendix D. 
+
+## 3 Numerical Evaluations 
+
+We validate the framework on the PushT manipulation problem [Chi et al., 2023] and manufacturing control [Goldratt, 1984], evaluating the Cameron-Martin loss against MSE and a weighted mixed-precision loss (between MSE and CM loss) baselines. Experiments probe the qualitative consequences of Theorem 1 (lower residuals, smoother trajectories) rather than directly measuring TV distance. 50 20 40 60 80 100            
+
+> Epochs (x 353)
+> 10 −1
+> 10 0
+> Training Loss
+> MSE (FD)/Mixed Precision
+> LMSE (μ)
+> LMP (μ),®=0.15
+> LMP (μ),®=0.25
+> LMP (μ),®=0.5
+> LMP (μ),®=0.75
+> LMP (μ),®=0.85 0100 200 300 400 500
+> Epochs (x 353)
+> 10 −2
+> 10 −1
+> 10 0
+> 10 1
+> Cameron-Martin Loss LCM (μ)
+
+LCM (μ), ®=1.0 Figure 1: Training loss curves for the Cameron-Martin, Mixed Precision, and MSE losses. The Cameron-Martin loss (right) achieves lower final training loss ( 0.029 vs. 0.06 for MSE) with tighter convergence, reflecting the mode-decomposed structure imposed by precision weighting. 
+
+3.1 Experimental Setup: PushT Manipulation Setup : PushT is a 2-DOF visual manipulation task requiring the alignment of a male “T-shaped" wooden block into a female “T-shaped" target based on RGB-D observations only. We train a 
+
+≈ 8M-parameter ConditionalUnet1D with ResNet-18 image features ( tp = 16 timesteps, AdamW optimizer, η = 10 −4) and average results over 5 seeds on an A100 GPU (see appendix for full hyperparameters). 
+
+Loss Functions Evaluated. We compare three loss formulations: 1. MSE loss (finite-dimensional baseline): 
+
+LMSE (θ) = E ∥ηθ − η∥22
+
+ , η ∼ N (0 , I ). (10) 2. Precision-weighted (Cameron-Martin) loss :
+
+LCM (θ) = E[∥C−1/2 
+
+> μ
+
+(ηθ − η)∥2
+
+> H
+
+] with η ∼ N (0 , C μ) (11) colored by the Matérn-3/2 kernel. This is the full infinite-dimensional formulation, α = 1 .0.3. Mixed precision loss (interpolation): 
+
+LMP (θ, α ) = αLCM (θ) + (1 − α)LMSE (θ), α ∈ { 0.15 , 0.25 , 0.50 , 0.75 }. (12) This family interpolates from FD ( α = 0 ) to ID ( α = 1 ), isolating the contribution of the measure-theoretic weighting. For all losses, the Matérn-3/2 kernel is parameterized ℓ = 0 .3 and σ2 = 1 .
+
+3.2 Training Convergence and Loss Dynamics 
+
+The training curves in Figure 1 reveal that 1. the MSE baseline achieved smooth convergence; however, it exhibits larger validation loss variance, which is consistent with white-noise sensitivity in high-dimensional spaces; 2. the mixed precision losses (α ∈ (0 , 1) ) produce mild convergence rates; the precision weighting suppresses low-frequency modes and improves trajectory smoothness without the full measure-theoretic constraint; and 3. the Cameron-Martin loss (α = 1 .0) achieves a lower final training loss with tighter convergence, reflecting mode-decomposed structure that is associated with the precision weighting. The loss converges to ≈ 0.029 (vs. ≈ 0.06 for MSE), indicating better alignment between the learned and target noise distributions in the Cameron-Martin space. The dimension-independent convergence theorem (Theorem 1) predicts that the loss should depend only on Tr( Cμ), not on da or tp. While we cannot vary da in this task ( da = 2 is fixed), the predicted dependence on Tr( Cμ) ≈ 2.8 (effective rank ≈ 4 for tp = 16 ) aligns with observed convergence: the constant factor in the TV bound depends on Tr( Cμ), not exponentially on tp.6LMSE LMP  
+
+> ®=0.25
+> LMP
+> ®=0.5
+> LMP
+> ®=0.85
+> LCM
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Reward  0.651
+> 0.195
+> 0.399
+> 0.167
+> 0.000 0.000
+> 0.960
+> 0.445
+> 1.000
+> 0.267
+> PushT Inference — Max vs Mean Reward
+
+Max Reward 
+
+Mean Reward Figure 2: Inference rewards during the denoising step for all three training losses. 
+
+3.3 Inference Performance: Reward Scores and Rollout Quality 
+
+After training, we evaluate policies on held-out test episodes using the per-step task reward (range 
+
+[0 , 1] , where 1 denotes successful block alignment). Reward dynamics reveal two critical insights, viz., Episodic max-reward (task success). Policies trained with Cameron-Martin loss achieve maximum episodic reward ≈ 0.95 (out of 1.0), compared to ≈ 0.78 for MSE (see Figure 2). This 
+
+≈ 17% improvement reflects tighter trajectory control i.e. , the precision-weighted training enforces smoothness in low-frequency modes, preventing the jittery control sequences that characterize white-noise finite-diffusion (see Figure 3). The mixed precision loss shows an interesting bifurcation around the LM P for α = 0 .5 indicating an equal pulling towards the spectral modes and the finite-dimensional regions of the OU process. The improvement is most pronounced in the final approach phases (steps 300–400), where trajectory precision is critical; MSE-trained policies exhibit high-frequency oscillations that destabilize the contact, while CM-trained policies maintain smooth, stable approach trajectories. 
+
+3.4 Kolmogorov Residual as Physics-Aware Diagnostic 
+
+The backward Kolmogorov equation residual R(ˆ u) (see (9) in §2.4) serves as a deterministic, oracle-free measure of policy fidelity. Unlike the training loss, which measures data-fitting quality, the residual ascertains whether the learned policy follows the backward Kolmogorov constraint. 
+
+Residual Magnitude Across Loss Formulations. 
+
+• MSE ( α = 0 ): We observed a mean residual of ≈ 0.34 across the spatio-temporal dynamics. High residuals indicate departures from the BKE constraint, consistent with white-noise sensitivity. • Mixed precision ( α = 0 .15 ): The residual drops to ≈ 0.28 , a 17 .6% reduction. Further increases ( α = 0 .25 , 0.50 ) yield residuals ≈ 0.22 , 0.18 respectively. • Cameron-Martin ( α = 1 .0): residual ≈ 0.11 , a 67 .6% reduction vs. 0.34 for the MSE. This indicates that the precision-weighted training induces strong alignment with the Kolmogorov dynamics, resulting in smoother learned representations. The residual reduction monotonically decreases with α, demonstrating that precision weighting progressively enforces the deterministic PDE structure. This alignment between theory (BKE) and practice (residual diagnostics) validates the measure-theoretic foundation of the framework. 
+
+Residual as Early Warning for Failure. During inference rollouts, we compute the residual at each step. Episodes with high average residuals ( > 0.15 ) correlate with task failure (max reward < 0.5), 7while low-residual rollouts (mean < 0.10 ) achieve higher success rates > 90% . This provides a real-time, model-free diagnostic: practitioners can flag unreliable trajectories without evaluating ground-truth rewards. 
+
+3.5 Summary of Push Results 
+
+The PushT experiments validate the following claims, viz., (i) Measure-theoretic weighting im-proves convergence. The Cameron-Martin loss achieves lower final training loss and higher inference rewards than MSE, confirming the 1 Theorem in practice. (ii) Precision weighting scales gracefully across loss mixing. Mixed precision losses ( α ∈ (0 , 1) ) interpolate smoothly between FD and ID performance, demonstrating that partial measure-theoretic structure is beneficial even when full compliance is not enforced. (iii) Kolmogorov residuals are interpretable failure detectors. The residual magnitude correlates strongly with task success and provides an oracle-free diagnostic for policy trustworthiness, enabling real-time safety monitoring during deployment. A second experimental setup based on a stochastic serially-connected manufacturing line is pro-vided in the Appendix. Across all experiments, the infinite-dimensional framework demonstrates interpretable behavior: better convergence rates, higher task success, lower Kolmogorov residuals, and a principled diagnostic that requires no ground-truth reward signals. These results suggest that measure-theoretic structure in infinite-dimensional spaces influences the trajectory regularity of diffusion policies in ways that high-dimensional Euclidean representations may miss. 
+
+## 4 Conclusion 
+
+Theory. The core machinery of our contribution are the covariance operator Cμ, its Mercer eigenbasis, the Cameron-Martin space HC = C1/2(H) as the geometric subspace for measure shifts, and the C-Wiener process as the natural noise model for H-valued diffusion. The forward OU process decouples spectrally into independent scalar modes (see Appendix A); the reverse SDE recovers the action distribution from colored noise, and the Cameron-Martin loss produces a total-variation convergence bound whose constant depends only on the effective rank reff (C) (see (?? ) in Appendix A) of the Matérn-3/2 kernel — not the discretization dimension d.
+
+Visuomotor Validation (PushT Manipulation). On the 2-DOF PushT image-based manipulation benchmark, the ID diffusion policy with Cameron-Martin loss achieves a maximum episodic reward improvement of 17% over FD baselines, reflecting superior trajectory smoothness and control precision. Cumulative per-step success rate is 0.62 (for the ID+CM) versus 0.51 (MSE), with the advantage being most pronounced in tail roll-out phases (steps 300 − 400 ) where trajectory precision is critical. The Kolmogorov residual exhibits a 67 .6% reduction with the Cameron-Martin loss (mean residual 0.11 vs. 0.34 for MSE), demonstrating strong alignment with the BKE constraint. 0 20 40 60 80 100                         
+
+> Diffusion steps
+> 0
+> 2
+> 4
+> 6
+> Drift,  |x(t)0 x(t + 1) 0 |2 Kolmogorov Residual, MSE
+> |x(t)0x(t+ 1) 0|2020 40 60 80 100
+> Diffusion steps
+> 0
+> 2
+> 4
+> Drift,  |x(t)0 x(t + 1) 0 |2
+> = 0.15
+> Kolmogorov Residual, MP ,= 0.15
+> |x(t)0x(t+ 1) 0|2020 40 60 80 100
+> Diffusion steps
+> 0
+> 1
+> 2
+> 3
+> Drift,  |x(t)0 x(t + 1) 0 |2
+> = 0.25
+> Kolmogorov Residual, MP ,= 0.25
+> |x(t)0x(t+ 1) 0|2
+
+α = 0 α = 0 .15 α = 0 .25 0 20 40 60 80 100                          
+
+> Diffusion steps
+> 0
+> 1
+> 2
+> 3
+> Drift,  |x(t)0 x(t + 1) 0 |2
+> = 0.5
+> Kolmogorov Residual, MP ,= 0.5
+> |x(t)0x(t+ 1) 0|2020 40 60 80 100
+> Diffusion steps
+> 0
+> 1
+> 2
+> 3
+> Drift,  |x(t)0 x(t + 1) 0 |2
+> = 0.75
+> Kolmogorov Residual, MP ,= 0.75
+> |x(t)0x(t+ 1) 0|2020 40 60 80 100
+> Diffusion steps
+> 0
+> 2
+> 4
+> Drift,  |x(t)0 x(t + 1) 0 |2
+> = 0.85
+> Kolmogorov Residual, MP ,= 0.85
+> |x(t)0x(t+ 1) 0|2
+
+α = 0 .5 α = 0 .75 α = 0 .85 
+
+Figure 3: Kolmogorov residuals measuring inter-step drift ∥ˆx(t)0 − ˆx(t+1) 0 ∥2 across roll-outs of mixed CM-MSE training objectives for varying values of α.8Mixed-precision losses ( α ∈ { 0.5, 0.75 }) capture > 80% of the improvement, showing graceful interpolation between FD and ID regimes. Training convergence measurements are consistent with the TV bound prediction: the Cameron-Martin loss converges to ε ≈ 0.029 versus ε ≈ 0.06 for MSE, aligning with the qualitative consequences of Theorem 1. The effective rank reff ≈ 4 for the 16-step horizon (out of 16 possible modes) underscores that the true degrees of freedom are few, enabling efficient learning with dimension-independent convergence. 
+
+Manufacturing Flow Control Validation. On a 6-station constant work-in-process (CON-WIP) [Spearman and Zazanis, 1990] production line with SimPy discrete-event simulation, the ID framework achieves two major milestones viz., WIP Forecasting : The ID model with Cameron-Martin loss converges to ε = 0 .105 (TV bound ≈ 0.65 ) over 500k synthetic timesteps. Compared to an LSTM+CONWIP baseline, ID reduces normalized WIP RMSE by 28.4% while achieving strong starvation-event recall ( ≈ 0.98 in held-out cycles). The effective rank reff ≈ 2.9 for the 16-step planning horizon (out of 6 stations) confirms that the queue system is genuinely low-rank—a property captured naturally by the Matérn-3/2 prior. Bottleneck Detection via Kolmogorov Residual : The residual serves as a real-time anomaly score for identifying the constraint station without access to linear programming (LP) shadow prices (see full experimental setup and description in Appendix E). In our test cycles, it achieves Precision@1 = 1.0 (vs. 0.167 random baseline), an F1 score of 1.00 , and a 13 × signal-to-noise ratio (mean residual at bottleneck S2 = 13 .05 vs. 0.96 at others). We observe a latency of < 1 second per evaluation on a single GPU. Safety via Hamilton-Jacobi Reachability :The LevelSetPy-computed [Molu, 2024a] HJ safety envelope certifies 81 .4% of state space as safe with no overly conservative exclusions in our test set. On 100 independent SimPy runs, the HJ dispatch filter prevents 351 deadlock events that occur in uncontrolled operation, a 96% reduction in deadlocks under the tested conditions. These results demonstrate that infinite-dimensional structure enables more reliable operational decision-making in stochastic manufacturing environments. 
+
+Physics-aware Diagnostics. The residual R(ˆ u) (Sec. 2.4) provides a deterministic, oracle-free measure of policy fidelity that correlates with operational failure across both domains. On PushT, episodes with high mean residuals ( > 0.15 ) exhibit task failure (max reward < 0.5), while low-residual rollouts (mean < 0.10 ) achieve success rates > 90% . In manufacturing, the residual detects anomalous high-frequency content in queue trajectories: the overloaded bottleneck station S 2 exhibits 
+
+13 × higher mean residual ( 13 .05 ) than non-bottleneck stations ( 0.964 ), directly identifying the constraint without invoking LP solvers or shadow prices. 
+
+Implementation Simplicity. Our formulation reduces to three substitutions in a standard DDPM training loop ( η = LN ξ, Cameron-Martin loss, z = LN ξ⊤ at inference). 
+
+Broader Impact. We bridge the gap between ID stochastic diffusion and its practical applications in autonomous systems and manufacturing. By grounding diffusion policies in measure-theoretic analysis and providing PDE-based diagnostics, we support more interpretable and transparent deploy-ment of diffusion policies. The integration with Hamilton-Jacobi reachability offers a framework for certifying safety properties in learned dispatch policies, which may help prevent operational failures in manufacturing settings. We encourage thoughtful consideration of workforce impacts and advocate for human-in-the-loop approaches that augment rather than replace human expertise. 9References 
+
+M. Abramowitz and I. A. Stegun. Handbook of Mathematical Functions. Dover, New York, 1965. 2, 18 Jose Barreiros, Andrew Beaulieu, Aditya Bhat, Rick Cory, Eric Cousineau, Hongkai Dai, Ching-Hsin Fang, Kunimatsu Hashimoto, Muhammad Zubair Irshad, Masha Itkina, et al. A Careful Examination of Large Behavior Models for Multitask Dexterous Manipulation. arXiv Preprint arXiv:2507.05331 , 2025. 1 Aude Billard and Daniel Grollman. Imitation Learning in Robots. In Encyclopedia of the Sciences of Learning , pages 1494–1496. Springer, 2012. 1 Vladimir Bogachev. Differentiable Measures and the Malliavin Calculus . American Mathematical Society, 2007. 15 Robert H Cameron and William T Martin. Transformations of Weiner Integrals under Translations. 
+
+Annals of Mathematics , 45(2):386–396, 1944. 3, 14, 15, 25 Hongrui Chen, Holden Lee, and Jianfeng Lu. Improved analysis of score-based generative modeling: User-friendly bounds under minimal smoothness assumptions. In International Conference on Machine Learning , pages 4735–4763. PMLR, 2023. 2, 19 Miriam Chen, Andrew Mackin, Jayson Liu, and Marco Pavone. Computing Certified Safety Envelopes for Autonomous Systems via Hamilton-Jacobi Reachability. IEEE Transactions on Robotics , 38 (2):1022–1039, 2022. doi: 10.1109/TRO.2021.3096782. 19 Wei Chen, Yan Liu, and Qi Zhang. LSTM-Based CONWIP Control for Manufacturing Flow. IEEE Transactions on Automation Science and Engineering , 18(3):1456–1468, 2021. 19, 28 Cheng Chi, Zhenjia Xu, Siyuan Feng, Eric Cousineau, Yilun Du, Benjamin Burchfiel, Russ Tedrake, and Shuran Song. Diffusion Policy: Visuomotor Policy Learning via Action Diffusion. The International Journal of Robotics Research , page 02783649241273668, 2023. 1, 5, 19 Valentin De Bortoli. Convergence of denoising diffusion models under the manifold hypothesis. 
+
+arXiv preprint arXiv:2208.05314 , 2022. 2, 19 Xavier Fernique. Integrability of Gaussian vectors. Comptes Rendus de l’Académie des Sciences, Série AB , 270:A1698 –A1699. 16 Pete Florence, Corey Lynch, Andy Zeng, Oscar A Ramirez, Ayzaan Wahid, Laura Downs, Adrian Wong, Johnny Lee, Igor Mordatch, and Jonathan Tompson. Implicit behavioral cloning. In 
+
+Conference on robot learning , pages 158–168. PMLR, 2022. 2 Eliyahu M. Goldratt. The Theory of Constraints . North River Press, Great Barrington, MA, 1984. 5, 19 Martin Hairer. An Introduction to Stochastic PDEs. arXiv preprint arXiv:0907.4178 , 2009. 16, 22 Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising Diffusion Probabilistic Models. Advances in Neural Information Processing Systems , 33:6840–6851, 2020. 2, 18, 19 Aapo Hyvärinen and Peter Dayan. Estimation of non-normalized statistical models by score matching. 
+
+Journal of Machine Learning Research , 6(4), 2005. 2 Physical Intelligence, Kevin Black, Noah Brown, James Darpinian, Karan Dhabalia, Danny Driess, Adnan Esmail, Michael Equi, Chelsea Finn, Niccolo Fusai, et al. π0.5: A Vision-Language-Action Model with Open-World Generalization. arXiv Preprint arXiv:2504.16054 , 2025. 1, 19 Moo Jin Kim, Karl Pertsch, Siddharth Karamcheti, Ted Xiao, Ashwin Balakrishna, Suraj Nair, Rafael Rafailov, Ethan Foster, Grace Lam, Pannag Sanketi, et al. OpenVLA: An Open-Source Vision-Language-Action Model. arXiv Preprint arXiv:2406.09246 , 2024. 1, 2, 19 Peter E Kloeden. Stochastic Differential Equations. In International Encyclopedia of Statistical Science , pages 1520–1521. Springer, 2011. 18 10 Žiga Kovaˇ ciˇ c and Rose Yu Wan. Neural Operators for Functional Time Series Prediction. Advances in Neural Information Processing Systems , 35:6789–6802, 2022. 19 Chieh-Hsin Lai, Yang Song, Dongjun Kim, Yuki Mitsufuji, and Stefano Ermon. The Principles of Diffusion Models. arXiv preprint arXiv:2510.21890 , 2025. 1 Zongyi Li, Nikola Kovachki, Kamran Azizzadenesheli, Burigede Liu, Kaushik Bhattacharya, Andrew Stuart, and Anima Anandkumar. Fourier Neural Operator for Parametric Partial Differential Equations. arXiv preprint arXiv:2010.08895 , 2021. 19 Qiayuan Liao, Takara E Truong, Xiaoyu Huang, Yuman Gao, Guy Tevet, Koushil Sreenath, and C Karen Liu. Beyondmimic: From motion tracking to versatile humanoid control via guided diffusion. arXiv preprint arXiv:2508.08241 , 2025. 2, 19 John D. C. Little. A Proof of the Queueing Formula L = λW . Operations Research , 9(3):383–387, 1961. doi: 10.1287/opre.9.3.383. 19 Lu Lu, Pengzhan Jin, and George Em Karniadakis. DeepONet: Learning Nonlinear Operators for Identifying Differential Equations Based on the Universal Approximation Theorem of Operators. 
+
+arXiv Preprint arXiv:1910.03193 , 2019. 19 Ian M. Mitchell. A Toolbox of Level Set Methods. In Proceedings of the International Conference on Hybrid Systems: Computation and Control , pages 384–397, 2007. 29 Ian M. Mitchell, Alexandre M. Bayen, and Claire J. Tomlin. A Time-Dependent Hamilton-Jacobi Formulation of Reachable Sets for Continuous Dynamic Games. IEEE Transactions on Automatic Control , 50(7):947–957, 2005. ISSN 00189286. 29 Lekan Molu. LevelSetPy: Hamilton-Jacobi Equations in Python . Molux Labs, 2024a. https: //github.com/lekanmolu/LevelSetPy . 9, 29 Lekan Molu. The python levelset toolbox (levelsetpy). In IEEE 63rd Conference on Decision and Control (CDC) , pages 8938–8945, 2024b. doi: 10.1109/CDC56724.2024.10886640. 28 Lekan Molu. The python levelset software package. The ACM Transactions on Mathematical Software , 2025. 28 Nvidia. Alpamayo-R1: Bridging Reasoning and Action Prediction for Generalizable Au-tonomous Driving in the Long Tail. 2025. URL https://d1qx31qr3h6wln.cloudfront. net/publications/Alpamayo-R1_1.pdf . 1, 19 Bernt Øksendal and Bernt Øksendal. Stochastic Differential Equations . Springer, 2003. 2, 18, 21 Grigorios A Pavliotis. Stochastic Processes and Applications. Texts in Applied Mathematics , 60, 2014. 2, 17, 18, 22 Jakiw Pidstrigach, Youssef Marzouk, Sebastian Reich, and Sven Wang. Infinite-Dimensional Diffu-sion Models. arXiv Preprint arXiv:2302.10130 , 2023. 19 Carl Edward Rasmussen and Christopher K. I. Williams. Gaussian Processes for Machine Learning .MIT Press, 2006. 3 Riesz, F., Nagy, B.Sz. Functional Analysis , volume Second Edition. Dover, New York, 1990. 4, 16 Jean-Marc Roger and Gábor Szekely. Functional Diffusion Models for Image Generation. Interna-tional Conference on Machine Learning , pages 4567–4580, 2022. 19 Stéphane Ross, Geoffrey Gordon, and Drew Bagnell. A Reduction of Imitation Learning and Structured Prediction to No-Regret Online Learning. In Proceedings of the Fourteenth Interna-tional Conference on Artificial Intelligence and Statistics , pages 627–635. JMLR Workshop and Conference Proceedings, 2011. 1 Halsey Lawrence Royden. Real Analysis . The Macmillan Company, London, Second Edition edition, 1968. 14, 15, 20 11 Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep Unsupervised Learning Using Nonequilibrium Thermodynamics. In International Conference on Machine Learning , pages 2256–2265. PMLR, 2015. 2 Yang Song and Stefano Ermon. Generative Modeling by Estimating Gradients of the Data Distribution. 
+
+Advances in Neural Information Processing Systems , 32, 2019. 4, 17, 19 Yang Song and Stefano Ermon. Improved techniques for training score-based generative models. 
+
+Advances in neural information processing systems , 33:12438–12448, 2020. 2 Mark L. Spearman and Michael A. Zazanis. The CONWIP Concept: A Pull System for Job Shops. International Journal of Production Research , 28(9):1785–1794, 1990. doi: 10.1080/ 00207549008945535. 9 Mark L. Spearman and Michael A. Zazanis. CONWIP Systems: Principles and Implementation ,2019. 19, 28 Mark L Spearman, David L Woodruff, and Wallace J Hopp. Conwip: a pull alternative to kanban. 
+
+The International Journal of Production Research , 28(5):879–894, 1990. 28 Andrew M Stuart. Inverse Problems: A Bayesian Perspective. Acta Numerica , 19:451–559, 2010. 19 Li Wang, Ming Zhao, and Feng Sun. Transformer-Based Job Shop Scheduling. Journal of Intelligent Manufacturing , 32(5):1023–1038, 2021. 19 Enrique Zuazua. Propagation, observation, control and numerical approximation of waves. SIAM Review , 47(2):197–243, 2005. 19 12 Appendix Contents Contents 
+
+Appendix Contents . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13 A A Catalog of Definitions, Lemmas, and Theorems . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14 
+
+A.1 Notations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14 A.2 Measure Theory on Polish Spaces . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14 A.3 Convergence on Probability Measures . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15 A.4 Spectral Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 A.5 Best N -term approximation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 A.6 Finite-Dimensional Diffusion Models in Coordinate Form . . . . . . . . . . . . . . . . . . . . . . . . . . 17 A.7 Practical Covariance Functions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18 
+
+B Related Works and Distinctions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 C Diffusion in Infinite Dimensions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 
+
+C.1 The Infinite-Dimensional Diffusion Lifting . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 C.2 Dimension Independent Convergence . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 C.3 Score Function in Infinite Dimensions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 C.4 Cameron-Martin Loss and Convergence . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 C.5 Derivation of the Kolmogorov Residual Physics-Aware Diagnostic . . . . . . . . . . . . . . . . . . . 25 C.6 Why Colored Noise? . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 
+
+D Kolmogorov Generative Modeling in Infinite Dimensions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26 E Results Addendum . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27 
+
+E.1 Manufacturing Flow Prediction and Certified Dispatch: WIP Forecasting with Infinite-Dimensional Diffusion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28 13 A A Catalog of Definitions, Lemmas, and Theorems 
+
+This section introduces the background for our contributions. Let us first describe our notations. 
+
+A.1 Notations 
+
+We employ the Banach spaces: the lp of real sequences with finite norm ⟨xn, x n⟩ := ( P∞ 
+
+> i=1
+
+|xn|p)1/p 
+
+for a p ∈ [1 , +∞); and the bounded continuous functions space Cb(X) of the topological space 
+
+X. For infinite-dimensional spaces, we consider the l2-separable Hilbert space H = L2([0 , T ], Rd).Radon Gaussian measures are denoted μ ∼ N (m, C μ) on H, with mean m and covariance operator 
+
+Cμ. The expectation of a random variable X is represented as E(X), while Tr (Cμ) denotes the trace of the bounded linear operator Cμ : H → H . The stochastic process of interest is {Xt}t≥0; Ω,
+
+F, and μ denote its sample space, filtration, and probability measure, respectively. The Cameron-Martin space is denoted as HC . For a vector v, ∥v∥H, ∥v∥2, ∥v∥Hc denote its norms with respect to the Hilbert, Euclidean, and [Cameron and Martin, 1944] spaces, respectively. Its time and spatial derivatives are written vt, ∇xv. For a compact operator T : H → H with singular values σk, the Hilbert–Schmidt norm is ∥T ∥2HS := P∞ 
+
+> k=1
+
+σ2
+
+> k
+
+.
+
+A.2 Measure Theory on Polish Spaces 
+
+We set our work in motion by briefly reviewing complete, separable, and metrizable spaces of probability measures on Polish spaces. A topological space X is separable if it contains a countable dense subset (x1, x 2, · · · ) ∈ X such that 
+
+X = clo (x1, x 2, · · · ), where clo (x) denotes the closure of x. An algebra a of sets is a σ-algebra, or a Borel field F if every union of a countable collection of sets in a is again in a. Put differently, the 
+
+σ-algebra F is a family of subsets of a given set Ω which contains ∅ and is closed with respect to complements and countable unions. A set function μ assigns an extended real number to certain sets so that a measurable space (Ω , F)
+
+consists of the set Ω and a σ-algebra F of subsets of Ω. Throughout, we take the topological space 
+
+X as X := (Ω , F). A set A ⊂ Ω is said to be measurable with respect to F if A ∈ F . The Banach space of bounded, real-valued, continuous functions on X is denoted B(X, ∥ · ∥ B), equipped with supremum norm ∥f ∥B = sup x∈X f (X).A measure μ on the measurable space (Ω , F) is a nonnegative set function defined for all sets 
+
+F satisfying μ(∅) = 0 and μ(∪∞
+
+> i=1
+
+Ei) = P∞ 
+
+> i=1
+
+μE i for any sequence E = {Ei}∞ 
+
+> i=1
+
+of disjoint measurable sets. Since the measure runs to ∞ on E, μ is said to be “countably additive"; otherwise, 
+
+μ is “finitely additive" for disjoint sets Ei ∈ F . A set E is finite if μ(Ω) < ∞, and it is σ-finite if there exists a sequence {Ωn} ∈ F such that Ω = S∞ 
+
+> n=1
+
+Ωn and μ(Ω n) < ∞. The set E is of finite measure if E ∈ F and μ(E) < ∞. A set E is of σ−finite measure if E is the union of a countable collection of measurable sets of finite measure. The measure space (Ω , F, μ ) is the measurable space (Ω , F) along with the measure μ, defined on F. A metric l on X is consistent with F if every set of the form {y ∈ X | l(x, y ) < c }, x ∈ X, c > 0, is in F, and every nonempty set in F is the union of such sets. We say the space (Ω , F) is metrizable if such an l exists. 
+
+Proposition 1 (Measurable Functions Royden [1968]) . Suppose that f is an extended real-valued function with a measurable domain. Then, for each real number α the following statements are equivalent: 1. The set {x : f (x) > α } is measurable. 2. The set {x : f (x) ≥ α} is measurable. 3. The set {x : f (x) < α } is measurable. 4. The set {x : f (x) ≤ α} is measurable. These imply that for each extended real number α the set {x : f (x) = α} is measurable. 
+
+Definition 1 (Lebesgue measurable functions ). An extended real-valued function f is Lebesgue 
+
+measurable if its domain is measurable and if it satisfies one of the four statements above. 
+
+14 A.3 Convergence on Probability Measures 
+
+A Borel measure μ is Radon if, for every Borel set F and every ε > 0, there exists a compact subset K in B such that |μ|(B \ (K) ≤ ε [Bogachev, 2007, Section 1.2]. A measure ν is absolutely continuous with respect to the measure μ (denoted μ ≪ ν) if ν(X) = 0 for each set X whereupon 
+
+μ(X) = 0 .A probability measure μ on X is a map μ : F(Ω) → [0 , 1] such that μ(Ω) = 1 and μ(S Ai) = Σμ(Ai) for any countable collection of mutually disjoint sets Ai ∈ F (Ω) .
+
+Theorem 2 (Radon-Nikodym Theorem [Royden, 1968]) . Suppose that (Ω , F, μ ) is a σ-finite measure space. Suppose that ν is a measure defined on F and is absolutely continuous with respect to μ. Then there exists a nonnegative measurable function f (the density at a given point) such that for each set E ∈ F ,
+
+ν(E) = 
+
+Z
+
+> E
+
+f dμ. (A.1) 
+
+In addition, the function f is unique: if g is any measurable function with this property, then g = f
+
+a.e. [μ].
+
+Remark 1 (Radon-Nikodym derivative) . The function f is the Radon-Nikodym derivative of ν with respect to μ, denoted [dν/dμ ].
+
+Definition 2 (Pushforward Map ). For a continuous linear functional f : F → R, the pushforward map on R i.e. (f ♯μ)( X) = μ(f −1(X)) is a measure on R for every f . If for every zero-mean ( i.e. 
+
+centered) f ♯μ, f is centered, then we say the measure μ is centered .
+
+Definition 3 (Gaussian Measure ). The measure μ is Gaussian if the pushforward f ♯μ is Gaussian for all linear functionals f ∈ X⋆. Such measure is non-degenerate if it is strictly positive. 
+
+Definition 4 (Wiener process , {W Cμ 
+
+> t
+
+}t≥0). A Cμ-Wiener process (equivalently, a Wiener process with covariance operator Cμ) is an H-valued stochastic process {W Cμ 
+
+> t
+
+}t≥0 satisfying, (i) W Cμ 
+
+> 0
+
+= 0 
+
+almost surely (a.s.); (ii) independent increments: W Cμ 
+
+> t
+
+− W Cμ 
+
+> s
+
+⊥ F s for all 0 ≤ s ≤ t; and (iii) Gaussian increments: for every h, g ∈ H ,
+
+E
+
+h
+
+⟨W Cμ 
+
+> t
+
+− W Cμ 
+
+> s
+
+, h ⟩ ⟨ W Cμ 
+
+> t
+
+− W Cμ 
+
+> s
+
+, g ⟩
+
+i
+
+= ( t − s) ⟨Cμh, g ⟩H. (A.2) 
+
+Definition 5 (Total variation convergence ). Let (Ω , F) be a fixed measurable space and let μ and 
+
+ν be two (probability) measures defined on (Ω , F). The total variation convergence between two Gaussian measures μ and ν is defined as 
+
+∥μ − ν∥T V = sup 
+
+> ∥ϕ∥∞≤1
+
+Z
+
+φ(x)μ(dx ) −
+
+Z
+
+φ(x)ν(dx ) , (A.3) 
+
+where ∥ϕ∥∞ denotes the supremum norm of φ.
+
+Equation (A.3) is a useful metric for measuring the distance between two probability measures, otherwise defined for densities Dμ and Dν of the measures μ and ν as 
+
+∥μ − ν∥T V =
+
+Z
+
+> Ω
+
+|D μ(x) − D ν (x)|π(dx ). (A.4) By the Radon-Nikodym Theorem 2, π is a positive measurable function. 
+
+Definition 6 (The Cameron-Martin Space ). Let the adjoint of F be denoted F⋆. Then μ on F is associated with the canonical Hilbert space Hμ ⊂ F , called the Cameron-Martin space Cameron and Martin [1944], E of measure μ — essentially a Hilbert space with the intersection of all linear spaces of full measure under μ. It defines the set of directions whereby shifting μ to μ′ results in an absolutely continuous measure similar to μ. Given a centered μ, and for f, g ∈ F ⋆ there exists a bilinear, positive definite operator of μ, the map Cμ : F⋆ × F ⋆ → R such that 
+
+f (Cμg) = Cμ(f, g ) := 
+
+Z
+
+> F
+
+f (x)g(x)μ(dx ), (A.5) 15 for all f ∈ F ⋆, g ∈ F ⋆μ where F⋆μ is the closure of F⋆ in L2(μ). By Fernique’s theorem Fer-nique, [Hairer, 2009, Th 3.36], the operator norm, Cμ is bounded, i.e. there exists a constant 
+
+∥Cμ∥ < ∞ such that Cμ(f, g ) ≤ ∥ Cμ∥∥ f ∥∥ g∥ due to the square integrable nature of the Gaussian measure (see [Hairer, 2009, Cor. 3.37]). Its self-adjoint, non-negative, and trace-class properties are established in Def. 2. 
+
+As it turns out, the covariance operator Cμ is not just bounded: if B(X, ∥ · ∥ H) ≡ H (X, ∥ · ∥ H),then the covariance operator Cμ(h, k ) is of trace class. It is of interest to note that Cμ enjoys a representation in terms of the eigenvalues and the continuous representations of the eigenvectors as given in Mercer’s Theorem 3. The eigenpairs {λk, e k} provide a coordinate system on H adapted to the Gaussian measure N (0 , C μ). These are the backbone of the spectral analysis introduced shortly. 
+
+A.4 Spectral Analysis 
+
+Consider μ on H = L2(X, μ ) with R 
+
+> H
+
+∥x∥2 
+
+> H
+
+μ(dx ) < ∞. Define the covariance operator Cμ as 
+
+⟨Cμu, v ⟩H =
+
+Z
+
+> H
+
+⟨x, u ⟩H ⟨x, v ⟩H μ(dx ), ∀ (u, v ) ∈ H , (A.6) with associated covariance kernel k : X × X → Rn,
+
+k(x, y ) = 
+
+Z
+
+> H
+
+⟨z, x ⟩H ⟨z, y ⟩H μ(dz ), (A.7) so that (Cμf )( x) = R 
+
+> X
+
+k(x, y ) f (y) μ(dy ). We first restate Mercer’s theorem. 
+
+Theorem 3. Mercer’s , 1909; [Riesz, F., Nagy, B.Sz., 1990, §98] Suppose k is continuous and symmetric, and Cμ is positive, i.e. ⟨C μf, f ⟩H ≥ 0 for all f ∈ H . Then, 1. Spectral decomposition . There exists a countable orthonormal basis {ek}∞ 
+
+> k=1
+
+of H and strictly positive eigenvalues λ1 ≥ λ2 ≥ · · · > 0, λk → 0, such that 
+
+Cμek = λk ek (A.8) 
+
+and Cμ = P∞ 
+
+> k=1
+
+λk ⟨· , e k⟩H ek in the strong operator topology. 2. Uniform kernel expansion . The series 
+
+k(x, y ) = 
+
+> ∞
+
+X
+
+> k=1
+
+λk ek(x) ek(y) (A.9) 
+
+converges absolutely uniformly on X × X.3. Diagonal and trace . On the diagonal, uniformly in x: k(x, x ) = P∞ 
+
+> k=1
+
+λk |ek(x)|2.
+
+Exchange of sum and integral is justified by Dini’s theorem, since the partial sums of positive continuous functions converge uniformly to the continuous function k(x, x ). Integrating over X yields the trace identity ,
+
+Tr( Cμ) = 
+
+Z
+
+> X
+
+k(x, x ) μ(dx ) = 
+
+> ∞
+
+X
+
+> k=1
+
+λk < ∞, (A.10) 
+
+so that positivity and continuity of k force Cμ to be trace-class .
+
+A.5 Best N -term approximation Corollary 1 (Best N -term approximation ). For the uniformly convergent kernel (see Theorem 3) 
+
+k(x, y ) = 
+
+> ∞
+
+X
+
+> i=1
+
+λiei(x)ei(y), (A.11) 
+
+the partial sum kN = PNi=1 λiei ⊗ ei uniquely minimizes ∥k − kN ∥L2 with residual ∥k − kN ∥2 
+
+> L2
+
+=P 
+
+> i>N
+
+λ2 
+
+> i
+
+, underpinning the effective rank reff (Cμ) = ( P 
+
+> k
+
+λk)2/(P 
+
+> k
+
+λ2
+
+> k
+
+).
+
+16 Proof of Corollary (Best N -term approximation). For coefficients ci ≥ 0, any rank-N approxima-tion ˜kN = PNi=1 cifi ⊗ fi for orthonormal {fi} satisfies 
+
+∥k − ˜kN ∥2 
+
+> L2
+
+= ∥k∥2 
+
+> L2
+
+−
+
+> N
+
+X
+
+> i=1
+
+c2 
+
+> i
+
+≤ X
+
+> i>N
+
+λ2 
+
+> i
+
+, (A.12) with equality iff {(ci, f i) = ( λi, e i)}Ni=1 , by the Eckart-Young theorem applied to the self-adjoint Hilbert-Schmidt operator Cμ (with ∥Cμ∥2HS = P 
+
+> k
+
+λ2
+
+> k
+
+). Since λ1 ≥ λ2 ≥ · · · , the Mercer partial sum kN = PNi=1 λiei ⊗ ei is the unique minimizer, giving the effective rank 
+
+reff (Cμ) := 
+
+ P  
+
+> k
+
+λk
+
+2
+
+P 
+
+> k
+
+λ2
+
+> k
+
+= Tr( Cμ)2
+
+∥Cμ∥2HS 
+
+, (A.13) which equals N for a uniform spectrum and is small when the spectrum decays rapidly. □
+
+The full hierarchy of norms and operators derived from the Mercer eigenpairs {(λk, e k)} is sum-marized in Table 1. The strict hierarchy trace-class ⇒ Hilbert–Schmidt ⇒ bounded follows from P 
+
+> k
+
+λk < ∞ ⇒ P 
+
+> k
+
+λ2 
+
+> k
+
+< ∞ ⇒ λ1 < ∞. The induced operator norm ∥Cμ∥ = λ1 is attained at e1
+
+by the spectral theorem; cf. the finite-dimensional case where the induced 2-norm of a symmetric positive matrix equals its largest eigenvalue. 
+
+Remark 2 (Basis-free Trace-Class Operators ). For the non-negative symmetric operator Cμ :
+
+H → H , define 
+
+Tr( Cμ) := 
+
+> ∞
+
+X
+
+> k=1
+
+⟨Cμek, e k⟩H (A.14) 
+
+for any complete orthonormal basis {ek}. By Lidskii’s theorem, this sum is independent of the choice of basis, and we say Cμ is trace-class if Tr( Cμ) < ∞.
+
+A.6 Finite-Dimensional Diffusion Models in Coordinate Form 
+
+In this section, we study the linear finite-dimensional SDE for “diffusing" the initial measure μ0 to the infinite-dimensional generator formalism. Diffusion injects a stochastic Wiener process, {W Cμ 
+
+> t
+
+}t≥0
+
+(see Def. 4) into the forward Ornstein-Uhlenbeck (OU) process [Pavliotis, 2014], defined by the Itô forward SDE (3) such that the drift − 12 Xt provides linear mean-reversion toward zero, and the noise 
+
+dW Cμ 
+
+> t
+
+injects energy in every complete orthonormal basis direction {ek}k≥1 at rate √λk, where 
+
+{λk}k≥1 are the corresponding eigenvalues. Process (3) corrupts any clean action a0 ∈ H into pure colored noise N (0 , C μ) as t → ∞ on discrete FD Euclidean spaces Rd [Song and Ermon, 2019]. As d → ∞ , the algorithm’s stability deteriorates owing to the increasing refinement of discretization parameters. Function-space diffusion-learned approximators are crucial for their extension to scientific problems. These may include spatio-temporal variables with inverse PDE applications that recover material properties or dynamical system states from sparse or noisy measurements. Consider the measure space (Ω , F, μ ) and a stochastic process with events Xt =: X. Let Xt evolve on the bounded and continuous domain Cb(Rn) that is associated with the transition probability density p(y, t |x, s ), where 0 ≤ s < t . Let the measure μ be characterized by the stochastic transition matrix P = {pij } such that P 
+
+> i
+
+pij = 1 . For an observable f ∈ Cb(Rn) at a time t > 0, we are tasked with learning the transition probability density p(y, t |x, s ) from which a smooth function 
+
+u(x, s ) = E[f (Xt) | Xs = x] emerges. The Chapman-Kolmogorov poses the recovery of the value function operator u(x, s ) via the conditional expectation 
+
+u(x, s ) = E[f (Xt) | Xs = x] := 
+
+Z
+
+> Rn
+
+f (y)p(y, t |x, s )dy. (A.15) Learning u(x, s ) provides an efficient compact representation of an high-dimensional information characterized by continuous-time, continuous sample paths; and a dynamically consistent basis for diffusion model evaluation as approximating paths Xt. Letting p(y, t |x, s ) := p, the transition 17 probability density evolves according to the Kolmogorov equation in the backward variables (x, s ) as the final-value partial differential equation (pde) 
+
+− ∂u ∂s (x, s ) = b(x, s ) ∂∂s u(x, s ) + 12 Σ( x, s ) ∂2
+
+∂x 2 u(x, s ), u (t, x ) = f (x)
+
+(Backward-Kolmogorov) where b(x, s ) is the drift of the diffusion process and Σ( x, s ) is the diffusion coefficient defined as 
+
+b(x, s ) = lim  
+
+> t→s
+
+E
+
+ Xt − Xs
+
+t − s | Xs = x
+
+
+
+and Σ( x, s ) = lim  
+
+> t→s
+
+E
+
+ | Xt − Xs |2
+
+t − s | Xs = x
+
+
+
+. (A.16) Equation Backward-Kolmogorov models backward Kolmogorov process , which given a variable x at a time s in the past, its solution generates y at the current time t.A similar argument can be made for the forward variables (y, t ) if we consider the transition probability density function as the solution to the initial value pde problem 
+
+− ∂p ∂t = − ∂∂y b(t, y ) · p + 12
+
+∂2
+
+∂y 2 (Σ( t, y ) · p) , p (y, s |x, s ) = δ(x − y). (Fokker-Planck) Similarly, the (Fokker-Planck) equation describes the behavior of a stochastic diffusion process in the forward variables (y, t ). We refer readers to standard stochastic differential equations texts (such as [Øksendal and Øksendal, 2003, Kloeden, 2011, Pavliotis, 2014]) for the derivations above. For time-homogeneous systems, the time dependence in (Backward-Kolmogorov) and (Fokker-Planck) vanish 
+
+i.e. s = 0 , and the resulting equations are similar to the forward and reverse processes employed in denoising probablistic models [Ho et al., 2020]; in these situations, the spatial partial derivatives are evaluated as Jacobian matrices. Since this is what we address here, we briefly introduce the time-homogeneous versions of the equations in what follows. 
+
+A.7 Practical Covariance Functions 
+
+The covariance function is a crucial component of the Gaussian process predictor for the data. Mercer’s Theorem 3 treats the eigenfunction analysis of covariance functions, allowing us to express the covariance function under certain conditions in terms of its eigenfunctions and eigenvalues. A covariance function is invariant to input space transitions. Define the function τ = x − x′ and let 
+
+r = |τ | for an isotropic covariance function. Also, define ℓ as thne characteristic length scale. In practice, we would choose Cμ from the Matérn class of covariance functions with kernel 
+
+kM at ´ern (r) = 21−ν
+
+Γ( ν)
+
+√2νr ℓ
+
+!ν
+
+Kν
+
+√2νr ℓ
+
+!
+
+, (A.17) where ℓ is the characteristic length-scale of the process — defined as the amount of distance one has to move to see a marked increase in the function; ν > 0 and Kν > 0 is a modified Bessel function [Abramowitz and Stegun, 1965, Sec. 9.6]. For a d-dimensional data, this covariance function 
+
+kM at ´ern (r) has a spectral density 
+
+S(s) = 2d π d/ 2 Γ ν + d
+
+> 2
+
+ (2 ν)ν
+
+Γ( ν) ℓ2ν
+
+ 2νℓ2 + 4 π2s2
+
+−(ν+ d 
+
+> 2
+
+)
+
+,
+
+where Γ( ·) is the gamma function [Abramowitz and Stegun, 1965, Sec. 6]. Matérn covariance functions become especially simple when ν is half-integer i.e. ν = p + 1 /2, where p is a non-negative integer. In this case the covariance function is a product of an exponential and a polynomial of order p, the general expression can be derived from [Abramowitz and Stegun, 1965, eq. 10.2.15], giving 
+
+kν=p+1 /2(r) = exp 
+
+ −√2νr ℓ
+
+ Γ( p + 1) Γ(2 p + 1) ·
+
+> p
+
+X
+
+> i=0
+
+(p + 1)! 
+
+i!( p − i)! 
+
+√8νr ℓ
+
+!p−1
+
+. (A.18) 18 B Related Works and Distinctions 
+
+Finite-dimensional diffusion. DDPM [Ho et al., 2020] and score-based models [Song and Ermon, 2019] discretize actions in Rd before training, yielding convergence bounds that degrade with d. De Bortoli [De Bortoli, 2022] and Chen et al. [Chen et al., 2023] proved score-matching loss scales as O(√d). [Zuazua, 2005] showed that discretization of controlled PDEs can introduce spurious high-frequency modes and degraded controllability, motivating caution when repeatedly discretizing stochastic control trajectories. 
+
+Infinite-dimensional generative models. [Pidstrigach et al., 2023] proved dimension-independent convergence in Hilbert spaces and [Stuart, 2010] established a function-space Bayesian perspective on inverse PDEs that produces a full characterization of all possible solutions, and their relative probabilities. Our novelties include: (i) adopting the Kolmogorov backward PDE for adjoint guidance without sampling instability; (ii) grounding the objective in Cameron-Martin geometry, following the Radon–Nikodym Theorem 2; and (iii) unified validation across visuomotor, manufacturing, and safety-critical domains. While prior infinite-dimensional diffusion formulations retain stochastic trajectory sampling, our perspective emphasizes the associated Kolmogorov operators as the primary representation of policy evolution. 
+
+Function-space and weighted diffusion. Recent approaches [Roger and Szekely, 2022, Kovaˇ ciˇ cand Wan, 2022] do not expose operator residuals that quantify dynamical inconsistency or policy infeasibility along generated trajectories. We provide the Kolmogorov residual for failure detection and bottleneck identification, unified validation across three domains, and certified safety guarantees. 
+
+Robotic visuomotor control. Diffusion visuomotor policies [Chi et al., 2023] and VLA models [Kim et al., 2024, Intelligence et al., 2025] discretize actions, yielding high inter-step drift during denoising steps. Our ID formulation eliminates discretization artifacts by training in H = L2([0 , T ], Rda ) with three substitutions to standard DDPM. 
+
+Manufacturing flow control and supply chain optimization. Applications of diffusion policies to manufacturing systems have been limited, with most work focusing on discrete event simulation or traditional time series forecasting [Spearman and Zazanis, 2019]. Recent attempts to apply neural networks to production line control [Chen et al., 2021, Wang et al., 2021] suffer from the same FD discretization issues that plague FD policies. Our work bridges this gap by modeling queue-length trajectories as function-valued processes in L2([0 , T ], Rns )2, preserving long-range temporal and inter-station correlations through the Cameron–Martin objective. We connect ID diffusion with HJ reachability for certified operating envelopes of inventories, work-in-process (WIP) management [Goldratt, 1984], and demand forecasting — addressing the constraints/bottlenecks in stochastic manufacturing lines [Little, 1961]. 
+
+Control applications. In autonomous control domains, diffusion policies find applications as action generators in vision-language-action (VLA) heads in autonomous driving [Nvidia, 2025], whole-body control Liao et al. [2025], and manipulation Intelligence et al. [2025], among others. However, these applications often neglect the theoretical guarantees provided by ID formulations. Our work connects ID diffusion with HJ reachability [Chen et al., 2022] to provide provably safe operating zones, addressing the “safety-critical” concerns of real-world deployment of VLAs. We further extend this to manufacturing flow control, where we demonstrate deadlock prevention and WIP throttling based on backward reachable sets of congestion states. 
+
+Neural operators for function-space denoising. Fourier Neural Operators (FNO) [Li et al., 2021] and DeepONet [Lu et al., 2019] learn mappings between ID function spaces without committing to a fixed discretization, making them natural candidates for the denoising network ηθ : H × [0 , T ] → H 
+
+in our framework. In principle, operator-learning architectures may enable horizon-transfer behavior unavailable to fixed-grid denoisers, potentially narrowing the gap between continuous Kolmogorov formulations and their discrete implementations.   
+
+> 2For nsnumber of stations.
+
+19 Quantity Spectral form Meaning 
+
+Action on a ∈ H 
+
+Cμ = X
+
+> k
+
+λk⟨x, e k⟩H ek
+
+Decompose, scale, recompose Operator norm 
+
+∥Cμ∥ = λ1
+
+Largest stretch on the unit ball in H
+
+Trace (trace-class condition) 
+
+Tr( Cμ) = X
+
+> k
+
+λk < ∞
+
+Finite expected energy Hilbert–Schmidt norm 
+
+∥Cμ∥2HS = X
+
+> k
+
+λ2
+
+> k
+
+Stronger than the trace-class Square root 
+
+C1/2 
+
+> μ
+
+ek = pλk ek
+
+Positive functional calculus Cameron–Martin norm 
+
+∥h∥2 
+
+> HC
+
+= X
+
+> k
+
+ˆh2
+
+> k
+
+λk
+
+Anisotropic geometry induced by covariance Table 1: Spectral identities associated with the covariance operator Cμ.
+
+## C Diffusion in Infinite Dimensions 
+
+In this section, we present our infinite-dimensional diffusion policy framework. Our development is premised on measures that are approximated from within, i.e., Radon measures, and we leverage the fact that all Borel measures on complete separable metric spaces are Radon. 
+
+C.1 The Infinite-Dimensional Diffusion Lifting Proposition 2 (Trace-Class Covariance Operators) . Let Cμ : H → H be a positive, self-adjoint, trace-class operator on a separable Hilbert space H with orthonormal eigenbasis {ek}. Then 
+
+Tr( Cμ) = P∞
+
+> k=1
+
+⟨Cμek, e k⟩H = R 
+
+> H
+
+∥x∥2 
+
+> H
+
+μ(dx ) for any measure μ with covariance operator Cμ,and paths of the Cμ-Wiener process lie in H almost surely. 
+
+Proof. From (A.6), 
+
+⟨Cμek, e k⟩H =
+
+Z
+
+> H
+
+⟨x, e k⟩2 μ(dx ). (C.19) Summing over the orthonormal basis and applying Parseval’s identity (∥x∥2 
+
+> H
+
+= P
+
+> k
+
+⟨x, e k⟩2),
+
+Tr( Cμ) = 
+
+> ∞
+
+X
+
+> k=1
+
+Z
+
+> H
+
+⟨x, e k⟩2 μ(dx ) = 
+
+Z
+
+> H
+
+∥x∥2 
+
+> H
+
+μ(dx ), (C.20) where Tonelli’s theorem (all terms non-negative) [Royden, 1968, pp. 270] justifies exchanging sum and integral. Hence Tr( Cμ) < ∞ ensures paths of the Cμ-Wiener process lie in H a.s. □
+
+20 Corollary 2 (RKHS interpretation ). The Cameron-Martin space HC = C1/2 
+
+> μ
+
+(H) is the RKHS of 
+
+k: for every x ∈ X , k(·, x ) ∈ H C with reproducing property 
+
+⟨f, k (·, x )⟩HC = f (x), ∀ f ∈ H C , x ∈ X . (C.21) 
+
+In the Mercer eigenbasis, k(x, y ) = P 
+
+> k
+
+λkek(x)ek(y) is the reproducing kernel representation. The canonical inclusion I : HC ,→ H is Hilbert-Schmidt norm, 
+
+∥I∥ 2HS =
+
+> ∞
+
+X
+
+> k=1
+
+∥I ek∥2 
+
+> H
+
+=
+
+> ∞
+
+X
+
+> k=1
+
+λk = Tr( Cμ) < ∞. (C.22) 
+
+Thus, the trace-class condition on Cμ is equivalent to HC ,→ H being a Hilbert-Schmidt embedding. 
+
+Corollary 3 (Measure-theoretic characterization. ). Let μ = N (0 , C μ) be the Gaussian measure on H with covariance Cμ. By definition of Cμ as the covariance operator of μ, we have 
+
+⟨Cμek, e k⟩H =
+
+Z
+
+> H
+
+⟨x, e k⟩2 μ(dx ). (C.23) 
+
+Summing over the basis and applying Parseval’s identity ∥x∥2 
+
+> H
+
+= P
+
+> k
+
+⟨x, e k⟩2 together with Tonelli’s theorem (non-negative terms justify interchange of sum and integral), 
+
+Tr[ Cμ] = 
+
+> ∞
+
+X
+
+> k=1
+
+Z
+
+> H
+
+⟨x, e k⟩2 μ(dx ) = 
+
+Z
+
+> H
+
+∥x∥2 
+
+> H
+
+μ(dx ). (C.24) 
+
+Hence Tr[ Cμ] < ∞ is equivalent to μ having finite second moment in H i.e., typical samples have finite H-norm. Choosing {ek} to be the Mercer eigenbasis gives the three-way equivalence, 
+
+Tr[ Cμ] = 
+
+Z
+
+> H
+
+∥x∥2 
+
+> H
+
+μ(dx ) = 
+
+> ∞
+
+X
+
+> k=1
+
+⟨Cμek, e k⟩H ≜
+
+> ∞
+
+X
+
+> k=1
+
+λk < ∞. (C.25) 
+
+Remark 3. The measure-theoretic form is the most fundamental; the basis-free operator form shall what appears in the BKE diffusion term (to be introduced shortly); the eigenvalue sum is the most computationally explicit. 
+
+C.2 Dimension Independent Convergence 
+
+Proof of Dimension-Independent Convergence Theorem 1. The proof establishes convergence of the learned policy μθ to the data distribution μdata in total variation distance by decomposing the error into learning (data fitting) and approximation (BKE numerical integration) components. The key insight is that all constants depend only on spectral properties of the data covariance Cμ, not on action dimension. 
+
+Setup: Two Markov diffusions. Both μdata and μθ are generated by the OU process (3) with denoising drifts, 
+
+dX data  
+
+> s
+
+= − 12 Xs ds + η∗(Xs, s ) ds + dW Cμ 
+
+> s
+
+, (C.26) 
+
+dX θs = − 12 Xs ds + ηθ (Xs, s ) ds + dW Cμ 
+
+> s
+
+, (C.27) where η∗(x, s ) is the optimal denoising direction determined by the value function u∗ via (6) and 
+
+ηθ (x, s ) is the neural approximation learned via the Cameron-Martin loss. Both processes share the same Wiener noise, W Cμ 
+
+> s
+
+, and drift terms, −1/2Xsds ; they differ only in the denoising correction. 
+
+Step 1: Girsanov’s theorem and KL divergence. By Girsanov’s theorem for infinite-dimensional diffusions [Øksendal and Øksendal, 2003, §8.6], the Radon-Nikodym derivative (Theorem 2) of μθ
+
+with respect to μdata is 
+
+dμ θ
+
+dμ data 
+
+(Xdata ) = exp 
+
+Z T
+
+> 0
+
+ηθ − η∗, dW Cμ  
+
+> sH
+
+− 12
+
+Z T
+
+> 0
+
+∥ηθ (Xs, s ) − η∗(Xs, s )∥2 
+
+> HC
+
+ds 
+
+!
+
+,
+
+(C.28) 21 with KL divergence 
+
+KL( μdata ∥μθ ) = Eμdata 
+
+
+
+log dμ data 
+
+dμ θ
+
+
+
+= Eμdata 
+
+"
+
+−
+
+Z T
+
+> 0
+
+ηθ − η∗, dW Cμ  
+
+> sH
+
++ 12
+
+Z T
+
+> 0
+
+∥ηθ − η∗∥2 
+
+> HC
+
+ds 
+
+#
+
+.
+
+(C.29) The stochastic integral R T
+
+> 0
+
+D
+
+ηθ − η∗, dW Cμ
+
+> s
+
+E
+
+> H
+
+is a martingale with respect to the filtration generated by W Cμ (the Itô isometry holds for trace-class noise by Proposition 2). Its expectation vanishes, leaving 
+
+KL( μdata ∥μθ ) = 12
+
+Z T
+
+> 0
+
+EXs∼μdata 
+
+h
+
+∥ηθ (Xs, s ) − η∗(Xs, s )∥2
+
+> HC
+
+i
+
+ds. (C.30) 
+
+Step 2: Cameron-Martin loss controls score error. The learned denoiser ηθ is trained to minimize the Cameron-Martin loss 
+
+LCM (θ) = Es,X s,η 
+
+
+
+C−1/2 
+
+> μ
+
+(ηθ (Xs, s ) − η) 2
+
+> H
+
+
+
+, η ∼ N (0 , C μ), (C.31) which is precisely designed to measure error in the Cameron-Martin norm, ∥v∥2 
+
+> HC
+
+= ∥C−1/2 
+
+> μ
+
+v∥2
+
+> H
+
+(see Corollary 3). At optimality, the loss bounds the squared Cameron-Martin norm of the score error, 
+
+Z T
+
+> 0
+
+EXs
+
+h
+
+∥ηθ (Xs, s ) − η∗(Xs, s )∥2
+
+> HC
+
+i
+
+ds ≲ LCM (θ). (C.32) The relationship follows from the orthogonality of residuals at optimality and the equivalence 
+
+∥C−1/2 
+
+> μ
+
+v∥H = ∥v∥HC . Combining equations (C.30) and (C.32), we must have 
+
+KL( μdata ∥μθ ) ≲ LCM (θ). (C.33) 
+
+Step 3: Pinsker’s inequality and learning error. By Pinsker’s inequality (see e.g. Hairer [2009]), for any two probability measures on a separable metric space, 
+
+∥μθ − μdata ∥TV ≤
+
+q 12 KL( μdata ∥μθ ). (C.34) Substituting equation (C.33), 
+
+∥μθ − μdata ∥TV ≤ C1
+
+pLCM (θ), (C.35) where C1 = pC′/2 is a universal constant depending only on the Girsanov and Pinsker coefficients. 
+
+Step 4: Tail error from BKE approximation. In practice, the value function u∗ solving the backward Kolmogorov equation (equation (6) ) is approximated numerically via Picard iteration or finite-difference schemes. The error in this numerical integration contributes an additional tail term. By the contraction property of the OU semigroup (the eigenvalues of the OU generator L are −λk/2
+
+by spectral theory applied to the Mercer decomposition Pavliotis [2014]), the Picard iterates converge geometrically with rate e−T / 2:
+
+∥unum (x, 0) − u∗(x, 0) ∥H ≤ C2e−T / 2, (C.36) where C2 depends on the terminal condition f and properties of the OU operator but not on action dimension or discretization resolution. 
+
+Step 5: Dimension-independence. The key observation is that all constants in equations (C.34) ,(C.35), and (C.36) depend only on: 1. Universal constants (Girsanov factor 1/2, Pinsker factor p1/2), 2. The trace of the covariance operator, Tr( Cμ) = P∞ 
+
+> k=1
+
+λk (Corollary 3), 3. Properties of the OU semigroup spectrum, which is {− λk/2}∞
+
+> k=1
+
+.22 0 2 4 6 8 10 12 14                                
+
+> Time step
+> 0.60
+> 0.55
+> 0.50
+> 0.45
+> Action Dim: [0]
+> Original actions, A0
+> 0246810 12 14
+> Time step
+> 1.5
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> DDPM: At=tA0+1t)
+> 0246810 12 14
+> Time step
+> 1.50
+> 1.25
+> 1.00
+> 0.75
+> 0.50
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> Inf-Dim Diff: At=tA0+1t)
+
+Figure 4: Noise comparison of the forward OU process, showing the variation on action distribution (left) when it is corrupted by white noise (middle) and with the Matérn-3/2 noise. By Mercer’s theorem (Theorem 3), Tr( Cμ) is a scalar property of the covariance kernel, determined by its smoothness (e.g., for the Matérn-3/2 kernel, λk ∼ k−3), not by the action dimension da or discretization size. The Cameron-Martin norm ∥ · ∥ HC operates on function space without reference to dimension. The OU contraction rate e−T / 2 is uniform across all Mercer modes. 
+
+Final bound. Combining the learning error (equation (C.35)) and the tail error (equation (C.36)), 
+
+∥μθ − μdata ∥TV ≤ C1
+
+pLCM (θ) + C2e−T / 2, (C.37) where the constants C1, C 2 > 0 are determined by universal properties of Girsanov/Pinsker, the spectral trace Tr( Cμ), and the OU operator contraction. Neither depends on the discretization resolution, the action dimension da, or the planning horizon T (except exponentially in the tail term). This proves dimension-independent convergence and establishes the superiority of the infinite-dimensional formulation over finite-dimensional DDPM, which suffers an O(√da) degradation in its convergence rate. 
+
+C.3 Score Function in Infinite Dimensions 
+
+A fundamental challenge in infinite-dimensional probability theory is that Gaussian measures on infinite-dimensional spaces have no Lebesgue density, so the conventional score ∇x log pt(x) is ill-defined. We overcome this via the conditional expectation formulation. 
+
+Definition 7 (Score Function via Conditional Expectation) . Let u(x, s ) = E[f (Xt) | Xs = x] for 
+
+f ∈ H . Then u satisfies the backward Kolmogorov equation (6) .The derivation of (6) proceeds thus. For a general H-valued Itô process with 
+
+dX t = b(Xt) dt + dW Ct , (C.38) 
+
+the infinitesimal generator L encodes the instantaneous rate of change of expectations. Acting on a smooth (Fréchet-differentiable) test function φ : H → R, it reads 
+
+Lφ(x) = ⟨b(x), ∇xφ(x)⟩H
+
+| {z }
+
+> drift part
+
++ 12 Tr C · D2φ(x)| {z }
+
+> diffusion part
+
+. (C.39) 
+
+Here ∇xφ(x) ∈ H is the Fréchet gradient and D2φ(x) : H → H is the Hessian (second Fréchet derivative). The formula is the infinite-dimensional analogue of the finite-dimensional Itô generator, with Cμ playing the role of σσ ⊤. The score function is then defined as, 
+
+∇x log ps(x) = C−1 
+
+> μ
+
+∇xu(x, s ). (C.40) 
+
+This formulation replaces score-matching in H with a deterministic boundary-value problem that yields adjoint guidance without Monte Carlo sampling instability. 
+
+23 C.4 Cameron-Martin Loss and Convergence Spectral decoupling of the forward process. The infinite-dimensional structure admits the sim-plification i.e. , projecting the OU process (3) onto the Mercer eigenbasis {ek}, the dynamics decouple into independent scalar OU processes, one per mode. For each k = 1 , 2, . . . , define 
+
+ak(t) := ⟨Xt, e k⟩H. Then 
+
+da k
+
+dt = − 12 ak dt + pλk dβ k(t), (C.41) where {βk} are independent standard Brownian motions. Each mode decays at an exponential rate 
+
+1/2 and is forced by colored noise scaled by √λk. Consequently, the stationary variance of mode 
+
+k is Var( ak(∞)) = λk, consistent with the covariance structure. This spectral separation is the foundation of the dimension-independence claim: we do not discretize the space H into a finite grid; instead, we leverage the spectral structure to decouple infinite-dimensional coupling. 
+
+Conditional score structure and insufficiency of naive loss. The conditional score ∇x log ps(x)
+
+in the Mercer eigenbasis decomposes mode-wise. Solving the scalar OU SDE da k = − 12 ak dt +
+
+√λk dβ k from ak(0) to time s yields the marginal transition (via Itô’s formula) 
+
+ak(s) | ak(0) ∼ N 
+
+
+
+e−s/ 2ak(0) , λ k(1 − e−s)
+
+
+
+, (C.42) where the mean decays exponentially and the variance grows from 0 to λk. The conditional score for mode k is then 
+
+∂ log ps
+
+∂a k ak
+
+= − e−s/ 2ak(0) − ak(s)
+
+λk(1 − e−s) . (C.43) A naive squared loss Lplain (θ) = E P 
+
+> k
+
+(ηθ,k − ηk)2, where ηk := pλk(1 − e−s) ξk is the colored noise in mode k and ξk ∼ N (0 , 1) , would weight all modes equally. However, high-energy modes (large λk) have smoother score surfaces (gradients are divided by λk), while low-energy modes (small 
+
+λk) concentrate density sharply. Equally weighting the prediction error across all modes ignores this asymmetry: a small error in a high-energy mode contributes little to the KL divergence, while an equally-sized error in a low-energy mode is catastrophic. The infinite-dimensional setting makes this pathology severe because the spectrum is unbounded below ( λk → 0). 
+
+Cameron-Martin loss as measure-theoretic weighting. To correct for this imbalance, we weight the loss by the inverse covariance: the Cameron-Martin loss is 
+
+LCM (θ) = E
+
+
+
+C−1/2 
+
+> μ
+
+(ηθ − η) 2
+
+> H
+
+
+
+. (C.44) Since Cμek = λkek, we have C−1/2 
+
+> μ
+
+ek = λ−1/2 
+
+> k
+
+ek. Applying this to the expansion ηθ − η =P
+
+> k
+
+(ηθ,k − ηk)ek yields 
+
+C−1/2 
+
+> μ
+
+(ηθ − η) = 
+
+> ∞
+
+X
+
+> k=1
+
+λ−1/2 
+
+> k
+
+(ηθ,k − ηk)ek. (C.45) Thus, (C.44) in spectral form is 
+
+LCM (θ) = E
+
+" ∞X
+
+> k=1
+
+|ηθ,k − ηk|2
+
+λk
+
+#
+
+. (C.46)       
+
+> Precision-Weighted Loss
+> This precision weighting penalizes errors in low-energy modes ( λk→0) where density concentrates. it is measure-theoretically natural and dimension-independent since it depends only on the spectrum, rather than on daor discretization.
+
+24 C.5 Derivation of the Kolmogorov Residual Physics-Aware Diagnostic 
+
+The Kolmogorov residual (9) in §2.4 emerges directly from the backward Kolmogorov equation by converting the PDE constraint into a measurable quantity. 
+
+Derivation. The backward Kolmogorov equation (equation (6) ) states that the true value function 
+
+u∗(x, s ) satisfies 
+
+− ∂u ∗
+
+∂s (x, s ) = 
+
+
+
+− 12 x, ∇xu∗(x, s )
+
+
+
+> H
+
++ 12 Tr Cμ · ∇ 2
+
+> x
+
+u∗(x, s ) . (C.47) Rearranging by moving all terms to the left-hand side, 
+
+∂u ∗
+
+∂s (x, s ) + 
+
+
+
+− 12 x, ∇xu∗(x, s )
+
+
+
+> H
+
++ 12 Tr Cμ · ∇ 2
+
+> x
+
+u∗(x, s ) = 0 . (C.48) This identity holds exactly for the true solution u∗. For a learned approximation ˆu(x, s ) parameterized by a neural network with weights θ, we define the residual as the norm of the left-hand side of equation (C.48): 
+
+R(ˆ u) := ∂ ˆu∂s +
+
+
+
+− 12 x, ∇x ˆu
+
+
+
+> H
+
++ 12 Tr Cμ · ∇ 2 ˆu
+
+> H
+
+. (C.49) By construction, R(ˆ u) = 0 if and only if ˆu satisfies the BKE exactly. 
+
+Computational aspects. All three terms in the residual come from automatic differentiation of ˆu:(i) ∂ ˆu∂s is the backward gradient w.r.t. the time input s, (ii) − 12 x, ∇x ˆu H is the directional derivative w.r.t. the state input x, and (iii) 12 Tr[ Cμ · ∇ 2 ˆu] is a weighted trace of the Hessian, computed via the eigenvalues and eigenvectors of the covariance operator Cμ (via Mercer’s theorem, Theorem 3). Given the state (x, s ) and the network weights θ, the residual can be evaluated in a single forward-backward pass with no environment interaction or data collection. 
+
+Interpretation as unbiased failure detection. The residual is a pointwise, deterministic PDE constraint violation—not a statistical estimate. Unlike the training loss LCM (θ), which averages over batches and measures data-fitting fidelity, the residual interrogates the learned function, evaluating whether it satisfies the BKE point-wise. High residuals signal BKE violation of the conditional expectation structure it encodes. 
+
+C.6 Why Colored Noise? 
+
+Sampling discretizes the reverse SDE from t = T to t = 0 :
+
+Xt−∆t = μθ (Xt, t ) + 
+
+q
+
+˜βt ηt, ηt ∼ N (0 , C ),
+
+where μθ is the posterior mean from ηθ and ˜βt is the posterior variance schedule. The forward noising injects Cμ-colored increments dW Cμ 
+
+> t
+
+at every step; the reverse SDE is also driven by dW Cμ 
+
+> t
+
+. Using white noise N (0 , I ) instead would inject energy outside the Cameron-Martin space E = C1/2 
+
+> μ
+
+(H). By the Cameron-Martin theorem [Cameron and Martin, 1944], any perturbation outside E produces a measure mutually singular with N (0 , C μ), meaning the reverse trajectory immediately leaves the support of the data distribution. In spectral terms, white noise injects equal energy in every mode ek; the data distribution concentrates on low-k modes (large λk); colored noise N (0 , C μ) injects energy proportional to λk, keeping the trajectory inside E at every step. The replacement N (0 , I ) → N (0 , C μ) is therefore not cosmetic. It is a measure-theoretic necessity. 25 Algorithm 1 Infinite-Dimensional Diffusion Policy (InfDiff)  
+
+> 1:
+
+Input: Dataset {a(i)0 }Ni=1 ; planning horizon T ; timesteps tp; Matérn kernel parameters (ℓ, σ 2, ν ) 
+
+> 2:
+
+Preprocessing: Compute Gram matrix K ∈ Rtp×tp with Kij = k(si, s j ) 
+
+> 3:
+
+Compute Cholesky factor L = chol( K) 
+
+> 4:
+
+TRAINING LOOP  
+
+> 5:
+
+for epoch = 1 , . . . , N epochs do  
+
+> 6:
+
+for batch {a(bi)0 }Bi=1 do  
+
+> 7:
+
+Substitution I: Sample colored noise η(b) ∼ N (0 , K ) via η(b) = Lξ where ξ ∼ N (0 , I ) 
+
+> 8:
+
+Sample diffusion step t ∼ Uniform(0 , t p) 
+
+> 9:
+
+Compute noisy trajectory: A(b) 
+
+> t
+
+= √¯αtA(b)0 + √1 − ¯αt η(b) 
+
+> 10:
+
+Predict noise: ηθ (A(b) 
+
+> t
+
+, t ) → denoiser network  
+
+> 11:
+
+Substitution II: Compute Cameron-Martin loss: LCM (θ) = E[∥C −1/2(ηθ − η)∥2
+
+> H
+
+] 
+
+> 12:
+
+Update θ via gradient descent on LCM  
+
+> 13:
+
+end for  
+
+> 14:
+
+end for  
+
+> 15:
+
+INFERENCE  
+
+> 16:
+
+Input: Observation ot (e.g., image stack); sample large time s = tp − 1 
+
+> 17:
+
+Encode: z = E(ot) (vision encoder shared with training)  
+
+> 18:
+
+Substitution III: Initialize X(0)  
+
+> tp
+
+∼ N (0 , K ) 
+
+> 19:
+
+for s = tp − 1, . . . , 0 do  
+
+> 20:
+
+Sample colored noise ζs ∼ N (0 , K ) via ζs = Lζ ′ where ζ′ ∼ N (0 , I ) 
+
+> 21:
+
+Predict noise ηθ (Xs, s |z) (conditioned on z) 
+
+> 22:
+
+Denoise: Xs−1 = 1√ ¯αs−1 (Xs − √1 − ¯αsηθ ) + √1 − ¯αs−1ζs 
+
+> 23:
+
+(Optional) Compute Kolmogorov residual Rθ (Xs, s ) for diagnostics  
+
+> 24:
+
+end for  
+
+> 25:
+
+Decode: a = D(X0) (action decoder)  
+
+> 26:
+
+Return: Action trajectory a ∈ H 
+
+## D Kolmogorov Generative Modeling in Infinite Dimensions 
+
+The infinite-dimensional framework is instantiated via discrete approximation on [0 , T ] with tp
+
+timesteps. Algorithm 1 shows the complete pipeline with the three key substitutions highlighted. The Kolmogorov residuals R(t) 
+
+> θ
+
+measured at intermediate timesteps serve as a dimension-agnostic diagnostic for trajectory regularity and can flag policy failure modes (e.g., inter-step drift in visuomotor tasks or material starvation in manufacturing). 26 Figure 5: Temporal PushT rollout sequence across representative execution frames with high-dimensional RGB-D observations at 96 ×96 pixels, 2×2 agent positions and 2×1 action dimensions. 0 20 40 60 80 100 
+
+# Diffusion steps 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+> Drift,  k ^x(t)0 ¡ ^x(t + 1) 0 k2
+
+# Kolmogorov Residual, LCM , ® = 1 :0
+
+## Inter-step ^x0 drift k ^x(t)0 ¡ ^x(t + 1) 0 k2
+
+Figure 6: Kolmogorov Residual: Cameron-Martin Precision-Weighted 
+
+## E Results Addendum 
+
+This section contains charts and results from numerical validation environments. 27 CONWIP Lmax = 20        
+
+> λ= 1
+> ρ=0.83 ρ=0.83 ρ=1.40 ⚠ ρ=0.83 ρ=0.83 ρ=0.83
+> output
+> 6-Station Serial Manufacturing Line (SimPy, 500k steps)
+> S0
+> μ=1.2
+> S1
+> μ=1.2
+> S2
+> μ=0.716
+> BOTTLENECK
+> S3
+> μ=1.2
+> S4
+> μ=1.2
+> S5
+> μ=1.2
+
+Figure 7: A Six-Serial Stochastic Manufacturing Line 
+
+E.1 Manufacturing Flow Prediction and Certified Dispatch: WIP Forecasting with Infinite-Dimensional Diffusion 
+
+Beyond robotic manipulation, we validate the infinite-dimensional framework on a manufacturing flow control problem: predicting work-in-process (WIP) [Spearman et al., 1990] trajectories across a serial production line and certifying safe dispatch decisions via Hamilton-Jacobi reachability [Molu, 2025, 2024b]. This application demonstrates two key contributions: (i) that function-valued diffusion policies outperform scalar-based LSTM forecasting when queue dynamics are inherently function-valued, and (ii) that the Kolmogorov residual serves as an interpretable anomaly detector for real-time bottleneck localization—a result that theory alone cannot produce. 
+
+Problem Formulation: Manufacturing as Stochastic Control. Consider a 6-station serial produc-tion line with CONWIP (see Figure 7) flow control (work-in-process cap Lmax = 20 ). Station k
+
+maintains a queue of jobs with length qk(t) ∈ R≥0 evolving as a stochastic process. The line operates in discrete time under Poisson arrivals (rate λ = 1 .0 job/step) and stochastic service times (Gamma-distributed per station). Station S2 is a designed bottleneck (service rate μ2 = 0 .55 · min k μk) to induce realistic congestion patterns. Given a snapshot of queue lengths qt = ( q1(t), . . . , q 6(t)) at the current time, predict the next-horizon WIP trajectory q(s) ∈ L2([ t, t + H], R6) for a planning window H = 16 timesteps ahead. Standard approaches (e.g. LSTM, moving-average heuristics) [Chen et al., 2021, Spearman and Zazanis, 2019] treat the queue at each future timestep as an independent scalar prediction. This throws away the underlying function-space structure: inter-station coupling, momentum effects, and cascading starvation are function-space phenomena that demand function-space methods. 
+
+Experiment 1: InfDiff WIP Forecaster. We train an infinite-dimensional diffusion policy (reusing the ConditionalUnet1D architecture from the PushT domain, with ≈ 7.99 × 10 6 parameters) to learn the WIP evolution on 500,000 synthetic timesteps generated via SimPy discrete-event simulation. The model is conditioned on the last 8 snapshots of queue lengths and must predict the next 16-step trajectory in the Cameron-Martin norm: 
+
+LCM (θ) = E
+
+
+
+C−1/2 
+
+> μ
+
+(ηθ − η) 2
+
+> H
+
+
+
+, η ∼ N (0 , C μ), (E.50) where Cμ is parameterized by a Matérn-3/2 kernel with length scale ℓ = 0 .25 (matched to the empirical autocorrelation of queue series) and variance σ2 = 2 .0. The effective rank of Cμ is 
+
+reff ≈ 2.9 for the 16-step horizon, meaning the 6-station system has only ≈ 3 independent dynamic modes—a dramatic dimensionality reduction that explains why the method succeeds with moderate data. Training was performed on 8× NVIDIA A100 GPUs with distributed data parallelism. After 640 epochs (each processing 450k training windows), the best validation Cameron-Martin loss was ε = 0 .10541 , yielding a total-variation TV bound of ∥μθ − μtrue ∥TV ≤ 2√ε ≈ 0.65 by Theorem 1. While the bound is not tight (TV ∈ [0 , 1] ), the empirical results below show that near-oracle distributional fidelity is achieved on the metrics that matter for operations. 
+
+Experiment 2: KG Residual Bottleneck Detector. A key operational question: which station is the constraint? In linear programming terms, the LP dual (shadow prices) identifies the bottleneck as the 28 0 250 500 750 1000 
+
+Epoch                              
+
+> 0.10
+> 0.12
+> 0.14
+> 0.16
+> 0.18
+> 0.20
+> 0.22
+> LCM
+> Fast ▼ Slow Grind ▼ LR Sched. Floor
+> InfDiff Training
+> ε=0.105
+> Run GPUs Model Best ε
+> 11× 30M 0.203
+> 28× 7M 0.126
+> 38× 30M 0.105
+> 48× 30M Stop
+> Train LCM
+> Val LCM
+> 050 100 150 200 250 300
+> Epoch
+> 0.007
+> 0.008
+> 0.009
+> 0.010
+> 0.011
+> 0.012
+> MSE
+> LSTM Baseline
+> MSE=0.0086
+> Little's Law: λW = 26.25
+> Mean WIP=18.78 vs cap=20
+> Train MSE
+> Val MSE
+
+Figure 8: The RMSE in comparison between our InfDiff training scheme and the LSTM baseline. station with non-zero opportunity cost. We propose using the Kolmogorov residual as a real-time, unsupervised detector: 
+
+Rk(ˆ u) := ∂s ˆuk + − 12 x, ∇x ˆuk 
+
+> H
+
++ 12 Tr Cμ · ∇ 2 ˆuk 
+
+> H
+
+, (E.51) computed per-station k using only that station’s local queue trajectory. The intuition: when station k
+
+is overloaded and in a saturated state, the observed queue dynamics exhibit high-frequency content (rapid swings between full and empty) incompatible with the smooth Matérn-3/2 prior. The residual spikes, signaling that the learned model cannot explain the data under the assumed stochasticity. Validation: we compare the KG residual ranking of all 6 stations against the ground truth (LP shadow prices) over 100 simulation runs. 
+
+Results :• Precision@1 : 1.0 (always ranks the true bottleneck station S 2 first). • Signal-to-Noise Ratio : mean residual at S 2 is 13.05; mean residual at all other stations is 0.96. A 13 × SNR demonstrates unambiguous localization. • Latency : < 1 second to compute residuals for all stations on a single GPU, enabling real-time online detection. This result validates the theoretical claim that the KG residual is a physics-aware diagnostic: it directly measures PDE constraint violation and correlates with operational anomalies (bottleneck formation) that LSTM and heuristic baselines must infer indirectly from prediction error. 
+
+Experiment 3: Hamilton-Jacobi Certified Dispatch Safety Envelope. Beyond prediction, we use the InfDiff WIP forecast to initialize a Hamilton-Jacobi reachability computation (via Lev-elSetPy [Mitchell, 2007, Mitchell et al., 2005]) that certifies a safe dispatch policy. The state space is a 2D simplification: (qconstraint , q downstream ), representing queue depth at the bottleneck (S 2) and the next station (S 3). The dispatch decision u ∈ { 0, 1} controls whether to release a new job into the system. The HJ PDE is 
+
+vt + min  
+
+> u∈{ 0,1}
+
+[∇v · f (x, u )] = 0 , (E.52) where f (x, u ) = ( λin − μ2 · IS2 not empty , μ 2 · IS2 not empty − μ3 · IS3 not empty ) encodes the flow dynamics. The safe set is S = {(qc, q d) : v(qc, q d) ≤ 0}, the reachable set from which a control law exists that keeps both stations above zero queue (no starvation) and below the CONWIP cap (no deadlock). We solve this on a 101 × 101 grid using the toolbox LevelSetPy [Molu, 2024a] with CFL-stable semi-Lagrangian integration. The backup reachable set (BRS) captures all states from which a policy can operate without violating safety constraints. 
+
+Safety results: 
+
+29 0.0 0.2 0.4 0.6 0.8 1.0 1.2 
+
+Normalized Score 
+
+S0 
+
+S1 
+
+S2 
+
+S3 
+
+S4 
+
+S5 
+
+> 0.71
+> 1.16
+> 13.04
+> 0.97
+> 1.32
+> 0.56
+
+Residuals Bottleneck Detection     
+
+> KG Residual (norm.)
+> LP Shadow Price (norm.)
+> 13× SNR
+> (S2 vs mean others)
+> P@1 = 1.000 |F1 = 1.000 |Random = 0.167
+
+Figure 9: The Kolmogorov bottleneck identification by the InfDiff Framework (i) Safe fraction : 81.4% of the (qc, q d) state space is certified safe. (i) Conservatism : 0% false positive rate (the HJ filter never blocks a dispatch action that is truly safe). This indicates the abstraction to 2D is faithful without over-conservative approximation. (i) Baseline violation rate : in uncontrolled SimPy runs, 45.16% of dispatch decisions fall outside the safe envelope, leading to deadlock or starvation. With the HJ-certified filter applied, this drops to 0% — all unsafe actions are blocked before execution. (i) Deadlock prevention : across 100 independent simulation runs, the HJ filter prevents 351 deadlock events that occur in uncontrolled operation, with zero false negatives. The certification guarantees that any dispatch decision inside S is provably safe—a property that machine learning baselines (LSTM, heuristics) cannot provide. This represents a hybrid paradigm: learning predicts where the system is headed; verification certifies that the predicted trajectory respects safety. 
+
+End-to-End Benchmark and Composite Results. We benchmark the full pipeline (InfDiff forecaster + KG bottleneck detector + HJ safety filter) against a baseline i.e. an LSTM WIP forecaster + CONWIP heuristic, without safety certification(see Figure 8). Both are evaluated on the same SimPy-generated test trajectories. A composite score, L weights four operational metrics, namely the root mean square error score 
+
+Lrmse , starvation recall Lstarve , the safety violation score, Ls-viol , and the precision score, LP@1 i.e. ,
+
+L = 0 .25(1 − L ∥rmse ∥) + 0 .35 Lstarve + 0 .25(1 − L s-viol ) + 0 .15 · L P@1 , (E.53) where the starvation recall ( i.e. deadlock avoidance) is weighted heaviest (0.35) to reflect the operational priority. 
+
+Final scores :Metric InfDiff+HJ LSTM+CONWIP 
+
+(Normalized) Lrmse 0.124 0.092 
+
+Lstarve 1.000 1.000 Safety Violation Rate 0.000 N/A KG Bottleneck P@1 1.000 0.167 
+
+Composite Score 0.637 0.564 
+
+Infinite diffusion, coupled with an HJ safety mechanism outperforms the baseline by a 13% relative improvement (0.637 vs 0.564 , and a 0.073 -point absolute gain). This gap is driven by the safety 30 0 10 25 
+
+# qdownstream     
+
+> 0
+> 10
+> 25
+> qconstraint
+> Safe fraction: 81.4%
+> Uncontrolled: 45.2% violation
+> Conservative: 0.0% (zero false blocks)
+
+HJ Backward Reachable Safe Set 
+
+> Unsafe
+> Safe
+
+Figure 10: The HJ Dispatch Safety Filter and bottleneck components: The infinite dimensional diffusion scheme loses on pointwise root mean-square error because it optimizes for distributional fidelity in the CM norm. However, it wins decisively on the metrics that prevent operational failure i.e. zero safety violations and perfect bottleneck detection. The LSTM struggles to compete in this regime. 
+
+Interpretation. The infinite-dimensional diffusion structure is not merely a theoretical construct. It is directly applicable to real operational problems. The manufacturing benchmark reveals three improvements, namely, 1. Function-space learning : It captures inter-station coupling that scalar-based LSTM misses, resulting in a lower Cameron-Martin training loss and better generalization to out-of-distribution queue patterns. 2. Inference-time anomaly detection : The Kolmogorov residual achieves perfect bottleneck localization (Figure 9) with a precision at 1, P@1 of 1.0, a 13 × SNR without access to LP duals. This shows that the score-network uncertainty directly reflects operational constraints. 3. Certified safety : Hamilton-Jacobi reachability provides guarantees that learning alone cannot aid dispatch workflow. The hybrid learning + verification approach prevents 45% of otherwise-unsafe dispatches, with zero false positives (see Figure 10). Infinite-dimensional diffusion policies are not just theoretically elegant. They are operationally superior when the underlying system is function-valued, as manufacturing queues are. The proof of the improvements when combined with HJ safety certification is shown in Figure 11. 31 RMSE 
+
+(w=0.25) 
+
+Starvation 
+
+Recall (w=0.35) 
+
+Safety 
+
+Viol.(w=0.25) 
+
+P@1 
+
+(w=0.15) 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+> Weighted Score Contribution
+
+0.350 
+
+0.137 0.150 
+
+0.258 
+
+0.350 
+
+0.125 
+
+0.025  
+
+> InfDiff optimizes LCM
+> not pointwise MSE
+
+Per-Metric Breakdown 
+
+InfDiff+HJ 
+
+LSTM+CONWIP 
+
+InfDiff 
+
++HJ 
+
+LSTM 
+
++CONWIP 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+> Composite Score
+
+0.6371 
+
+0.5644 
+
+Composite Score 
+
++13% 
+
+(+0.073) 
+
+InfDiff+HJ vs LSTM+CONWIP Benchmark Figure 11: Compisite Benchmark figure 32
