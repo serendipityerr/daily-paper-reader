@@ -6,31 +6,35 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-22
-- 运行时间：2026-06-22 22:28:50 UTC
+- 最新运行日期：2026-06-23
+- 运行时间：2026-06-23 21:52:22 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：1
-- 速读区：2
+- 本次总论文数：5
+- 精读区：4
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读8.0分扩散模型得分匹配热力学论文，速读生成建模的Perron-Frobenius算子匹配与Kolmogorov回归。  
-最值得关注：得分匹配的随机热力学解释（精读论文）及扩散策略的鲁棒性（Kolmogorov回归）。  
-建议先掌握扩散模型基础，再深入精读论文探讨的热力学视角，速读论文可作为应用延伸。
-- 详情：[/202606/22/README](/202606/22/README)
+今日精选5篇论文，精读4篇，聚焦扩散模型与随机控制新突破。最值得关注的是《Delta-Diffusion》在脑淀粉样蛋白PET轨迹建模中的应用，以及《几何Schrödinger桥》为SO(2)群上随机控制提供的解析解法。后续建议优先深入这两篇，追踪扩散模型在医学与几何控制领域的交叉潜力。
+- 详情：[/202606/23/README](/202606/23/README)
 
 ### 精读区论文标签
-1. [Stochastic Thermodynamics of Score Matching in Diffusion Models](/202606/22/2606.17252v1-stochastic-thermodynamics-of-score-matching-in-diffusion-models)  
+1. [Delta-Diffusion: Modeling Longitudinal Brain Amyloid-PET Trajectories via Conditional Poisson Diffusion Bridge](/202606/23/2606.22216v1-delta-diffusion-modeling-longitudinal-brain-amyloid-pet-trajectories-via-conditional-poisson-diffusion-bridge)  
+   标签：评分：9.0/10、query:diff-bridge
+   evidence：明确使用扩散桥连接分布
+2. [A Geometric Solution of the Schrödinger Bridge Problem on $\mathsf{SO}(2)$ via Stochastic Optimal Control](/202606/23/2606.22690v1-a-geometric-solution-of-the-schrdinger-bridge-problem-on-mathsfso2-via-stochastic-optimal-control)  
+   标签：评分：9.0/10、query:diff-bridge
+   evidence：直接通过随机最优控制解决了SO(2)上的Schrödinger桥问题
+3. [Statistical Matching via Schrödinger Bridge beyond Conditional Independence](/202606/23/2606.22770v1-statistical-matching-via-schrdinger-bridge-beyond-conditional-independence)  
+   标签：评分：9.0/10、query:diff-bridge
+   evidence：使用薛定谔桥进行统计匹配
+4. [Variance-Tilted Diffusion Models for Diverse Sampling](/202606/23/2606.22239v1-variance-tilted-diffusion-models-for-diverse-sampling)  
    标签：评分：8.0/10、query:diff-bridge
-   evidence：为扩散模型中的分数匹配提供随机热力学框架，为用分数模型求解薛定谔桥奠定了基础
+   evidence：使用Doob h-变换构造用于多样性采样的扩散桥
 
 ### 速读区论文标签
-1. [Perron--Frobenius Operator Matching for Generative Modeling](/202606/22/2606.17465v1-perron--frobenius-operator-matching-for-generative-modeling)  
+1. [Understanding Latent Flow Models for Tabular Data Synthesis: Targets, Paths, and Sampling](/202606/23/2606.20878v1-understanding-latent-flow-models-for-tabular-data-synthesis-targets-paths-and-sampling)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：Perron-Frobenius算子匹配统一了生成建模中的流、扩散和跳跃模型
-2. [Kolmogorov Regression for Robust Diffusion Policies](/202606/22/2606.18186v1-kolmogorov-regression-for-robust-diffusion-policies)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：使用向后Kolmogorov方程和Cameron-Martin空间，与扩散过程的路径积分表述相关
+   evidence：评估了流模型中的最优输运（OT）路径
 
 
 <div class="dpr-home-promo-card">
