@@ -6,35 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-23
-- 运行时间：2026-06-23 21:52:22 UTC
+- 最新运行日期：2026-06-24
+- 运行时间：2026-06-24 21:46:07 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：4
-- 速读区：1
+- 本次总论文数：3
+- 精读区：1
+- 速读区：2
 
 ### 今日简报（AI）
-今日精选5篇论文，精读4篇，聚焦扩散模型与随机控制新突破。最值得关注的是《Delta-Diffusion》在脑淀粉样蛋白PET轨迹建模中的应用，以及《几何Schrödinger桥》为SO(2)群上随机控制提供的解析解法。后续建议优先深入这两篇，追踪扩散模型在医学与几何控制领域的交叉潜力。
-- 详情：[/202606/23/README](/202606/23/README)
+今日精读一篇概率布朗桥扩散模型用于MRI序列图像翻译（9.0分），速读两篇扩散模型评分近似与几何基础（各7.0分）。最值得关注方向为基于布朗桥的确定性图像翻译方法，可显著提升MRI序列转换质量。建议读者优先精读本文，结合速读文章理解扩散模型的结构逼近与几何优化。
+- 详情：[/202606/24/README](/202606/24/README)
 
 ### 精读区论文标签
-1. [Delta-Diffusion: Modeling Longitudinal Brain Amyloid-PET Trajectories via Conditional Poisson Diffusion Bridge](/202606/23/2606.22216v1-delta-diffusion-modeling-longitudinal-brain-amyloid-pet-trajectories-via-conditional-poisson-diffusion-bridge)  
+1. [Prob-BBDM: a Probabilistic Brownian Bridge Diffusion Model for MRI sequence image-to-image translation](/202606/24/2606.24313v1-prob-bbdm-a-probabilistic-brownian-bridge-diffusion-model-for-mri-sequence-image-to-image-translation)  
    标签：评分：9.0/10、query:diff-bridge
-   evidence：明确使用扩散桥连接分布
-2. [A Geometric Solution of the Schrödinger Bridge Problem on $\mathsf{SO}(2)$ via Stochastic Optimal Control](/202606/23/2606.22690v1-a-geometric-solution-of-the-schrdinger-bridge-problem-on-mathsfso2-via-stochastic-optimal-control)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：直接通过随机最优控制解决了SO(2)上的Schrödinger桥问题
-3. [Statistical Matching via Schrödinger Bridge beyond Conditional Independence](/202606/23/2606.22770v1-statistical-matching-via-schrdinger-bridge-beyond-conditional-independence)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：使用薛定谔桥进行统计匹配
-4. [Variance-Tilted Diffusion Models for Diverse Sampling](/202606/23/2606.22239v1-variance-tilted-diffusion-models-for-diverse-sampling)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：使用Doob h-变换构造用于多样性采样的扩散桥
+   evidence：使用布朗桥扩散模型进行图像翻译,桥接两个分布
 
 ### 速读区论文标签
-1. [Understanding Latent Flow Models for Tabular Data Synthesis: Targets, Paths, and Sampling](/202606/23/2606.20878v1-understanding-latent-flow-models-for-tabular-data-synthesis-targets-paths-and-sampling)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：评估了流模型中的最优输运（OT）路径
+1. [Score Approximation for Diffusion Models on Arbitrary Low-Dimensional Structures](/202606/24/2606.19894v1-score-approximation-for-diffusion-models-on-arbitrary-low-dimensional-structures)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：扩散模型的分数近似为基于分数的薛定谔桥求解器提供支撑
+2. [The Geometry Behind Diffusion and Flow Matching: Gradient Flows and Geodesics in Wasserstein Space](/202606/24/2606.24157v1-the-geometry-behind-diffusion-and-flow-matching-gradient-flows-and-geodesics-in-wasserstein-space)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：将扩散模型与Wasserstein空间中的最优输运测地线联系起来,为桥过程提供几何基础
 
 
 <div class="dpr-home-promo-card">
