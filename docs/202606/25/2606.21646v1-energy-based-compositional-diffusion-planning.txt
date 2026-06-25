@@ -1,0 +1,1332 @@
+Title: Energy-based Compositional Diffusion Planning
+
+URL Source: https://arxiv.org/pdf/2606.21646v1
+
+Published Time: Tue, 23 Jun 2026 01:12:50 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# Energy-based Compositional Diffusion Planning 
+
+Tao Sun 1 Utkarsh A. Mishra 2 Jiaxin Lu 3 Danfei Xu 2 Iro Armeni 1
+
+# Abstract 
+
+Compositional diffusion planners aim to solve long-horizon robotic tasks using short training trajectories. Yet, current approaches often rely on the heuristic stitching of local predictions. We show that the resulting stitched update is generally a non-conservative field that does not mathematically correspond to any valid global trajectory log-density function. We propose 
+
+Energy-based Compositional Diffuser (ECD), a framework that formulates the global trajectory as the minimizer of the sum of local bridge potentials. This energy-based perspective defines a conservative correction field and contains a 
+
+boundary reaction term that heuristic stitching omits. To enable efficient inference, we further introduce a Markov-based score approximation that computes the reaction term via a single block-tridiagonal solve, maintaining time complexity linear in the planning horizon. Empirically, ECD achieves state-of-the-art success rates on a range of OGBench stitching tasks, while nearly matching the inference speed of heuristic stitching methods. Code is available at https: //github.com/GradientSpaces/ECD .
+
+# 1. Introduction 
+
+Diffusion models have become a robust paradigm for offline decision-making and robotic planning (Janner et al., 2022b; Ajay et al., 2023a; Chi et al., 2023). By abstracting planning as a sampling process, these models offer distinct advantages over classical planners: they naturally handle multimodality, allow flexible conditioning on goals and constraints, and integrate seamlessly with guidance-style control signals to satisfy multiple objectives at inference time (Dhariwal & Nichol, 2021; Ho & Salimans, 2022). 
+
+> 1
+
+Stanford University, California, USA 2Georgia Institute of Technology, Georgia, USA 3University of Texas at Austin, Texas, USA. Correspondence to: Tao Sun <taosun@stanford.edu >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). Ideal Region 
+
+Figure 1. Performance-runtime frontier on OGBench stitch tasks (Park et al., 2025). We plot the trade-off between success rate and inference runtime averaged over PointMaze Giant and AntMaze Giant environments. While recent inference-time search methods like CDGS (4 or 8 resampling rounds) achieve high success, they suffer from significantly longer runtime costs. Conversely, heuristic stitching methods, e.g ., CompDiffuser (CD), are fast but prone to lower success. Ours bridges this gap, achieving state-of-the-art performance within reasonable runtime. 
+
+Despite this promise, deploying diffusion planners in realistic long-horizon settings remains challenging. While an ideal training set would contain demonstrations spanning complete task horizons so that the model can be queried with boundary constraints ( e.g ., start and goal states) (Janner et al., 2022b), real robot datasets are typically fragmented 
+
+into short clips due to skill segmentation (Kaelbling & Lozano-P ´erez, 2011; Garrett et al., 2021; Mishra et al., 2023) or task-agnostic play (Lynch et al., 2020; Agia et al., 2022; Park et al., 2025). This creates a fundamental mismatch: we have abundant local motion statistics but few full episodes that cover the downstream task. Hence, the planner is forced to generate long trajectories of length L
+
+using only short-horizon experience of length l ≪ L, a form of compositional generation in which short trajectory “chunks” must be composed into a globally consistent and feasible plan (Ajay et al., 2023b; Yang et al., 2023b). To address compositional generation and create one long-horizon trajectory, recent methods rely on the stitching of the short trajectory chunks’ predictions during the denoising process of diffusion sampling. Such approaches have employed simple mode-averaging (Mishra et al., 2023; 2024) or boundary-conditioned inpainting to generate local chunks, which are then stitched using simple 1                  
+
+> arXiv:2606.21646v1 [cs.RO] 19 Jun 2026 Energy-based Compositional Diffusion Planning 0.9 80.96 0.90 0.80 0.60 0.30 0.00
+> CompDiffuser Ours
+> Figure 2. Comparison of the denoising process. Snapshots of the 2D trajectory on one OGBench AntMaze Giant sample during reverse diffusion process (timesteps are normalized to 1→0). While CompDiffuser (CD, top) exhibits scattered samples until the later steps, our method (bottom) rapidly converges to one possible global mode at earlier time ( t≈0.8for ours and t≈0.3for CD) and maintains this mode throughout the denoising process. The alternating darker colors denote different chunks. ( Best viewed in color .)
+
+stitching heuristics (Li et al., 2024; Luo et al., 2025) or hierarchical refinement (Chen et al., 2024a; 2025). While effective for simple cases, we argue that these methods operate on a flawed inductive bias: they assume global consistency can be achieved by heuristically averaging or overwriting local overlaps, thereby mishandling the underlying mathematics of composition of diffusion scores. A recent work, CDGS (Mishra et al., 2025), attempts to resolve such inconsistencies at inference time through resampling and scaling inference-time compute. While CDGS improves success rates over heuristic stitching methods, e.g ., CompDiffuser (CD) (Luo et al., 2025), its iterative nature imposes substantial computational overhead. As illustrated in Fig. 1, a significant gap remains in the literature landscape: existing methods are either fast but inconsistent, or consistent but prohibitively slow. In this paper, we identify a fundamental failure mode in existing stitching approaches. The issue is not using boundary conditions for local chunks, but rather how overlapping updates are aggregated. Stitching heuristics, such as averaging or overwriting, ignore how the chunk’s interior mean shifts in response to boundary-condition perturbations. Mathematically, this omission drops a necessary chain-rule term: the gradient component that adjusts boundary variables based on “feedback” from the chunk’s interior points. By ignoring this interaction, existing methods induce a non-conservative score field ( i.e. , with non-zero curl). Because this field cannot be expressed as the gradient of any global log-density function, the usual score-based reverse-diffusion interpretation no longer applies. Empirically, this results in slower convergence and/or a failure to settle into one possible trajectory mode, as shown in Fig. 2. Conversely, restoring conservativity of the induced compositional energy provides a principled direction for mode-consistent denoising, thereby potentially reducing the need for heavy resampling required to enforce mode consistency, as in CDGS. Guided by the above findings, we propose an energy-based compositional diffuser (ECD). Our key insight is to invert the problem: instead of composing predicted trajectories from local denoisers, we first construct a global, scalar-valued energy by summing local energies induced by each chunk denoiser, and then use its negative gradient as a conservative correction direction. Because the correction is obtained by differentiating a scalar-valued energy, the energy-derived field is conservative by construction. This energy perspective also reveals what stitching approaches miss, a boundary reaction term (a Jacobian-vector product) that propagates interior inconsistency back to chunk boundaries as boundary messages. Finally, we show how to approximate this reaction efficiently with a single block-tridiagonal solve per chunk, giving per-denoising-step complexity linear in the planning horizon. We summarize our main contributions: • We identify a theoretical failure mode of heuristic stitching diffusion planners: the induced update field is generally non-conservative, and thus cannot correspond to the score of any global trajectory density. • We propose an energy-based formulation for compositional diffusion planners whose energy-derived correction field is conservative by construction. With this formulation, we reveal a crucial boundary reaction term that propagates interior inconsistency to chunk boundaries as messages. • We introduce a Markov-based approximation that computes this reaction efficiently via a block-tridiagonal solve, keeping inference time close to heuristic stitching approaches. 
+
+# 2. Preliminaries 
+
+2.1. Problem Setup 
+
+In a standard goal-conditioned planning setting, let X = RD
+
+denote the state space. Given a start state xs and a goal 2Energy-based Compositional Diffusion Planning Heuristic stitching (in CompDiffuser ) Energy -based correction (in ECD, ours ) 
+
+> 1. Denoising local chunk individually.
+> 2. Heuristically stitching local predictions.
+> 1. Computing local chunk scores.
+> 2. Apply an energy -based global correction.
+
+Figure 3. Method comparison. At diffusion time t, the global trajectory x(t) is covered by overlapping chunks (colored bands) connecting a fixed start and goal around obstacles. For chunk k, xsk (t) and xek (t) denote the boundary conditions given to the local denoiser ( i.e. ,start/goal states or segments overlapped with neighboring chunks). Left: CompDiffuser denoises chunks independently, producing local noisy-mean predictions μk (t), and then stitches them into a global mean ν(t). However, the minimizer of this heuristically stitched score 
+
+score stitch (ν(t), t ) is generally not guaranteed to correspond to a globally consistent trajectory, due to its non-conservativity. Right: 
+
+ECD constructs a scalar-valued global energy Et(x(t)) = P 
+
+> k
+
+Et(xCk (t)) from local chunk energies and follows the negative energy gradient −∇ xEt(x(t)) . Therefore, ECD performs a conservative energy-based correction, and its denoising target is the global energy minimizer arg min Et(x(t)) . See Eq. 4 for the stitched score definition. ( Best viewed in color. )
+
+xg , the objective is to generate a feasible trajectory x0: L ∈
+
+R(L+1) ×D such that x0 = xs and xL = xg . Following prior work (Mishra et al., 2023; Luo et al., 2025), we formulate planning as conditional generative modeling: 
+
+x1: L−1 ∼ pθ (· | x0 = xs, x L = xg ). (1) Although we describe the method over states for clarity, the formulation extends directly to state-action sequences (Janner et al., 2022b). In practice, diffusion planners often generate state sequences only and recover actions using a separate inverse-dynamics model that predicts the action given consecutive states (Ajay et al., 2022; Luo et al., 2025). Accordingly, we focus on state-sequence planning throughout the paper. In this paper, we study the out-of-span long-horizon setting where training clips are much shorter than the downstream planning horizon. Specifically, the dataset D consists only of fragments of fixed length l, D := {x(i)
+
+> si:si+l
+
+}Ni=1 , where 
+
+l ≤ L. This reflects common real-robot pipelines where skill separation, resets, safety interventions, or teleoperation yield short segments rather than complete task episodes. The core challenge is to learn local dynamics from the fragments in D and compose them consistently to solve horizon-L
+
+tasks during inference. 
+
+2.2. Compositional Diffusion Planning 
+
+CompDiffuser (CD) (Luo et al., 2025) first addresses this setting by combining a local conditional diffusion model with heuristic prediction stitching. 
+
+Local chunk denoiser. Following CD’s convention, the task horizon L is covered by K + 1 overlapping chunks with length l and stride d, where l/ 2 < d < l . For each chunk k, its start and end indices are sk := kd and ek := 
+
+kd + l, respectively. Without loss of generality, we assume 
+
+L = Kd + l. We denote the k-th chunk index set as Ck := 
+
+{sk, · · · , e k} = {kd, · · · , kd + l}.
+
+Let Sk select the states in chunk Ck. We further introduce two local selectors: Pk selects the coordinates whose noisy mean is predicted or scored, and Ok selects the variables used as the boundary condition. Throughout the paper, a boundary condition can refer to the chunk’s start/end states 3Energy-based Compositional Diffusion Planning Mode transition      
+
+> Training chunks ( l= 3 )
+> CompDiffuser
+> Ours Valid prediction Invalid predictio nStart Goal
+
+100.0%  
+
+> 100.0% Success rate
+
+Figure 4. Toy example with a sequence of 1D distributions : For scalar variables {x0: L}, there are two feasible long-horizon plans from start x0 = 0 to goal xL = 0 : one through the top modes ( E[xi] = +1 ) and one through the bottom modes ( E[xi] = −1). Each training chunk contains l = 3 consecutive variables. While both CD and our method show robust performance at L = 4 , CD’s performance degrades significantly at L = 12 . Our method enforces better consistency in overlapping regions via an energy-derived conservative score field, enabling improved long-horizon continuity while keeping individual segments in-distribution. In contrast, CD’s stitching strategy leads to inconsistent jumps between modes. In gray blocks, each subfigure displays 200 runs for each method; green lines denote valid trajectories, while coral lines indicate invalid ones. The number above each subfigure is the success rate. ( Best viewed in color .) 
+
+or to short boundary segments shared with neighboring chunks. At diffusion timestep t, the denoiser estimates a clean local prediction for the selected coordinates. The network may receive the current noisy selected coordinates as an input, but the bridge-energy correction differentiates the prediction only through the boundary-condition channel. Equivalently, the selected-coordinate input is treated as part of the CD proposal, or as stop-gradient, when defining the correction energy. We write the corresponding noisy mean as 
+
+μk(t) := μk ck(t), t 
+
+:= √¯αt ˆxk
+
+> 0,θ
+
+ t, sg[ PkSkx(t)] | ck(t), (2) Here, ck(t) := OkSkx(t) is the boundary condition, ¯αt is the cumulative diffusion drift and sg[ ·] denotes stop-gradient for the energy correction. The crucial point is that the local mean μk is differentiated as a function of the boundary condition. Therefore, when the boundary condition changes during reverse diffusion, the entire local prediction can shift. 
+
+Inference via stitching of local chunks. During reverse diffusion, each local expert generates a noisy-mean prediction μk(t) over its window Ck. Because indices in the overlapping regions j ∈ Ck ∩ Ck+1 receive conflicting candidates from adjacent experts, CD resolves these conflicts via a heuristic override or averaging rule. Let ν(t) ∈ R(L+1) ×D be the global stitched mean. Under stride assumption, the value at an overlap index j ∈ Ck ∩
+
+Ck+1 is composed as: 
+
+νj (t) = wkμkj (t) + (1 − wk)μk+1  
+
+> j
+
+(t). (3) The corresponding stitched noisy-mean score estimate is 
+
+score stitch (x, t ) := ν(t) − x(t)
+
+σ2
+
+> t
+
+. (4) In CD’s autoregressive (AR) variant, 1 the shared region is determined entirely by one direction. For ar forward ,
+
+wk = 0 (the later chunk overwrites the earlier); for 
+
+ar backward , wk = 1 (the earlier chunk overwrites the later). This stitched mean ν(t) is then used to compute the noise estimate ˆϵ(t) for updating the global state. Such heuristic composition is fast, but it uses only the local predictions themselves. It does not differentiate how a chunk prediction changes with respect to the boundary condition 
+
+OkSkx(t). The missing derivative is the boundary reaction term derived in the next section. 
+
+# 3. Energy-based Compositional Diffuser 
+
+We approach compositional planning by inverting the standard paradigm: rather than stitching local predictions 
+
+> 1
+
+CD offers both AR and interleaved variants in which chunks are denoised separately and boundary conditions for chunk k are drawn from neighboring chunks. Our analysis applies whenever the local mean depends on the boundary condition and the stitching rule omits the chain-rule derivative. Details are in Appendix A. 
+
+4Energy-based Compositional Diffusion Planning 
+
+to approximate a global trajectory, we construct a global energy landscape from local chunk denoisers and define the plan as one of the energy minimizers. Because the correction direction is the negative gradient of a scalar field, the resulting energy-derived vector field is conservative by construction (Marsden & Tromba, 2003). In the practical sampler, this field is used as a conservative compatibility 
+
+correction to a CD-style interleaved sampler. 
+
+3.1. Properties of a Consistent Global Energy 
+
+To build intuition, consider the 1D toy example in Fig. 4. The task is to plan a trajectory x0: L from x0 = 0 to 
+
+xL = 0 . The underlying data distribution is multimodal, favoring trajectories that stay entirely at +1 (top path) or −1
+
+(bottom path). A valid trajectory must commit to one mode. However, an inpainting denoiser for a short chunk ( l = 3 )sees valid training data in both modes. The core challenge is ensuring that a decision to choose a mode in one chunk propagates globally to align all other chunks, avoiding the “zig-zag” failure where the trajectory incoherently jumps between +1 and −1, denoted as pink lines in Fig. 4. To solve the mode-consistency illustrated above, aglobal energy function E(x) should satisfy the following properties: 1. Interior update. For any given chunk, if the boundary variables are fixed ( e.g ., at mode +1 ), the energy minimum for the interior nodes must lie on the feasible manifold connecting them. This ensures local kinematic validity and avoids collision. 2. Reaction to boundary conditions. The energy must couple the interior to the boundary conditions. If the interior is high-energy ( e.g. , in the middle of two modes), it must exert a “reaction force” on the boundary conditions to move them toward feasible modes. 3. Chunk consensus. Since chunks overlap, the global energy needs to be additive, forcing the overlapping nodes to satisfy the constraints of both the left and right overlapping simultaneously. We illustrate the above three properties in Fig. 5 with the desired gradient direction of each property. In addition to these, the energy should have consistent noise scaling throughout the diffusion time steps, so its contribution has a magnitude compatible with DDIM at different times. 
+
+3.2. Energy-based Correction 
+
+We realize these properties by lifting the conditional predictions of the trained denoiser into an energy-based correction. Recall chunk k covers indices Ck =
+
+{sk, . . . , e k} and we denote xk := Skx ∈ R(l+1) D.Interior update Reaction to    
+
+> boundary conditions Chunk consensus
+> Figure 5. Physical interpretation of three properties. The arrows indicate the desired gradient direction leading to energy minimization for each property. Here, small dots denote interior variables and large dots denote boundary variables. ( Best viewed in color .)
+
+Let Pkxk denote the local coordinates that we score, and let Okxk denote the local boundary condition. The selector Pk selects the local trajectory coordinates being corrected, while Ok selects the boundary variables that condition the chunk prediction. Following the stop-gradient convention in Eq. 2, at diffusion step t the trained denoiser provides a conditional mean prediction for the selected local coordinates: 
+
+μk(t) := μk(Okxk(t), t ) ∈ Rdk , dk := dim( Pkxk).
+
+(5) Here, all derivatives of μk below are with respect to the boundary condition Okxk, and the denoiser’s direct noisy-input argument is held fixed in this bridge-energy interpretation. 
+
+Local energy. We define the local energy of a single chunk as the squared Mahalanobis distance between the current selected local state and this predicted mean: 
+
+Ek
+
+> bridge
+
+(x, t ) := 12σ2
+
+> t
+
+Pkxk − μk Okxk, t  2
+
+> Wk
+
+, (6) where ∥v∥2 
+
+> Wk
+
+:= vT Wkv, and Wk is a diagonal weighting matrix handling overlap redundancy, e.g ., wkj = 1 /|{ k′ :
+
+j ∈ Ck′ }| . In the context of Fig. 4, if a chunk’s boundary variables are at +1 , the expert prediction μk will likely be a sequence of +1 s. This energy term penalizes any deviation of the selected local nodes from this mode. 
+
+Global energy. We define the global energy as a sum of local bridge energies: 
+
+Et(x) := 
+
+> K
+
+X
+
+> k=0
+
+Ek
+
+> bridge
+
+(x, t ). (7) The induced bridge-model score/correction direction is the negative gradient of this energy, i.e ., score( x, t ) := 
+
+−∇ xEt(x).5Energy-based Compositional Diffusion Planning 
+
+Property satisfaction. To see how the three properties are enforced, we first analyze the gradient of a single chunk (Eq. 8) and then the summation over chunks (Eq. 9). Let 
+
+rk(t) := Wk
+
+
+
+Pkxk(t) − μk Okxk(t), t 
+
+be the residual error of the selected local coordinates. The score contribution of chunk k is 
+
+score k(x, t ) = −∇ x Ek
+
+> bridge
+
+(x, t )= − 1
+
+σ2
+
+> t
+
+STk PTk rk(t)
+
+| {z }
+
+> Interior update
+
++ 1
+
+σ2
+
+> t
+
+STk OTk JO,k (t)T rk(t)
+
+| {z }
+
+> Boundary reaction
+
+. (8) Here, JO,k (t) := ∂ μk (Ok xk ,t )   
+
+> ∂Okxk
+
+is the Jacobian of the local predictor with respect to its boundary condition. If one instead differentiates through the noisy selected-coordinate input of the neural denoiser, Eq. 8 gains an additional self-Jacobian factor on the interior term. ECD uses the boundary-only/stop-gradient bridge energy in Eq. 6, so Eq. 8 is the exact gradient of the energy being minimized. Summing over chunks gives 
+
+score( x, t ) = 
+
+> K
+
+X
+
+> k=0
+
+score k(x, t ). (9) By construction, the ECD correction field score( x, t ) = 
+
+−∇ xEt(x) is conservative and integrable as the score of the induced bridge-energy compatibility density, proportional to exp( −Et(x)) . In the full implementation, this field is applied as an additive correction to the CD proposal. The terms in Eq. 8, combined with the summation in Eq. 9, satisfy the physical requirements as: • The interior update term pulls the selected local coordinates toward the predicted mean μk (Property 1). • The boundary reaction term captures how the local prediction μk changes as the boundary condition Okxk
+
+moves. This term propagates the residual from the predicted coordinates back to the boundary variables (Property 2). • The chunk consensus is enforced by the summation of these local scores in Eq. 9. Because the global energy is additive, any state variable xj belonging to multiple overlapping chunks receives gradient updates from all of them simultaneously. This drives the trajectory toward a configuration that minimizes the total energy of all overlapping chunks (Property 3). 
+
+3.3. Why Heuristic Stitching is Non-Conservative 
+
+We can now formally pinpoint why heuristic stitching ( e.g. 
+
+CD) fails more frequently in the multimodal data in Fig. 4. When CD resolves a conflict between a chunk that predicts 
+
++1 at an index and a neighbor that predicts −1 at that index, it computes a weighted average or overwriting (Eq. 3). This corresponds to a bridge-only approximation that uses the residual term while effectively setting the reciprocal boundary-condition Jacobian JO,k (t) in Eq. 8 to zero. We formalize this in Proposition 3.1 (proved in Appendix A), which states formally why CD-style stitching results in a non-conservative vector field. Such a field cannot represent the gradient of any valid log-density, making the standard score-based interpretation invalid and helping explain the observed mode drift. 
+
+Proposition 3.1 (Non-conservative score field of chunk stitching) . Assume there exists a chunk k and an index j
+
+for which the stitched mean uses μkj with nonzero weight and μkj (x, t ) depends nontrivially on a chunk boundary condition, i.e., 
+
+∂μ kj
+
+∂(Okxk)q̸ = 0 
+
+for some coordinate q, at some x and fixed t. Assume also that this dependence is not exactly canceled by other terms contributing to the same stitched coordinate. Further assume that stitching assigns that boundary-conditioning coordinate using only chunk predictions that do not depend on xj . Then, the Jacobian ∇xscore stitch (x, t ) is asymmetric. 
+
+3.4. Efficient Approximation via Markovian Structure 
+
+Calculating the exact Jacobian JO,k (t) in Eq. 8 requires differentiating through the neural network at each denoising step, which is computationally prohibitive. However, in robotic planning tasks, the dependency structure is often locally Markovian, where xi depends primarily on xi−1 and 
+
+xi+1 . We exploit this to approximate JTO,k rk by solving a sparse, block-tridiagonal linear system. This reduces the complexity of computing the reaction term from quadratic to linear in the horizon length, O(L), enabling the efficient inference shown in Algorithm 1. Details are in Appendix C. 
+
+# 4. Experiments 
+
+In this section, we evaluate ECD’s performance on the long-horizon trajectory stitching benchmark from OGBench (Park et al., 2025). For all experiments, we consider the input as either the 2D position of the center of mass or a higher-dimensional state that also includes the joint poses of the agent. 
+
+Baselines. We compare the performance of our method against baselines that perform heuristic stitching (CD) (Luo et al., 2025), mode averaging (GSC) (Mishra et al., 2023) and compute scaled mode averaging (CDGS) (Mishra et al., 2025). In addition, we borrow the goal conditioned reinforcement learning benchmark from OGBench (Park 6Energy-based Compositional Diffusion Planning Type Method Success Rate [%]                                                               
+
+> Medium Large Giant
+> Offline RL
+> GCBC 23 ±18 7±50±0
+> GCIVL 70 ±14 12 ±60±0
+> GCIQL 21 ±931 ±20±0
+> CRL 0±10±00±0
+> QRL 80 ±12 84 ±15 50 ±8
+> HIQL 74 ±613 ±60±0
+> Diffusion
+> GSC 100 ±0100 ±039 ±1
+> CompDiffuser 100 ±0100 ±077 ±3
+> CDGS 100 ±097 ±269 ±4
+> Ours 100 ±0100 ±084 ±2
+
+Table 1. Quantitative results on PointMaze-stitching datasets in Ghugare et al. (2024a). We compare ECD to baselines of multiple categories, including diffusion, data augmentation, and offline reinforcement learning in Ghugare et al. (2024a), GSC Mishra et al. (2023), CompDiffuser Luo et al. (2025) and CDGS Mishra et al. (2025). Results are averaged over 3 seeds and standard deviations are shown after the ± sign. 0 2 4 6 8 10       
+
+> Replan budget
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Success rate [%]
+> PointMaze Giant
+> 0246810
+> Replan budget
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> AntMaze Giant
+> CompDiffuser Ours
+
+Figure 6. Performance at different replan budgets . We compare the success rates of our method and CD on PointMaze Giant and AntMaze Giant as a function of the allowed number of replans. Our method consistently outperforms CD across all replan budgets. 
+
+et al., 2025) comprising of goal-conditioned behavioral cloning (GCBC) (Lynch et al., 2020; Ghosh et al., 2019), goal-conditioned implicit V-learning (GCIVL) and Q-learning (GCIQL) (Kostrikov et al., 2021), Contrastive RL (CRL) (Eysenbach et al., 2022), Quasimetric RL (QRL) (Wang et al., 2023), and Hierarchical implicit Q-learning (HIQL) (Park et al., 2024). 
+
+4.1. Effectiveness Study ECD effectively solves trajectory stitching. We conduct experiments on the PointMaze domain where the short-horizon diffusion model is trained to predict a sequence of x-y positions. At inference, ECD generates plans for unseen start and goal pairs with horizons much beyond the training data. As shown in Table 1, our method matches the baselines for Medium and Large mazes. With increasing plan length requirements for the Giant maze, the bridge plus boundary-reaction update promotes coherent boundary consistency and substantially improves performance over baselines. We conduct similar experiments with AntMaze and HumanoidMaze, where the trajectory planning is done to get the sequence of x-y positions that is further executed with the help of an inverse dynamics model (Ajay et al., 2022; Luo et al., 2025). As illustrated in Table 2, we observe consistent improvement in performance across all mazes when compared to heuristic stitching and simple model averaging baselines. 
+
+ECD improves performance in high-dimensional regime. 
+
+We further evaluate the performance in high-dimensional trajectory stitching scenarios, where we incorporate the joint positions along with the x-y position of the center of mass of the agents. The algorithms directly synthesize a sequence of high-dimensional states. We show results on 2D and 15D AntMaze in Table 4. Although success rates decrease with higher-dimensional planning due to added complexity, ECD consistently outperforms CD. We finally evaluate ECD on AntSoccer, where the task is to synthesize a plan for an Ant agent to reach a soccer ball and push it to the provided goal. We evaluate against OGBench standards across two maze environments, Arena and Medium , as shown in Table 3. We test under 17D configuration (tracking ant and ball positions plus all ant joint states). In both environments, ECD achieves the highest mean success among the compared methods, suggesting that our formulation extends to joint dynamics and multi-object planning scenarios. 
+
+4.2. Ablation Study ECD improves the feasibility of long-horizon plans. In our evaluation setup, we try to track the planned sequence of states using an inverse dynamics (ID) model. Each time, we (i) execute actions based on ID outputs and (ii) progressively update the target state for the inverse dynamics model to be the immediate next planned state in the sequence. If the distance between the current state and the target state crosses a threshold, we assume that the agent cannot track the sequence anymore and fall back on replanning a new sequence of states to the goal. An algorithm that outputs more feasible long-horizon plans will require fewer replans to achieve the goal. As illustrated in Figure 6, given a fixed maximum number of replans, we observe that ECD exceeds CD’s performance suggesting that our energy formulation not only enforces feasible boundary consistency but also keeps the local segments in-distribution after stitching. 
+
+ECD performs better with the exact boundary reaction term. To assess the effectiveness of our score approximation (Section 3.4), we compare it against the exact boundary reaction term computed via automatic differentiation through the chunk denoiser. As shown in Table 5, the exact computation yields slightly higher success rates on both PointMaze ( 92% vs. 91% ) and AntMaze ( 89% vs. 87% ). 7Energy-based Compositional Diffusion Planning Environment Type Size GCBC GCIVL GCIQL QRL CRL HIQL GSC CD CDGS Ours AntMaze Stitch Medium 45 ±11 44 ±6 29 ±6 59 ±7 53 ±6 94 ±1 98 ±1 95 ±4 96 ±1 97 ±1
+
+Large 3 ±3 18 ±2 7 ±2 18 ±2 11 ±2 67 ±5 77 ±4 74 ±4 71 ±3 82 ±1
+
+Giant 0 ±0 0 ±0 0 ±0 0 ±0 0 ±0 21 ±2 36 ±1 72 ±9 78 ±7 82 ±6
+
+Humanoid-Maze Stitch Medium 29 ±5 12 ±2 12 ±3 18 ±2 71 ±3 96 ±4 90 ±2 90 ±4 91 ±1 92 ±2
+
+Large 6 ±3 1 ±1 0 ±0 3 ±1 6 ±1 31 ±3 58 ±5 59 ±2 50 ±3 64 ±4
+
+Giant 0 ±0 0 ±0 0 ±0 0 ±0 0 ±0 12 ±2 7 ±1 42 ±1 23 ±6 49 ±1
+
+Table 2. Success rates [%] on AntMaze and HumanoidMaze in OGBench. We benchmark our method on the 5 test-time tasks defined in OGBench with 20 episodes per task. Results are averaged over 3 seeds and standard deviations are shown after the ± sign. 
+
+Environment Size GCBC GCIVL GCIQL QRL CRL HIQL GSC 
+
+(4D) 
+
+CD 
+
+(4D) 
+
+GSC 
+
+(17D) 
+
+CD 
+
+(17D) 
+
+CDGS 
+
+(17D) 
+
+Ours 
+
+(17D) 
+
+AntSoccer Arena 34 ±4 21 ±3 5 ±2 2 ±1 2 ±1 23 ±2 41 ±4 55 ±6 65 ±3 61 ±3 65 ±3 66 ±2
+
+Medium 2 ±1 1 ±0 0 ±0 0 ±0 0 ±0 8 ±2 5 ±2 13 ±1 12 ±2 17 ±3 9 ±3 20 ±2
+
+Table 3. Success rates [%] on high-dimensional AntSoccer in OGBench. We evaluate two AntSoccer environments with 17D state dimensions. Results are averaged over 3 seeds and standard deviations are shown after the ± sign. 
+
+Environment Size Method 2D 15D AntMaze 
+
+Large CD 74 ±4 83 ±3
+
+Ours 82 ±1 89 ±1
+
+Giant CD 72 ±9 41 ±3
+
+Ours 82 ±6 51 ±3
+
+Table 4. Success rates [%] on high-dimensional AntMaze stitching tasks . We compare our method against CompDiffuser (CD) on AntMaze Large and Giant with 15-dimensional state space. Our energy-based approach consistently outperforms CD, particularly in the more challenging giant environment. 
+
+These results are consistent with the theoretical derivation of the boundary reaction term and suggest that precise gradient feedback further enhances trajectory consistency. However, the exact calculation increases inference runtime by almost 
+
+3× (approx. 22 s vs. 8s). Our approximation thus provides a favorable trade-off, retaining most benefits of the energy-derived correction while ensuring efficiency. To further evaluate the approximation fidelity, we plot the approximation accuracy statistics (cosine similarity and norm ratio) between the approximate and exact reaction terms in Figure 7. We observe that the accuracy of the approximation improves significantly as reverse diffusion proceeds ( t → 0). This trend is consistent with the theoretical error bound in Appendix C.4, which predicts that the message approximation error scales with the noise level σt across timesteps. 
+
+Inference runtime across methods. Table 6 reports the planning runtime per episode for all four diffusion stitching methods on the two Giant environments (PointMaze and AntMaze), measured on a single NVIDIA RTX 5090 under the matched evaluation protocol of Fig. 1. ECD runs at 0.0 0.5 1.0  
+
+> Diffusion Timestep ( T/Tmax )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Approximation Accuracy
+> PointMaze Giant
+> 0.0 0.5 1.0
+> Diffusion Timestep ( T/Tmax )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> AntMaze Giant
+> Cosine Similarity Norm Ratio
+
+Figure 7. Fidelity of reaction term approximation. We compare our approximated reaction term with the exact JVP computed via backpropagation. We report the Cosine Similarity and Norm Ratio across normalized diffusion timesteps ( 1.0 → 0.0)on PointMaze and AntMaze Giant. The approximation shows reasonable alignment, particularly in the later denoising stages. Shaded regions indicate standard deviation. 
+
+a comparable cost, adding only a moderate overhead on AntMaze from the block-tridiagonal solve. Notably, CDGS is excessively slower, since each reverse step performs multiple resampling rounds. ECD attains the best success rate at a runtime close to CD and far below CDGS. 
+
+# 5. Prior Work 
+
+Diffusion models for planning. Diffusion models (Sohl-Dickstein et al., 2015; Ho et al., 2020) have been widely adopted for generative planning (Janner et al., 2022a; Ajay et al., 2022; Chi et al., 2023; Wang et al., 2022; Chen et al., 2024a). Such methods formulate trajectory generation as probabilistic inference and have been applied to motion planning (Carvalho et al., 2023; Luo et al., 2024) and task 8Energy-based Compositional Diffusion Planning Environment Compute Success Rate Runtime                                                               
+
+> [%] [sec / episode]
+> PointMaze Exact 86 ±217 ±2
+> Approx 84 ±28±2
+> AntMaze Exact 82 ±527 ±17
+> Approx 82 ±625 ±19
+> Table 5. Approximate vs. exact reaction term . We evaluate success rate and inference time on PointMaze and AntMaze Giant. Exact mode slightly improves success rate but is substantially slower at inference.
+> Method PointMaze Giant AntMaze Giant
+> SR [%] Runtime [s] SR [%] Runtime [s] GSC 39 5±036 20 ±9
+> CD 77 8±272 17 ±10
+> CDGS ( 4×)69 14 ±478 46 ±25
+> CDGS ( 8×)68 29 ±982 168 ±39
+> ECD (Ours) 84 8±282 25 ±19
+> Table 6. Inference runtime on the Giant environments. Success rate [SR, %] and planning runtime per episode [sec] (mean ±std over the episodes), measured on a single RTX 5090 for planner only. ECD attains the highest success rate at a runtime comparable to CompDiffuser (CD) and far below CDGS at both 4×and 8×
+> resampling rounds.
+
+planning (Yang et al., 2023a; Fang et al., 2024). Recent advancements integrate diffusion with hierarchical planning (Li et al., 2023; Chen et al., 2024b), uncertainty-aware sampling (Sun et al., 2024), and online replanning (Zhou et al., 2024a). However, these methods are generally limited to planning horizons as seen in training data. We build on compositional planning (Mishra et al., 2023; Luo et al., 2025) to resolve the “out-of-span” problem, and extend planning horizons significantly beyond training regime. 
+
+Trajectory stitching for long-horizon planning. 
+
+Effectively using fragmented trajectories to plan for long-horizon tasks allows reusing offline information to solve unseen tasks at inference time. Some effective approaches include using generative models (Li et al., 2024; Lu et al., 2024; Kim et al., 2024b; Lee et al., 2024; Li & Zhang, 2024; Liu et al., 2024), model-based approaches (Char et al., 2022; Lei et al., 2024; Zhou et al., 2024b; Hepburn & Montana, 2022), and clustering (Ghugare et al., 2024b). Supervised methods, such as sequence modeling (Chen et al., 2021; Huang et al., 2025; Wu et al., 2023; Zhuang et al., 2024; Wang et al., 2024b), latent space learning (Zeng et al., 2023; Venkatraman et al., 2023; Zhang et al., 2024), and dynamic programming (Gao et al., 2024; Kim et al., 2024a), also demonstrate stitching capabilities. We propose a method to solve the stitching problem directly within the sampling process of a compositional generative framework. 
+
+Generative trajectory stitching. Recent works leverage compositional generative modeling (Du et al., 2020; 2023; Garipov et al., 2023; Du & Kaelbling, 2024; Mahajan et al., 2024; Bradley et al., 2025; Okawa et al., 2024; Thornton et al., 2025) for trajectory stitching in planning (Yang et al., 2023b; Ajay et al., 2023b; Luo et al., 2024; Mishra et al., 2023; 2024; Luo et al., 2025; Mishra et al., 2025) and policy learning (Wang et al., 2024a; Patil et al., 2024). We identify that current stitching heuristics ignore how interior predictions shift with boundary-condition perturbations, inducing a non-conservative score field with non-zero curl. By restoring conservativity for the induced bridge-energy model, we introduce a boundary reaction term that propagates interior inconsistencies to chunk boundaries, promoting coherent trajectories. 
+
+Training-time trajectory stitching. Recent methods, such as SCoTS (Lee & Choi, 2025) and HM-Diffusion (Chen et al., 2025), propose addressing long-horizon planning by modifying training data (e.g., via trajectory segmenting and progressive augmentation). While effective, these approaches often require task-specific state representations, limiting transfer to domains with high-dimensional observations or complex dynamics like AntSoccer or manipulation. In contrast, ECD is an inference-time composition rule for a fixed local chunk denoiser. Moreover, as analyzed in Appendix B.2, given a well-trained local expert, ECD can remove the structural inference-time error associated with the dropped reaction term in the induced bridge-energy model. Thus, ECD is natural to combine with methods that improve the local planner itself, such as SCoTS. 
+
+# 6. Conclusion 
+
+In this paper, we proposed an energy-based compositional diffuser (ECD), which composes local energies into a global scalar objective whose negative gradient defines an energy-derived denoising correction. This perspective yields a conservative field for the induced bridge-energy model and exposes a missing boundary reaction term that propagates interior inconsistency back to chunk boundaries. To ensure practical inference, we further introduce a Markov-structured approximation that computes the reaction via a single block-tridiagonal solve per chunk, yielding linear time complexity in the planning horizon. Finally, we validate our approach in maze environments across both low- and high-dimensional settings. Limitations and future directions are discussed in Appendix E. 
+
+# Impact Statement 
+
+This work improves long-horizon robotic planning by making compositional diffusion planners more consistent 9Energy-based Compositional Diffusion Planning 
+
+and efficient. Potential positive impacts include more reliable robot navigation, manipulation, and task execution learned from fragmented offline data, which may reduce the need for costly full-task demonstrations. However, improved planning methods could also be applied in safety-critical or harmful robotic systems if deployed without appropriate safeguards. Our experiments are limited to simulated benchmark environments, and real-world deployment would require careful validation, monitoring, and oversight to ensure safe and responsible behavior. 
+
+# Acknowledgment 
+
+Tao Sun is supported by the Stanford Graduate Fellowship (SGF). The authors thank Liyuan Zhu for discussion. We thank Stanford Marlowe Cluster (Kapfer et al., 2025) and NVIDIA Academic Grant Project for providing GPU resources for this project. 
+
+# References 
+
+Agia, C., Migimatsu, T., Wu, J., and Bohg, J. Stap: Sequencing task-agnostic policies. arXiv preprint arXiv:2210.12250 , 2022. Ajay, A., Du, Y., Gupta, A., Tenenbaum, J. B., Jaakkola, T. S., and Agrawal, P. Is conditional generative modeling all you need for decision making? In The Eleventh International Conference on Learning Representations ,2022. Ajay, A., Du, Y., Gupta, A., Tenenbaum, J. B., Jaakkola, T. S., and Agrawal, P. Is conditional generative modeling all you need for decision making? In International Conference on Learning Representations (ICLR) , 2023a. Ajay, A., Han, S., Du, Y., Li, S., Gupta, A., Jaakkola, T. S., Tenenbaum, J. B., Kaelbling, L. P., Srivastava, A., and Agrawal, P. Compositional foundation models for hierarchical planning. In Thirty-seventh Conference on Neural Information Processing Systems , 2023b. Bradley, A., Nakkiran, P., Berthelot, D., Thornton, J., and Susskind, J. M. Mechanisms of projective composition of diffusion models. arXiv preprint arXiv:2502.04549 ,2025. Carvalho, J., Le, A. T., Baierl, M., Koert, D., and Peters, J. Motion planning diffusion: Learning and planning of robot motions with diffusion models. In 2023 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 1916–1923. IEEE, 2023. Char, I., Mehta, V., Villaflor, A., Dolan, J. M., and Schneider, J. Bats: Best action trajectory stitching. arXiv preprint arXiv:2204.12026 , 2022. Chen, C., Deng, F., Kawaguchi, K., Gulcehre, C., and Ahn, S. Simple hierarchical planning with diffusion. In 
+
+International Conference on Learning Representations (ICLR) , 2024a. Chen, C., Deng, F., Kawaguchi, K., Gulcehre, C., and Ahn, S. Simple hierarchical planning with diffusion. arXiv preprint arXiv:2401.02644 , 2024b. Chen, C., Hamed, H., Baek, D., Kang, T., Bengio, Y., and Ahn, S. Extendable long-horizon planning via hierarchical multiscale diffusion. arXiv preprint arXiv:2503.20102 , 2025. Chen, L., Lu, K., Rajeswaran, A., Lee, K., Grover, A., Laskin, M., Abbeel, P., Srinivas, A., and Mordatch, I. Decision transformer: Reinforcement learning via sequence modeling. Advances in neural information processing systems , 34:15084–15097, 2021. Chi, C., Feng, S., Du, Y., Xu, W., Wang, T., Cousineau, E., Burchfiel, B., and Song, S. Diffusion policy: Visuomotor policy learning via action diffusion. arXiv preprint arXiv:2303.04137 , 2023. Dhariwal, P. and Nichol, A. Q. Diffusion models beat gans on image synthesis. In Advances in Neural Information Processing Systems , volume 34, pp. 8780–8794, 2021. URL https://arxiv.org/abs/2105.05233 .Du, Y. and Kaelbling, L. Compositional generative modeling: A single model is not all you need. arXiv preprint arXiv:2402.01103 , 2024. Du, Y., Li, S., and Mordatch, I. Compositional visual generation with energy based models. Advances in Neural Information Processing Systems , 33:6637–6647, 2020. Du, Y., Durkan, C., Strudel, R., Tenenbaum, J. B., Dieleman, S., Fergus, R., Sohl-Dickstein, J., Doucet, A., and Grathwohl, W. S. Reduce, reuse, recycle: Compositional generation with energy-based diffusion models and mcmc. In International conference on machine learning , pp. 8489–8510. PMLR, 2023. Eysenbach, B., Zhang, T., Levine, S., and Salakhutdinov, R. R. Contrastive learning as goal-conditioned reinforcement learning. Advances in Neural Information Processing Systems , 35:35603–35620, 2022. Fang, X., Garrett, C. R., Eppner, C., Lozano-P ´erez, T., Kaelbling, L. P., and Fox, D. Dimsam: Diffusion models as samplers for task and motion planning under partial observability. In 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 1412–1419. IEEE, 2024. 10 Energy-based Compositional Diffusion Planning 
+
+Gao, C.-X., Wu, C., Cao, M., Kong, R., Zhang, Z., and Yu, Y. Act: Empowering decision transformer with dynamic programming via advantage conditioning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pp. 12127–12135, 2024. Garipov, T., De Peuter, S., Yang, G., Garg, V., Kaski, S., and Jaakkola, T. Compositional sculpting of iterative generative processes. arXiv preprint arXiv:2309.16115 ,2023. Garrett, C. R., Chitnis, R., Holladay, R., Kim, B., Silver, T., Kaelbling, L. P., and Lozano-P ´erez, T. Integrated task and motion planning. Annual review of control, robotics, and autonomous systems , 4(1):265–293, 2021. Ghosh, D., Gupta, A., Reddy, A., Fu, J., Devin, C., Eysenbach, B., and Levine, S. Learning to reach goals via iterated supervised learning. arXiv preprint arXiv:1912.06088 , 2019. Ghugare, R., Geist, M., Berseth, G., and Eysenbach, B. Closing the gap between td learning and supervised learning–a generalisation point of view. arXiv preprint arXiv:2401.11237 , 2024a. Ghugare, R., Geist, M., Berseth, G., and Eysenbach, B. Closing the gap between td learning and supervised learning-a generalisation point of view. In The Twelfth International Conference on Learning Representations ,2024b. Hepburn, C. A. and Montana, G. Model-based trajectory stitching for improved offline reinforcement learning. In 
+
+3rd Offline RL Workshop: Offline RL as a “Launchpad” ,2022. Ho, J. and Salimans, T. Classifier-free diffusion guidance. 
+
+arXiv preprint arXiv:2207.12598 , 2022. Ho, J., Jain, A., and Abbeel, P. Denoising diffusion probabilistic models. Advances in neural information processing systems , 33:6840–6851, 2020. Huang, X., Wu, D., and Boulet, B. Drdt3: Diffusion-refined decision test-time training model. arXiv preprint arXiv:2501.06718 , 2025. Janner, M., Du, Y., Tenenbaum, J., and Levine, S. Planning with diffusion for flexible behavior synthesis. In 
+
+International Conference on Machine Learning , pp. 9902– 9915. PMLR, 2022a. Janner, M., Du, Y., Tenenbaum, J. B., and Levine, S. Planning with diffusion for flexible behavior synthesis. In 
+
+International Conference on Machine Learning (ICML) ,2022b. Kaelbling, L. P. and Lozano-P ´erez, T. Hierarchical task and motion planning in the now. In 2011 IEEE international conference on robotics and automation , pp. 1470–1477. IEEE, 2011. Kapfer, C., Stine, K., Narasimhan, B., Mentzel, C., and Candes, E. Marlowe: Stanford’s gpu-based computational instrument, 2025. Kim, J., Lee, S., Kim, W., and Sung, Y. Adaptive q-aid for conditional supervised learning in offline reinforcement learning. Advances in Neural Information Processing Systems , 37:87104–87135, 2024a. Kim, S., Choi, Y., Matsunaga, D. E., and Kim, K.-E. Stitching sub-trajectories with conditional diffusion model for goal-conditioned offline rl. In Proceedings of the AAAI Conference on Artificial Intelligence ,volume 38, pp. 13160–13167, 2024b. Kostrikov, I., Nair, A., and Levine, S. Offline reinforcement learning with implicit q-learning. arXiv preprint arXiv:2110.06169 , 2021. Lee, J., Yun, S., Yun, T., and Park, J. GTA: Generative trajectory augmentation with guidance for offline reinforcement learning. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. Lee, K. and Choi, J. State-covering trajectory stitching for diffusion planners. arXiv preprint arXiv:2506.00895 ,2025. Lei, X., Zhang, X., and Wang, D. Mgda: Model-based goal data augmentation for offline goal-conditioned weighted supervised learning. arXiv preprint arXiv:2412.11410 ,2024. Li, G., Shan, Y., Zhu, Z., Long, T., and Zhang, W. Diffstitch: Boosting offline reinforcement learning with diffusion-based trajectory stitching. In Forty-first International Conference on Machine Learning , 2024. Li, S. and Zhang, X. Augmenting offline reinforcement learning with state-only interactions. arXiv preprint arXiv:2402.00807 , 2024. Li, W., Wang, X., Jin, B., and Zha, H. Hierarchical diffusion for offline decision making. In International Conference on Machine Learning , pp. 20035–20064. PMLR, 2023. Liu, Z., Qian, L., Liu, Z., Wan, L., Chen, X., and Lan, X. Enhancing decision transformer with diffusion-based trajectory branch generation. arXiv preprint arXiv:2411.11327 , 2024. 11 Energy-based Compositional Diffusion Planning 
+
+Lu, C., Ball, P., Teh, Y. W., and Parker-Holder, J. Synthetic experience replay. Advances in Neural Information Processing Systems , 36, 2024. Luo, Y., Sun, C., Tenenbaum, J. B., and Du, Y. Potential based diffusion motion planning. In International Conference on Machine Learning , pp. 33486–33510. PMLR, 2024. Luo, Y., Mishra, U. A., Du, Y., and Xu, D. Generative trajectory stitching through diffusion composition. arXiv preprint arXiv:2503.05153 , 2025. Lynch, C., Khansari, M., Xiao, T., Kumar, V., Tompson, J., Levine, S., and Sermanet, P. Learning latent plans from play. In Conference on robot learning , pp. 1113–1132. PMLR, 2020. Mahajan, D., Pezeshki, M., Mitliagkas, I., Ahuja, K., and Vincent, P. Compositional risk minimization. arXiv preprint arXiv:2410.06303 , 2024. Marsden, J. E. and Tromba, A. Vector calculus . Macmillan, 2003. Mishra, U. A., Xue, S., Chen, Y., and Xu, D. Generative skill chaining: Long-horizon skill planning with diffusion models. In 7th Annual Conference on Robot Learning ,2023. Mishra, U. A., Chen, Y., and Xu, D. Generative factor chaining: Coordinated manipulation with diffusion-based factor graph. In 8th Annual Conference on Robot Learning , 2024. Mishra, U. A., He, D., Chen, Y., and Xu, D. Compositional diffusion with guided search for long-horizon planning. 
+
+arXiv preprint arXiv:2601.00126 , 2025. Okawa, M., Lubana, E. S., Dick, R., and Tanaka, H. Compositional abilities emerge multiplicatively: Exploring diffusion models on a synthetic task. Advances in Neural Information Processing Systems , 36, 2024. Park, S., Ghosh, D., Eysenbach, B., and Levine, S. Hiql: Offline goal-conditioned rl with latent states as actions. 
+
+Advances in Neural Information Processing Systems , 36, 2024. Park, S., Frans, K., Eysenbach, B., and Levine, S. Ogbench: Benchmarking offline goal-conditioned rl. In 
+
+International Conference on Learning Representations (ICLR) , 2025. Patil, O., Sah, A., and Gopalan, N. Composing diffusion policies for few-shot learning of movement trajectories. 
+
+arXiv preprint arXiv:2410.17479 , 2024. Sohl-Dickstein, J., Weiss, E., Maheswaranathan, N., and Ganguli, S. Deep unsupervised learning using nonequilibrium thermodynamics. In Proceedings of the 32nd International Conference on Machine Learning ,volume 37 of Proceedings of Machine Learning Research ,pp. 2256–2265, 2015. URL https://proceedings. mlr.press/v37/sohl-dickstein15.html .Sun, J., Jiang, Y., Qiu, J., Nobel, P., Kochenderfer, M. J., and Schwager, M. Conformal prediction for uncertainty-aware planning with diffusion dynamics model. Advances in Neural Information Processing Systems , 36, 2024. Thornton, J., Bethune, L., Zhang, R., Bradley, A., Nakkiran, P., and Zhai, S. Composition and control with distilled energy diffusion models and sequential monte carlo. 
+
+arXiv preprint arXiv:2502.12786 , 2025. Venkatraman, S., Khaitan, S., Akella, R. T., Dolan, J., Schneider, J., and Berseth, G. Reasoning with latent diffusion in offline reinforcement learning. arXiv preprint arXiv:2309.06599 , 2023. Wang, L., Zhao, J., Du, Y., Adelson, E. H., and Tedrake, R. Poco: Policy composition from and for heterogeneous robot learning. arXiv preprint arXiv:2402.02511 , 2024a. Wang, T., Torralba, A., Isola, P., and Zhang, A. Optimal goal-reaching reinforcement learning via quasimetric learning. In International Conference on Machine Learning , pp. 36411–36430. PMLR, 2023. Wang, Y., Yang, C., Wen, Y., Liu, Y., and Qiao, Y. Critic-guided decision transformer for offline reinforcement learning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pp. 15706–15714, 2024b. Wang, Z., Hunt, J. J., and Zhou, M. Diffusion policies as an expressive policy class for offline reinforcement learning. 
+
+arXiv preprint arXiv:2208.06193 , 2022. Wu, Y.-H., Wang, X., and Hamaya, M. Elastic decision transformer. Advances in neural information processing systems , 36:18532–18550, 2023. Yang, C.-F., Xu, H., Wu, T.-L., Gao, X., Chang, K.-W., and Gao, F. Planning as in-painting: A diffusion-based embodied task planning framework for environments under uncertainty. arXiv preprint arXiv:2312.01097 ,2023a. Yang, Z., Mao, J., Du, Y., Wu, J., Tenenbaum, J. B., Lozano-P ´erez, T., and Kaelbling, L. P. Compositional diffusion-based continuous constraint solvers. arXiv preprint arXiv:2309.00966 , 2023b. 12 Energy-based Compositional Diffusion Planning 
+
+Zeng, Z., Zhang, C., Wang, S., and Sun, C. Goal-conditioned predictive coding for offline reinforcement learning. Advances in Neural Information Processing Systems , 36:25528–25548, 2023. Zhang, Z., Xu, J., Liu, J., Zhuang, Z., Wang, D., Liu, M., and Zhang, S. Context-former: Stitching via latent conditioned sequence modeling. arXiv preprint arXiv:2401.16452 , 2024. Zhou, S., Du, Y., Zhang, S., Xu, M., Shen, Y., Xiao, W., Yeung, D.-Y., and Gan, C. Adaptive online replanning with diffusion models. Advances in Neural Information Processing Systems , 36, 2024a. Zhou, Z., Zhu, C., Zhou, R., Cui, Q., Gupta, A., and Du, S. S. Free from bellman completeness: Trajectory stitching via model-based return-conditioned supervised learning. In The Twelfth International Conference on Learning Representations , 2024b. Zhuang, Z., Peng, D., Liu, J., Zhang, Z., and Wang, D. Reinformer: Max-return sequence modeling for offline rl. In International Conference on Machine Learning , pp. 62707–62722. PMLR, 2024. 13 Energy-based Compositional Diffusion Planning 
+
+# A. Why Is CompDiffuser’s Stitching Non-Conservative? 
+
+This section proves Proposition 3.1 and makes explicit how the argument applies to the CompDiffuser (CD) variants used in practice. We use the selector notation from the main text for boundary-conditioned chunk denoisers. 
+
+A.1. Notation 
+
+Let x ∈ R(L+1) D be the long noisy trajectory at diffusion time t. Chunk k selects local coordinates using Sk. Within the chunk, Pk selects the coordinates whose noisy mean is predicted or scored, and Ok selects the coordinates used as the local boundary condition. Thus 
+
+yk = PkSkx, ck = OkSkx. (10) The local denoiser induces a noisy mean 
+
+μk(ck, t ) = √¯αt ˆxk 
+
+> 0,θ
+
+(sg[ yk], c k, t ), (11) where the dependence on ck is essential and sg[ yk] denotes that the selected-coordinate input is treated as stop-gradient for the correction energy. Here ck is the local boundary condition vector supplied to the chunk denoiser. Let Π denote the stitching or aggregation operator used by CD, e.g. , overwrite, averaging, overlap blending, or candidate selection followed by blending. A stitched noisy mean can be written abstractly as 
+
+νCD (x, t ) = Π  {μk(OkSkx, t )}Kk=0 
+
+, (12) which induces the usual VP noisy-mean score estimate 
+
+sCD (x, t ) := νCD (x, t ) − x
+
+σ2
+
+> t
+
+. (13) For sCD to be the gradient of a scalar potential, its Jacobian must be symmetric on any simply connected region where the stitching rule is smooth. 
+
+A.2. Proof of the Non-Conservative Stitching Proposition Proposition A.1 (Non-conservative score field of chunk stitching) . Fix t and consider a region where the stitching rule 
+
+Π is differentiable and its selected/blending weights are fixed. Suppose there exist a local prediction coordinate a and a boundary-conditioning coordinate b ∈ OkSkx such that the stitched mean uses μk,a with nonzero coefficient and 
+
+∂μ k,a 
+
+∂x b̸ = 0 . (14) 
+
+Assume moreover that the remaining stitched terms do not exactly cancel this contribution, so ∂ν a/∂x b̸ = 0 on the considered region. Suppose further that the stitching rule assigns coordinate b by copying, overwriting, averaging, or blending values whose local dependence does not include xa. Then the Jacobian of sCD (x, t ) is asymmetric, and therefore 
+
+sCD is generally non-conservative. Proof. From Eq. (13), 
+
+∇xsCD (x, t ) = σ−2
+
+> t
+
+ ∇xνCD (x, t ) − I. (15) Thus it is enough to show that ∇xνCD is asymmetric. By assumption, on the considered region the stitched coordinate νa
+
+contains the local prediction μk,a with some nonzero coefficient γ:
+
+νa(x, t ) = γ μ k,a (OkSkx, t ) + ha(x, t ), γ̸ = 0 , (16) where ha collects the remaining stitched terms. By the non-cancellation assumption, 
+
+∂(sCD )a
+
+∂x b
+
+= σ−2
+
+> t
+
+∂ν a
+
+∂x b̸ = 0 . (17) However, coordinate b is assigned by a heuristic stitching operation that does not reciprocally depend on xa. Hence, locally, 
+
+∂(sCD )b
+
+∂x a
+
+= σ−2
+
+> t
+
+∂ν b
+
+∂x a
+
+= 0 . (18) The mixed partial derivatives are unequal, so the Jacobian is asymmetric. Therefore the field cannot be written as ∇ϕ(x) for any scalar potential ϕ on that region. 14 Energy-based Compositional Diffusion Planning 
+
+Why this is the missing reaction. The bridge energy used by ECD has the form 
+
+Ek(x, t ) = 12σ2
+
+> t
+
+∥PkSkx − μk(OkSkx, t )∥2 
+
+> Wk
+
+. (19) Let 
+
+rk = Wk (PkSkx − μk(OkSkx, t )) , JO,k = ∂μk
+
+∂(OkSkx) . (20) Then the chain rule gives 
+
+−∇ xEk = −σ−2 
+
+> t
+
+S⊤ 
+
+> k
+
+P⊤ 
+
+> k
+
+rk + σ−2 
+
+> t
+
+S⊤ 
+
+> k
+
+O⊤ 
+
+> k
+
+J⊤
+
+> O,k
+
+rk. (21) The second term is the boundary reaction. Heuristic stitching uses local predictions while omitting this reciprocal derivative, and Proposition A.1 formalizes the resulting asymmetry. 
+
+Auto-regressive variant. CD’s auto-regressive (AR) variant replaces averaging with directional overwriting, which makes the asymmetry direct. 
+
+Proposition A.2 (Autoregressive overwrite is non-conservative) . Assume a chunk prediction depends nontrivially on a boundary-condition coordinate. Then both forward and backward autoregressive CD induce a generally non-conservative score field. Proof. Consider two neighboring chunks k and k + 1 with shared coordinate a ∈ Ck ∩ Ck+1 . In forward AR, the later chunk overwrites the earlier one, so on the shared region 
+
+νa = μk+1 ,a (ck+1 , t ). (22) Let b be a left boundary-condition coordinate of chunk k + 1 . By assumption, 
+
+∂ν a
+
+∂x b
+
+= ∂μ k+1 ,a 
+
+∂x b̸ = 0 . (23) But b is supplied by the previous chunk or by a fixed boundary condition and is not assigned through a rule that depends on 
+
+xa. Thus ∂ν b/∂x a = 0 , and the Jacobian is asymmetric. Backward AR gives the same result with the roles reversed. The earlier chunk overwrites the later one. Choose a in the shared region assigned from chunk k and let b be a right boundary-condition coordinate of chunk k. Again ∂ν a/∂x b̸ = 0 
+
+while ∂ν b/∂x a = 0 . Hence the score field is generally non-conservative. 
+
+Chunk-interleaved variant. CD’s chunk-interleaved variant used in practice is an ordered composition of local updates. It is therefore better viewed as a proposal operator than as a single simultaneous score field. Its non-conservative character can still be formalized. Let Tk denote the local update that denoises chunk k while treating the current neighboring boundary variables as conditions. One interleaved sweep is 
+
+Tint = TK ◦ · · · ◦ T 1 ◦ T 0. (24) If a sweep were an Euler step of a conservative score field, its infinitesimal displacement would have a symmetric Jacobian. The following result shows why this condition fails. 
+
+Proposition A.3 (Interleaving does not restore integrability) . Suppose at least one local chunk update has a nonzero dependence on a boundary condition supplied by another chunk, and the reciprocal derivative is omitted as in Proposition A.1. Then the first-order displacement induced by an interleaved sweep has an asymmetric Jacobian. Moreover, even if individual block directions were conservative, the ordered composition generically introduces non-gradient Lie-bracket terms unless the block Jacobians commute. Proof. Write a small local update as Tk(x) = x + ηf k(x) + O(η2). The first-order displacement of one sweep is 
+
+Tint (x) − x = η X
+
+> k
+
+fk(x) + O(η2). (25) 15 Energy-based Compositional Diffusion Planning 
+
+Each fk uses the local denoiser response to the current boundary condition while treating the boundary-condition source as externally provided. This drops the reciprocal reaction derivative. By Proposition A.1, the Jacobian of P 
+
+> k
+
+fk is generically asymmetric. At second order, the ordered composition contributes terms of the form 
+
+η2 X
+
+> j>i
+
+Df j (x)fi(x). (26) Equivalently, the modified vector field contains Lie brackets [fj , f i] = Df ifj − Df j fi. Lie brackets of gradient fields are not generally gradient fields unless the corresponding Hessians commute in a special way. Thus interleaving is a useful proposal mechanism, but it does not restore the existence of a global scalar energy. 
+
+Conclusion. CD remains useful as a local proposal because it preserves chunk-level multimodality. However, its update is not the gradient of a global compatibility energy because it treats boundary conditions as one-way inputs. ECD keeps the local proposal and adds the missing reaction correction analyzed next. 
+
+# B. Why ECD Helps with CompDiffuser? 
+
+The practical sampler uses CD’s chunk-interleaved proposal, so the full sampler is not a pure conservative reverse-diffusion field. The theoretical claim is therefore conditional: given a CD proposal, the ECD step is a conservative energy correction that reduces unnecessary independence across chunks, and is closer to the oracle score under certain conditions. 
+
+B.1. Conservative Correction 
+
+Let z denote the duplicated chunk state used by the interleaved sampler. A CD sweep produces a proposal 
+
+ez = DCD  
+
+> θ,t
+
+(z). (27) ECD then applies an energy correction using the lifted bridge energy 
+
+Et(z) = X
+
+> k
+
+12σ2
+
+> t
+
+zk − μk(Okz, t ) 2
+
+> Wk
+
+. (28) The exact correction is 
+
+z+ = ez − ρt Πc
+
+ ∇E t(ez), (29) where Πc is optional blockwise clipping. In the implementation, the bridge and reaction terms may be scaled separately; the proposition below states the clean case, and the same proof gives an alignment condition for unequal scales. 
+
+Proposition B.1 (Exact ECD is an energy-improving correction to CD) . Assume Et has Lt-Lipschitz gradient in a neighborhood of the CD proposal ez. If Πc is the identity and 0 < ρ t < 2/L t, then the exact ECD correction in Eq. (29) 
+
+satisfies 
+
+Et(z+) ≤ E t(ez) − ρt
+
+
+
+1 − Ltρt
+
+2
+
+
+
+∥∇E t(ez)∥2 . (30) 
+
+With clipping, the same conclusion holds whenever 
+
+⟨∇E t(ez), Πc(∇E t(ez)) ⟩ > Ltρt
+
+2 ∥Πc(∇E t(ez)) ∥2 . (31) 
+
+Proof. The smoothness inequality gives 
+
+E(u − ρg ) ≤ E(u) − ρ∥g∥2 + Lρ 2
+
+2 ∥g∥2 (32) for g = ∇E(u). Setting u = ez yields Eq. (30) . The clipped statement follows from the same smoothness inequality with direction −Πc(g).16 Energy-based Compositional Diffusion Planning 
+
+B.2. Sufficient Conditions for ECD to Improve CD 
+
+We further give two sufficient conditions. The first is energy-based and applies directly to the post-CD correction. The second is score-based and connects the correction to reverse-diffusion convergence. 
+
+Proposition B.2 (Sublevel success improvement) . Let Gτ = {z : Et(z) ≤ τ } be a set of energy-consistent proposals. Suppose the exact ECD correction satisfies 
+
+Et(C(ez)) ≤ E t(ez) (33) 
+
+for every CD proposal ez, where C denotes the correction map. Then 
+
+P C(eZ) ∈ Gτ
+
+ ≥ P eZ ∈ Gτ
+
+. (34) 
+
+If, in addition, a set of positive probability satisfies 
+
+τ < Et(eZ) ≤ τ + ∆ and Et(eZ) − E t(C(eZ)) ≥ ∆, (35) 
+
+then the inequality is strict. Proof. If ez ∈ Gτ , then energy monotonicity implies C(ez) ∈ Gτ . Thus C−1(Gτ ) contains Gτ , proving the first inequality. The strict statement follows because the specified positive-probability shell outside Gτ is mapped into Gτ .This result does not assume that low energy is exactly equivalent to task success. It guarantees that ECD improves the probability of satisfying the energy-consistency certificate. When the bridge energy is a useful feasibility surrogate, this certificate becomes a mechanism for improving success rate. For the score-based condition, let s⋆ be the oracle score of the induced bridge-energy model. Let sex be the exact ECD score/correction direction and sCD be the CD direction using the same local denoiser but without the reaction. Define 
+
+R := sex − sCD , e := sex − s⋆. (36) Then sCD − s⋆ = e − R.
+
+Theorem B.3 (Score-error condition for exact ECD to outperform CD) . At a fixed diffusion time and state, exact ECD has smaller squared score error than CD if and only if 
+
+∥e∥2 < ∥e − R∥2 ⇐⇒ ⟨e, R ⟩ < 12 ∥R∥2. (37) 
+
+A sufficient condition is ∥e∥ < 12 ∥R∥.Proof. Compute 
+
+∥sCD − s⋆∥2 − ∥ sex − s⋆∥2 = ∥e − R∥2 − ∥ e∥2 = ∥R∥2 − 2⟨e, R ⟩. (38) The stated equivalence and sufficient condition follow immediately. 
+
+Connection to diffusion convergence. Standard reverse-diffusion error bounds depend on a weighted integral or sum of squared score errors. If Eq. (37) holds on average along the reverse process, exact ECD has a smaller effective score-error term than CD for the induced bridge model. This statement does not identify the bridge model with the true data distribution. It states that, for the energy model defined by the local denoisers, CD carries an additional structural error from the dropped reaction, while exact ECD removes that error up to learned-model error. 
+
+Oracle sufficient condition. The condition above can be related to local denoiser accuracy. Let μ⋆k, J ⋆O,k , r ⋆k denote the oracle local mean, boundary Jacobian, and residual. Let m⋆k = ( J⋆O,k )⊤r⋆k and mk = J⊤
+
+> O,k
+
+rk. If 
+
+X
+
+> k
+
+(1 + ∥JO,k ∥)∥Wk∥ ∥ μk − μ⋆k∥ + ∥JO,k − J⋆O,k ∥ ∥ r⋆k∥ < 12
+
+X
+
+> k
+
+O⊤ 
+
+> k
+
+mk , (39) then exact ECD is closer to the oracle noisy-mean score than CD. This formalizes the intuition that exact ECD helps when the local chunk mean and its boundary-condition dependence are accurate enough relative to the reaction term that CD drops. 17 Energy-based Compositional Diffusion Planning 
+
+# C. Markov Approximation to the Boundary Reaction Term 
+
+Exact ECD requires the neural VJP J⊤
+
+> O,k
+
+rk. Approximate ECD replaces it with a Markov reaction computed by a sparse linear solve. This section analyzes the approximation error and clarifies when the approximation should be trusted. 
+
+C.1. Implicit Markov Reaction 
+
+For chunk k, introduce a local Markov surrogate energy 
+
+Ems  
+
+> k
+
+(y, c, t ) = X
+
+> i
+
+Eϕ,t (yi) + X
+
+> i
+
+Eψ,t (yi, y i+1 ) + E∂,t (y, c ), (40) where y denotes predicted/core chunk coordinates and c denotes boundary conditions. Let 
+
+Hk(t) := ∇2 
+
+> yy
+
+Ems  
+
+> k
+
+(y, c, t ), Gk(t) := ∇2
+
+> yc
+
+Ems  
+
+> k
+
+(y, c, t ). (41) If the surrogate mean is defined by the stationarity condition ∇y Ems  
+
+> k
+
+(y, c, t ) = 0 , implicit differentiation gives 
+
+∂y ∂c = −Hk(t)−1Gk(t). (42) Therefore the exact reaction message is approximated by 
+
+emk(t) = −Gk(t)⊤uk(t), Hk(t)uk(t) = rk(t). (43) When Eψ is first-order Markov, Hk is block-tridiagonal, so the solve is linear in the chunk horizon for fixed state dimension. 
+
+C.2. Single-Step Reaction Error Theorem C.1 (Markov reaction approximation error) . Let H⋆k , G ⋆k be the ideal implicit matrices satisfying J⋆O,k =
+
+−(H⋆k )−1G⋆k. Assume 
+
+λmin (H⋆k ) ≥ m⋆k(t) > 0, ∥Hk − H⋆k ∥ ≤ δkH (t) < m ⋆k(t), ∥Gk − G⋆k∥ ≤ δkG(t). (44) 
+
+Let mk = J⋆⊤
+
+> O,k
+
+rk and emk = −G⊤ 
+
+> k
+
+H−1 
+
+> k
+
+rk. Then 
+
+∥ emk − mk∥ ≤ 
+
+ δkG(t)
+
+m⋆k(t) + δkH (t)∥Gk(t)∥
+
+m⋆k(t)( m⋆k(t) − δkH (t)) 
+
+
+
+∥rk(t)∥. (45) 
+
+If the bridge energy has VP scaling λ(2 σ2 
+
+> t
+
+)−1∥zk − μk∥2 
+
+> Wk
+
+and 0 < w k 
+
+> min
+
+≤ wkj ≤ wk
+
+> max
+
+, then 
+
+∥ emk − mk∥ ≤ σt
+
+wk
+
+> max
+
+q
+
+wk
+
+> min
+
+r 2
+
+λ
+
+ δkG(t)
+
+m⋆k(t) + δkH (t)∥Gk(t)∥
+
+m⋆k(t)( m⋆k(t) − δkH (t)) 
+
+ q 
+
+Ek
+
+> br
+
+(z, t ). (46) 
+
+Proof. Write 
+
+mk = −(G⋆k)⊤(H⋆k )−1rk, emk = −G⊤ 
+
+> k
+
+H−1 
+
+> k
+
+rk. (47) Add and subtract −G⊤ 
+
+> k
+
+(H⋆k )−1rk. The G-error term is bounded by 
+
+δkG(t)∥(H⋆k )−1∥∥ rk∥ ≤ δkG(t)
+
+m⋆k(t) ∥rk∥. (48) For the inverse error, use the resolvent identity 
+
+H−1 
+
+> k
+
+− (H⋆k )−1 = H−1 
+
+> k
+
+(H⋆k − Hk)( H⋆k )−1 (49) and 
+
+∥H−1 
+
+> k
+
+∥ ≤ 1
+
+m⋆k(t) − δkH (t) . (50) Combining these bounds gives Eq. (45). The VP-scaled statement follows from 
+
+∥rk(t)∥ ≤ wk
+
+> max
+
+q
+
+wk
+
+> min
+
+r 2σ2
+
+> t
+
+λ
+
+q
+
+Ek
+
+> br
+
+(z, t ). (51) 18 Energy-based Compositional Diffusion Planning 
+
+Implication. The key implication is that the approximation gap shrinks with σt along bounded-energy denoising paths. Thus the Markov reaction is most reliable in the low-noise regime, where local modes and boundary dependencies are sharpest. 
+
+C.3. Approximate ECD versus Exact ECD and CD 
+
+Let 
+
+Rex = X
+
+> k
+
+O⊤ 
+
+> k
+
+mk, Rap = X
+
+> k
+
+O⊤ 
+
+> k
+
+emk. (52) Then 
+
+∥Rap − Rex ∥ ≤ X
+
+> k
+
+∥Ok∥ ∥ emk − mk∥. (53) By contrast, bridge-only/CD drop Rex entirely. Hence approximate ECD is closer to exact ECD than bridge-only whenever 
+
+X
+
+> k
+
+∥Ok∥ ∥ emk − mk∥ < ∥Rex ∥. (54) This gives a useful diagnostic: approximate ECD is preferable once its Markov error is smaller than the reaction that CD omits. 
+
+Proposition C.2 (Approximate descent with relative reaction error) . Let g = ∇E t(ez) be the exact ECD gradient, let bg be the approximate ECD gradient, and define p = Π c(bg). Suppose the clipping map is alignment-preserving, 
+
+⟨bg, p ⟩ ≥ ∥ p∥2, (55) 
+
+which holds for standard norm clipping and coordinatewise clipping. Suppose further that 
+
+∥bg − g∥ ≤ κ∥p∥, κ < 1, (56) 
+
+and ∇E t is Lt-Lipschitz. Then the update z+ = ez − ηp satisfies 
+
+Et(z+) ≤ E t(ez) − η
+
+
+
+1 − κ − Ltη
+
+2
+
+
+
+∥p∥2. (57) 
+
+Therefore approximate ECD is an energy-decreasing correction whenever η < 2(1 − κ)/L t. Under Theorem C.1, κ
+
+decreases with σt when the bridge energy and curvature mismatch remain controlled. Proof. By smoothness, 
+
+Et(ez − ηp ) ≤ E t(ez) − η⟨g, p ⟩ + Ltη2
+
+2 ∥p∥2. (58) Write g = bg − (bg − g). Using Eq. (55) and Cauchy’s inequality gives 
+
+⟨g, p ⟩ ≥ ∥ p∥2 − ∥ bg − g∥∥ p∥ ≥ (1 − κ)∥p∥2. (59) Substituting this bound into the smoothness inequality yields the result. 
+
+C.4. Multi-Step Perturbation from Exact ECD 
+
+Let Φex  
+
+> i
+
+and Φap  
+
+> i
+
+be one exact and approximate ECD update at DDIM step i. Suppose Φex  
+
+> i
+
+is Mi-Lipschitz and 
+
+∥Φap  
+
+> i
+
+(z) − Φex  
+
+> i
+
+(z)∥ ≤ ηiϵi(ti). (60) If both samplers start from the same initial noise, then after N steps, 
+
+∥zap 0 − zex 0 ∥ ≤ 
+
+> N
+
+X
+
+> i=1
+
+Y
+
+> j<i
+
+Mj
+
+ ηiϵi(ti). (61) 19 Energy-based Compositional Diffusion Planning 
+
+If Mj ≤ 1 + Lj ηj , then 
+
+∥zap 0 − zex 0 ∥ ≤ X
+
+> i
+
+ηiϵi(ti) exp 
+
+X
+
+> j<i
+
+Lj ηj
+
+ . (62) Combining this with Eq. (46) gives ϵi(ti) = O(σti
+
+pEbr (zi, t i)) under the Markov assumptions. This motivates late-time reaction gates: high-noise corrections are weakly trusted, while low-noise corrections are both more informative and better approximated. 
+
+# D. Experimental Details 
+
+This appendix describes the implementation choices used in our OGBench stitching experiments. We follow the CompDiffuser (CD) evaluation protocol whenever possible: all methods use the same local planner checkpoints, candidate batch size, DDIM grid, boundary-mismatch ranking, and trajectory-blending post-processing, and replanning rule. Note that the main difference between CD and ECD is the additional bridge/boundary-reaction correction applied after each CD-style local denoising proposal. 
+
+D.1. OGBench Evaluation Protocol 
+
+Table 7 summarizes the evaluation settings used across the 13 OGBench stitching environments. The “training horizon” column is the local chunk horizon l used by the planner. The planning horizon L is the total stitched horizon induced by the default number of chunks, 
+
+L = l + K(l − o), (63) where o = l − d is the overlap length and K + 1 is the number of chunks. The 15D AntMaze variants use the same underlying AntMaze environments but plan in the first 15 observation dimensions.                                                                                                 
+
+> OGBench environment Training horizon Planning horizon Overlap # Chunks Max steps Replan thres.
+> lLo=l−dK+ 1 Nmax τ
+> pointmaze-medium-stitch-v0 160 368 56 31000 1
+> pointmaze-large-stitch-v0 160 680 56 61000 1
+> pointmaze-giant-stitch-v0 160 888 56 81000 1
+> antmaze-medium-stitch-v0 160 368 56 31000 4
+> antmaze-large-stitch-v0 160 680 56 61000 4
+> antmaze-giant-stitch-v0 160 992 56 92000 4
+> humanoidmaze-medium-stitch-v0 336 960 128 45000 10
+> humanoidmaze-large-stitch-v0 336 1376 128 65000 10
+> humanoidmaze-giant-stitch-v0 336 2416 128 11 8000 10
+> antsoccer-arena-stitch-v0 160 576 56 55000 4
+> antsoccer-medium-stitch-v0 160 680 56 65000 6
+> antmaze-large-stitch-v0-o15d 160 680 56 61000 4
+> antmaze-giant-stitch-v0-o15d 160 992 56 92000 4
+> Table 7. OGBench stitching evaluation configuration. The table reports the local planner horizon, total stitched planning horizon, overlap length, default number of chunks, rollout horizon, and adaptive replanning threshold. The o15d AntMaze variants use the same underlying AntMaze environments but plan in the first 15 observation dimensions.
+
+D.2. Implementation Details Planner models. Planner architectures are determined by the environment family and planner state dimension. Two-dimensional PointMaze, AntMaze, and HumanoidMaze use a one-dimensional U-Net trajectory denoiser with separate boundary-condition encoders. AntSoccer and AntMaze-o15d use a DiT trajectory denoiser with DiT boundary-condition encoders, which are more stable for high-dimensional planner states. All planners use the same conditioning convention: a local chunk receives boundary conditions from either fixed start/goal inpainting tokens or neighboring chunks. Table 8 summarizes the planner architectures. 20 Energy-based Compositional Diffusion Planning Environment family Planner dim. Trajectory denoiser Boundary encoder 
+
+pointmaze-* 2D U-Net, base dim 128, dim mults (1 , 2, 4, 8) CNN boundary encoders, out dim 256 
+
+antmaze-* 2D U-Net, base dim 128, dim mults (1 , 2, 4, 8) CNN boundary encoders, out dim 256 
+
+humanoidmaze-* 2D U-Net, base dim 128, dim mults (1 , 2, 4, 8) CNN boundary encoders, out dim 256 
+
+antsoccer-* 17D DiT, hidden 768, depth 16, 12 heads DiT boundary encoders, hidden 384, depth 8 
+
+antmaze-*-o15d 15D DiT, hidden 768, depth 16, 12 heads DiT boundary encoders, hidden 384, depth 8 
+
+Table 8. Planner architectures. The planner architecture is fixed by environment family and planner dimensionality. The o15d AntMaze variants use the same underlying AntMaze environments but plan in the first 15 observation dimensions. All CD and ECD comparisons use the same planner checkpoint within each environment. 
+
+Inverse-dynamics models. PointMaze is executed with the standard PD controller and does not use inverse dynamics. AntMaze, HumanoidMaze, AntSoccer, and AntMaze-o15d use an MLP inverse-dynamics model that maps the current full observation and the next planned waypoint to an action. The inverse-dynamics model is shared across CD and ECD evaluations for a fixed environment and checkpoint, so ECD changes only the planner output. Table 9 summarizes the controller and inverse-dynamics models. 
+
+Environment family Model Implementation 
+
+pointmaze-* PD controller Standard PD controller with PD gain = 5 .0.
+
+antmaze-* MLP inverse dynamics Hidden dims (512 , 512 , 512) .
+
+humanoidmaze-* MLP inverse dynamics Hidden dims (512 , 1024 , 1024 , 512 , 256) .
+
+antsoccer-arena-stitch-v0 MLP inverse dynamics Hidden dims (512 , 512 , 512) .
+
+antsoccer-medium-stitch-v0 MLP inverse dynamics Hidden dims (512 , 1024 , 1024 , 512) .
+
+antmaze-*-o15d MLP inverse dynamics AntMaze inverse-dynamics architecture with 15D planned input. 
+
+Table 9. Controller and inverse-dynamics models. PointMaze uses a PD controller. All other environments use learned inverse dynamics. For each environment, CD and ECD use the same inverse-dynamics checkpoint, so the comparison isolates the effect of the planner and compositional denoising rule. 
+
+DDIM and guidance defaults. Unless otherwise specified, all diffusion-planning methods use 50 DDIM inference steps, 
+
+η = 1 .0, classifier-free guidance weight 2.0, and candidate batch size b = 40 for full rollout evaluation. We keep these values fixed between CD and ECD. The environment-specific number of chunks is listed in Table 7. 
+
+Algorithm 1 CD-style interleaved DDIM with ECD correction 
+
+1: Initialize chunk states z0 
+
+> T
+
+, . . . , z KT ∼ N (0 , I ).
+
+2: Clamp the start state in chunk 0 and the goal state in chunk K.
+
+3: for DDIM timesteps t = T, T − ∆, . . . , 0 do 
+
+4: for chunks k = 0 , . . . , K in interleaved order do 
+
+5: Build the local boundary condition Okzt from fixed start/goal tokens or neighboring boundary variables. 
+
+6: Run the local CD DDIM step to obtain ˜zkt−∆ and ˆzk 
+
+> 0,θ
+
+.
+
+7: Compute μk = √¯αt ˆzk 
+
+> 0,θ
+
+and residual rk = Wk(Pkzkt − μk).
+
+8: Bridge correction: ∆k ← − ηb(t) P ⊤ 
+
+> k
+
+Πc(rk).
+
+9: if using approximate ECD then 
+
+10: Solve the Markov system Hkuk = rk and compute the boundary-space message ˜mk = −G⊤ 
+
+> k
+
+uk.
+
+11: Reaction correction: ∆k ← ∆k + ηr (t) O⊤ 
+
+> k
+
+Πc( ˜ mk).
+
+12: end if 
+
+13: Update zkt−∆ ← ˜zkt−∆ + ∆ k.
+
+14: end for 
+
+15: Re-clamp the start and goal chunks. 
+
+16: end for 
+
+17: Rank candidates by boundary mismatch, blend shared boundaries, and execute the selected trajectory. 21 Energy-based Compositional Diffusion Planning 
+
+DDIM inference loop. Algorithm 1 gives the inference loop used in the main ECD experiments. The loop follows CD’s interleaved chunk sampler. For each diffusion step and chunk, we first run the local CD DDIM proposal and then add the ECD correction. Setting the bridge and reaction scales to zero recovers CD exactly. The bridge-only variant uses only the residual correction, while the approximate variant additionally computes the Markov reaction. The time-dependent scales 
+
+ηb(t) and ηr (t) absorb both the σ−2 
+
+> t
+
+factor from the energy gradient and the DDIM conversion from a noisy-mean correction to an xt−∆ update. In Algorithm 1, zkt is the k-th local chunk at diffusion step t; Pk selects the scored coordinates; Ok
+
+selects the boundary-condition variables; Wk is the diagonal residual weight; Πc denotes clipping with threshold c; Hk is the approximate Markov Hessian/precision system; and Gk maps boundary variables to the scored coordinates in the local linearization. 
+
+PyTorch pseudo code. The following code snippet summarizes the core ECD implementation. It is simplified for readability. Here Pk , Pk T , and Ok T denote the selector and scatter maps corresponding to Pk, P ⊤ 
+
+> k
+
+, and O⊤ 
+
+> k
+
+. Please refer to our codebase for full implementation.                                                                                  
+
+> #Local CD proposal for chunk k. x_in, tj_cond =build_interleaved_condition(x_list, k, t) x_prev, x0_pred =diffusion.ddim_p_sample( x_in, tj_cond, t_2d, eta=ddim_eta, use_clipped_model_output=True, return_x0=True) #Bridge residual in noisy-mean coordinates. #Pk selects scored coordinates; Pk_T scatters them back. mu_t =sqrt_alpha_t *Pk(x0_pred) r=bridge_weight_mask(k) *(Pk(x_in) -mu_t) #ECD correction (bridge term). Note: bridge_scale_t absorbs sigma_tˆ{-2}. delta =-bridge_scale_t *Pk_T(clip_vec(r, delta_clip)) #ECD correction (approximate reaction term). if react_scale_t >0: u=solve_block_tridiagonal(H_k, r) m_cond =-G_k.transpose(-1, -2) @udelta =delta +react_scale_t *Ok_T( clip_vec(m_cond, delta_clip)) x_list[k] =x_prev +delta
+
+Candidate ranking and trajectory blending. CD uses boundary-mismatch ranking and exponential boundary blending. We follow this post-processing for all main experiments. Let zk,a denote candidate a for local chunk k, with a = 1 , . . . , b 
+
+and k = 0 , . . . , K . Let Ro select the right boundary segment, i.e., the last o states of a chunk, and let Lo select the left boundary segment, i.e., the first o states of a chunk. We compute the boundary-mismatch score 
+
+da =
+
+> K−1
+
+X
+
+> k=0
+
+1
+
+oD Rozk,a − Lozk+1 ,a 2 
+
+> F
+
+, a = 1 , . . . , b, (64) where o is the boundary length, D is the planner state dimension, and ∥ · ∥ F is the Frobenius norm over the selected boundary segment. We keep the top ntop = 5 candidates with the smallest da. We use only this boundary-mismatch ranking in the main experiments; additional progress- or inverse-dynamics-based rankers are implementation diagnostics and are not used in the reported main configuration. For each selected candidate, non-boundary regions are copied directly. In boundary regions shared by neighboring chunks, we use the same exponential blending rule as CD. For two adjacent boundary segments u0: o−1 = Rozk,a and 
+
+v0: o−1 = Lozk+1 ,a , indexed by i = 0 , . . . , o − 1, the blended segment is 
+
+Blend( ui, v i) = ωiui + (1 − ωi)vi, ωi = exp( −βi/ (o − 1)) − exp( −β)1 − exp( −β) , (65) with β = 2 .0 by default. Unless otherwise specified, we use CD’s pick type=first : after top-k ranking and blending, the first ranked trajectory is executed. In the pseudo-code below, trajs[k] stores the b candidate trajectories for chunk k,
+
+n comp = K + 1 , top n = ntop , and overlap = o.22 Energy-based Compositional Diffusion Planning                                        
+
+> #CD-style ranking and blending. scores =[] for kin range(n_comp -1): end_k =trajs[k][:, -overlap:] st_next = trajs[k +1][:, :overlap] scores.append(((end_k -st_next) ** 2).mean(axis=(1, 2))) rank =np.argsort(np.stack(scores, axis=1).sum(axis=1)) top =[traj[rank[:top_n]] for traj in trajs] plan =exponential_overlap_blend(top, beta=2.0) plan =plan[0] #pick_type=’first’
+
+Adaptive replanning. Full rollout evaluation uses the same adaptive replanning rule of CD. Let τ be the tracking threshold in Table 7, M the maximum number of replans, aback the waypoint-backoff parameter, and cdelay the additional condition delay. The evaluator triggers a new plan when either (i) the distance between the current observation and the current planned waypoint exceeds τ , or (ii) the agent has consumed sufficiently many waypoints from the current plan. In the latter case, the number of remaining chunks is reduced proportionally to the unused fraction of the previous plan. We set M = 10 for environments that use adaptive replanning and use the environment-specific (aback , c delay ) constants in Table 10.                              
+
+> Environment group Max replans MBackoff aDelay c
+> pointmaze-* 10 10 150
+> antmaze-* and antmaze-*-o15d 10 50 150
+> humanoidmaze-* 10 300 150
+> antsoccer-arena 10 50 50
+> antsoccer-medium 10 010
+> Table 10. Adaptive replanning constants. The threshold τand rollout horizon Nmax are listed in Table 7. PointMaze Medium/Large are evaluated without adaptive replanning in the CD-aligned setting because their default maximum number of replans is zero.
+
+D.3. ECD Settings and Hyperparameters 
+
+All main ECD runs use the CD-style interleaved chunk sampler and the bridge/boundary-reaction correction described in Algorithm 1. The principal ECD hyperparameters are the bridge scale ηb, reaction scale ηr , delta clip c, Markov coupling 
+
+ρ, and candidate ranker. Based on validation runs, we use boundary-mismatch ranking for the main reported experiments. Detailed settings can be found in our codebase. 
+
+D.4. Baselines Generative Skill Chaining (Mishra et al., 2023) and CompDiffuser (Luo et al., 2025). We follow the official CompDiffuser implementation and hyperparameter conventions: https://github.com/devinluo27/comp_ diffuser_release . We use the same planner checkpoints for CD and ECD. PointMaze is executed with the PD controller. AntMaze, HumanoidMaze, AntSoccer, and AntMaze-o15d use inverse-dynamics models trained with the same architecture family described in Table 9. For HumanoidMaze and AntSoccer, which are not fully covered by the released pretrained checkpoints, we train our own planner and inverse-dynamics models following the CD codebase. 
+
+Compositional Diffusion with Guided Search (Mishra et al., 2025). We use the official CDGS codebase: https: //github.com/UtkarshMishra04/CDGS_ogbench . We use the same checkpoints as CD and ECD. For CDGS, we report the resampling strategy with resampling rounds fixed to 4 across mazes. We also report the CDGS with the 8
+
+resampling rounds in our repository which shows diminishing returns over 4 rounds. Since this already substantially exceeds the local forward-evaluation budget of CD and ECD, we do not additionally scale guided-search compute further. 
+
+Goal-conditioned offline RL algorithms. For offline RL baselines, we follow the implementation setup established by OGBench (Park et al., 2025). These baselines are not diffusion chunk-stitching methods and therefore do not share the Local-NFE accounting above; they are included to contextualize planner success rates in the standard OGBench benchmark. 23 Energy-based Compositional Diffusion Planning 
+
+# E. Limitations and Future Work 
+
+This appendix closes the paper by separating implementation assumptions from conceptual limitations. The main method replaces heuristic stitching with an energy-derived correction; the discussion below clarifies when this correction is reliable, where the current approximation may break down, and which extensions are most natural. 
+
+E.1. Limitations Score approximation depends on local Markov structure. The efficient block-tridiagonal solve assumes a local first-order Markov surrogate over states (Eq. 40). This assumption is reasonable for many navigation tasks, but it can be weak for contact-rich manipulation, delayed dynamics, long-range constraints, or settings where feasibility depends on history. In such cases, the surrogate can underestimate cross-time coupling, weakening boundary messages and causing slower mode commitment or residual boundary inconsistency. 
+
+Sensitivity to chunking and overlap design. As in prior compositional diffusion planners (Luo et al., 2025; Mishra et al., 2025), ECD still requires choosing the number of chunks K, chunk horizon l, and stride d. The overlap length is o = l − d.Very large overlaps ( d ≪ l) add redundancy and can make the effective energy landscape poorly conditioned, whereas very small overlaps ( o ≪ l) reduce the amount of information passed between neighboring chunks. We found stable settings across the OGBench tasks, but optimal values can remain domain- and task-dependent. 
+
+Limited evaluation scope. Our experiments focus on OGBench stitching tasks in navigation-like domains. These tasks capture long-horizon composition under multimodality and obstacles, but they do not cover the full range of issues that arise in real-robot deployment, including perception noise, contact dynamics, actuator limits, hardware safety constraints, and model mismatch between offline data and online execution. 
+
+E.2. Discussion and Future Work Integrability versus the true data distribution. ECD guarantees that the composed update field is conservative for the energy model we define, but this should not be interpreted as recovering the exact score of the true long-horizon data distribution. Integrability is necessary for a true score field, not sufficient. Our bridge energy is built from squared deviation to the local denoiser’s conditional mean, so the induced density is best viewed as a structured compatibility model. It enforces the consistency properties in Section 3.1, rather than serving as an exact likelihood for long-horizon trajectories. A natural extension is to replace the squared-error bridge with learned conditional energies that better approximate short-segment likelihoods given boundary conditions and noise level. For example, a noise-conditional energy-based model could be trained to distinguish stitchable chunks from incompatible ones. 
+
+Learning better reaction approximations. The current approximation computes boundary messages from a hand-structured Markov surrogate. A direct extension is to learn the surrogate energy or to amortize the Jacobian-vector product that produces the message mk(t), avoiding backpropagation through fθ at inference time. Possible designs include neural potentials Eϕ, E ψ beyond local curvature estimation (Appendix C) or a message-passing network supervised by exact reaction terms on training chunks. 
+
+Adaptive chunking for compositional planning. Another direction is to choose (K, l, d ) automatically from task geometry, predicted uncertainty, or state-dependent difficulty. For example, the planner could increase overlap or reaction strength in ambiguous regions while keeping computation low in easier regions. 
+
+Real-robot evaluation. Finally, ECD should be evaluated under real-world disturbances such as actuation noise, partial observability, imperfect inverse dynamics, and dataset bias. Coupling the energy correction with online adaptation or uncertainty-aware replanning may improve reliability in deployment. 24
