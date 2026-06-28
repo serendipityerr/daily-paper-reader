@@ -1,0 +1,2263 @@
+Title: Sample complexity of unbalanced entropic OT
+
+URL Source: https://arxiv.org/pdf/2606.24987v1
+
+Published Time: Thu, 25 Jun 2026 00:08:56 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+# Sample complexity of unbalanced entropic OT 
+
+## Francisco Andrade ∗ Gabriel Peyr´ e † Clarice Poon ‡
+
+Abstract 
+
+Optimal transport (OT) has become a central language for comparing probability measures, but exact balanced OT is often both too rigid for data with missing, created, or destroyed mass and subject to unfavorable high-dimensional sample complexity. En-tropic regularization and unbalanced relaxations address these limitations in complemen-tary ways. Entropy smooths the geometry, improves statistical behavior, and enables fast Sinkhorn-type algorithms, while unbalanced marginal penalties replace hard con-servation constraints by divergence terms adapted to noisy empirical data. This paper studies the sample complexity of entropic unbalanced OT at the level of the optimal cou-pling, rather than only the scalar transport value. We develop a translation-invariant dual formulation, prove compactness and strong convexity properties for the intrinsic dual variables, and convert these geometric estimates into high-probability finite-sample bounds for empirical couplings. The results clarify why regularization is a practical ne-cessity in machine learning applications: it softens the curse of dimensionality, reduces the number of samples needed for stable transport estimation, and keeps the resulting estimators compatible with scalable Sinkhorn-type solvers. 
+
+# 1 Introduction 
+
+Among the various formulations of unbalanced optimal transport, entropic regularized models play a prominent role due to their computational tractability and smooth dual struc-ture. In this setting, the primal problem admits a dual formulation in terms of generalized Kantorovich potentials, and the optimal coupling is expressed through an exponential scal-ing of the cost. While this structure closely parallels the balanced case, a crucial geometric difference emerges: the dual objective generally loses the translation (gauge) invariance that 
+
+> ∗
+
+INRIA (PreMeDICaL & HeKA), francisco.de-lima-andrade@inria.fr 
+
+> †
+
+CNRS and ENS, PSL Universit´ e, gabriel.peyre@ens.fr 
+
+> ‡
+
+Mathematics Institute, University of Warwick, clarice.poon@warwick.ac.uk 
+
+1
+
+> arXiv:2606.24987v1 [math.ST] 23 Jun 2026
+
+characterizes classical entropic OT. In the balanced case, gauge freedom allows one to quotient out a flat direction in the dual, yielding a strictly convex objective on a suitable subspace. In contrast, for unbalanced OT, the dual functional may fail to be strongly convex, and its geometry depends sensitively on the chosen divergences. As a result, controlling the stability of dual potentials and deriving statistical guarantees for empirical estimators becomes signif-icantly more delicate. The goal of this paper is to show that, under very mild and largely divergence-agnostic assumptions, one can recover a favorable geometric structure for the dual problem and leverage it to obtain finite-sample guarantees for unbalanced entropic OT for the transport plan. To the best of our knowledge, existing statistical guarantees for unbalanced entropic OT mostly concern the objective value (or related stability statements), rather than high-probability finite-sample bounds directly on the optimal coupling/plan. 
+
+## 1.1 Previous works 
+
+Entropic optimal transport. Optimal transport has become a central tool in statistics and machine learning because it compares probability measures while respecting the geome-try of the data space; a broad computational overview is given in [18]. It has been used as a Wasserstein loss for structured prediction [11], as a Sinkhorn-divergence loss for generative modeling [13], and as a debiased interpolation between entropic OT and maximum mean dis-crepancies for distributional comparison [8]. The classical, unregularized Wasserstein distance has however a well-known statistical drawback: empirical convergence rates deteriorate with the ambient dimension, hence a curse of dimensionality [10]. Entropic regularization mit-igates this difficulty while making OT computationally usable at scale. On the algorithmic side, matrix-scaling iterations provide the basic normalization principle [24], entropic OT turns this principle into a large-scale learning tool [7], and regularized transport solvers can be in-terpreted as iterative Bregman projections [2]. These iterations involve kernel evaluations and reductions, which are highly parallelizable and therefore well suited to GPU implementations. On the statistical side, sample-complexity bounds are available for Sinkhorn divergences [12], central limit theorems and statistical bounds have been established for entropic OT costs [16], and sharper plan-level stability estimates follow from the strong convexity of the entropic dual modulo translations [19]. 
+
+Unbalanced optimal transport. Unbalanced optimal transport (UOT) extends classi-cal optimal transport by relaxing marginal constraints through divergence penalties, thereby allowing for mass creation and destruction. Early examples include free-boundary formula-tions of partial transport [4] and the analysis of the optimal partial transport problem [9]. Distances between finite Radon measures remove the equal-mass requirement directly [14]. Dynamic and geometric formulations later emerged through the Hellinger–Kantorovich and 2entropy-transport framework [15], as well as through dynamic and Kantorovich formulations for unbalanced OT [6]. Entropic regularization also leads to scalable UOT solvers: scaling al-gorithms were developed for unbalanced problems [5], and Sinkhorn divergences were adapted to the unbalanced setting [21]. A broader account of the theory, numerics, and applications of UOT can be found in [22]. These developments are driven by applications in which the coupling itself is often the relevant object. Wasserstein-type losses appear in learning prob-lems [11], while Sinkhorn divergences provide losses for generative modeling [13]. Regularized OT has been used to infer developmental trajectories from single-cell data [20], proximal OT models have been proposed for population dynamics [3], and regularized unbalanced OT has been used to learn stochastic dynamics from snapshots [25]. In a related direction, unbal-anced diffusion Schr¨ odinger bridges combine mass variation with stochastic interpolation [17]. In these settings, finite-sample control of the plan is more informative than value convergence alone, since the coupling is used for prediction, interpolation, or downstream learning. 
+
+Dual formulations and translation invariance. In balanced entropic optimal transport, the dual objective is invariant under additive translations of the Kantorovich potentials, re-flecting the fact that the dual variables are identifiable only up to a one-dimensional affine subspace. This non-uniqueness is routinely handled in Sinkhorn scaling by explicit normal-ization of the dual iterates [7]. At the level of analysis, the balanced entropic dual becomes strongly convex only after quotienting out this translation direction [19]. In contrast, this symmetry is generally broken in unbalanced optimal transport because the marginal diver-gence penalties depend on the absolute levels of the potentials. This loss of translation in-variance has important algorithmic consequences and has motivated explicit normalization strategies. Translation-invariant Sinkhorn iterations for UOT improve numerical stability and convergence speed [23], and related normalization ideas already appear in unbalanced scaling algorithms [5]. 
+
+Statistical guarantees and sample complexity. The statistical properties of entropic op-timal transport have been extensively studied in the balanced setting. Finite-sample bounds for Sinkhorn divergences can be obtained through empirical-process arguments [12]. Statistical bounds and central limit theorems are available for entropic OT costs [16]. These results should be contrasted with the unregularized Wasserstein rates, which display the high-dimensional curse of dimensionality [10]. Beyond scalar cost functionals, stability properties of entropic dual potentials and the associated couplings can also be controlled in the balanced setting [19]. For unbalanced optimal transport, statistical analyses are comparatively less developed. Un-balanced Sinkhorn divergences come with stability and computational guarantees [21], and the dynamic and Kantorovich formulations provide the basic variational framework [6]. General sample-complexity results for the transport plan itself, especially for broad φ-divergences, re-3main largely absent. The present work addresses this gap by combining a translation-invariant dual formulation with uniform compactness and strong convexity to derive high-probability sample-complexity bounds for unbalanced entropic optimal transport. In contrast to prior work, our results apply to a broad class of unbalanced models and explicitly characterize the role of the translation direction in controlling statistical fluctuations. 
+
+## 1.2 Contribution 
+
+Section 3 develops the main geometric contribution. It introduces the envelope T α,β ,which removes the scalar translation direction from the intrinsic dual variables. Theorem 1 shows that this envelope has a compact anchored minimization domain Pα,β  
+
+> 0
+
+and is strongly convex there in the weighted L2(α, β ) norm. This provides the dual stability mechanism used in Proposition 1 to obtain convergence of anchored potentials and weak convergence of the associated transport plans. Subsection 3.3 controls the remaining scalar translation. Under the domain condition in Assumption A2, Theorem 2 proves that the envelope minimization can be restricted to a fixed interval [ −R, R ], with the explicit radius (8). This yields uniform L∞ bounds on translated dual potentials and applies to the usual unbalanced divergences, including KL, χ2, Hellinger, Jensen–Shannon, and α-divergences. Section 4 turns these compactness and convexity estimates into a plan-level statistical guarantee. The curvature and subgradient assumptions in Assumption A3, together with the translation stability estimate of Proposition 2, allow us to compare empirical and population dual solutions. Theorem 3 then proves the main high-probability bound (14) for the deviation between the empirical optimal plan πn and the population plan π⋆, using the concentration estimates collected in Section A. 
+
+# 2 Unbalanced entropic OT 
+
+In this section, we recall the formulation of entropically regularized unbalanced optimal transport and its dual representation. We work in a general setting where deviations from prescribed marginals are penalized via φ-divergences, encompassing most models used in prac-tice. 
+
+Assumption A1. The spaces X and Y are compact. Let c : X × Y → R be a L-Lipschitz function. 
+
+4Divergences The φ-divergence associated to a convex, positive, lower-semi-continuous func-tion φ : (0 , ∞) → [0 , ∞) that satisfies φ(1) = 0 is defined as 
+
+Dφ(α|β) := 
+
+Z
+
+> X
+
+φ
+
+dα dβ (x)
+
+
+
+dβ (x) + φ′∞
+
+Z
+
+> X
+
+dα ⊥(x),
+
+where φ′∞ = lim x→∞ φ(x)/x , and where, for any pair ( α, β ) ∈ M +(X ), α⊥ is defined via the Radon-Nikodym-Lebesgue decomposition α = ( dα/dβ )β + α⊥ (see [21]). The Kullback-Leibler divergence is abbreviated by KL and corresponds to Dφ with φ(p) = p log( p) − p + 1. The indication function of a set S is denoted by ιS and the notation ι=β abbreviates the 
+
+D{1}-divergence, i.e., it is defined by ι=β (α) = 0 if α = β and + ∞ otherwise. 
+
+Primal problem Given α ∈ M +(X ), β ∈ M +(Y) and a cost c ∈ C (X ×Y ), the entropically regularized unbalanced OT coupling is defined by 
+
+π = argmin 
+
+> π∈M +(X ×Y )
+
+⟨c, π ⟩ + η KL( π | α ⊗ β) + Dφ1 (π1 | α) + Dφ2 (π2 | β). (p-UOT) Here π1, π 2 denote the marginals of π, and φ1, φ 2 are φ-divergences. We denote the masses by 
+
+mα := α(X ) and mβ := β(Y). Balanced OT is recovered by taking hard constraints on marginals, that is, φi = ι{1} and 
+
+mα = mβ = 1, whereas other divergences allow mass variation. 
+
+Dual problem Under Assumption A1 and the standing assumptions that φi are proper convex, positive, lower-semicontinuous entropy functions with φi(1) = 0, the primal problem admits a minimizer by the Fenchel–Rockafellar duality argument of [5, Theorem 3.2]; this min-imizer is unique because of the strict convexity of the entropic KL term. Moreover, the same duality argument gives the standard dual characterization recalled next; see also [21, Sec. 3] for the entropic unbalanced formulation under these entropy-function assumptions. The Kan-torovich potentials themselves need not be unique before fixing the translation/gauge freedom; uniqueness of an anchored representative requires additional compactness/coercivity or quo-tient arguments [21, Sec. 3.3], as addressed below through the anchored envelope formulation. There exist Kantorovich potentials ( f ⋆, g ⋆) such that 
+
+dπ dα ⊗ β = exp 
+
+f ⋆ ⊕ g⋆ − cη
+
+
+
+(α ⊗ β)-a.e. , (1) where ( f ⋆, g ⋆) solve the dual problem (f ⋆, g ⋆) ∈ argmin 
+
+> (f,g )∈L2(α)×L2(β)
+
+Kα,β (f, g ), (d-UOT) 5with 
+
+Kα,β (f, g ) := ⟨φ∗
+
+> 1
+
+(−f ), α ⟩ + ⟨φ∗
+
+> 2
+
+(−g), β ⟩ + η
+
+D
+
+exp 
+
+f ⊕ g − cη
+
+
+
+, α ⊗ β
+
+E
+
+. (2) In the classical OT setting where mα = mβ , and φ∗ 
+
+> i
+
+(x) = x for i = 1 , 2, and hence, Kα,β is invariant under the translation (f, g ) 7 → (f + λ, g − λ), λ ∈ R.
+
+Here, translation invariance of the dual objective allows one to quotient out a one-dimensional flat direction, yielding a strictly convex functional on a suitable subspace. This geometric property plays a central role in stability analyses and convergence guarantees of the transport plan. In the unbalanced case, although the plan is invariant to scalar translation of f ⋆ and 
+
+g⋆, the translation invariant property is lost in Kα,β .
+
+# 3 Translational invariation formulation 
+
+We consider a translation-invariant envelope of the dual objective, obtained by minimizing over the translation parameter. This construction restores invariance by design and allows us to separate the essential degrees of freedom of the dual from the spurious translation direction. We show that, under mild regularity assumptions on the cost and the underlying spaces, the envelope functional admits a compactly anchored minimization domain and is uniformly strongly convex on this set. This result is the cornerstone of our analysis: it provides a stable geometric framework that does not rely on divergence-specific properties and will be crucial for establishing continuity and statistical guarantees. Following [22], we introduce the translation-invariant envelope 
+
+T α,β (f, g ) := inf  
+
+> λ∈R
+
+Kα,β (f + λ, g − λ). (3) By definition, for all λ ∈ R, T α,β (f − λ, g + λ) = T (f, g ). While translation invariance of the dual formulation of unbalanced optimal transport has been previously exploited for algorithmic purposes to improve the stability of Sinkhorn it-erations [23], our work takes a complementary perspective by treating this invariance as a genuine geometric symmetry of the dual problem. By explicitly passing to the associated quotient space, we recover strong convexity of the dual objective in its intrinsic degrees of freedom, which allows us to develop a unified stability and statistical analysis of unbalanced entropic optimal transport. 63.1 Envelope definition and strong convexity 
+
+We show that T is strongly convex with respect to the quotient space with R f dα = 0. In the subsequent section, we show that this strong convexity property leads to a simple proof on sample complexity bounds for the corresponding transport plans. 
+
+Theorem 1 (Compact anchoring and strong convexity of T ). Assume that c is L-Lipschitz on X × Y and that Assumption A1 holds. Set m := mαmβ . Let U be any finite constant such that U ⩾ inf f,g K(f, g ). In particular, 
+
+U := mα sup 
+
+> |t|≤∥ c∥∞
+
+φ∗
+
+> 1
+
+(t) + mβ φ∗
+
+> 2
+
+(0) + η m αmβ
+
+suffices. Define 
+
+CFY := mαφ1(mβ ) + mβ φ2(mα) + m∥c∥∞
+
+and 
+
+M := ∥c∥∞ + 2( U + CFY )
+
+m + 4 L diam( X ) + diam( Y).
+
+Define the anchored compact set 
+
+Pα,β  
+
+> 0
+
+:= 
+
+n
+
+(f, g ) : f, g ∈ C L,
+
+Z
+
+f dα = 0 , ∥f ∥∞ ≤ M, ∥g∥∞ ≤ M
+
+o
+
+,
+
+where CL denotes the set of L-Lipschitz functions. Then 
+
+min  
+
+> f,g
+
+Kα,β (f, g ) = min 
+
+> (f,g )∈P α,β
+> 0
+
+T α,β (f, g ). (4) 
+
+Furthermore, with μ = η−1e−M/η , T α,β is μ-strongly convex on Pα,β  
+
+> 0
+
+with respect to 
+
+∥(u, v )∥2 
+
+> α,β
+
+:= mβ
+
+Z
+
+u2 dα + mα
+
+Z
+
+v2 dβ. 
+
+Proof. For brevity write K = Kα,β and T = T α,β .
+
+Step 1: Explicit bound on f ⊕g −c. Let h = f ⊕g −c and q = h/η . By the Fenchel–Young inequality, 
+
+φ∗
+
+> 1
+
+(−f ) + φ1(mβ ) + mβ f ≥ 0, φ∗
+
+> 2
+
+(−g) + φ2(mα) + mαg ≥ 0.
+
+So, 
+
+K(f, g ) + CFY ≥ η
+
+Z
+
+(eq − q) d(α ⊗ β).
+
+7Here CFY is the constant from the statement and q := ( f ⊕ g − c)/η .Any minimizer ( f, g ) of K satisfies K(f, g ) ≤ K (f0, g 0), where we define 
+
+f0(x) := inf  
+
+> y∈Y
+
+c(x, y ), g0(y) := 0 .
+
+Then f0 ⊕ g0 − c ≤ 0, hence exp(( f0 ⊕ g0 − c)/η ) ≤ 1 and therefore 
+
+η
+
+D
+
+exp 
+
+f0 ⊕ g0 − cη
+
+
+
+, α ⊗ β
+
+E
+
+≤ η m αmβ .
+
+Since −f0(x) ∈ [−∥ c∥∞, ∥c∥∞], we also have 
+
+⟨φ∗
+
+> 1
+
+(−f0), α ⟩ ≤ mα sup 
+
+> |t|≤∥ c∥∞
+
+φ∗
+
+> 1
+
+(t).
+
+Thus inf  
+
+> f,g
+
+Kα,β (f, g ) ≤ K α,β (f0, g 0) ≤ mα sup 
+
+> |t|≤∥ c∥∞
+
+φ∗
+
+> 1
+
+(t) + mβ φ∗
+
+> 2
+
+(0) + η m αmβ .
+
+This proves that the displayed choice of U in the statement is admissible. For any chosen upper bound U , we can restrict to considering q such that 
+
+Z
+
+(eq − q) d(α ⊗ β) ≤ U + CFY 
+
+η := D m. 
+
+By Jensen’s inequality, e¯q − ¯q ≤ D with ¯ q = 1
+
+> m
+
+R q d (α ⊗ β), which implies |¯q| ≤ 2D assuming 
+
+D ⩾ 1. Therefore Z
+
+(f ⊕ g − c) d(α ⊗ β) = ηm |¯q| ≤ 2Dηm. 
+
+Since f, g, c are L-Lipschitz, ( f ⊕ g − c) is 3 L-Lipschitz on X × Y , and for all ( x, y ), 
+
+|(f ⊕ g − c)( x, y )| ≤ 1
+
+m
+
+Z
+
+(f ⊕ g − c) d(α ⊗ β) + 3 L diam( X ) + diam( Y).
+
+Thus, we can restrict minimization of Kα,β to ( f, g ) that satisfies 
+
+∥f ⊕ g − c∥∞ ≤ M0 := 2( U + CFY )
+
+m + 3 L diam( X ) + diam( Y). (5) 
+
+Step 2: Compact anchoring. Fix the gauge R f dα = 0. For f ∈ C L,
+
+|f (x)| = 1
+
+mα
+
+Z
+
+(f (x) − f (x′)) dα (x′) ≤ L diam( X ),
+
+8so ∥f ∥∞ ≤ Ldiam( X ). Using ∥f ⊕ g − c∥∞ ≤ M0 gives 
+
+|g(y)| ≤ ∥ c∥∞ + M0 + ∥f ∥∞,
+
+which yields 
+
+∥f ∥∞ ≤ L diam( X ), ∥g∥∞ ≤ ∥ c∥∞ + 2( U + CFY )
+
+m + 4 L diam( X ) + diam( Y) := M. (6) Since translations preserve T , (4) follows. 
+
+Step 3: Strong convexity. Decompose T = F + T0 with 
+
+F (f, g ) = η
+
+D
+
+e(f ⊕g−c)/η , α ⊗ β
+
+E
+
+, T0(f, g ) = inf 
+
+> λ∈R
+
+ ⟨φ∗
+
+> 1
+
+(−f + λ), α ⟩ + ⟨φ∗
+
+> 2
+
+(−g − λ), β ⟩.
+
+The map T0 is convex. On Pα,β  
+
+> 0
+
+we have ∥f ⊕ g − c∥∞ ≤ M0, hence the Hessian of F is bounded below by η−1e−M0/η . A direct expansion using R f dα = R f ′ dα = 0 gives 
+
+Z  (f − f ′) ⊕ (g − g′)2 d(α ⊗ β) = mβ ∥f − f ′∥2 
+
+> L2(α)
+
++ mα∥g − g′∥2
+
+> L2(β)
+
+,
+
+which yields the claimed strong convexity with η−1e−M0/η ⩾ η−1e−M/η .
+
+## 3.2 Continuity and stability 
+
+Thanks to the strong convexity property, we have the following continuity property of the potentials: 
+
+Proposition 1 (Continuity of quotient dual potentials and weak convergence of the primal plans) . Assume Assumption A1. Let αn ⇀ α and βn ⇀ β weakly. For each n, let (fn, g n) ∈Pαn,β n 
+
+> 0
+
+be the (unique) minimizer of the translation-invariant dual objective T αn,β n
+
+. Then 
+
+(fn, g n) converges uniformly to the (unique) minimizer (f, g ) ∈ P α,β  
+
+> 0
+
+of T α,β .Moreover, defining 
+
+πn := exp 
+
+fn ⊕ gn − cη
+
+
+
+(αn ⊗ βn), π := exp 
+
+f ⊕ g − cη
+
+
+
+(α ⊗ β),
+
+we have πn ⇀ π weakly; equivalently, ⟨h, π n − π⟩ → 0 for all h ∈ C(X × Y ).Proof. By Assumption A1, fn, g n ∈ C L with uniform L∞ bounds. Since X and Y are compact, Arzel` a–Ascoli yields a subsequence (not relabeled) such that fn → f and gn → g uniformly, for some f, g ∈ C L.9We first show that ( f, g ) ∈ P α,β  
+
+> 0
+
+. Since R fn dα n = 0 for all n,0 = 
+
+Z
+
+fn dα n =
+
+Z
+
+f dα +
+
+Z
+
+(fn − f ) dα n +
+
+Z
+
+f d (αn − α).
+
+The second term tends to 0 by uniform convergence, and the third by weak convergence 
+
+αn ⇀ α and continuity of f . Hence R f dα = 0. Next, we identify ( f, g ) as the minimizer of T α,β . Let ( ˆf , ˆg) ∈ P α,β  
+
+> 0
+
+be arbitrary and define 
+
+κn := 1
+
+> mα
+
+R ˆf dα n, ˆfn := ˆf − κn, ˆ gn := ˆ g + κn. Then ( ˆfn, ˆgn) ∈ P αn,β n 
+
+> 0
+
+and ˆfn ⊕ ˆgn = ˆf ⊕ ˆg. By optimality of ( fn, g n), 
+
+T αn,β n
+
+(fn, g n) ≤ T αn,β n
+
+( ˆfn, ˆgn).
+
+Since fn → f , gn → g uniformly, c is Lipschitz, and αn ⊗ βn ⇀ α ⊗ β, both sides converge to T α,β (f, g ) and T α,β ( ˆf , ˆg) respectively. Thus T α,β (f, g ) ≤ T α,β ( ˆf , ˆg), proving optimality. By strong convexity of T α,β on Pα,β  
+
+> 0
+
+, the minimizer is unique, so the full sequence converges uniformly. Finally, since fn ⊕gn → f ⊕g uniformly and αn ⊗βn ⇀ α ⊗β, we have for all h ∈ C(X ×Y ), 
+
+⟨h, π n⟩ =
+
+Z
+
+h e (fn⊕gn−c)/η d(αn ⊗ βn) −→ 
+
+Z
+
+h e (f ⊕g−c)/η d(α ⊗ β) = ⟨h, π ⟩.
+
+Remark 1. The proposition above is similar to Proposition 10 of [21], however, strong convexity of the translation invariant operator and hence our continuity result hold under much weaker assumptions: we only need the cost c to be Lipschitz and compact domains. 
+
+## 3.3 Uniform compactness of the translation parameter 
+
+Although the envelope formulation removes the gauge freedom, it still involves an optimiza-tion over an a priori unbounded translation parameter λ. For subsequent stability and sample complexity arguments, it is essential to control this remaining degree of freedom uniformly. In this section, we show that under a mild domain condition on the marginal divergences, the translation parameter can in fact be restricted to a compact interval, uniformly over all admissible dual potentials. This condition is satisfied by most φ-divergences used in unbal-anced OT and excludes only the balanced case, where translation invariance is exact and no restriction is needed. Our result yields explicit bounds on the translation parameter and further implies uniform bounds on the dual potentials themselves. These compactness properties play a key role in controlling empirical processes in the statistical analysis that follows. 10 Assumption A2 (Bounded translations) . There exist a, a ′ ∈ dom( φ1) and b, b ′ ∈ dom( φ2)
+
+such that 
+
+bm β > am α, b′mβ < a ′mα.
+
+Remark 2. Assumption A2 is a mild domain condition : it asks for two pairs ( a, b ) and ( a′, b ′)with a, a ′ ∈ dom( φ1) and b, b ′ ∈ dom( φ2) such that bm β − am α > 0 and b′mβ − a′mα < 0. In particular, if dom( φ1) and dom( φ2) both contain an interval (e.g. (0 , ∞), or [0 , ∞)), then the assumption always holds: pick any a̸ = a′ in dom( φ1) and choose b > b ′ := mα 
+
+> mβ
+
+a′ in dom( φ2)(and similarly b < mα 
+
+> mβ
+
+a for the other inequality). This covers the common φ-divergences used in unbalanced OT, whose generators are finite on (0 , ∞), such as KL (φ(p) = p log p − p + 1), 
+
+χ2 (φ(p) = ( p − 1) 2), Hellinger (φ(p) = ( √p − 1) 2), Jensen–Shannon (an f -divergence with finite generator on (0 , ∞)), and more generally the α-divergences (power divergences), all of which are standard f -divergences with dom( φ) = (0 , ∞) (or containing (0 , ∞)). In contrast, for balanced OT the marginal penalties are hard constraints, corresponding to the indicator divergence ι{1} (i.e. π1 = α and π2 = β); then the dual has the usual gauge invariance and the envelope minimization is trivial, effectively R = 0 (no translation search). The next proposition shows that under Assumption A2, one can further restrict the opti-mization over λ in T to a compact interval. Our proof relies on the Fenchel–Young inequality. While related compactness results appear in [22], the proof strategies there depend on the particular divergence: one argument applies when φ∗ is strictly convex and admits subgradi-ents converging to 0 or ∞ [22, Lemma 5], while the TV and range divergences are handled separately. In contrast, Assumption A2 covers all these cases. 
+
+Theorem 2 (Restriction to bounded translations with explicit constants) . Assume Assump-tions A1 and A2. Let Pα,β  
+
+> 0
+
+be the anchored compact set from Theorem 1, and let M, U > 0 be the constants there. There exists R such that 
+
+inf 
+
+> f,g ∈P α,β
+> 0
+
+T α,β (f, g ) = inf 
+
+> f,g ∈P α,β
+> 0
+
+min  
+
+> λ∈[−R,R ]
+
+Kα,β (f + λ, g − λ). (7) 
+
+Consequently, one can restrict the minimization of Kα,β to (f, g ) such that 
+
+∥f ∥∞ ≤ M + R, ∥g∥∞ ≤ M + R. 
+
+Concretely, we can define 
+
+s+ := bm β − am α > 0, s− := a′mα − b′mβ > 0,
+
+and the constants 
+
+Ca,b (M ) := |a| M m α + φ1(a) mα + |b| M m β + φ2(b) mβ ,Ca′,b ′ (M ) := |a′| M m α + φ1(a′) mα + |b′| M m β + φ2(b′) mβ .
+
+11 Then the quantity 
+
+R := max 
+
+nU + Ca,b (M )
+
+s+
+
+, U + Ca′,b ′ (M )
+
+s−
+
+o
+
+(8) 
+
+Proof. Fix ( f, g ) and abbreviate K = Kα,β . Starting from the Fenchel–Young inequality on 
+
+φ∗
+
+> 1
+
+, φ∗
+
+> 2
+
+, for any π1 ≪ α and π2 ≪ β,
+
+K(f + λ, g − λ) ≥ − ⟨ f, π 1⟩ − ⟨ g, π 2⟩ + η
+
+D
+
+exp 
+
+f ⊕ g − cη
+
+
+
+, α ⊗ β
+
+E
+
++ λ mπ2 − mπ1
+
+ −
+
+D
+
+φ1
+
+dπ 1
+
+dα 
+
+
+
+, α 
+
+E
+
+−
+
+D
+
+φ2
+
+dπ 2
+
+dβ 
+
+
+
+, β 
+
+E
+
+,
+
+(9) where mπi denotes the total mass of πi.
+
+Step 1: One-sided linear coercivity with explicit intercepts. Choose π1 = aα and 
+
+π2 = bβ with a ∈ dom( φ1) and b ∈ dom( φ2). Then mπ1 = am α, mπ2 = bm β , and (9) gives 
+
+K(f + λ, g − λ) ≥ s+ λ − ⟨ af, α ⟩ − φ1(a)mα − ⟨ bg, β ⟩ − φ2(b)mβ
+
++ η
+
+D
+
+exp 
+
+f ⊕ g − cη
+
+
+
+, α ⊗ β
+
+E
+
+. (10) Since the exponential term is nonnegative, we may drop it to obtain a simpler bound. If additionally ( f, g ) ∈ P α,β  
+
+> 0
+
+, then ∥f ∥∞, ∥g∥∞ ≤ M , hence 
+
+−⟨ af, α ⟩ ≥ −| a|
+
+Z
+
+|f | dα ≥ −| a|M m α, −⟨ bg, β ⟩ ≥ −| b|M m β ,
+
+and therefore from (10), 
+
+K(f + λ, g − λ) ≥ s+ λ − Ca,b (M ), ∀ λ ∈ R. (11) Similarly, choosing π1 = a′α and π2 = b′β yields 
+
+K(f + λ, g − λ) ≥ − s− λ − Ca′,b ′ (M ), ∀ λ ∈ R, (12) again for all ( f, g ) ∈ P α,β  
+
+> 0
+
+.
+
+Step 2: Uniform restriction of minimizers of (λ, f, g ) 7 → K (f + λ, g − λ). For any minimizing ( λ, f, g ) we have 
+
+K(f + λ, g − λ) ≤ U, 
+
+with U as in Theorem 1. Consequently, T (f, g ) ≤ U for all ( f, g ) ∈ P α,β  
+
+> 0
+
+.12 Now if λ ≥ 0, by (11), 
+
+U ⩾ K(f + λ, g − λ) ≥ s+λ − Ca,b (M ),
+
+so no minimizer over λ ∈ R can lie beyond ( U + Ca,b (M )) /s + on the positive side. Similarly, by (12), 
+
+U ⩾ K(f + λ, g − λ) ≥ − s−λ − Ca′,b ′ (M ),
+
+so no minimizer can lie beyond −(U + Ca′,b ′ (M )) /s − on the negative side. Therefore (7) holds with 
+
+R := max 
+
+nU + Ca,b (M )
+
+s+
+
+, U + Ca′,b ′ (M )
+
+s−
+
+o
+
+.
+
+# 4 Sample complexity 
+
+We now turn the deterministic geometry of Section 3 into a statistical guarantee. The object of interest is the transport plan itself: given empirical marginals αn, β n, we want to con-trol the deviation between the empirical UOT coupling and the population coupling through bounded test functions. The argument is organized in two steps. Subsection 4.1 isolates the one-dimensional stability mechanism for the scalar translation parameter. Subsection 4.2 then combines this mechanism with the strong convexity of the anchored envelope and the concentration estimates of Section A to prove the plan-level sample-complexity theorem. The deterministic input for the section is the compact anchoring and translation control obtained above. Under Assumptions A1 and A2, Theorem 2 gives a deterministic interval [−R, R ] such that inf 
+
+> f,g ∈P α,β
+> 0
+
+T α,β (f, g ) = inf 
+
+> f,g ∈P α,β
+> 0
+
+min  
+
+> λ∈[−R,R ]
+
+Kα,β (f + λ, g − λ). (13) In the balanced case the gauge can be fixed directly and we take R = 0. The additional curvature and subgradient regularity assumptions needed for the final theorem are therefore introduced only in Subsection 4.2; the preliminary proposition below only needs local condi-tions on the one-dimensional scalar problem. 
+
+## 4.1 Stability of the translation minimizer 
+
+The translation-invariant envelope separates the intrinsic potentials from the scalar shift 
+
+λ. Once the anchored potentials are fixed, the only remaining scalar degree of freedom is the minimizer of the function λ 7 → K (f + λ, g − λ). The empirical objective may choose a 13 different minimizer, and the next proposition shows that this displacement is small whenever the empirical scalar objective has curvature. This one-dimensional estimate is the bridge between the deterministic translation control of Theorem 2 and the comparison of empirical and population dual certificates. 
+
+Proposition 2 (Stability of the translation minimizer) . Fix bounded f, g with ∥f ∥∞, ∥g∥∞ ≤
+
+M and define 
+
+G(λ) := Kα,β (f + λ, g − λ), Gn(λ) := Kαn,β n
+
+(f + λ, g − λ), λ ∈ [−R, R ].
+
+Assume that Gn is γ–strongly convex on [−R, R ], and let 
+
+λ⋆ ∈ arg min  
+
+> [−R,R ]
+
+G(λ) and λ⋆n ∈ arg min  
+
+> [−R,R ]
+
+Gn(λ).
+
+Suppose moreover that λ⋆ admits measurable stationarity selections 
+
+ψ⋆ 
+
+> 1
+
+(·) ∈ ∂φ ∗
+
+> 1
+
+(−f (·) − λ⋆), ψ⋆ 
+
+> 2
+
+(·) ∈ ∂φ ∗
+
+> 2
+
+(−g(·) + λ⋆),
+
+satisfying 
+
+−
+
+Z
+
+ψ⋆ 
+
+> 1
+
+dα +
+
+Z
+
+ψ⋆ 
+
+> 2
+
+dβ = 0 , |ψ⋆ 
+
+> 1
+
+| ≤ B1, |ψ⋆ 
+
+> 2
+
+| ≤ B2.
+
+Then, for all t > 0, with probability at least 1 − e−t,
+
+|λ⋆n − λ⋆| ≲ mαB1 + mβ B2
+
+γ
+
+r tn.
+
+Proof. Since the entropic term is invariant under ( f, g ) 7 → (f + λ, g − λ), a subgradient of G
+
+at λ is given by 
+
+∂G (λ) ∋ − 
+
+Z
+
+ψ1 dα +
+
+Z
+
+ψ2 dβ, ψ1(·) ∈ ∂φ ∗
+
+> 1
+
+(−f (·) − λ), ψ 2(·) ∈ ∂φ ∗
+
+> 2
+
+(−g(·) + λ).
+
+Using the stationarity selections at λ⋆, the corresponding empirical subgradient satisfies 
+
+sn := −
+
+Z
+
+ψ⋆ 
+
+> 1
+
+d(αn − α) + 
+
+Z
+
+ψ⋆ 
+
+> 2
+
+d(βn − β) ∈ ∂G n(λ⋆).
+
+By γ–strong convexity of Gn on [ −R, R ], 
+
+|λ⋆n − λ⋆| ≤ 1
+
+γ dist  0, ∂G n(λ⋆) ≤ 1
+
+γ |sn|.
+
+Hoeffding’s inequality and the bounds |ψ⋆ 
+
+> 1
+
+| ≤ B1, |ψ⋆ 
+
+> 2
+
+| ≤ B2 yield the stated rate. 14 4.2 Plan-level sample complexity 
+
+We now impose the uniform assumptions that make the preceding scalar estimate usable along the empirical and population minimizers. The first condition bounds the marginal subgradients on the compact range of admissible translated potentials. The second supplies curvature in the translation direction, preventing an almost-flat scalar mode from amplifying sampling noise. The third transfers marginal subgradient certificates from the population translation to the empirical one. These requirements are automatic in the balanced gauge-fixed case, and they hold for the standard smooth strictly convex unbalanced divergences on compact potential ranges. 
+
+Assumption A3 (Translation curvature and subgradient regularity) . Let R ∈ [0 , ∞) be the translation radius from Theorem 2 in the unbalanced case, and set R := 0 in the balanced case. Let M > 0 be the uniform L∞ bound on dual potentials from Theorem 2, and define 
+
+IM,R := [ −(M + R), M + R].
+
+Assume the following conditions. (i) Bounded subgradients on the relevant range. For i = 1 , 2,
+
+Bi := sup 
+
+> u∈IM,R
+
+sup  
+
+> v∈∂φ ∗
+> i(u)
+
+|v| < ∞.
+
+(ii) Strong convexity in the translation direction. At least one of φ∗ 
+
+> 1
+
+or φ∗ 
+
+> 2
+
+is strongly convex on compact sets. If we can set R = 0 in (7) , then this condition is not required. (iii) Local Lipschitz property of marginal subgradients. For each i ∈ { 1, 2}, there exists Li < ∞ such that, for all p, q ∈ IM,R with nonempty ∂φ ∗ 
+
+> i
+
+(p) and ∂φ ∗ 
+
+> i
+
+(q), every 
+
+ψ ∈ ∂φ ∗ 
+
+> i
+
+(p) admits a companion ˜ψ ∈ ∂φ ∗ 
+
+> i
+
+(q) satisfying 
+
+| ˜ψ − ψ| ≤ Li|p − q|.
+
+Remark. Assumption A3(iii) holds if φ∗ 
+
+> i
+
+∈ C1,1 on a neighborhood of IM,R (with Li =Lip( ∇φ∗ 
+
+> i
+
+)), and it also holds with Li = 0 whenever ∂φ ∗ 
+
+> i
+
+(u) is a singleton independent of u on 
+
+IM,R (e.g. affine/indicator-type conjugates arising from TV penalties on the relevant range). 
+
+Remark. In the balanced OT setting, the dual objective is invariant under (f, g ) 7 → (f +
+
+λ, g − λ), and we fix the gauge (e.g. R f dα = 0 ). Equivalently, the envelope optimization has R = 0 , so Assumption A3 is satisfied trivially. Assumption A3 (ii) holds for KL and, more broadly, for smooth strictly convex f -divergences (e.g. χ2, Hellinger, Jensen–Shannon, and α-divergences): on any compact interval, their conjugates have a strictly positive second derivative and hence a positive strong convexity modulus. 
+
+15 Under Assumption A3, the empirical envelope is stable in the anchored variables and the remaining translation drift is controlled by Proposition 2. The theorem below converts these dual estimates into a high-probability bound for the optimal coupling through the exponential formula (1). 
+
+Theorem 3 (Sample complexity for unbalanced entropic OT) . Assume Assumptions A1, A2, and A3. Let (zi, w i)ni=1 
+
+> iid
+
+∼ ξ, where ξ has marginals ξ1 = α/m α and ξ2 = β/m β . Let π⋆ denote the UOT solution of (p-UOT) , and let πn denote the UOT solution with (α, β ) replaced by the empirical measures 
+
+αn := mα
+
+n
+
+> n
+
+X
+
+> i=1
+
+δzi , βn := mβ
+
+n
+
+> n
+
+X
+
+> j=1
+
+δwj .
+
+Then for all t > 0 and all h ∈ Cc(X × Y ), with probability at least 1 − e−t,
+
+⟨h, π ⋆ − πn⟩ ≤ C1 eC2(M +∥c∥∞)/η ∥h∥L∞(α⊗β)
+
+rmαmβ (log n + t)
+
+n , (14) 
+
+where C1 > 0 depends only on mα, m β , η , and the constants in Assumptions A2–A3, and 
+
+C2 > 0 is a numerical constant. If ξ = 1 
+
+> mαmβ
+
+α ⊗ β, the log n factor can be removed. Proof of Theorem 3. Let 
+
+p⋆ 
+
+> ∞
+
+:= dπ ⋆
+
+d(α ⊗ β), p⋆n := dπ n
+
+d(αn ⊗ βn).
+
+Let ( f ⋆
+
+> ∞
+
+, g ⋆
+
+> ∞
+
+) ∈ P α,β  
+
+> 0
+
+be a minimizer of the population envelope T α,β , and let ( f ⋆n , g ⋆n) be an optimal dual pair for Kn. By Theorem 2, all these potentials are uniformly bounded in L∞:there exists M > 0 such that 
+
+∥f ⋆
+
+> ∞
+
+∥∞, ∥g⋆
+
+> ∞
+
+∥∞, ∥f ⋆n ∥∞, ∥g⋆n∥∞ ≤ M. (15) In particular, 
+
+∥p⋆
+
+> ∞
+
+∥L∞(α⊗β) ≤ exp 
+
+2M + ∥c∥∞
+
+η
+
+
+
+. (16) By the triangle inequality, 
+
+⟨h, π ⋆ − πn⟩ ≤ ⟨hp ⋆
+
+> ∞
+
+, α ⊗ β − αn ⊗ βn⟩ + ∥h∥∞ ⟨p⋆ 
+
+> ∞
+
+− p⋆n, α n ⊗ βn⟩ . (17) 16 To control the first term on the RHS of (17): Apply Lemma 1 to ˜h = hp ⋆ 
+
+> ∞
+
+− ⟨ hp ⋆
+
+> ∞
+
+, α ⊗
+
+β⟩/(mαmβ ). Using ∥˜h∥∞ ≤ 2∥h∥∞∥p⋆
+
+> ∞
+
+∥∞ and (16), we obtain: for all t > 0, with probability at least 1 − e−t,
+
+⟨hp ⋆
+
+> ∞
+
+, α ⊗ β − αn ⊗ βn⟩ ≲ ∥h∥∞ exp 
+
+2M + ∥c∥∞
+
+η
+
+
+
+mαmβ
+
+r tn. (18) It remains to bound the second term on the RHS of (17). 
+
+Lipschitz control of the primal densities. On the interval [ −(2 M + ∥c∥∞), 2M + ∥c∥∞], the map u 7 → eu/η is η−1 exp((2 M + ∥c∥∞)/η )–Lipschitz. Hence, for all ( x, y ), 
+
+|p⋆
+
+> ∞
+
+(x, y ) − p⋆n(x, y )| ≤ η−1 exp 
+
+2M + ∥c∥∞
+
+η
+
+ 
+
+|f ⋆
+
+> ∞
+
+(x) − f ⋆n (x)| + |g⋆
+
+> ∞
+
+(y) − g⋆n(y)|
+
+
+
+.
+
+Integrating against αn ⊗ βn and using Cauchy–Schwarz yields 
+
+⟨p⋆ 
+
+> ∞
+
+− p⋆n, α n ⊗ βn⟩ ≲ η−1 exp 
+
+2M + ∥c∥∞
+
+η
+
+
+
+∥(f ⋆ 
+
+> ∞
+
+− f ⋆n , g ⋆ 
+
+> ∞
+
+− g⋆n)∥αn,β n . (19) 
+
+Empirical centering of the population potentials. Define the empirical centering constant and centered potentials 
+
+κn := 1
+
+mα
+
+Z
+
+f ⋆ 
+
+> ∞
+
+dα n, ¯f ⋆ 
+
+> ∞
+
+:= f ⋆ 
+
+> ∞
+
+− κn, ¯g⋆ 
+
+> ∞
+
+:= g⋆ 
+
+> ∞
+
++ κn. (20) Then R ¯f ⋆ 
+
+> ∞
+
+dα n = 0 and 
+
+∥ ¯f ⋆
+
+> ∞
+
+∥∞ ≤ 2M, ∥¯g⋆
+
+> ∞
+
+∥∞ ≤ 2M, ( ¯f ⋆ 
+
+> ∞
+
+⊕ ¯g⋆
+
+> ∞
+
+) = ( f ⋆ 
+
+> ∞
+
+⊕ g⋆
+
+> ∞
+
+).
+
+In particular, the density p⋆ 
+
+> ∞
+
+remains the same when expressed via ( ¯f ⋆
+
+> ∞
+
+, ¯g⋆
+
+> ∞
+
+). So, we can replace ( f ⋆
+
+> ∞
+
+, g ⋆
+
+> ∞
+
+) in (19) by their centred counterparts ( ¯f ⋆
+
+> ∞
+
+, ¯g⋆
+
+> ∞
+
+)Moreover, since R f ⋆ 
+
+> ∞
+
+dα = 0 (population anchoring), we have κn = R f ⋆ 
+
+> ∞
+
+d(αn − α), and Hoeffding’s inequality gives: for all t > 0, with probability at least 1 − e−t,
+
+|κn| ≲ M m α
+
+r tn. (21) 
+
+Empirical envelope and its minimizers. Define 
+
+Tn(f, g ) := min  
+
+> λ∈[−R,R ]
+
+Kn(f + λ, g − λ), (f, g ) ∈ P αn,β n 
+
+> 0
+
+,
+
+17 where R is the deterministic translation bound from Theorem 2. By Theorem 1 (applied with αn, β n) the envelope Tn is μ–strongly convex on Pαn,β n 
+
+> 0
+
+w.r.t. 
+
+∥ · ∥ αn,β n with 
+
+μ = η−1e−M/η .
+
+Therefore, since ( f ⋆n , g ⋆n) minimize Tn,
+
+∥(f ⋆n − ¯f ⋆
+
+> ∞
+
+, g ⋆n − ¯g⋆
+
+> ∞
+
+)∥αn,β n ≤ 1
+
+μ dist  0, ∂ Tn( ¯f ⋆
+
+> ∞
+
+, ¯g⋆
+
+> ∞
+
+). (22) 
+
+Danskin–Valadier: reducing ∂Tn to ∂Kn at a minimizing shift. Set Φ λ(f, g ) := Kn(f +λ, g −λ), so Tn(f, g ) = min λ∈[−R,R ] Φλ(f, g ). For each fixed λ, Φ λ is convex in ( f, g ), and [ −R, R ] is compact, hence Danskin–Valadier gives 
+
+∂Tn(f, g ) = co 
+
+ [
+
+> λ∈Λn(f,g )
+
+∂Φλ(f, g )
+
+
+
+, Λn(f, g ) := arg min  
+
+> λ∈[−R,R ]
+
+Φλ(f, g ).
+
+Therefore for any λ ∈ Λn(f, g ), dist(0 , ∂ Tn(f, g )) ≤ dist(0 , ∂ Φλ(f, g )) .
+
+Moreover, by the chain rule for subdifferentials, 
+
+∂Φλ(f, g ) = ∂(f,g )Kn(f + λ, g − λ). (23) Now pick 
+
+λn, ∞ ∈ Λn( ¯f ⋆
+
+> ∞
+
+, ¯g⋆
+
+> ∞
+
+) = arg min  
+
+> λ∈[−R,R ]
+
+Kn( ¯f ⋆ 
+
+> ∞
+
++ λ, ¯g⋆ 
+
+> ∞
+
+− λ),
+
+and obtain dist  0, ∂ Tn( ¯f ⋆
+
+> ∞
+
+, ¯g⋆
+
+> ∞
+
+) ≤ dist 
+
+
+
+0, ∂ (f,g )Kn( ¯f ⋆ 
+
+> ∞
+
++ λn, ∞, ¯g⋆ 
+
+> ∞
+
+− λn, ∞)
+
+
+
+. (24) Given any measurable selections 
+
+ψ1,n ∈ − ∂φ ∗
+
+> 1
+
+ −( ¯f ⋆ 
+
+> ∞
+
++ λn, ∞), ψ2,n ∈ − ∂φ ∗
+
+> 2
+
+ −(¯ g⋆ 
+
+> ∞
+
+− λn, ∞),
+
+define 
+
+q1,n (·) := ψ1,n (·) + 
+
+Z
+
+p⋆
+
+> ∞
+
+(·, y ) dβ n(y), (25) 
+
+q2,n (·) := ψ2,n (·) + 
+
+Z
+
+p⋆
+
+> ∞
+
+(x, ·) dα n(x). (26) 18 By direct inspection of Kn and (23), we have (q1,n , q 2,n ) ∈ ∂(f,g )Kn( ¯f ⋆ 
+
+> ∞
+
++ λn, ∞, ¯g⋆ 
+
+> ∞
+
+− λn, ∞),
+
+hence dist 
+
+
+
+0, ∂ (f,g )Kn( ¯f ⋆ 
+
+> ∞
+
++ λn, ∞, ¯g⋆ 
+
+> ∞
+
+− λn, ∞)
+
+
+
+≤ ∥ (q1,n , q 2,n )∥αn,β n . (27) It remains to bound ∥(q1,n , q 2,n )∥αn,β n for some appropriate choice of ψ1,n and ψ2,n . Let 
+
+λ∞ ∈ [−R, R ] be a population minimizer of the translation problem: 
+
+λ∞ ∈ argmin 
+
+> λ∈[−R,R ]
+
+K(f ⋆ 
+
+> ∞
+
++ λ, g ⋆ 
+
+> ∞
+
+− λ).
+
+Pick corresponding KKT selections 
+
+ψ⋆ 
+
+> 1
+
+∈ − ∂φ ∗
+
+> 1
+
+(−f ⋆ 
+
+> ∞
+
+− λ∞), ψ⋆ 
+
+> 2
+
+∈ − ∂φ ∗
+
+> 2
+
+(−g⋆ 
+
+> ∞
+
++ λ∞),
+
+satisfying 
+
+ψ⋆ 
+
+> 1
+
+(·) + 
+
+Z
+
+p⋆
+
+> ∞
+
+(·, y ) dβ (y) = 0 α-a.e. , (28) 
+
+ψ⋆ 
+
+> 2
+
+(·) + 
+
+Z
+
+p⋆
+
+> ∞
+
+(x, ·) dα (x) = 0 β-a.e. . (29) Define the residuals ˜q1(·) := ψ⋆ 
+
+> 1
+
+(·) + 
+
+Z
+
+p⋆
+
+> ∞
+
+(·, y ) dβ n(y) = 
+
+Z
+
+p⋆
+
+> ∞
+
+(·, y ) d(βn − β)( y), (30) ˜q2(·) := ψ⋆ 
+
+> 2
+
+(·) + 
+
+Z
+
+p⋆
+
+> ∞
+
+(x, ·) dα n(x) = 
+
+Z
+
+p⋆
+
+> ∞
+
+(x, ·) d(αn − α)( x). (31) By Proposition 4 (applied to the bounded kernel p⋆
+
+> ∞
+
+), for all t > 0, with probability at least 1 − e−t,
+
+∥˜q1∥L2(αn) + ∥˜q2∥L2(βn) ≲ exp 
+
+2M + ∥c∥∞
+
+η
+
+rmαmβ (log n + t)
+
+n . (32) Finally we compare ( q1,n , q 2,n ) to (˜ q1, ˜q2). This is the only place where Assumption A3 is used. Indeed, Assumption A3 (ii) implies that the scalar map 
+
+Gn : λ 7 → K n(f ⋆ 
+
+> ∞
+
++ λ, g ⋆ 
+
+> ∞
+
+− λ)19 is γ–strongly convex on [ −R, R ] for a deterministic γ > 0, depending only on the local cur-vature properties of ϕ∗ 
+
+> 1
+
+and ϕ∗
+
+> 2
+
+. It has λn, ∞ + κn as a minimizer. By (21) and Proposition 2, with probability at least 1 − e−t,
+
+|λn, ∞ − λ∞| ≲ exp 
+
+2M + ∥c∥∞
+
+η
+
+r tn. (33) By Assumption A3(iii), for each i ∈ { 1, 2} we can choose measurable ψi,n and ψ⋆i so that 
+
+ψ1,n (x) ∈ − ∂φ ∗
+
+> 1
+
+ −( ¯f ⋆
+
+> ∞
+
+(x) + λn, ∞), ψ⋆ 
+
+> 1
+
+(x) ∈ − ∂φ ∗
+
+> 1
+
+ −(f ⋆
+
+> ∞
+
+(x) + λ∞),
+
+(and similarly for i = 2), and such that pointwise 
+
+|ψi,n − ψ⋆i | ≤ Li
+
+ |λn, ∞ − λ∞| + |κn|.
+
+Consequently, 
+
+∥ψ1,n − ψ⋆ 
+
+> 1
+
+∥L2(αn) + ∥ψ2,n − ψ⋆ 
+
+> 2
+
+∥L2(βn) ≲ |λn, ∞ − λ∞| + |κn|.
+
+Combining this with (25)–(26), (32), (33) and (21) yields, with probability at least 1 − e−t,
+
+∥q1,n ∥L2(αn) + ∥q2,n ∥L2(βn) ≲ exp 
+
+2M + ∥c∥∞
+
+η
+
+rmαmβ (log n + t)
+
+n . (34) Plugging (34) into (27) and then into (24) gives dist  0, ∂ Tn( ¯f ⋆
+
+> ∞
+
+, ¯g⋆
+
+> ∞
+
+) ≲ exp 
+
+2M + ∥c∥∞
+
+η
+
+rmαmβ (log n + t)
+
+n . (35) Insert the dual error bound into (19), and then combine with (18) and (17) to obtain (14). 
+
+# 5 Conclusion 
+
+We have proved finite-sample guarantees for entropic unbalanced optimal transport at the level of the optimal coupling. The main technical point is to analyze the unbalanced dual prob-lem through a translation-invariant envelope. Once the intrinsic dual variables are anchored and the remaining scalar translation is controlled, the dual geometry yields compactness and strong convexity estimates that are robust across a broad class of φ-divergences. These esti-mates convert empirical deviations of the dual objective into high-probability control of the 20 potentials and, through the exponential representation of the optimizer, of the transport plan itself. This analysis reinforces the practical role of regularization in OT. Entropy is not only an algorithmic device for Sinkhorn-type scaling; it also improves the statistical stability of transport estimators and helps reduce high-dimensional sample requirements. Unbalanced marginal penalties add the modeling flexibility needed when mass is not conserved. Together, these two forms of regularization produce the forward stability estimate needed in the compan-ion inverse-problem analysis [1], where the goal is to recover the cost from samples. Natural extensions include sharper dependence on the entropy parameter, noncompact domains, richer nonparametric cost classes, and algorithms that exploit the quotient geometry directly. 
+
+# References 
+
+[1] F. Andrade, G. Peyr´ e, and C. Poon. Learning from samples: Inverse problems over measures via sharpened Fenchel–Young losses. arXiv preprint arXiv:2505.07124 , 2025. [2] J.-D. Benamou, G. Carlier, M. Cuturi, L. Nenna, and G. Peyr´ e. Iterative bregman pro-jections for regularized transportation problems. SIAM Journal on Scientific Computing ,37(2):A1111–A1138, 2015. [3] C. Bunne, L. Papaxanthos, A. Krause, and M. Cuturi. Proximal optimal transport modeling of population dynamics. In Proceedings of the 25th International Conference on Artificial Intelligence and Statistics , volume 151 of Proceedings of Machine Learning Research , pages 6511–6528. PMLR, 2022. [4] L. A. Caffarelli and R. J. McCann. Free boundaries in optimal transport and monge-ampere obstacle problems. Annals of Mathematics , 171(2):673–730, 2010. [5] L. Chizat, G. Peyr´ e, B. Schmitzer, and F.-X. Vialard. Scaling algorithms for unbalanced optimal transport problems. Mathematics of computation , 87(314):2563–2609, 2018. [6] L. Chizat, G. Peyr´ e, B. Schmitzer, and F.-X. Vialard. Unbalanced optimal transport: Dynamic and Kantorovich formulations. Journal of Functional Analysis , 274(11):3090– 3123, 2018. [7] M. Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. In Ad-vances in Neural Information Processing Systems , volume 26, pages 2292–2300, 2013. [8] J. Feydy, T. S´ ejourn´ e, F.-X. Vialard, S.-i. Amari, A. Trouv´ e, and G. Peyr´ e. Interpolating between optimal transport and MMD using Sinkhorn divergences. In Proceedings of 
+
+21 the 22nd International Conference on Artificial Intelligence and Statistics , volume 89 of 
+
+Proceedings of Machine Learning Research , pages 2681–2690. PMLR, 2019. [9] A. Figalli. The optimal partial transport problem. Archive for rational mechanics and analysis , 195(2):533–560, 2010. [10] N. Fournier and A. Guillin. On the rate of convergence in wasserstein distance of the empirical measure. Probability theory and related fields , 162(3–4):707–738, 2015. [11] C. Frogner, C. Zhang, H. Mobahi, M. Araya, and T. A. Poggio. Learning with a wasser-stein loss. In Advances in Neural Information Processing Systems , volume 28, 2015. [12] A. Genevay, L. Chizat, F. Bach, M. Cuturi, and G. Peyr´ e. Sample complexity of Sinkhorn divergences. In Proceedings of the 22nd International Conference on Artificial Intelligence and Statistics , volume 89 of Proceedings of Machine Learning Research , pages 1574–1583. PMLR, 2019. [13] A. Genevay, G. Peyr´ e, and M. Cuturi. Learning generative models with sinkhorn di-vergences. In Proceedings of the 21st International Conference on Artificial Intelligence and Statistics , volume 84 of Proceedings of Machine Learning Research , pages 1608–1617. PMLR, 2018. [14] S. Kondratyev, L. Monsaingeon, and D. Vorotnikov. A new optimal transport distance on the space of finite radon measures. arXiv preprint arXiv:1505.07746 , 2015. [15] M. Liero, A. Mielke, and G. Savar´ e. Optimal entropy-transport problems and a new Hellinger–Kantorovich distance between positive measures. Inventiones Mathematicae ,211(3):969–1117, 2018. [16] G. Mena and J. Niles-Weed. Statistical bounds for entropic optimal transport: sample complexity and the central limit theorem. In Advances in Neural Information Processing Systems , volume 32, 2019. [17] M. Pariset, Y.-P. Hsieh, C. Bunne, A. Krause, and V. De Bortoli. Unbalanced diffusion Schr¨ odinger bridge. arXiv preprint arXiv:2306.09099 , 2023. [18] G. Peyr´ e and M. Cuturi. Computational optimal transport: With applications to data science. Foundations and Trends in Machine Learning , 11(5–6):355–607, 2019. [19] P. Rigollet and A. J. Stromme. On the sample complexity of entropic optimal transport. 
+
+arXiv preprint arXiv:2206.13472 , 2022. 22 [20] G. Schiebinger, J. Shu, M. Tabaka, B. Cleary, V. Subramanian, A. Solomon, J. Gould, S. Liu, S. Lin, P. Berube, et al. Optimal-transport analysis of single-cell gene expression identifies developmental trajectories in reprogramming. Cell , 176(4):928–943, 2019. [21] T. S´ ejourn´ e, J. Feydy, F.-X. Vialard, A. Trouv´ e, and G. Peyr´ e. Sinkhorn divergences for unbalanced optimal transport. arXiv preprint arXiv:1910.12958 , 2019. [22] T. S´ ejourn´ e, G. Peyr´ e, and F.-X. Vialard. Unbalanced optimal transport, from theory to numerics. Handbook of Numerical Analysis , 24:407–471, 2023. [23] T. S´ ejourn´ e, F.-X. Vialard, and G. Peyr´ e. Faster unbalanced optimal transport: Trans-lation invariant sinkhorn and 1-d frank-wolfe. In Proceedings of the 25th International Conference on Artificial Intelligence and Statistics , volume 151 of Proceedings of Machine Learning Research , pages 4995–5021. PMLR, 2022. [24] R. Sinkhorn. A relationship between arbitrary positive matrices and doubly stochastic matrices. Ann. Math. Statist. , 35:876–879, 1964. [25] Z. Zhang, T. Li, and P. Zhou. Learning stochastic dynamics from snapshots through regularized unbalanced optimal transport. arXiv preprint arXiv:2410.00844 , 2024. 
+
+# A Concentration bounds 
+
+Proposition 3 (McDiarmid’s inequality) . Let Z1, . . . , Z n be independent random variables taking values in a measurable space Z, and let F : Zn → R satisfy the bounded-differences property: there exists c > 0 such that for all i ∈ { 1, . . . , n } and all z1, . . . , z n, z ′ 
+
+> i
+
+∈ Z ,
+
+F (z1, . . . , z i, . . . , z n) − F (z1, . . . , z ′
+
+> i
+
+, . . . , z n) ≤ c. 
+
+Then for all t > 0,
+
+P
+
+
+
+F (Z1, . . . , Z n) − E[F (Z1, . . . , Z n)] ≥ t
+
+
+
+≤ 2 exp 
+
+
+
+− 2t2
+
+nc 2
+
+
+
+.
+
+Lemma 1 (Hoeffding bound for the empirical product measure) . Let (α, β ) ∈ M +(X ) ×M+(Y) and let (zi, w i)ni=1 be i.i.d. with common law ξ, where ξ1 = α/m α and ξ2 = β/m β . Let 
+
+h ∈ L∞(α ⊗ β) satisfy ⟨h, α ⊗ β⟩ = 0 and set 
+
+αn = mα
+
+n
+
+> n
+
+X
+
+> i=1
+
+δzi , βn = mβ
+
+n
+
+> n
+
+X
+
+> j=1
+
+δwj .
+
+23 Then for all t > 0, with probability at least 1 − e−t,
+
+⟨h, α n ⊗ βn⟩ ≤ mαmβ ∥h∥L∞(α⊗β)
+
+r t
+
+2n. (36) 
+
+In particular, ⟨h, α n ⊗ βn⟩ ≲ mαmβ ∥h∥∞
+
+pt/n .Proof. Write 
+
+⟨h, α n ⊗ βn⟩ = mαmβ
+
+n2
+
+> n
+
+X
+
+> i,j =1
+
+h(zi, w j ) = mαmβ Un, Un := 1
+
+n2
+
+> n
+
+X
+
+> i,j =1
+
+h(zi, w j ).
+
+Since ( zi, w i) are i.i.d. with marginals ξ1 = α/m α and ξ2 = β/m β , we have 
+
+E[h(zi, w j )] = 
+
+Z
+
+h d (ξ1 ⊗ ξ2) = 1
+
+mαmβ
+
+Z
+
+h d (α ⊗ β) = 0 ,
+
+hence E[Un] = 0. Let U off  
+
+> n
+
+:= 1
+
+> n(n−1)
+
+P 
+
+> i̸=j
+
+h(zi, w j ) be the order-2 U-statistic (with kernel ( z, w ′) 7 → h(z, w ′)). Then Un differs from U off  
+
+> n
+
+only by the diagonal terms: 
+
+Un = n(n − 1) 
+
+n2 U off  
+
+> n
+
++ 1
+
+n2
+
+> n
+
+X
+
+> i=1
+
+h(zi, w i).
+
+Therefore, using |h| ≤ ∥ h∥∞,
+
+|Un| ≤ | U off  
+
+> n
+
+| + 1
+
+n ∥h∥∞. (37) Now apply Hoeffding’s inequality, since the kernel takes values in [ −∥ h∥∞, ∥h∥∞], for all 
+
+t > 0, 
+
+P
+
+
+
+|U off  
+
+> n
+
+− E[U off  
+
+> n
+
+]| ≥ ∥ h∥∞
+
+r t
+
+2n
+
+
+
+≤ e−t.
+
+Moreover E[U off  
+
+> n
+
+] = E[h(z1, w 2)] = 0, so with probability at least 1 − e−t,
+
+|U off  
+
+> n
+
+| ≤ ∥ h∥∞
+
+r t
+
+2n.
+
+Combining with (37) yields, on the same event, 
+
+|Un| ≤ ∥ h∥∞
+
+r t
+
+2n + 1
+
+n∥h∥∞ ≤ 2∥h∥∞
+
+r t
+
+2n,
+
+where t ≥ 1 would imply n−1 ≤ pt/ (2 n) and otherwise, we simply absorb constants. Multi-plying by mαmβ gives (36). 24 Proposition 4 (Concentration of the empirical dual subgradients) . Let q1, q 2 be defined by 
+
+(30) –(31) , and assume that 
+
+∥f ⋆
+
+> ∞
+
+∥∞ ≤ r, ∥g⋆
+
+> ∞
+
+∥∞ ≤ r
+
+for some r > 0 (e.g. r = M + R from Theorem 2). Set 
+
+B := Bexp (r) := exp 
+
+2r + ∥c∥∞
+
+η
+
+
+
+.
+
+Then for all t > 0, with probability at least 1 − e−t,
+
+∥q1∥L2(αn) + ∥q2∥L2(βn) ≲ B
+
+rmαmβ (log n + t)
+
+n (38) 
+
+with an absolute implicit constant. If moreover ξ = 1 
+
+> mαmβ
+
+α ⊗ β (independent sampling of z and w), then for all t > 0, with probability at least 1 − e−t,
+
+∥q1∥L2(αn) + ∥q2∥L2(βn) ≤ 2B
+
+
+
+mβ
+
+rmαtn + mα
+
+rmβ tn
+
+
+
+. (39) 
+
+Proof. We prove the bound for q1; the proof for q2 is identical with ( α, z i, β, m β ) replaced by (β, w i, α, m α). 
+
+Step 1: Centering and envelope bounds. Recall 
+
+q1(z) = ψ⋆ 
+
+> 1
+
+(z) + 
+
+Z
+
+p⋆
+
+> ∞
+
+(z, y ) dβ n(y), p⋆
+
+> ∞
+
+(x, y ) = exp 
+
+f ⋆
+
+> ∞
+
+(x) + g⋆
+
+> ∞
+
+(y) − c(x, y )
+
+η
+
+
+
+.
+
+Population optimality gives the stationarity condition (for α-a.e. z)
+
+ψ⋆ 
+
+> 1
+
+(z) + 
+
+Z
+
+p⋆
+
+> ∞
+
+(z, y ) dβ (y) = 0 .
+
+Hence, for α-a.e. z,
+
+q1(z) = 
+
+Z
+
+p⋆
+
+> ∞
+
+(z, y ) d(βn − β)( y). (40) Moreover, the box bound on ( f ⋆
+
+> ∞
+
+, g ⋆
+
+> ∞
+
+) implies 
+
+∥p⋆
+
+> ∞
+
+∥L∞(X ×Y ) ≤ B. (41) 25 Step 2 (general coupling): Fix i ∈ { 1, . . . , n }. Using (40) at z = zi and writing βn =
+
+> mβ
+> n
+
+Pnj=1 δwj , we have 
+
+q1(zi) = mβ
+
+n
+
+> n
+
+X
+
+> j=1
+
+
+
+p⋆
+
+> ∞
+
+(zi, w j ) − EW ∼β/m β
+
+p⋆
+
+> ∞
+
+(zi, W )
+
+.
+
+Split the sum as j̸ = i plus j = i: q1(zi) = Ai + Bi,Ai := mβ
+
+n
+
+X 
+
+> j̸=i
+
+
+
+p⋆
+
+> ∞
+
+(zi, w j )−EW ∼β/m β [p⋆
+
+> ∞
+
+(zi, W )] 
+
+
+
+, Bi := mβ
+
+n
+
+
+
+p⋆
+
+> ∞
+
+(zi, w i)−EW ∼β/m β [p⋆
+
+> ∞
+
+(zi, W )] 
+
+
+
+.
+
+(42) By (41), |Bi| ≤ 2mβ 
+
+> n
+
+B deterministically. Now condition on zi. The random variables ( wj )j̸ =i are independent (they are functions of independent pairs ( zj , w j )), and for each j̸ = i the marginal of wj is β/m β (because the marginal of ξ is fixed). Therefore, conditional on zi, the summands in Ai are independent, centered, and each lies in  − 2B, 2B. Hoeffding’s inequality yields: for all s > 0, 
+
+P |Ai| ≥ s zi
+
+ ≤ 2 exp 
+
+
+
+− 2s2
+
+(n − 1) (2 mβ B/n )2
+
+
+
+≤ 2 exp 
+
+
+
+− ns 2
+
+2m2 
+
+> β
+
+B2
+
+
+
+.
+
+Consequently, for all s > 0, 
+
+P |q1(zi)| ≥ s + 2mβ 
+
+> n
+
+B ≤ 2 exp 
+
+
+
+− ns 2
+
+2m2 
+
+> β
+
+B2
+
+
+
+.
+
+Apply a union bound over i = 1 , . . . , n and choose 
+
+s := mβ B
+
+r2(log(2 n) + t)
+
+n .
+
+Then, with probability at least 1 − e−t,max  
+
+> 1≤i≤n
+
+|q1(zi)| ≤ mβ B
+
+r2(log(2 n) + t)
+
+n + 2mβ
+
+n B. 
+
+Therefore, 
+
+∥q1∥L2(αn) =
+
+vuutmα
+
+n
+
+> n
+
+X
+
+> i=1
+
+q1(zi)2 ≤ √mα max  
+
+> i
+
+|q1(zi)|≤ √2 mβ B
+
+rmα(log(2 n) + t)
+
+n + 2mβ
+
+√mα
+
+n B. (43) 26 Step 3 (independent sampling): Assume now ξ = α ⊗ β/ (mαmβ ), so ( wj )nj=1 are i.i.d. with law β/m β and independent of z1: n. Define 
+
+Xj := 
+
+
+
+p⋆
+
+> ∞
+
+(zi, w j ) − EW ∼β/m β [p⋆
+
+> ∞
+
+(zi, W )] 
+
+ni=1 
+
+∈ Rn.
+
+Then E[Xj | z1: n] = 0 and ∥Xj ∥∞ ≤ 2B by (41). Moreover, (q1(zi)) ni=1 = mβ
+
+n
+
+> n
+
+X
+
+> j=1
+
+Xj .
+
+A standard vector Bernstein/Hoeffding inequality (e.g. [19, Lemma 17]) implies: with proba-bility at least 1 − e−t,
+
+1
+
+n
+
+> n
+
+X
+
+> j=1
+
+Xj 2
+
+≤ 2B
+
+r tn.
+
+Multiplying by mβ and then by pmα/n yields 
+
+∥q1∥L2(αn) =
+
+rmα
+
+n
+
+mβ
+
+n
+
+> n
+
+X
+
+> j=1
+
+Xj 2
+
+≤ 2 mβ B
+
+rmαtn . (44) 
+
+Step 4: Bound q2 and sum. The same argument gives 
+
+∥q2∥L2(βn) ≤ √2 mαB
+
+rmβ (log(2 n) + t)
+
+n + 2mα
+
+√mβ
+
+n B (general coupling), and 
+
+∥q2∥L2(βn) ≤ 2 mαB
+
+rmβ tn (independent sampling). Summing with (43) gives (38), and summing with (44) gives (39). 27

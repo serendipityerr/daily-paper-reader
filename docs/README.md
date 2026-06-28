@@ -6,29 +6,31 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-27
-- 运行时间：2026-06-27 20:55:58 UTC
+- 最新运行日期：2026-06-28
+- 运行时间：2026-06-28 21:06:53 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：0
+- 本次总论文数：3
+- 精读区：1
 - 速读区：2
 
 ### 今日简报（AI）
-今天筛选出2篇6分论文，聚焦随机分析与最优输运的交叉前沿。
-值得关注：McKean-Vlasov SDE路径空间的大偏差理论与带跳半鞅最优输运的统一框架。
-建议普通读者从带跳半鞅最优输运切入，其理论扩展了经典输运到不连续过程，应用前景更广。
-- 详情：[/202606/27/README](/202606/27/README)
+今日精读高分论文探讨随机高斯端点布朗桥的凸包性质，速读两篇最优传输的样本复杂度与有限样本界。  
+最值得关注的是布朗桥凸包中端点随机性与几何结构的关联，以及带惩罚最优传输的样本效率理论。  
+建议后续尝试将最优传输的样本界结论用于实际匹配问题，或结合凸包性质研究随机几何应用。
+- 详情：[/202606/28/README](/202606/28/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [On the convex hull of a planar Brownian bridge with a random Gaussian endpoint](/202606/28/2606.24485v1-on-the-convex-hull-of-a-planar-brownian-bridge-with-a-random-gaussian-endpoint)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：布朗桥研究直接相关于扩散桥概念
 
 ### 速读区论文标签
-1. [Onsager--Machlup functionals for McKean--Vlasov SDEs via Euler-type approximation](/202606/27/2606.26929v1-onsager--machlup-functionals-for-mckean--vlasov-sdes-via-euler-type-approximation)  
+1. [Sample complexity of unbalanced entropic OT](/202606/28/2606.24987v1-sample-complexity-of-unbalanced-entropic-ot)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：Onsager-Machlup泛函提供SDE的路径积分变分框架
-2. [Semimartingale Optimal Transport with Jumps: A General Framework and Equivalent Formulations](/202606/27/2606.27078v1-semimartingale-optimal-transport-with-jumps-a-general-framework-and-equivalent-formulations)  
+   evidence：熵正则化非平衡最优传输的样本复杂度研究
+2. [Finite-sample bounds for regularized optimal transport](/202606/28/2606.25947v1-finite-sample-bounds-for-regularized-optimal-transport)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：半鞅最优传输框架，处理边际分布和成本函数
+   evidence：正则化最优传输的有限样本界
 
 
 <div class="dpr-home-promo-card">
