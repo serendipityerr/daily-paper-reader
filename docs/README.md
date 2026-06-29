@@ -6,31 +6,33 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-28
-- 运行时间：2026-06-28 21:06:53 UTC
+- 最新运行日期：2026-06-29
+- 运行时间：2026-06-29 21:26:36 UTC
 - 运行状态：成功
 - 本次总论文数：3
-- 精读区：1
-- 速读区：2
+- 精读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读高分论文探讨随机高斯端点布朗桥的凸包性质，速读两篇最优传输的样本复杂度与有限样本界。  
-最值得关注的是布朗桥凸包中端点随机性与几何结构的关联，以及带惩罚最优传输的样本效率理论。  
-建议后续尝试将最优传输的样本界结论用于实际匹配问题，或结合凸包性质研究随机几何应用。
-- 详情：[/202606/28/README](/202606/28/README)
+今日精读两篇高分论文：扩散过程漂移变换框架与跨域宫颈异常筛查方法。
+
+最值得关注的是多维扩散过程的漂移变换理论及其在Wiener和Ornstein-Uhlenbeck动力学中的应用，以及结合图像合成与知识蒸馏的两阶段跨域宫颈筛查方案。
+
+建议优先精读这两篇高分论文，速读的概率测度空间观测器可作延伸参考。
+- 详情：[/202606/29/README](/202606/29/README)
 
 ### 精读区论文标签
-1. [On the convex hull of a planar Brownian bridge with a random Gaussian endpoint](/202606/28/2606.24485v1-on-the-convex-hull-of-a-planar-brownian-bridge-with-a-random-gaussian-endpoint)  
+1. [A framework for drift transformations of multidimensional diffusion processes with applications to Wiener and Ornstein--Uhlenbeck dynamics](/202606/29/2606.27549v1-a-framework-for-drift-transformations-of-multidimensional-diffusion-processes-with-applications-to-wiener-and-ornstein--uhlenbeck-dynamics)  
    标签：评分：8.0/10、query:diff-bridge
-   evidence：布朗桥研究直接相关于扩散桥概念
+   evidence：漂移变换构建具有可解析转移密度的新扩散过程
+2. [Two-Stage Cross-Domain Cervical Abnormality Screening with Cytopathological Image Synthesis and Knowledge Distillation](/202606/29/2606.27678v1-two-stage-cross-domain-cervical-abnormality-screening-with-cytopathological-image-synthesis-and-knowledge-distillation)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：使用薛定谔桥进行跨域图像翻译
 
 ### 速读区论文标签
-1. [Sample complexity of unbalanced entropic OT](/202606/28/2606.24987v1-sample-complexity-of-unbalanced-entropic-ot)  
+1. [The Mortensen observer on the space of probability measures](/202606/29/2606.23034v1-the-mortensen-observer-on-the-space-of-probability-measures)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：熵正则化非平衡最优传输的样本复杂度研究
-2. [Finite-sample bounds for regularized optimal transport](/202606/28/2606.25947v1-finite-sample-bounds-for-regularized-optimal-transport)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：正则化最优传输的有限样本界
+   evidence：Wasserstein空间上的最优传输，含动力学代价和HJB方程
 
 
 <div class="dpr-home-promo-card">
