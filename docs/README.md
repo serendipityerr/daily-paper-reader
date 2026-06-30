@@ -6,33 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-29
-- 运行时间：2026-06-29 21:26:36 UTC
+- 最新运行日期：2026-06-30
+- 运行时间：2026-06-30 20:45:55 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：2
-- 速读区：1
+- 本次总论文数：4
+- 精读区：1
+- 速读区：3
 
 ### 今日简报（AI）
-今日精读两篇高分论文：扩散过程漂移变换框架与跨域宫颈异常筛查方法。
-
-最值得关注的是多维扩散过程的漂移变换理论及其在Wiener和Ornstein-Uhlenbeck动力学中的应用，以及结合图像合成与知识蒸馏的两阶段跨域宫颈筛查方案。
-
-建议优先精读这两篇高分论文，速读的概率测度空间观测器可作延伸参考。
-- 详情：[/202606/29/README](/202606/29/README)
+今日精读一篇高分综述，系统梳理了流匹配、扩散模型、最优传输与薛定谔桥的生成建模基础；速读涉及扩散桥版权保护、重流对齐及传输图估计极限。最值得关注的是生成建模综述（8分）和扩散桥版权保护方法（7分），前者是理论框架，后者针对实际部署风险。建议普通读者先读综述建立理论脉络，再按需补充版权保护或对齐方法。
+- 详情：[/202606/30/README](/202606/30/README)
 
 ### 精读区论文标签
-1. [A framework for drift transformations of multidimensional diffusion processes with applications to Wiener and Ornstein--Uhlenbeck dynamics](/202606/29/2606.27549v1-a-framework-for-drift-transformations-of-multidimensional-diffusion-processes-with-applications-to-wiener-and-ornstein--uhlenbeck-dynamics)  
+1. [Notes on generative modeling: flow matching, diffusion, optimal transport and Schr{ö}dinger bridge](/202606/30/2606.30053v1-notes-on-generative-modeling-flow-matching-diffusion-optimal-transport-and-schrdinger-bridge)  
    标签：评分：8.0/10、query:diff-bridge
-   evidence：漂移变换构建具有可解析转移密度的新扩散过程
-2. [Two-Stage Cross-Domain Cervical Abnormality Screening with Cytopathological Image Synthesis and Knowledge Distillation](/202606/29/2606.27678v1-two-stage-cross-domain-cervical-abnormality-screening-with-cytopathological-image-synthesis-and-knowledge-distillation)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：使用薛定谔桥进行跨域图像翻译
+   evidence：直接讨论了薛定谔桥及其与最优传输和流匹配的联系
 
 ### 速读区论文标签
-1. [The Mortensen observer on the space of probability measures](/202606/29/2606.23034v1-the-mortensen-observer-on-the-space-of-probability-measures)  
+1. [GoodDiffusion: Proactive Copyright Protection for Diffusion Bridge Models via Learnable Sample-specific Signatures](/202606/30/2606.29759v1-gooddiffusion-proactive-copyright-protection-for-diffusion-bridge-models-via-learnable-sample-specific-signatures)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：针对扩散桥模型的主动版权保护
+2. [Beyond Trajectory Matching: Reflow with Marginal Distribution Alignment](/202606/30/2606.29287v1-beyond-trajectory-matching-reflow-with-marginal-distribution-alignment)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：Wasserstein空间上的最优传输，含动力学代价和HJB方程
+   evidence：通过重流进行边缘分布对齐，实现分布间的传输
+3. [The Fundamental Limits of Valid Transport Map Estimation](/202606/30/2606.30574v1-the-fundamental-limits-of-valid-transport-map-estimation)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：估计分布之间的传输映射，与构建扩散桥相关
 
 
 <div class="dpr-home-promo-card">
