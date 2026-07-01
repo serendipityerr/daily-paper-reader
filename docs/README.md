@@ -6,32 +6,34 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-30
-- 运行时间：2026-06-30 20:45:55 UTC
+- 最新运行日期：2026-07-01
+- 运行时间：2026-07-01 21:09:25 UTC
 - 运行状态：成功
 - 本次总论文数：4
 - 精读区：1
 - 速读区：3
 
 ### 今日简报（AI）
-今日精读一篇高分综述，系统梳理了流匹配、扩散模型、最优传输与薛定谔桥的生成建模基础；速读涉及扩散桥版权保护、重流对齐及传输图估计极限。最值得关注的是生成建模综述（8分）和扩散桥版权保护方法（7分），前者是理论框架，后者针对实际部署风险。建议普通读者先读综述建立理论脉络，再按需补充版权保护或对齐方法。
-- 详情：[/202606/30/README](/202606/30/README)
+1) 今日精读一篇基于薛定谔化量子算法的正则化Wasserstein近端算子论文（8.0分），速读三篇聚焦扩散逆问题、Levy过程耦合及Sinkhorn算法收敛率。  
+2) 最值得关注的是精读论文提出的量子算法新框架，以及Sinkhorn算法O(1/k)收敛速率的严格证明（6.0分）——两者分别对量子计算和最优传输的实用化有直接启发。  
+3) 建议优先阅读精读论文理解量子与最优传输的交叉路径，同时结合Sinkhorn收敛性分析评估该算法在低精度场景下的效率优势。
+- 详情：[/202607/01/README](/202607/01/README)
 
 ### 精读区论文标签
-1. [Notes on generative modeling: flow matching, diffusion, optimal transport and Schr{ö}dinger bridge](/202606/30/2606.30053v1-notes-on-generative-modeling-flow-matching-diffusion-optimal-transport-and-schrdinger-bridge)  
+1. [Schrödingerization based quantum algorithms for regularized Wasserstein proximal operators](/202607/01/2606.28752v1-schrdingerization-based-quantum-algorithms-for-regularized-wasserstein-proximal-operators)  
    标签：评分：8.0/10、query:diff-bridge
-   evidence：直接讨论了薛定谔桥及其与最优传输和流匹配的联系
+   evidence：利用薛定谔化方法求解正则化Wasserstein近端算子，与薛定谔桥问题直接相关
 
 ### 速读区论文标签
-1. [GoodDiffusion: Proactive Copyright Protection for Diffusion Bridge Models via Learnable Sample-specific Signatures](/202606/30/2606.29759v1-gooddiffusion-proactive-copyright-protection-for-diffusion-bridge-models-via-learnable-sample-specific-signatures)  
+1. [Stochastic Optimal Control Sampling for Diffusion Inverse Problems](/202607/01/2606.28785v1-stochastic-optimal-control-sampling-for-diffusion-inverse-problems)  
    标签：评分：7.0/10、query:diff-bridge
-   evidence：针对扩散桥模型的主动版权保护
-2. [Beyond Trajectory Matching: Reflow with Marginal Distribution Alignment](/202606/30/2606.29287v1-beyond-trajectory-matching-reflow-with-marginal-distribution-alignment)  
+   evidence：使用随机最优控制引导扩散采样以解决逆问题
+2. [Optimal Couplings of Levy Processes in the Class of Immersion Couplings](/202607/01/2606.24290v1-optimal-couplings-of-levy-processes-in-the-class-of-immersion-couplings)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：通过重流进行边缘分布对齐，实现分布间的传输
-3. [The Fundamental Limits of Valid Transport Map Estimation](/202606/30/2606.30574v1-the-fundamental-limits-of-valid-transport-map-estimation)  
+   evidence：莱维过程在二次成本下的最优耦合
+3. [Sharp $O(1/k)$ convergence rate for the Sinkhorn algorithm via a local analysis](/202607/01/2606.28973v1-sharp-o1k-convergence-rate-for-the-sinkhorn-algorithm-via-a-local-analysis)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：估计分布之间的传输映射，与构建扩散桥相关
+   evidence：熵正则化最优传输的Sinkhorn算法
 
 
 <div class="dpr-home-promo-card">
