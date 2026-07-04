@@ -6,26 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-03
-- 运行时间：2026-07-03 21:02:51 UTC
+- 最新运行日期：2026-07-04
+- 运行时间：2026-07-04 21:04:32 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日推荐2篇论文，其中1篇精读获得9.0高分。最值得关注的是基于布朗桥扩散的联合信道估计与数据检测方法，可增强接收机抗干扰能力。普通读者可优先了解扩散模型在通信系统中的应用思路。
-- 详情：[/202607/03/README](/202607/03/README)
+今日速读2篇论文，聚焦分数估计几何与分子扩散模型热力学。值得关注Local Fokker-Planck几何的精确高维采样方法，以及分子扩散模型的动作-算子语义与自由能审计。建议进一步学习热球均值表示和无监督热力学框架，以理解高维采样与分子建模前沿。
+- 详情：[/202607/04/README](/202607/04/README)
 
 ### 精读区论文标签
-1. [Brownian Bridge Diffusion-Based Joint Channel Estimation and Data Detection for Jamming-Resilient Receivers](/202607/03/2606.28778v1-brownian-bridge-diffusion-based-joint-channel-estimation-and-data-detection-for-jamming-resilient-receivers)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：布朗桥扩散框架
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [A PDE-Based Framework for Generative Modeling Beyond Classical Score-Based Diffusion](/202607/03/2607.02349v1-a-pde-based-framework-for-generative-modeling-beyond-classical-score-based-diffusion)  
+1. [Local Fokker--Planck Geometry for Score Estimation: Heat-Ball Mean-Value Representations and Exact High-Dimensional Sampling](/202607/04/2606.27954v1-local-fokker--planck-geometry-for-score-estimation-heat-ball-mean-value-representations-and-exact-high-dimensional-sampling)  
    标签：评分：7.0/10、query:diff-bridge
-   evidence：使用非线性OU动力学和正反向PDE进行生成建模
+   evidence：非线性漂移下的局部分数估计，实现精确高维采样
+2. [Unsupervised Thermodynamics of Molecular Diffusion Models: Action-Operator Semantics and Auditable Free-Energy Readout](/202607/04/2606.30687v1-unsupervised-thermodynamics-of-molecular-diffusion-models-action-operator-semantics-and-auditable-free-energy-readout)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：用于连接分子态的有噪算子桥
 
 
 <div class="dpr-home-promo-card">

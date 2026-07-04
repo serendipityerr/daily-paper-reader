@@ -1,0 +1,858 @@
+Title: Local Fokker–Planck Geometry for Score Estimation: Heat-Ball Mean-Value Representations and Exact High-Dimensional Sampling
+
+URL Source: https://arxiv.org/pdf/2606.27954v1
+
+Published Time: Mon, 29 Jun 2026 00:48:42 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# Local Fokker–Planck Geometry for Score Estimation: Heat-Ball Mean-Value Representations and Exact High-Dimensional Sampling 
+
+Jiayao Bai ∗1, Lang Deng †1, Yi Du ‡1, and Yifei Jia §21Department of Mathematics, Jinan University, Guangdong, China 
+
+> 2
+
+College of Mathematics and Statistics, Xinjiang University, Xinjiang, China 
+
+Abstract 
+
+Score-based generative models and Langevin samplers rely on estimating the score function 
+
+∇x log pt(x) of a forward diffusion. Classically this is tractable when the drift is linear: the marginal density is Gaussian and the score is a global conditional expectation [3, 14]. For a general nonlinear, state-dependent drift the marginal density has no closed form, and existing methods—denoising score matching (DSM) and global Fokker–Planck residual penalties [5]— resort to global averaging that inflates estimation error in low-density regions precisely where accuracy is most critical. We address this by developing a local Fokker–Planck geometric framework that replaces global conditioning with local parabolic averaging. Our approach rests on three numerical-analytic contributions. First, a time change to the cumulative-variance coordinate reduces the variable-coefficient Fokker–Planck equation to a standard inhomogeneous heat equation, on which we extend Evans’ classical heat-ball monotonicity method to derive exact local mean-value representations for the score ∇x log p together with the density, log-density, and entropy density (Theorem 5, Corollary 6); local well-posedness is established under an explicit dimension-dependent drift budget (Theorem 1). Second, for high-dimensional Monte Carlo evaluation of the resulting heat-ball integrals, we introduce the κ-measure—the Watson mean-value proba-bility measure on heat balls—and derive its exact factorized sampler (Algorithm 1) with unit per-sample weight, χ22 radial concentration, and a provable Ω( √d) variance advantage over uniform importance sampling (Corollary 13, Proposition 14). Third, the r → 0 limit of the heat-ball residual recovers the pointwise Fokker–Planck residual (Theorem 8), showing that the local framework is a one-parameter generalization of global FP-residual methods, and that the DSM population minimizer is feasible for the heat-ball constraint at every scale. We validate the framework on 2D structured data—where the local constraint demonstrably outperforms the global FP residual in low-density regions—on 256-dimensional MNIST, and on a dedicated sampler study confirming the concentration laws of Corollary 13. 
+
+# 1 Introduction 
+
+Score-based generative modeling [1, 2, 4] has become a central paradigm in machine learning, enabling high-quality sample generation by learning the score function ∇x log pt(x) of a forward 
+
+> ∗
+
+1793408913@qq.com 
+
+> †
+
+dela0929@163.com 
+
+> ‡
+
+Corresponding author: duyidy@jnu.edu.cn 
+
+> §
+
+jiayifei333@163.com 
+
+1
+
+> arXiv:2606.27954v1 [stat.ML] 26 Jun 2026
+
+diffusion. The pioneering work of Song and Ermon [1] and its unification with diffusion probabilis-tic models [4, 3] established denoising score matching (DSM) as the standard training objective, recovering the score as a global conditional expectation ∇x log pt(x) = E[ · | Xt = x]. 
+
+The nonlinear drift problem. The global conditional-expectation formula is exact when the drift is constant or linear—the standard DDPM and SMLD settings where the marginal density is Gaussian. For a general nonlinear, state-dependent drift d Xt = f (Xt, t ) d t + g(t) d Wt, the marginal density p(x, t ) has no closed form and global conditioning leads to two systematic deficiencies: 1. Density inaccessibility. No closed-form expression exists for p(x, t ), so the global con-ditional expectation cannot be evaluated or approximated without strong assumptions on 
+
+f .2. Bias inflation in low-density regions. Global averaging mixes information from distant, heterogeneous parts of the distribution, inflating score estimation error in low-density tails— the regions most critical for mode coverage and manifold fidelity. Recent work, FP-Diffusion [5], addresses this by adding a global Fokker–Planck residual penalty (PINN-style), but the score itself remains a global conditional expectation and the low-density degradation persists (Section 5.1, Observation 1). 
+
+Our approach: local parabolic geometry. We take a different route, replacing global condi-tioning with local parabolic averaging . The central insight is that a time change to the cumulative-variance coordinate τ (t) = R t 
+
+> 012
+
+g2(s) d s reduces the variable-coefficient Fokker–Planck equation to a standard inhomogeneous heat equation. On this equation, the classical heat-ball monotonicity method of Watson [7] and Evans [6] yields exact mean-value representations: every pointwise value of a caloric function equals a local weighted integral over a backward heat ball, with the Watson kernel |y|2/s 2. Extending these identities to the nonlinear Fokker–Planck setting, we obtain: 
+
+• Exact local representations for the score ∇x log p together with the density, log-density, and entropy density—no global density required (Theorem 5, Corollary 6). 
+
+• Local well-posedness with an explicit, dimension-dependent drift budget controlling how the safe existence window shrinks in high dimension (Theorem 1). 
+
+• An exact high-dimensional sampler for the Watson mean-value measure ( κ-measure, Algo-rithm 1) with unit per-sample weight, χ22 concentration, and a provable Ω( √d) variance advantage over uniform importance sampling (Corollary 13, Proposition 14). The local viewpoint reduces bias (nearby points respect local geometry rather than enforcing global Gaussian smoothing) and variance (the κ-sampler provides exact unbiased estimation with no importance reweighting). Analytically, Theorem 8 shows that the r → 0 limit of the heat-ball residual recovers the pointwise Fokker–Planck residual and that the DSM population minimizer is feasible for the heat-ball constraint at all scales, establishing the local framework as a strict generalization of both DSM and FP-Diffusion. While the motivation comes from score-based generative modeling, the technical contributions are in numerical analysis and computational mathematics: 
+
+• Extension of the heat-ball mean-value method from constant-coefficient to variable-coefficient parabolic equations, yielding explicit representations for u, log u, ∇ log u, and 
+
+u log u as heat-ball integrals with quantified error. 2• An exact factorized sampler for the Watson parabolic probability measure, with closed-form Beta( d/ 2 + 1 , 1) radial distribution, rigorous concentration analysis ( χ22 and Gaussian limits), and non-asymptotic variance bounds. 
+
+• Dimension-dependent well-posedness bounds that make precise how the drift budget must be controlled in high dimensions for the representations to hold. 
+
+Related work. The heat-ball mean-value identity for the constant-coefficient heat equation is classical [7, 6]; the present extension to variable-coefficient Fokker–Planck dynamics and the κ-measure sampler are new. On the score-estimation side, DSM [3] and its variants [1, 2, 4] are global methods; FP-Diffusion [5] adds a global FP residual penalty. The Helmholtz/Hodge decomposi-tion as a diagnostic for learned score fields connects to flow matching [13, 16] and divergence-free generative models [12]. The Jordan–Kinderlehrer–Otto framework [10] motivates the variational Fokker–Planck perspective; our approach is complementary, working at the level of pointwise mean-value identities rather than gradient flows. 
+
+Main contributions. 
+
+1. Local mean-value hierarchy for score estimation. (Section 3) Exact heat-ball repre-sentations for u, v = log u, w = u log u, and the score ∇v (Theorem 5, Corollary 6); local well-posedness under explicit dimension-dependent drift bounds (Theorem 1); r → 0 recovery of the Fokker–Planck residual and DSM feasibility (Theorem 8). 2. κ-measure and exact high-dimensional sampler. (Section 4) Closed-form factorization of the Watson measure (Proposition 11), exact sampler (Algorithm 1), χ22 and Gaussian concentration laws (Corollary 13), and non-asymptotic Ω( √d) variance gap over uniform importance sampling (Proposition 14). 3. Numerical validation. (Section 5) 2D diagnostic study confirming local robustness (Obser-vation 1) and Helmholtz decomposition structure (Observation 2); 256-dimensional MNIST scalability; sampler concentration verification. 
+
+Organization. Section 2 sets up the SDE, Fokker–Planck equation, time change, and Helmholtz decomposition. Section 3 derives the parabolic mean-value hierarchy, well-posedness, and the FP residual limit. Section 4 constructs the κ-measure and the exact sampler with variance and concen-tration analysis. Section 5 reports numerical validation. Section 6 concludes. Appendix 6 collects additional 2D diagnostics and the 1D bistable OU verification. 
+
+# 2 Problem Setup and Fokker–Planck Dynamics 
+
+2.1 SDE, Fokker–Planck equation, and time change 
+
+Consider the Itˆ o SDE [8, 9] dxt = f (xt, t ) d t + g(t) d Wt, xt ∈ Rd, g(t) > 0, (1) where f : Rd × [0 , ∞) → Rd is the drift and Wt is standard Brownian motion. The density p(x, t )of xt satisfies the forward Fokker–Planck (Kolmogorov forward) equation 
+
+∂tp = −∇ x ·  f p  + 12 g2(t) ∆ xp, (x, t ) ∈ Rd × (0 , ∞). (2) 3Time change. Define the cumulative-variance coordinate 
+
+τ (t) := 
+
+Z t 
+
+> 012
+
+g2(s) d s. (3) Since τ ′(t) = 12 g2(t) > 0, τ is strictly increasing with smooth inverse t = t(τ ). Setting u(x, τ ) := 
+
+p(x, t (τ )) and defining the normalized drift 
+
+˜f (x, τ ) := f (x, t (τ ))  
+
+> 12
+
+g2(t(τ )) , (4) equation (2) reduces to the standard inhomogeneous heat equation 
+
+∂τ u − ∆xu = −∇ x ·   ˜f (x, τ ) u(x, τ ). (5) 
+
+Remark. The time-dependent diffusion coefficient g2(t) is fully absorbed into τ ; equation (5) has constant unit diffusion coefficient, with all drift information carried by ˜f . All subsequent analysis is carried out in ( x, τ ) coordinates. 
+
+2.2 Helmholtz decomposition of the drift 
+
+To make the action of the drift explicit, we split the normalized drift by a Helmholtz (Hodge) decomposition [11]: ˜f = ˜f1 + ˜f2, ∇x · ˜f1 = 0 (divergence-free) , ˜f2 = ∇xϕ (curl-free) . (6) In 2D the divergence-free part is a stream-function rotation ˜f1 = ∇⊥χ = ( −∂x2 χ, ∂ x1 χ). The source of (5) then separates as 
+
+−∇ x · ( ˜f u ) = −∇ x · (∇xϕ u )
+
+| {z }
+
+> potential (from ˜f2)
+
+− ˜f1 ·∇ xu
+
+| {z }
+
+> transport (from ˜f1)
+
+, (7) using ∇x · ˜f1 = 0. Since the true score ∇x log u is a gradient (hence curl-free), any residual rotational mass in ˜f1 of a learned model is an estimation artifact—a diagnostic we exploit in Section 5 (Observation 2). This connects to geometric perspectives on vector-field flows [13, 16] and divergence-free generative models [12]. 
+
+Role in this paper. The Helmholtz split (6) is used as an interpretive and diagnostic device only; every mean-value identity of Section 3 treats the drift through the single term −∇ x · ( ˜f u )and holds without any decomposition. The split enters only in the numerical analysis of Section 5 (Observation 2). 
+
+2.3 Well-posedness of the Fokker–Planck equation 
+
+We work with equation (5) and the three derived quantities v := log u, w := u log u, s := ∇x log u =
+
+∇xv.
+
+Theorem 1 (Local well-posedness for u, v, w, s ). Let u0 ∈ W 1,∞(Rd) with m0 := ess inf Rd u0 > 0,
+
+M0 := ∥u0∥L∞ , S0 := ∥∇ u0∥L∞ , and let ˜f ∈ L∞
+
+> loc
+
+([0 , ∞); C1 
+
+> b
+
+(Rd; Rd)) . For T > 0 set 
+
+A(T ) := sup  
+
+> 0≤τ≤T
+
+∥ ˜f (·, τ )∥L∞ , C(T ) := sup  
+
+> 0≤τ≤T
+
+∥∇· ˜f (·, τ )∥L∞ , Cd := Γ   d+1 2
+
+/Γ  d
+
+> 2
+
+.
+
+Then there exists Tmax ∈ (0 , ∞] and a unique solution u ∈ C([0 , T max ); W 1,∞(Rd)) such that: 
+
+4(a) Lifespan lower bound. For every θ ∈ (0 , 1) ,
+
+Tmax ≥ T0(θ) := 
+
+q 
+
+C2 
+
+> d
+
++ θA(T0)+ C(T0) − Cd
+
+2
+
+. (8) (b) Regularity. For τ > 0, u(·, τ ) ∈ C∞(Rd) and ∂τ u ∈ C((0 , T max ); L∞).
+
+(c) Positivity and two-sided bounds. For all (x, τ ) ∈ Rd × [0 , T max ),
+
+m0e−C(τ )τ ≤ u(x, τ ) ≤ M0eC(τ )τ ,
+
+where C(τ ) := sup 0≤s≤τ ∥∇· ˜f (·, s )∥L∞ ; in particular u > 0.Consequently v, w, s lie in C([0 , T max ); L∞), are C∞ for τ > 0, and satisfy, with V0 := max {| log m0|, | log M0|} ,
+
+∥v(·, τ )∥L∞ ≤ V0+C(τ )τ, ∥w(·, τ )∥L∞ ≤ M0eC(τ )τ (V0+C(τ )τ ), ∥s(·, τ )∥L∞ ≤ eC(τ )τ 
+
+> m0
+
+∥∇ u(·, τ )∥L∞ .
+
+Proof. The proof is given in Appendix A. 
+
+Remark. Several consequences of Theorem 1 are worth noting explicitly. 
+
+(i) Existence window and drift budget. The condition Λ( T ) := K√T (√T + 2 Cd) < θ for some 
+
+θ < 1 (where K = A + C) guarantees that [0 , T ] lies inside the existence window. This gives the a priori drift budget K ≲ θ/ [√T (√T + 2 Cd)]; the initial data M0, S 0 enter only the solution radius 
+
+R = ( M0 + S0)/(1 − θ) and do not affect the threshold. 
+
+(ii) Exponential growth in drift size. The bounds on v, w, s grow exponentially in C = ∥∇· ˜f ∥L∞ ;controlling the divergence of the normalized drift is therefore the binding constraint for score estimation. 
+
+(iii) Dimension dependence. Since Cd = Γ( d+1 2 )/Γ( d 
+
+> 2
+
+) ∼ pd/ 2, the lifespan estimate satisfies 
+
+T0(θ) ∼ d−1K−2: the safe existence window shrinks like 1 /d as dimension grows, making the explicit drift budget of (i) essential in high dimensions. 
+
+(iv) Regularity requirement on ˜f . The space C1 
+
+> b
+
+is needed to control ∇· ˜f in the comparison principle; 
+
+L∞ suffices for well-posedness of u alone, but the pointwise bounds on v, w, s require the divergence. 
+
+# 3 Heat-Ball Geometry and Mean-Value Representations 
+
+Our goal is a local mean-value formula for u(x0, τ 0) over a parabolic heat-ball, expressing the pointwise value as a space-time integral of u and the PDE source. For the constant-coefficient heat equation such formulas are classical [6]; here we extend them to the variable-coefficient Fokker– Planck setting via the time change of Section 2. All analysis is in ( x, τ ) coordinates. 
+
+3.1 Heat-ball and the auxiliary function ψ
+
+For a reference point ( x0, τ 0), define the backward Gaussian kernel ([6, §2.3.1]) Φ( x − x0, τ 0 − τ ) := 1
+
+ 4π(τ0 − τ )d/ 2 exp 
+
+
+
+− |x − x0|2
+
+4( τ0 − τ )
+
+
+
+, τ < τ 0, (9) which satisfies ∂τ Φ + ∆ xΦ = 0. For r > 0 define the heat-ball 
+
+E(x0, τ 0; r) := (x, τ ) ∈ Rd+1 : τ < τ 0, Φ( x − x0, τ 0 − τ ) ≥ r−d , (10) 5and the auxiliary function (positive inside, zero on the boundary) 
+
+ψ(x, τ ) := ln  rd Φ( x − x0, τ 0 − τ ) = d ln r − d 
+
+> 2
+
+ln  4π(τ0 − τ ) − |x − x0|2
+
+4( τ0 − τ ) , (11) with derivatives ∇xψ = −(x − x0)/(2( τ0 − τ )) and the key symmetry 
+
+∇x0 ψ = −∇ xψ = x − x0
+
+2( τ0 − τ ) . (12) 
+
+Proposition 2. The heat-ball E(x0, τ 0; r) satisfies |E (x0, τ 0; r)| = cd rd+2 for a dimensional constant 
+
+cd > 0. Under the parabolic scaling (y, s ) = (( x − x0)/r, (τ0 − τ )/r 2), it maps bijectively onto the unit heat-ball E1 := {(y, s ) : s > 0, Φ( y, s ) ≥ 1}.
+
+3.2 Monotonicity functional and the base identity for u
+
+Define the monotonicity functional 
+
+J(r) := 1
+
+rd
+
+Z Z 
+
+> E(x0,τ 0;r)
+
+u |x − x0|2
+
+(τ0 − τ )2 dx dτ +
+
+Z r
+
+> 0
+
+4dρd+1 
+
+Z Z 
+
+> E(x0,τ 0;ρ)
+
+−∇ x · ( ˜f u )ψ dx dτ dρ. (13) Since ψ|∂E = 0, integration by parts yields 
+
+Z Z 
+
+> E
+
+−∇ x · ( ˜f u )ψ dx dτ = −
+
+Z Z 
+
+> E
+
+˜f u · x − x0
+
+2( τ0 − τ ) dx dτ, (14) giving the equivalent form 
+
+J(r) = 1
+
+rd
+
+Z Z 
+
+> E(x0,τ 0;r)
+
+u |x − x0|2
+
+(τ0 − τ )2 dx dτ −
+
+Z r
+
+> 0
+
+4dρd+1 
+
+Z Z 
+
+> E(x0,τ 0;ρ)
+
+˜f u · x − x0
+
+2( τ0 − τ ) dx dτ dρ. (15) 
+
+Lemma 3 (Monotonicity) . If u ∈ C2,1 solves (5) , then J′(r) = 0 .Proof. Under the parabolic scaling x − x0 = ry , τ0 − τ = r2s, write J(r) = A(r) + B(r) where 
+
+A(r) = RR  
+
+> E1
+
+u(x0 + ry, τ 0 − r2s)|y|2/s 2 dy ds and B(r) is the source term integral. Differentiat-ing and returning to ( x, τ ) coordinates gives A′(r) = −4d r −(d+1) RR 
+
+> E
+
+−∇ x · ( ˜f u )ψ and B′(r) = +4 d r −(d+1) RR 
+
+> E
+
+−∇ x · ( ˜f u )ψ, so J′(r) = A′(r) + B′(r) = 0. 
+
+Lemma 4 (Boundary value) . If u ∈ C2,1 is continuous on E1, then lim r→0 J(r) = 4 u(x0, τ 0).Proof. In scaled coordinates, lim r→0 A(r) = u(x0, τ 0) RR  
+
+> E1
+
+|y|2/s 2 dy ds = 4 u(x0, τ 0) (the universal constant RR  
+
+> E1
+
+|y|2/s 2 = 4; see [6]), and lim r→0 B(r) = 0 since the ρ factor in B(r) and the shrinking domain give a vanishing contribution. Combining Lemmas 3–4: J(r) ≡ 4 u(x0, τ 0), which is the base identity for u.6Table 1: Inhomogeneous heat equations and sources for the four quantities. Here v = log u and ˜f
+
+is the normalized drift (4). Quantity F PDE Source hF
+
+u ∂τ u − ∆u = hu hu = −∇ x · ( ˜f u )
+
+v = log u ∂τ v − ∆v = hv hv = |∇ xv|2 − ˜f ·∇ xv − ∇ x · ˜fw = u log u ∂τ w − ∆w = hw hw = −∇ x · ( ˜f w ) − u|∇ xv|2 − u ∇x · ˜fs = ∇xv (derived from v; see Corollary 6) 
+
+3.3 The parabolic mean-value hierarchy 
+
+Each of the four quantities u, v = log u, w = u log u, and s = ∇xv satisfies an inhomogeneous heat equation ∂τ F − ∆xF = hF and admits the same Watson mean-value representation driven by its source hF . Table 1 collects the sources. For F ∈ { u, v, w }, define the Watson average 
+
+Mr[F ]( x0, τ 0) := 14
+
+Z Z 
+
+> E1
+
+F (x0 + ry, τ 0 − r2s) |y|2
+
+s2 dy ds. (16) The heat-ball representation takes the uniform form 
+
+F (x0, τ 0) = Mr[F ]( x0, τ 0) + d
+
+Z Z 
+
+> E1
+
+ψ0(z, σ )
+
+Z r
+
+> 0
+
+ρ h F (x0 + ρz, τ 0 − ρ2σ) d ρ dz dσ, (17) with the source entering through a uniform positive sign. 
+
+Theorem 5 (Parabolic mean-value hierarchy) . Let u be a smooth positive solution of (5) and let 
+
+v = log u, w = u log u with sources as in Table 1. For any (x0, τ 0) and r > 0, each of F ∈ { u, v, w }
+
+satisfies the exact representation (17) . Explicitly: 
+
+u(x0, τ 0) = Mr[u] − d
+
+Z Z 
+
+> E1
+
+ψ0
+
+Z r
+
+> 0
+
+ρ ∇x · ( ˜f u )( x0 + ρz, τ 0 − ρ2σ) d ρ dz dσ, (18) 
+
+v(x0, τ 0) = Mr[v] + d
+
+Z Z 
+
+> E1
+
+ψ0
+
+Z r
+
+> 0
+
+ρ h v(x0 + ρz, τ 0 − ρ2σ) d ρ dz dσ, (19) 
+
+w(x0, τ 0) = Mr[w] + d
+
+Z Z 
+
+> E1
+
+ψ0
+
+Z r
+
+> 0
+
+ρ h w(x0 + ρz, τ 0 − ρ2σ) d ρ dz dσ. (20) 
+
+The entropy-density identity (20) provides a density-adaptive weighting: w = u log u is larger where 
+
+u is smaller (in low-density regions), emphasizing sparse parts of the distribution and improving estimator robustness in the tails. Proof. Each identity follows the same pattern: verify that F satisfies an inhomogeneous heat equation with source hF , then apply the monotonicity argument of Lemmas 3–4. 
+
+Identity for u. u solves (5) with hu = −∇ x · ( ˜f u ). Integration by parts via (14) and combining with J(r) ≡ 4 u(x0, τ 0) gives (18). 
+
+Identity for v. Substituting u = ev into (5) and dividing by u gives ∂τ v − ∆xv = |∇ xv|2 − ˜f ·∇xv − ∇ x · ˜f =: hv. The monotonicity argument with source hv yields (19). 
+
+Identity for w. Using ∂τ w = ( ∂τ u)v + u(∂τ v) and v∆u + u∆v = ∆( uv ) − 2u|∇ v|2, one obtains 
+
+∂τ w − ∆xw = −∇ x · ( ˜f w ) − u|∇ xv|2 − u ∇x · ˜f =: hw. The monotonicity argument with source hw
+
+yields (20). 7Corollary 6 (Heat-ball representation for the score) . The score s = ∇x log u = ∇xv admits the representation 
+
+s(x0, τ 0) = 14
+
+Z Z 
+
+> E1
+
+∇x0
+
+ log u(x0 + ry, τ 0 − r2σ) |y|2
+
+σ2 dy dσ
+
++ d
+
+Z Z 
+
+> E1
+
+hZ r
+
+> 0
+
+ρ ∇x0 hv(x0 + ρz, τ 0 − ρ2σ) d ρ
+
+i
+
+ψ0(z, σ ) d z dσ. (21) 
+
+Proof. Differentiate (19) with respect to x0. The auxiliary function ψ satisfies ∇x0 ψ = −∇ xψ
+
+(cf. (12)), which allows ∇x0 to be transferred onto ψ by integration by parts; the boundary term vanishes since ψ|∂E = 0. 
+
+Remark. The symmetry ∇x0 ψ = −∇ xψ is the parabolic analogue of the reflection symmetry of the elliptic Green’s function with respect to source and field points. It is this symmetry—not an independent monotonicity argument—that yields the score representation from the log-density identity, making Corollary 6 structurally distinct from Theorem 5. 
+
+3.4 The r → 0 limit and connection to Fokker–Planck residuals 
+
+The heat-ball residual Rr[v] := v −Mr[v]−Sr[v] (where Sr[v] is the source integral in (17)) vanishes for any v satisfying the Fokker–Planck equation (Theorem 5). The following result shows that the 
+
+r → 0 limit of Rr recovers the pointwise Fokker–Planck residual, and characterizes the feasibility of the denoising score-matching optimum. 
+
+Lemma 7 (Heat-ball Taylor expansion) . Define the dimensional constants C1 := RR  
+
+> E1
+
+|y|2/s dy ds,
+
+C2 := RR  
+
+> E1
+
+|y|4/s 2 dy ds, C3 := d RR  
+
+> E1
+
+ψ0 dz dσ, all finite for d ≥ 1. The geometric identities 
+
+C2 = 2 dC 1 and C3 = C1/2 hold, and for every w ∈ C2,1 near (x0, τ 0),
+
+Mr[w] = w − C1 
+
+> 4
+
+r2 (∂τ − ∆) w + o(r2), Sr[w] = C1 
+
+> 4
+
+r2 hw + o(r2). (22) 
+
+Proof. Taylor-expand w in Mr[w]; use the normalization RR  
+
+> E1
+
+|y|2/s 2 = 4, oddness, isotropy, and 
+
+C1 to collect terms. For Sr[w], use continuity of hw and R r 
+
+> 0
+
+ρ dρ = r2/2. The constant identities follow by applying Rr ≡ 0 to the caloric polynomial w1 = |x|2 + 2 dτ (giving C2 = 2 dC 1) and to 
+
+w2 = τ (giving C3 = C1/2). 
+
+Theorem 8 (Heat-ball residual limit and DSM feasibility) . Let C1 > 0 be as in Lemma 7. 
+
+(i) (Pointwise FP residual.) For every w ∈ C2,1 near (x0, τ 0),
+
+lim 
+
+> r→0
+
+4
+
+C1r2 Rr[w]( x0, τ 0) =  ∂τ − ∆w − hw, (23) 
+
+the pointwise Fokker–Planck residual. This vanishes at every point iff w solves the Fokker– Planck equation. 
+
+(ii) (Feasibility.) The population minimizer of denoising score matching is the true score ∇x log u,whose v = log u solves ∂τ v − ∆v = hv exactly. Hence Rr[v] ≡ 0 for every r > 0: the true score is feasible for the heat-ball constraint at all scales. The heat-ball constraint is thus a one-parameter family of necessary conditions whose r → 0 limit recovers the Fokker–Planck equation. 
+
+8Proof. (i) Insert (22) into Rr = w − Mr[w] − Sr[w]: Rr[w] = ( C1/4) r2[( ∂τ − ∆) w − hw] + o(r2); divide by ( C1/4) r2 and take r → 0. (ii) v = log u solves the FP equation, so Theorem 5 gives 
+
+Rr[v] ≡ 0 for all r > 0. 
+
+Remark (Scope) . Theorem 8 establishes feasibility only: the DSM population optimum satisfies the heat-ball identities at every scale, and the r → 0 limit recovers the characterizing Fokker–Planck equation. No ordering or equivalence between the DSM loss E∥sθ − s⋆∥2 and the heat-ball loss LHB 
+
+is asserted; relating the two loss landscapes is left open. 
+
+3.5 Illustration: 1D bistable OU process 
+
+While Theorem 8 is a population-level result, a concrete 1D example illustrates the practical advan-tage of the local representation when estimation operates on finite samples in a strongly nonlinear regime. For the bistable OU process d Xt = ( Xt−X3 
+
+> t
+
+) d t+d Wt with stationary score s(x) = 2 x−2x3,the local heat-ball estimator (Corollary 6) reduces overall score MSE from 5 .20 (denoising score matching) to 0 .54, with near-zero error in the dense core. Full details are in Appendix C. 
+
+# 4 The κ-Measure and Exact High-Dimensional Sampler 
+
+The mean-value representations of Section 3 express each pointwise value as a heat-ball integral. Evaluating these by Monte Carlo requires sampling the Watson weight |y|2/s 2 as a probability measure. Uniform sampling over a bounding cylinder wastes volume in regions where |y|2/s 2 is negligible, leading to severe weight degeneracy in high dimensions. We construct the κ-measure directly and show it admits an exact factorized sampler with unit per-sample weight. 
+
+4.1 Watson mean-value identity and the κ-measure 
+
+We work in ( x, τ ) coordinates with σ denoting the local time variable. 1 The heat kernel on Rd is Φ( y, σ ) = (4 πσ )−d/ 2 exp( −| y|2/(4 σ)), σ > 0. The constraint Φ( z, σ ) ≥ 1 defines the unit heat-ball 
+
+E1 and is equivalent to |z| ≤ R(σ) where 
+
+R(σ)2 := −2d σ log(4 πσ ), σ ∈ (0 , 1/(4 π)) . (24) 
+
+Lemma 9 (Watson mean-value identity) . For any caloric function ϑ (i.e. ∂σϑ = ∆ ϑ) on a neigh-borhood of E1,
+
+ϑ(0 , 0) = 
+
+Z Z 
+
+> E1
+
+ϑ(z, σ ) κ(z, σ ) d z dσ, where κ(z, σ ) := 14
+
+|z|2
+
+σ2 1E1 (z, σ ) (25) 
+
+is a probability density on E1 (normalization constant Zκ = 4 ). Proof. By Watson [7] and Evans [6, Thm. 3, §2.3.2], ϑ(0 , 0) = 14
+
+RR  
+
+> E1
+
+ϑ |z|2/σ 2 dz dσ. The normal-ization RR  
+
+> E1
+
+|z|2/σ 2 = 4 follows from spherical coordinates; setting κ := 14 |z|2/σ 2 1E1 gives (25). 
+
+Definition 10 (κ-measure) . The κ-measure μκ on E1 is the probability measure with density κ
+
+from (25) . Identity (25) gives the probabilistic form ϑ(0 , 0) = E(z,σ )∼μκ [ϑ(z, σ )] , which is the basis of the exact sampler: any caloric function is an expectation under μκ with unit per-sample weight.        
+
+> 1In implementations with diffusion constant G2= 2, all formulas transfer by replacing σwith G2σin R(σ).
+
+94.2 Factorization and exact sampler 
+
+Proposition 11 (Factorization of μκ). Let (z, σ ) ∼ μκ and write z = ρˆz with ρ = |z|, ˆz ∈ Sd−1.Set θ = ρ/R (σ) ∈ [0 , 1] , t = θ2. Then (σ, t, ˆz) are mutually independent with: 1. ˆz ∼ Unif( Sd−1);2. t ∼ Beta( d/ 2 + 1 , 1) with density pt(t) = d+2 2 td/ 2 on [0 , 1] ;3. σ with density pσ(σ) ∝ R(σ)d+2 /σ 2 on (0 , 1/(4 π)) , amenable to inverse-CDF sampling. Proof. Angular. κ depends on z only through ρ, so ˆ z|ρ is uniform on Sd−1. Radial. The joint density of ( ρ, σ ) is p(ρ, σ ) ∝ ρd+1 /σ 2 1{ρ≤R(σ)}. Changing variables ρ 7 → t = ρ2/R (σ)2 gives p(t|σ) ∝ td/ 2
+
+(independent of σ), so t ∼ Beta( d/ 2 + 1 , 1) independent of σ. Temporal. Integrating over ρ and the sphere gives pσ(σ) ∝ R(σ)d+2 /σ 2.
+
+Remark. The first shape parameter d/ 2 + 1 in Beta( d/ 2 + 1 , 1) combines the spherical volume element ( d/ 2) with the parabolic Watson factor |z|2 ∝ ρ2 (+1). The second parameter is 1 because the Watson weight is largest at the boundary θ = 1, giving the hard-boundary law pt(t) ∝ td/ 2; by contrast, uniform sampling on a ball gives Beta( d/ 2, 1). 
+
+Algorithm 1: Exact κ-measure sampler 
+
+Input: dimension d, number of samples N .
+
+Output: i.i.d. samples {(zi, σ i)}Ni=1 from μκ.
+
+for i = 1 , . . . , N do 
+
+Sample σi from pσ ∝ R(σ)d+2 /σ 2 by inverse CDF (evaluated by quadrature or precomputed table); Draw Vi ∼ Unif(0 , 1); set ti = V 2/(d+2)  
+
+> i
+
+, ui = √ti (closed-form inverse CDF of Beta( d/ 2 + 1 , 1), no rejection); Draw gi ∼ N (0 , I d); set ˆ zi = gi/|gi|;Set zi = uiR(σi) ˆ zi;
+
+Corollary 12 (Exactness) . Algorithm 1 produces i.i.d. samples from μκ. For any caloric ϑ, the esti-mator bϑN = 1
+
+> N
+
+PNi=1 ϑ(zi, σ i) is unbiased with importance weight wi ≡ 1; its variance is Var μκ [ϑ]/N 
+
+with zero weight variance. 
+
+4.3 High-dimensional concentration 
+
+Corollary 13 (Concentration of μκ). Let θ = |z|/R (σ), t = θ2 as in Proposition 11. As d → ∞ :1. (Radial) E[t] = ( d + 2) /(d + 4) , Var( t) = Θ( d−2), and d(1 − t) d→∞ 
+
+====⇒ χ22, so |z| = R(σ)(1 −
+
+ΘP (d−1)) concentrates at the heat-ball boundary with χ22 fluctuations. 2. (Temporal) √d (σ − σ⋆) d→∞ 
+
+====⇒ N (0 , 2/(4 πe )2) where σ⋆ = 1 /(4 πe ) maximizes R.3. (Angular) ˆ z ∼ Unif( Sd−1) exactly for every d.Consequently μκ concentrates onto a thin-shell “equator” of the heat ball, the parabolic analogue of Gaussian concentration on a sphere of radius √d.
+
+10 Proof. (σ, t, ˆz) are mutually independent by Proposition 11. Radial: t ∼ Beta( d/ 2 + 1 , 1) gives the stated mean and variance; setting S = d(1 − t), a Scheff´ e-lemma argument shows fS (s) → 12 e−s/ 2
+
+(the χ22 density). Temporal: pσ ∝ σ−2enϕ (σ) with n = ( d + 2) /2 and ϕ = log( −σ log(4 πσ )), strictly concave with maximum at σ⋆; Laplace’s method gives the stated Gaussian limit. 
+
+4.4 Variance analysis 
+
+Proposition 14 (Variance gap) . Let q = |S|−11S be a uniform proposal on a set S ⊇ E 1, with importance weight w := κ/q = |S| κ on E1. For ϑ ∈ L2(μκ), the direct estimator bϑκN (from 
+
+μκ, weight ≡ 1) and the weighted estimator bϑunif  
+
+> N
+
+(from q) are both unbiased, with exact (non-asymptotic) variance difference 
+
+Var[ bϑunif  
+
+> N
+
+] − Var[ bϑκN ] = 1
+
+N Eμκ [( w − 1) ϑ2]. (26) 
+
+For constant ϑ ≡ c, the direct estimator has zero variance and Var[ bϑunif  
+
+> N
+
+] = c2χ2(μκ∥q)/N with 
+
+χ2(μκ∥q) = Ω( √d) → ∞ .Proof. Both estimators are unbiased by (25). Using w2q = wκ : N Var[ bϑunif  
+
+> N
+
+] = Eμκ [w ϑ 2] − I2 and 
+
+N Var[ bϑκN ] = Eμκ [ϑ2] − I2; subtracting gives (26). For ϑ ≡ c, Eμκ [w] = Eq[w2] = χ2(μκ∥q) + 1. The dimensional lower bound follows from Cauchy–Schwarz: Eq[w2] ≥ | S|/|E 1|; Laplace’s method applied to |E 1| = R 1/(4 π)0 R(σ)d dσ gives |S|/|E 1| ∼ (e/ 2√π)√d = Θ( √d). 
+
+Remark. What the κ-sampler exploits is the thin-shell geometry of E1 (Corollary 13): as d grows, 
+
+μκ places its mass on a thin shell of the heat ball, while any axis-aligned bounding proposal wastes a Θ( √d) volume factor. A proposal uniform on E1 itself keeps χ2 = O(1); the variance gap arises specifically against over-dispersed bounding proposals. 
+
+Empirical validation of the sampler. We validate Algorithm 1 independently of any generative-modeling pipeline, using the caloric reference integrand f (y, s ) = |y|2/(2 s) (whose true mean-value is known analytically), N = 2000 samples, M = 80 runs, and dimensions d ∈ { 4, 8, 16 , 32 , 64 , 128 }.Figure 1 reports estimator variance and effective sample size (ESS). Both estimators inherit the intrinsic O(d) growth of Var μκ [f ]; on top of this, the uniform-with-weights estimator suffers severe ESS collapse, while the direct μκ sampler maintains full ESS by construction. The same runs pro-vide histograms of d(1 − t) and √d(σ − σ⋆), confirming the χ22 and Gaussian limits of Corollary 13. 
+
+4.5 Heat-ball residual loss for neural score estimation 
+
+Let vθ(x, τ ) be a neural parameterization of the log-density. Translating E1 to anchor ( x0, τ 0) via (z, σ ) 7 → (x0 − z, τ 0 − σ), the heat-ball residual loss is 
+
+LHB (θ) = E(x0,τ 0)
+
+h 
+
+vθ(x0, τ 0) − 1
+
+> NN
+
+X
+
+> i=1
+
+vθ(x0 − zi, τ 0 − σi)
+
+2i
+
+, (27) with {(zi, σ i)} ∼ μκ from Algorithm 1. By Theorem 5 and Theorem 8(ii), the true log-density satisfies LHB (v) = 0: enforcing this loss is a necessary condition for ∇vθ to approximate the true score. 11 Figure 1: Estimator variance (left) and effective sample size (right) vs. dimension d ∈{4, 8, 16 , 32 , 64 , 128 }, N = 2000, M = 80 runs. The direct κ-sampler (blue) maintains ESS= N and variance scaling with the intrinsic O(d) growth of the integrand; the uniform importance-sampling estimator (red) suffers ESS collapse and excess variance growth, consistent with the Ω( √d) lower bound of Proposition 14. The χ22 and Gaussian concentration laws of Corollary 13 are confirmed by the histograms of d(1 − t) and √d(σ − σ⋆) (not shown). 
+
+# 5 Numerical Validation 
+
+We validate the local heat-ball (HB) framework along three complementary axes: (i) a controlled 2D study with known ground-truth score, where the theoretical predictions of Theorems 1–8 can be verified directly; (ii) a 256-dimensional test on binarized MNIST confirming that the κ-measure sampler scales to moderate dimension; and (iii) the dedicated sampler study of Section 4.4 (Fig-ure 1), which validates the concentration laws of Corollary 13. The goal is to isolate the quantitative predictions of the theory; large-scale generative benchmarks are outside the scope of this work. 
+
+5.1 Two-dimensional diagnostic study 
+
+Datasets. Five toy distributions spanning distinct score-field geometries: asymmetric gmm (asym-metric Gaussian mixture), sparse dense gmm (sparse–dense mixture), elongated gmm (aspect ratio 
+
+≈ 8:1), two spiral (two-arm spiral), and ring (radius R = 2 .5, radial standard deviation 0 .12). The elongated mixture has an irrotational-dominated score field; the ring has a purely tangential one. 
+
+Methods. Three score estimators: (i) DSM , standard denoising score matching; (ii) FP-Diffusion [5], DSM augmented with a global Fokker–Planck residual regularizer; and (iii) Heat-ball estimator (HB) , DSM augmented with the Helmholtz decomposition and the heat-ball mean-value constraint loss (27), switched on by a linear warm-up. 
+
+Protocol. All models train for 600 epochs with batch size 256 (192 for sparse dense gmm ), Adam optimizer with cosine-annealing schedule, and a ScoreMLP of hidden width 256. Score MSE is reported against the analytic score at τ = 0 .3; results at τ ∈ { 0.1, 0.5, 0.8} are qualitatively con-sistent. Values are single-seed (42) and indicative; the paper’s claims are the qualitative orderings 12 of Observations 1–2. 
+
+Heat-ball parameters. Following R(σ) = p−2d σ log(4 πσ ) with d = 2, we expose σmin =10 −3 and σmax as per-dataset hyperparameters (Table 2). For ring , the purely tangential score field requires smaller heat-balls ( σmax = 0 .04) to suppress spurious radial components from the divergence-free part ˜f1.Table 2: Per-dataset heat-ball parameters ( d = 2). Dataset σmin σmax Note 
+
+asymmetric gmm 10 −3 0.0796 default upper bound 
+
+sparse dense gmm 10 −3 0.0796 default upper bound 
+
+elongated gmm 10 −3 0.05 −37%, lower MC variance 
+
+two spiral 10 −3 0.05 compact ball for the manifold 
+
+ring 10 −3 0.04 −50%; see text 
+
+Quantitative results. Table 3 reports τ = 0 .3 final-epoch values. Globally, the heat-ball con-straint leaves the fit essentially unchanged where DSM is already accurate (HB within 3% of DSM on four of five datasets), and improves by 9 .4% on sparse dense gmm . Score fields are visually indistinguishable from DSM (Appendix Figure 5; field MSEs within ∼ 1%), consistent with Theo-rem 8: the DSM population optimum is feasible for the heat-ball constraint, so adding the constraint should not distort an already-optimal score. Table 3: Score MSE at τ = 0 .3 (seed 42, 600 epochs). Lower is better; best per row in bold. ∆ global: HB vs. DSM (relative). ∆ low-dens.: relative change in low-density region vs. DSM. MMD: reconstruction error of the Helmholtz field f = f1 + f2.Dataset DSM FP-Diff. HB ∆ global ∆ low-dens. MMD (HB / FP) (HB / FP) 
+
+asymmetric gmm 0.2418 0.2606 0.2448 +1 .2% / + 7 .8% +1 .3% / + 10 .4% 0.1126 
+
+elongated gmm 0.1198 0.1420 0.1234 +2 .9% / + 18 .5% +6 .2% / + 25 .9% 0.0373 
+
+ring 0.2798 0.2832 0.2811 +0 .5% / + 1 .2% +0 .7% / + 1 .9% 0.0091 
+
+sparse dense gmm 0.3001 0.2908 0.2721 −9.4% / − 3.1% −12 .2% / − 3.4% 0.0436 
+
+two spiral 0.5058 0.5073 0.5040 −0.4% / + 0 .3% −0.6% / + 0 .5% 0.0021 
+
+Observation 1: low-density robustness of the local constraint. Splitting the error by density region (Figure 2). The global FP-Diffusion regularizer degrades low-density tails by +10 .4% on asymmetric gmm and +25 .9% on elongated gmm relative to DSM; this is expected since the global FP residual penalty enforces a differential identity uniformly, spending capacity in well-sampled regions at the cost of accuracy in the tails. By contrast, the heat-ball constraint couples only probabilistically nearby points and preserves tail accuracy: HB stays within a few percent of DSM everywhere and improves the low-density region by 12 .2% on sparse dense gmm . The downstream consequence for sample quality (mode coverage, manifold preservation) is shown in Appendix Figure 7. 
+
+Observation 2: Helmholtz decomposition as a diagnostic. Figure 3 validates the split 
+
+f = f1 + f2: on Gaussian-mixture and elongated data the score field is irrotational-dominated 13 (a) elongated gmm : HB +6 .2%, FP +25 .9% in low-density region.     
+
+> (b) sparse dense gmm :HB −12 .2%, FP −3.4% in low-density region.
+
+Figure 2: Score MSE split into high- and low-density regions during training ( τ = 0 .3, log scale) on two representative datasets. In the high-density region (left subplot of each panel) all methods agree; in the low-density region (right subplot) the global FP residual degrades accuracy while the local heat-ball constraint preserves or improves it. (f2 = ∇ϕ carries the mode-seeking component; f1 is a weak residual swirl), while on manifold-structured data ( ring , two spiral , two moon ) f1 carries a pronounced circulation aligned with the manifold. Since the true score is curl-free, the rotational mass in f1 is an estimation artifact whose magnitude provides a per-dataset diagnostic. The Helmholtz field reproduces the data with MMD ranging from 0 .0021 ( two spiral ) to 0 .1126 ( asymmetric gmm ).      
+
+> (a) elongated gmm (cluster; MMD 0 .0373). (b) two moon (manifold; MMD 0 .0142).
+
+Figure 3: Helmholtz decomposition f = f1 + f2 of the learned drift at τ = 0 .5: curl-free f2 = ∇ϕ
+
+(left), divergence-free f1 (center), total f (right), with data overlaid. On cluster data f2 dominates; on manifold data f1 captures circulation. Residual rotational mass in f1 is an estimation artifact, since the true score is curl-free. 
+
+Heat-ball PDE residual. Appendix Figure 8 tracks the parabolic mean-value residual Rr[vθ]during training. The residual rises over training for all methods (from ∼ 10 −10 to ∼ 10 −4), which is expected: an under-fit score trivially satisfies the local mean-value identity, and the residual grows as the network resolves sharp structure. The HB estimator attains the lowest final residual on elongated gmm (3 × 10 −5 vs 1 .4 × 10 −4 for DSM), confirming that the constraint is actively enforced. 
+
+5.2 High-dimensional validation: 256-dimensional MNIST 
+
+We validate scalability on MNIST downsampled to 16 × 16 ( d = 256). The heat-ball score model trains for at most 50 epochs and produces visually coherent digit samples. Table 4 reports MMD across sampler configurations (deterministic-switch threshold det tau ∈ { 0.05 , 0.10 , 0.15 , 0.20 },Langevin corrector steps n correct ∈ { 0, 1, 2}, reverse-SDE steps n steps ∈ { 400 , 500 , 600 }). The best configuration achieves MMD= 0 .0088 (Figure 4). The deterministic-switch threshold is the 14 dominant inference parameter: lowering det tau to 0 .05 causes salt-and-pepper boundary artifacts (12 vs. 1 affected samples at 0 .05 vs. 0 .15). Table 4: MMD on 16 × 16 MNIST ( d = 256) for representative sampler configurations. Lower is better; best in bold. 
+
+det tau n correct n steps MMD 0.15 1 500 0.0088 
+
+0.15 1 400 0.0102 0.10 0 500 0.0118 0.15 0 400 0.0121 15 (a) det tau = 0 .15, n correct = 1, n steps = 500 (MMD= 0 .0088, best).             
+
+> (b) det tau = 0 .15, n correct = 1, n steps = 400 (MMD= 0 .0102).
+> (c) det tau =0.10, n correct =0, n steps =500 (MMD= 0 .0118).
+> (d) det tau = 0 .15, n correct = 0, n steps = 400 (MMD= 0 .0121).
+
+Figure 4: Unconditional samples from the heat-ball score model on 16 × 16 MNIST ( d = 256). In each grid, odd rows are real references and even rows are model generations. The κ-measure sampler scales to d = 256; enabling a Langevin corrector and adding reverse-SDE steps both lower MMD. 16 6 Conclusion 
+
+We have developed a local Fokker–Planck geometric framework for score estimation that replaces the global conditional expectation of denoising score matching with a local parabolic average. The central methodological advance is the extension of the classical heat-ball mean-value method (Watson [7], Evans [6]) to variable-coefficient Fokker–Planck dynamics via a cumulative-variance time change. This yields three categories of result. 
+
+Analytical foundations. Theorem 5 and Corollary 6 provide exact local mean-value representa-tions for the density u, log-density v = log u, score ∇v, and entropy density w = u log u as heat-ball integrals. Theorem 1 establishes local well-posedness with an explicit dimension-dependent drift budget—the safe existence window shrinks like d−1, making drift control structurally necessary in high dimensions. Theorem 8 shows that the heat-ball framework is a strict generalization of both denoising score matching (whose population minimizer is feasible for the heat-ball constraint at all scales) and global FP-residual methods (whose pointwise residual is recovered as r → 0). 
+
+Computational contributions. The κ-measure—the Watson mean-value probability measure— admits a closed-form factorization into independent Beta( d/ 2 + 1 , 1) radial, σ⋆-concentrated tem-poral, and uniform spherical components (Proposition 11). Algorithm 1 samples it exactly with unit per-sample weight and no rejection. Corollary 13 proves χ22 radial and Gaussian temporal concentration; Proposition 14 proves a non-asymptotic Ω( √d) variance advantage over uniform importance sampling. 
+
+Numerical evidence. The 2D diagnostic study confirms two qualitative effects predicted by the theory: the local heat-ball constraint preserves low-density accuracy that the global FP residual degrades (Observation 1), and the Helmholtz decomposition provides an interpretable diagnostic of estimation artifacts in the learned drift (Observation 2). The 256-dimensional MNIST experiment confirms that the κ-measure sampler scales to moderate dimension, and the dedicated sampler study validates the χ22 and Gaussian concentration laws of Corollary 13. All reported MSE/MMD values are single-seed and indicative; the primary contribution is the analytical and algorithmic framework, whose correctness and convergence properties are established by Theorems 1–8. 
+
+# References 
+
+[1] Y. Song and S. Ermon. Generative modeling by estimating gradients of the data distribution. 
+
+Advances in Neural Information Processing Systems , 2019. [2] Y. Song, J. Sohl-Dickstein, D. P. Kingma, A. Kumar, S. Ermon, and B. Poole. Score-based generative modeling through stochastic differential equations. International Conference on Learning Representations , 2021. [3] P. Vincent. A connection between score matching and denoising autoencoders. Neural Com-putation , 23(7):1661–1674, 2011. [4] J. Ho, A. Jain, and P. Abbeel. Denoising diffusion probabilistic models. Advances in Neural Information Processing Systems , 2020. 17 [5] C. Lai, Y. Takida, N. Murata, T. Uesaka, Y. Mitsufuji, and S. Ermon. FP-Diffusion: Improv-ing score-based diffusion models by enforcing the underlying score Fokker–Planck equation. 
+
+International Conference on Machine Learning , 2023. [6] L. C. Evans. Partial Differential Equations , 2nd ed. American Mathematical Society, 2010. [7] N. A. Watson. A theory of subtemperatures in several variables. Proceedings of the London Mathematical Society , s3-26(3):385–417, 1973. [8] B. D. O. Anderson. Reverse-time diffusion equation models. Stochastic Processes and their Applications , 12(3):313–326, 1982. [9] G. A. Pavliotis. Stochastic Processes and Applications . Texts in Applied Mathematics. Springer, 2014. [10] R. Jordan, D. Kinderlehrer, and F. Otto. The variational formulation of the Fokker–Planck equation. SIAM Journal on Mathematical Analysis , 29(1):1–17, 1998. [11] H. Bhatia, G. Norgard, V. Pascucci, and P. T. Bremer. The Helmholtz–Hodge decomposition— a survey. IEEE Transactions on Visualization and Computer Graphics , 19(8):1386–1404, 2013. [12] N. Rozen, A. Grover, M. Nickel, and Y. Lipman. Moser Flow: Divergence-based generative modeling on manifolds. Advances in Neural Information Processing Systems , 34:17669–17680, 2021. [13] Y. Lipman, R. T. Chen, H. Ben-Hamu, M. Nickel, and M. Le. Flow matching for generative modeling. International Conference on Learning Representations , 2023. [14] C. W. Huang, J. H. Lim, and A. C. Courville. A variational perspective on diffusion-based generative models and score matching. Advances in Neural Information Processing Systems ,34:22863–22876, 2021. [15] V. De Bortoli, J. Thornton, J. Heng, and A. Doucet. Diffusion Schr¨ odinger bridge with applications to score-based generative modeling. Advances in Neural Information Processing Systems , 34:17695–17709, 2021. [16] M. S. Albergo and E. Vanden-Eijnden. Building normalizing flows with stochastic interpolants. 
+
+International Conference on Learning Representations , 2023. [17] T. Karras, M. Aittala, T. Aila, and S. Laine. Elucidating the design space of diffusion-based generative models. Advances in Neural Information Processing Systems , 35:26565–26577, 2022. 
+
+# A Proof of Theorem 1 
+
+Proof. Fix T ∈ (0 , 1], write A = A(T ), C = C(T ), K := A+C, and work in XT := C([0 , T ]; W 1,∞(Rd)). 
+
+Step 1. Contraction. In nondivergence form, ∂τ u = ∆ u − N [u] with N [u] := ˜f ·∇ u + ( ∇· ˜f ) u.The mild solution u = Φ( u) satisfies Φ( u)( τ ) := eτ ∆u0 − R τ 
+
+> 0
+
+e(τ −s)∆ N [u]( s) d s. Using ∥N [u]∥L∞ ≤
+
+K∥u∥XT and ∥∇ et∆g∥L∞ ≤ Cd t−1/2∥g∥L∞ ,
+
+∥Φ( u)∥XT ≤ (M0 + S0) + Λ( T )∥u∥XT , Λ( T ) := K√T (√T + 2 Cd).
+
+18 For θ ∈ (0 , 1) with Λ( T0) ≤ θ and R = ( M0 + S0)/(1 − θ), Φ : ¯BR → ¯BR is a θ-contraction; Banach’s theorem gives a unique solution on [0 , T 0]. The condition Λ( T0) ≤ θ solved for √T0
+
+gives (8). Interior parabolic regularity then gives u(·, τ ) ∈ C∞ and ∂τ u ∈ C((0 , T max ); L∞) for 
+
+τ > 0. 
+
+Step 2. Positivity. The constant barriers ¯ u(τ ) = M0eCτ and u(τ ) = m0e−Cτ satisfy the appro-priate differential inequalities; the comparison principle gives u ≤ u ≤ ¯u, so u > 0. 
+
+Step 3. Derived quantities. With u positive and bounded, v = log u, w = uv , and s = ∇u/u 
+
+are well-defined in C([0 , T max ); L∞). The stated pointwise bounds follow from the two-sided density bounds of Step 2. 
+
+# B Additional 2D diagnostics 
+
+All figures use seed 42 and the protocol of Section 5.1. 
+
+Figure 5: Learned score fields at τ = 0 .3 (streamlines over density contours) for DSM, FP-Diffusion, and the heat-ball estimator on elongated gmm (top), ring (middle), and sparse dense gmm (bot-tom). All three fields are visually near-identical with field MSEs agreeing to within ∼ 1%, consistent with Theorem 8: the DSM optimum is feasible for the heat-ball constraint. 19 (a) asymmetric gmm (MMD 0 .1126) (b) elongated gmm (MMD 0 .0373) 
+
+(c) sparse dense gmm (MMD 0 .0436) (d) pinwheel (MMD 0 .0068) 
+
+(e) two moon (MMD 0 .0142) (f) two spiral (MMD 0 .0021) 
+
+Figure 6: Helmholtz decomposition f = f1 + f2 at τ = 0 .5 across all datasets: curl-free f2 = ∇ϕ
+
+(left), divergence-free f1 (center), total f (right). Mixture datasets are irrotational-dominated; manifold datasets carry circulation in f1.20 (a) asymmetric gmm (b) double ring          
+
+> (c) elongated gmm (d) pinwheel
+> (e) ring (f) sparse dense gmm
+> (g) two moon (h) two spiral
+
+Figure 7: Generated samples across the eight 2D datasets (left to right: real data, DSM, HB without heat-ball constraint, full HB). The heat-ball constraint preserves manifold geometry and mode coverage that the unconstrained variant collapses. 
+
+Figure 8: Parabolic mean-value residual ∥R r[vθ]∥ during training on elongated gmm (τ = 0 .3, log scale). All methods show an increasing residual as the network resolves sharper structure; the heat-ball estimator attains the lowest final value, confirming that the constraint is actively enforced. 21 Figure 9: Score MSE training curves at noise levels τ ∈ { 0.1, 0.2, 0.3, 0.5, 0.8} on elongated gmm 
+
+(top), sparse dense gmm (middle), and ring (bottom). The relative ordering DSM/FP/HB is stable across noise scales, justifying τ = 0 .3 as the representative operating point. 22 Figure 10: Generated samples with mode counting on elongated gmm (top), ring (middle), and 
+
+sparse dense gmm (bottom); ground truth vs. DSM, FP-Diffusion, and HB over the true density contours, with recovered mode count annotated. The heat-ball estimator retains modes in low-density regions where the global baselines lose mass. 23 C Verification on a 1D bistable OU process 
+
+Consider the scalar bistable OU process dXt = ( Xt − X3 
+
+> t
+
+) d t + d Wt, (28) whose stationary density p(x) ∝ exp( x2 − x4/2) gives the true score strue (x) = 2 x − 2x3. The cumulative-variance time change gives τ (t) = t/ 2 and normalized drift ˜f (x, τ ) = 2( x − x3). By Theorem 5 and Corollary 6, the score at ( x0, τ 0) is expressed as a local heat-ball integral, whose source hv = |∇ v|2 − ˜f · ∇ v − ∇ · ˜f is assembled from the numerical solution of the 1D Fokker–Planck equation. 
+
+Experimental setup. The comparison is diagnostic, not like-for-like. DSM uses 10 4 forward trajectories with kernel regression and Tweedie’s formula (noise scale σ = 0 .15). The heat-ball estimator evaluates Corollary 6 using κ-measure Monte Carlo with radius r = 0 .3 and linear extrapolation at the boundary. MSE is reported on [ −3, 3], split by region. Table 5: Score MSE on the bistable OU process ( t∗ = 1 .0). Method Overall MSE Core ( |x| < 1) Tail ( |x| ≥ 1) True score (analytic) 0 0 0DSM ( σ = 0 .15) 5.2025 1.15 8.15 Heat-ball ( r = 0 .3) 0.5415 ≈ 0 0.95 
+
+Figure 11: Score estimation on the bistable OU process. (A) Stationary density. (B) Score com-parison: true (black), DSM (red), heat-ball (blue). (C) Pointwise absolute error (log scale). (D–E) Overall and regional MSE. (F) DSM parameter sensitivity: the optimal DSM error (over σ) remains bounded above the heat-ball baseline. DSM exhibits structural bias in the saddle region ( x ≈ 0, where the global loss is overwhelmed by the high-density modes) and severe sample starvation in the tails ( |x| ≥ 1, MSE = 8 .15). The heat-ball estimator reduces overall MSE by a factor of ∼ 10 and achieves near-zero core error, demonstrating that the local Fokker–Planck constraint is a structural necessity in nonlinear regimes, not merely a variance-reduction heuristic. 24
