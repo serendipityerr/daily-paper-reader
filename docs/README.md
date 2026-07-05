@@ -6,27 +6,22 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-04
-- 运行时间：2026-07-04 21:04:32 UTC
+- 最新运行日期：2026-07-05
+- 运行时间：2026-07-05 20:25:37 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：0
 - 精读区：0
-- 速读区：2
+- 速读区：0
 
 ### 今日简报（AI）
-今日速读2篇论文，聚焦分数估计几何与分子扩散模型热力学。值得关注Local Fokker-Planck几何的精确高维采样方法，以及分子扩散模型的动作-算子语义与自由能审计。建议进一步学习热球均值表示和无监督热力学框架，以理解高维采样与分子建模前沿。
-- 详情：[/202607/04/README](/202607/04/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202607/05/README](/202607/05/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Local Fokker--Planck Geometry for Score Estimation: Heat-Ball Mean-Value Representations and Exact High-Dimensional Sampling](/202607/04/2606.27954v1-local-fokker--planck-geometry-for-score-estimation-heat-ball-mean-value-representations-and-exact-high-dimensional-sampling)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：非线性漂移下的局部分数估计，实现精确高维采样
-2. [Unsupervised Thermodynamics of Molecular Diffusion Models: Action-Operator Semantics and Auditable Free-Energy Readout](/202607/04/2606.30687v1-unsupervised-thermodynamics-of-molecular-diffusion-models-action-operator-semantics-and-auditable-free-energy-readout)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：用于连接分子态的有噪算子桥
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
