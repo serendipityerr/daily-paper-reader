@@ -1,0 +1,1710 @@
+Title: ITSPACE: Monotone Gaussian Optimal Transport Updates
+
+URL Source: https://arxiv.org/pdf/2606.30523v1
+
+Published Time: Tue, 30 Jun 2026 02:35:20 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+Woojoo Na 1 Jennifer Dy 1
+
+## Abstract 
+
+Covariance matrices serve as compact descriptors of feature distributions in many machine-learning pipelines, including domain adaptation and Gaus-sian embeddings. Under a centered Gaussian approximation, the unregularized Wasserstein– 2 optimal-transport (OT) discrepancy admits a closed form on covariances given by the Bures– Wasserstein (BW) objective on the symmetric pos-itive definite (SPD) cone. We propose ITSPACE (Iterative Transport for Stable Proximal Align-ment of Covariance Embeddings), a proximal majorization–minimization method that directly optimizes this exact BW objective through closed-form updates in a square-root factorization. In ex-act arithmetic, each iteration satisfies a sufficient-decrease inequality for the BW objective; under inexact polar computations, we provide an explicit certificate-gap bound controlling deviations from exact descent. The resulting iterations preserve PSD structure by construction and naturally sup-port rank-restricted factors, making ITSPACE well-suited as a lightweight inner-loop primitive in settings where adaptation must be performed from unlabeled target batches under strict step and compute budgets. Across real-world covariance-alignment benchmarks, ITSPACE reaches low-BW-gap solutions substantially faster than BW-gradient descent, methods based on other co-variance geometries, and entropically regularized sample-OT baselines. 
+
+## 1. Introduction 
+
+Many machine-learning pipelines adapt feature distribu-tions rather than raw inputs directly. In unsupervised do-main adaptation, for example, distribution shift is often re-duced by matching first- and second-order feature statistics 
+
+> 1
+
+Department of Computer Engineering, Northeastern Uni-versity, Boston, USA. Correspondence to: Woojoo Na 
+
+<na.w@northeastern.edu >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+between a source domain and a target domain. Correla-tion alignment (CORAL) and related methods use covari-ance alignment as a practical surrogate for aligning feature distributions (Sun & Saenko, 2016). Similar covariance operations also appear in normalization layers, whitening– recoloring transforms, metric learning modules, and recent Bures–Wasserstein normalization methods for SPD features (Wang et al., 2025). In probabilistic representation learn-ing and variational inference, Gaussian approximations are frequently used to represent local uncertainty or latent dis-tributions (Lambert et al., 2022; Diao et al., 2023). Recent generative modeling methods also use Gaussian optimal-transport structure inside Wasserstein flow matching and Schr ¨odinger-bridge formulations (Haviv et al., 2025; Bunne et al., 2023). Across these examples, the covariance matrix is not merely a statistic computed after training. It is often part of the computational state that must be updated, stored, and passed to another module. This paper studies covariance alignment under the Bures– Wasserstein (BW) distance. The BW distance is the closed-form Wasserstein–2 distance between centered Gaussian distributions, written directly in terms of their covariance matrices (Gelbrich, 1990; Takatsu, 2011; Bhatia et al., 2019). Thus, when a feature distribution is represented by a Gaus-sian approximation, or when a method explicitly updates a covariance matrix, minimizing the BW distance is equiva-lent to minimizing the exact unregularized Gaussian optimal transport objective. This is different from entropic optimal transport on empirical samples, which solves a regularized sample-transport problem (Sinkhorn & Knopp, 1967; Cu-turi, 2013; Peyr ´e & Cuturi, 2019). We do not assume that raw datasets such as images or feature clouds are globally Gaussian. The setting considered here is more specific: the object being updated is a covariance matrix, or a low-rank factor representing that covariance. At first glance, covariance alignment may seem trivial. If the target covariance Σ⋆ is available, why not simply replace the current covariance by Σ⋆? This is not the setting faced by many adaptation and representation-learning pipelines. During training, test-time adaptation, or minibatch-based domain correction, the model may maintain only a compact covariance state rather than an arbitrary dense d × d matrix. 1  
+
+> arXiv:2606.30523v1 [cs.LG] 29 Jun 2026 ITSPACE: Monotone Gaussian Optimal Transport Updates
+> Figure 1. Entropic OT vs. Gaussian OT on covariances. En-tropic OT solves a regularized sample-transport problem on em-pirical measures. In contrast, centered Gaussian OT has a closed-form Bures–Wasserstein objective on covariance matrices, and its geodesics are exact Gaussian displacement interpolations. This work focuses on updating low-rank covariance factors under this exact Gaussian OT objective.
+
+A common representation is a low-rank factorization 
+
+X = Y Y ⊤, Y ∈ Rd×r , r ≪ d, 
+
+which guarantees that X is positive semidefinite and has rank at most r. Such a factor is cheaper to store and update, and it can be inserted directly into downstream normaliza-tion, whitening, metric, or covariance-correction modules. The challenge is therefore not to write down the full target covariance once. The challenge is to produce valid low-rank covariance updates that move toward Σ⋆ under the BW objective after only a small number of steps. This limited-update setting is important because many ML systems cannot afford to run a full matrix optimization routine inside every adaptation loop. Target statistics may change across domains, minibatches, or time, and the up-dated covariance may be consumed immediately by a down-stream module. Consequently, intermediate iterates matter: after one or two updates, the covariance should already be positive semidefinite, rank constrained, and closer to the target under the exact Gaussian Wasserstein objective. Post-hoc projection is not an ideal solution, because it can add substantial cost and may break the connection between the update step and the objective being optimized. Several existing methods address related problems, but they do not simultaneously provide a cheap low-rank factor up-date and descent under the exact BW objective. The BW geodesic gives the exact Gaussian optimal transport dis-placement interpolation between two Gaussian measures (Takatsu, 2011; Bhatia et al., 2019). However, it is an in-terpolation between covariance matrices and does not di-rectly provide an iterative rank-constrained factor update. Gradient-based and Riemannian methods can optimize the BW objective on SPD matrices (Han et al., 2021; Fan et al., 2024), but they typically require repeated dense matrix square roots, inverses, logarithms, or projections. Euclidean, log-Euclidean, and affine-invariant Riemannian updates are useful geometries for positive definite matrices, but they optimize different objectives. Entropic OT methods such as Sinkhorn are powerful for empirical measures, but their regularized objective is not the closed-form BW distance between Gaussian covariances. We propose ITSPACE (Iterative Transport for Stable Proxi-mal Alignment of Covariance Embeddings), a majorization– minimization method for rank-constrained covariance align-ment under the BW distance. The method works directly with the low-rank factor Y . Using the identity 
+
+W 22 (Y Y ⊤, Σ⋆) = ∥Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2∥Σ1/2 
+
+> ⋆
+
+Y ∥∗,
+
+the BW objective becomes a quadratic term minus a nu-clear norm. At each iteration, ITSPACE replaces the nu-clear norm by a tight linear certificate obtained from a po-lar/Procrustes problem, adds a proximal term, and mini-mizes the resulting quadratic upper bound in closed form. The resulting update moves the current factor toward an aligned square root of the target covariance, while every covariance iterate remains positive semidefinite and rank constrained by construction. Our contributions are as follows. • A low-rank update for BW covariance alignment. 
+
+We derive a closed-form factor update for aligning a covariance X = Y Y ⊤ to a target covariance Σ⋆ under the exact Gaussian Wasserstein objective. Every iterate remains positive semidefinite and rank constrained by construction. • Descent guarantees for the true BW objective. We prove monotone decrease of the BW objective under exact polar computation, strengthen this guarantee with a sufficient-decrease bound, and quantify the effect of approximate polar computations. We also include a matched-rank positive semidefinite extension in the appendix, together with the certificate condition needed in singular cases. • Empirical evaluation under limited update bud-gets. Across real feature-covariance alignment tasks and downstream covariance-drift correction tasks, ITSPACE reaches BW alignment targets substantially faster than BW gradient descent and achieves com-petitive downstream recovery under the same rank constraint. In our downstream drift-correction exper-iments, one or two unlabeled target-batch updates re-cover a substantial fraction of the drift-induced degra-dation, including gains of +3 .8 AUROC on Came-lyon17 and +5 .1 accuracy on Terra. 2ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+## 2. Background and Related Work 
+
+2.1. Sample OT vs. Gaussian OT 
+
+Optimal transport can be applied at different levels of rep-resentation. In sample-based OT, the inputs are empirical measures supported on data points. In Gaussian OT, the in-puts are Gaussian distributions, so the transport problem can be written directly in terms of their means and covariances. This paper studies the latter setting: the object being updated is a covariance matrix, or a low-rank factor representing that covariance. Given probability measures μ, ν on Rd with finite second moments, the squared Wasserstein–2 distance is the optimal value of the Kantorovich problem 
+
+W 22 (μ, ν ) := min 
+
+> π∈Π( μ,ν )
+
+Z
+
+∥x − y∥22 dπ (x, y ), (1) where Π( μ, ν ) denotes the set of couplings with marginals 
+
+μ and ν (Peyr ´e & Cuturi, 2019; Villani, 2009). Throughout this paper, W2 denotes this unregularized objective. Entropic OT modifies (1) by adding an entropy or KL penalty to the coupling, leading to Sinkhorn iterations (Sinkhorn & Knopp, 1967; Cuturi, 2013; Genevay et al., 2016; Feydy et al., 2019). This modification is crucial for scalable sample-based OT, but it changes the objec-tive. Sinkhorn therefore solves a regularized empirical trans-port problem, whereas our target is the exact unregularized Gaussian Wasserstein distance available in closed form on covariances. For centered Gaussian distributions, the unregularized W2
+
+distance depends only on covariance matrices. Let Sd
+
+> ++
+
+denote the cone of d × d real symmetric positive definite matrices. If X, Σ ∈ Sd
+
+> ++
+
+, then 
+
+W 22 (X, Σ) = tr( X)+tr(Σ) − 2 tr 
+
+
+
+(Σ 1/2XΣ1/2)1/2
+
+,
+
+(2) where we write W 22 (X, Σ) for W 22 (N (0 , X ), N (0 , Σ)) 
+
+(Dowson & Landau, 1982; Gelbrich, 1990; Takatsu, 2011; Bhatia et al., 2019). This is the Gaussian Bures–Wasserstein (BW) objective on covariances. Although (2) is often stated for positive definite covariances, it extends continuously to positive semidefinite covariances. This extension is essen-tial for the low-rank representation X = Y Y ⊤ used below, since such covariances are generally positive semidefinite rather than positive definite. For non-Gaussian distributions, the covariance expression in (2) should not be interpreted as the full distributional 
+
+W2 distance. Rather, together with mean terms, it appears in Gelbrich-type lower bounds on W2 and is used here as a second-order description of distributional discrepancy (Gelbrich, 1990). 
+
+2.2. BW vs. Other Geometries on Covariances 
+
+Covariance alignment is widely used to reduce mismatch between feature distributions. CORAL and related domain-adaptation methods match second-order feature statistics across source and target domains (Sun & Saenko, 2016). Covariance matrices also appear in whitening and recoloring transforms, normalization layers, metric-learning modules, and methods for SPD-valued features (Wang et al., 2025). These settings motivate algorithms that update covariances while respecting positive semidefinite structure. There are several natural geometries on covariance matri-ces. Common choices include the Euclidean or Frobenius geometry, the log-Euclidean geometry, the affine-invariant Riemannian geometry, and the Bures–Wasserstein geometry (Moakher, 2005; Arsigny et al., 2006; Bhatia, 2007; Bhatia et al., 2019). These geometries are all useful, but they define different objectives. A step that decreases a Euclidean, log-Euclidean, or affine-invariant distance between covariances does not necessarily decrease the Gaussian Wasserstein ob-jective in (2) . Since our goal is Gaussian OT on covariances, BW is the objective optimized and reported in our main alignment experiments. This objective choice also clarifies how to interpret baselines. Methods based on other SPD geometries are meaningful covariance-alignment baselines, but they are not descent methods for the BW objective. Sinkhorn methods are mean-ingful sample-OT baselines, but they solve a regularized empirical transport problem. Our comparisons therefore distinguish between the target objective, the matrix repre-sentation, and the computational constraints imposed by low-rank covariance updates. 
+
+2.3. Full-Covariance Paths vs. Low-Rank Factor Updates 
+
+Within Gaussian OT, a natural baseline is the BW geodesic. BW geodesics are the exact Wasserstein displacement inter-polations between Gaussian measures (Takatsu, 2011; Bha-tia et al., 2019). They provide a closed-form path between two covariance matrices and are therefore the Gaussian ana-logue of OT displacement interpolation. However, the BW geodesic is a full-covariance path. It does not directly solve the update problem considered in this paper, where the maintained state is a low-rank factor 
+
+X = Y Y ⊤, Y ∈ Rd×r , r ≪ d. 
+
+A geodesic step can be followed by rank truncation, but that introduces an extra projection and does not give a closed-form descent step for the rank-constrained factor objective. Gradient-based and Riemannian methods can also opti-mize the BW objective on the SPD cone (Han et al., 2021; Fan et al., 2024). These methods target the correct Gaus-3ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+sian Wasserstein distance, but they typically involve re-peated dense matrix square roots, inverses, logarithms, lin-ear solves, or projections when a rank constraint is imposed. They may also require step-size tuning or line search to obtain reliable descent. The gap addressed by ITSPACE is a low-rank update prob-lem: we seek a closed-form update for the factor Y itself, so that every iterate Xk = YkY ⊤ 
+
+> k
+
+is positive semidefinite, rank constrained, and guaranteed to decrease the exact BW objective. The next section derives this update by rewriting the BW objective in the factor variable and minimizing a quadratic upper bound at each iteration. A detailed compari-son of baseline families, objectives, guarantees, and per-step costs is provided in Appendix C. 
+
+## 3. The ITSPACE Algorithm 
+
+3.1. Problem Setup and Notation 
+
+Let d ∈ N, and let Sd 
+
+> ++
+
+denote the cone of d × d symmetric positive definite matrices. We are given a fixed target co-variance Σ⋆ ∈ Sd 
+
+> ++
+
+and an initial covariance X0 ⪰ 0. The goal is to produce a short sequence of covariance iterates 
+
+X0, X 1, . . . , X K
+
+that moves the current covariance toward Σ⋆ under the exact Gaussian Wasserstein objective 
+
+W 22 (Xk, Σ⋆) as defined in Eq. (2). (3) The setting of interest is constrained by both a rank budget 
+
+r ≪ d and a small iteration budget K. Thus the algorithm should maintain valid covariance iterates throughout the trajectory, rather than only after a final projection. 
+
+Rank Budget and Factorization. We enforce positive semidefiniteness and the rank constraint by representing the maintained state through a square-root factor: 
+
+Xk = YkY ⊤ 
+
+> k
+
+, Yk ∈ Rd×r . (4) This guarantees Xk ⪰ 0 and rank( Xk) ≤ r for every k.The current state of the algorithm is the factor Yk; the cor-responding covariance is Xk = YkY ⊤ 
+
+> k
+
+. When the available initial covariance is full-rank, we initialize the maintained rank-budgeted state by taking a rank-r PSD truncation and a square-root factor of it. To keep notation simple, we write this maintained initial covariance as X0 = Y0Y ⊤ 
+
+> 0
+
+.The target covariance Σ⋆ may be full rank even when the maintained state is low rank. Our main theory assumes 
+
+Σ⋆ ∈ Sd 
+
+> ++
+
+so that its principal square root is well defined. In experiments with near-singular empirical covariances, we apply the same small diagonal stabilization across methods before computing matrix square roots (Appendix D.1). The factorization is not unique: Y and Y R represent the same covariance for any orthogonal matrix R ∈ O(r). The update below chooses a convenient orientation of the factor through a polar/Procrustes certificate and then takes a closed-form proximal majorization–minimization step. 
+
+3.2. Deriving the Closed-Form Factor Update 
+
+We now derive ITSPACE as a proximal majorization– minimization (MM) method for minimizing the exact BW objective restricted to the rank-budgeted factorization X =
+
+Y Y ⊤. Here Y ∈ Rd×r denotes a generic factor variable and Yk denotes the current factor iterate. 
+
+Factor Form of the BW Objective. Let 
+
+S := Σ 1/2
+
+> ⋆
+
+be the principal square root of the target covariance. Sub-stituting X = Y Y ⊤ into the BW closed form and using 
+
+tr(( AA ⊤)1/2) = ∥A∥∗ gives the equivalent factor objective 
+
+F (Y ) := W 22 (Y Y ⊤, Σ⋆) = ∥Y ∥2 
+
+> F
+
++tr(Σ ⋆)−2∥SY ∥∗.
+
+(5) This identity is the main reduction. The rank constraint is built into the factor Y , and the only nonquadratic term in F is the nuclear norm ∥SY ∥∗. Since this nuclear norm appears with a negative sign, a linear lower bound on ∥SY ∥∗
+
+becomes a quadratic upper bound on the objective. This is the basis of the MM update. 
+
+Nuclear-Norm Certificate. The nuclear norm admits the support-function representation 
+
+∥A∥∗ = max  
+
+> ∥Q∥2≤1
+
+tr( Q⊤A), A ∈ Rd×r . (6) For A ∈ Rd×r , we write polar( A) for a selected maxi-mizer in (6) . If A = U ΓV ⊤ is a compact singular value decomposition, then one valid choice is 
+
+polar( A) = U V ⊤.
+
+When A has full column rank, this coincides with the usual thin polar factor A(A⊤A)−1/2. When A is rank deficient, the maximizer may not be unique and need not satisfy 
+
+Q⊤Q = Ir ; for example, when A = 0 , the choice Q = 0 is feasible and attains the maximum. At the current iterate, define 
+
+Qk := polar( SY k), Bk := SQ k. (7) Then ∥Qk∥2 ≤ 1, and by (6), for every factor Y ,
+
+∥SY ∥∗ ≥ tr( Q⊤ 
+
+> k
+
+SY ). (8) If Qk is an exact maximizer for SY k, then the inequality is tight at Y = Yk. Intuitively, Qk selects an orientation that best aligns the current factor with the target square root, and 
+
+Bk = SQ k is the factor used by the quadratic update below. 4ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+Quadratic Upper Bound. Because the nuclear norm ap-pears with a negative sign in (5), the lower bound (8) gives an upper bound on F . For every Y ,
+
+F (Y ) = ∥Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2∥SY ∥∗
+
+≤ ∥ Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2 tr( Q⊤ 
+
+> k
+
+SY )= ∥Y − Bk∥2 
+
+> F
+
++ Ck, (9) where 
+
+Ck := tr(Σ ⋆) − ∥ Bk∥2
+
+> F
+
+is independent of Y . Under an exact polar certificate, this quadratic majorizer is tight at the current iterate Yk.
+
+Proximal Stabilization and Closed-Form Update. We add a proximal term around Yk and minimize the resulting quadratic surrogate: 
+
+Uk(Y ) := ∥Y − Bk∥2 
+
+> F
+
++ 12λ ∥Y − Yk∥2 
+
+> F
+
+, λ > 0.
+
+(10) This surrogate has a closed-form minimizer. Writing 
+
+α := 2λ
+
+1 + 2 λ ∈ (0 , 1) , (11) the update is 
+
+Yk+1 = αB k + (1 − α)Yk = αS polar( SY k) + (1 − α)Yk.
+
+(12) The covariance iterate is then Xk+1 = Yk+1 Y ⊤
+
+> k+1
+
+. Thus each iteration consists of computing the polar certificate 
+
+Qk = polar( SY k) and taking a closed-form average be-tween the current factor Yk and the certificate-induced factor 
+
+Bk = SQ k.
+
+Role of λ and α. The parameter α is not an independently chosen learning rate; it is the averaging weight induced by the proximal penalty. Large λ gives a more aggressive step with α close to 1, while small λ keeps the update close to the current factor. In the full-rank case r = d, if Yk is full rank, the undamped limit α → 1 maps Yk to a square root of Σ⋆ up to an orthogonal rotation. We use α < 1 when a controlled multi-step trajectory is desired or when damping is helpful in finite precision. 
+
+3.3. Algorithm 
+
+Algorithm 1 summarizes the iteration for a single target covariance. The target square root S = Σ 1/2 
+
+> ⋆
+
+is computed once and then reused across iterations. Implementation details for computing polar( ·) efficiently and stably are provided in Appendix B.2. 
+
+Algorithm 1 ITSPACE: Proximal MM for BW Covariance Alignment 
+
+Require: Target Σ⋆ ∈ Sd
+
+> ++
+
+, initial factor Y0 ∈ Rd×r , prox-imal weight λ > 0, iterations K
+
+Ensure: Factors {Yk}Kk=0 and, when needed, covariances 
+
+Xk = YkY ⊤
+
+> k
+
+S ← Σ1/2
+
+> ⋆
+
+α ← 2λ/ (1 + 2 λ)
+
+for k = 0 , 1, . . . , K − 1 do 
+
+Qk ← polar( SY k)
+
+Yk+1 ← α SQ k + (1 − α) Yk
+
+end for 3.4. Computational Cost 
+
+The computation separates into one-time preprocessing, re-peated low-rank updates, and optional BW evaluations for logging. Computing S = Σ 1/2 
+
+> ⋆
+
+once costs O(d3) time and 
+
+O(d2) memory, for example via eigendecomposition. This cost is paid once per target covariance and the same S is reused across all ITSPACE iterations. Each iteration first forms SY k, computes the polar factor of the resulting d × r matrix, and then forms SQ k. The two multiplications involving S cost O(d2r) time. The polar factor of a d × r matrix can be computed by a thin SVD in 
+
+O(dr 2) time, or by a Gram-based route in O(dr 2 + r3) time when r ≪ d; see Appendix B.2. Therefore, the repeated per-iteration update cost is 
+
+O(d2r + dr 2 + r3).
+
+For r ≪ d, the repeated cost is dominated by multiplications with the fixed target square root S, rather than by a full d×d
+
+matrix square root at each step. In the full-rank case r = d,the update cost reduces to O(d3).Evaluating W 22 (Xk, Σ⋆) exactly for plots or tables requires a matrix square root and typically costs O(d3) per evalua-tion. This evaluation overhead is not part of the ITSPACE update itself. In our timing protocol (Section 5.1), the one-time computation of S is treated as preprocessing and ex-cluded from per-iterate algorithmic time, so the reported algorithmic time reflects only the repeated inner-loop up-dates. 
+
+## 4. Theoretical Properties 
+
+We state the main guarantees for the update in Eq. (12) .Throughout this section, the target covariance satisfies Σ⋆ ∈
+
+Sd
+
+> ++
+
+, and we write S = Σ 1/2 
+
+> ⋆
+
+. For a factor Y ∈ Rd×r ,define 
+
+F (Y ) := W 22 (Y Y ⊤, Σ⋆) = ∥Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2∥SY ∥∗.
+
+(13) 5ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+Let {Yk}Kk=0 be generated by ITSPACE, and define Xk := 
+
+YkY ⊤ 
+
+> k
+
+. We also use the notation 
+
+Qk := polar( SY k), Bk := SQ k, α := 2λ
+
+1 + 2 λ .
+
+Here polar( ·) is understood in the support-function sense de-fined in Section 3.2. All proofs are deferred to Appendix A. 
+
+4.1. Validity and Sufficient Descent 
+
+The factorization immediately enforces the structural con-straint required by the algorithm. 
+
+Proposition 4.1 (Validity of the Iterates) . For every iter-ation k, the covariance iterate Xk = YkY ⊤ 
+
+> k
+
+is positive semidefinite and satisfies rank( Xk) ≤ r. If r = d and Yk
+
+is invertible, then Xk ∈ Sd
+
+> ++
+
+.
+
+The next theorem strengthens the monotonicity guarantee. The update does not only decrease the exact BW objective; it decreases it by at least a squared step-size term in factor space. 
+
+Theorem 4.2 (Sufficient BW Descent) . Assume that Qk =polar( SY k) is an exact maximizer of the nuclear-norm sup-port problem for SY k. Let Yk+1 be the ITSPACE update in Eq. (12) . Then 
+
+F (Yk)−F (Yk+1 ) ≥ 1
+
+α ∥Yk+1 −Yk∥2 
+
+> F
+
+= α∥Bk −Yk∥2 
+
+> F
+
+.
+
+(14) 
+
+Consequently, 
+
+W 22 (Xk+1 , Σ⋆) ≤ W 22 (Xk, Σ⋆) for all k. 
+
+This result is the main descent certificate for ITSPACE. It applies for any factor rank r ≤ d under the positive definite target assumption above. A direct finite-budget consequence is 
+
+> K−1
+
+X
+
+> k=0
+
+∥Yk+1 − Yk∥2 
+
+> F
+
+≤ α F (Y0) − F (YK ) ≤ αF (Y0).
+
+(15) Thus the same certificate that proves monotonicity also con-trols the cumulative movement of the factor iterates. This is an objective-level guarantee for the exact BW energy; downstream task metrics need not improve monotonically because they also depend on the feature representation, the fixed predictor, and the shared downstream adaptation map. The proof follows from the tight quadratic upper bound in-duced by the polar certificate and a completion-of-squares identity for the proximal surrogate. 
+
+4.2. Inexact Polar Certificates 
+
+Theorem 4.2 assumes that the polar certificate is computed exactly. In finite precision, it is useful to state the effect of an inexact but feasible certificate. 
+
+Proposition 4.3 (Inexact Polar Certificates) . Let Ak := 
+
+SY k, and let bQk satisfy ∥ bQk∥2 ≤ 1 and 
+
+tr( bQ⊤ 
+
+> k
+
+Ak) ≥ ∥ Ak∥∗ − εk for some εk ≥ 0. (16) 
+
+Form the surrogate by replacing Qk with bQk, and let Yk+1 
+
+be the corresponding minimizer. Then 
+
+F (Yk+1 ) ≤ F (Yk) + 2 εk. (17) Thus finite-precision error enters the descent statement only through the certificate gap εk. When εk = 0 , the monotonic-ity part of Theorem 4.2 is recovered. A sharper descent-margin version of Proposition 4.3, which recovers the full sufficient decrease bound in the exact case, is given in Ap-pendix A.4. 
+
+4.3. Full-Rank Invertible Fixed Points 
+
+The factorization X = Y Y ⊤ is invariant under right mul-tiplication by an orthogonal matrix. The following propo-sition characterizes fixed points in the full-rank invertible case. 
+
+Proposition 4.4 (Full-Rank Invertible Fixed Points) . As-sume r = d and Σ⋆ ∈ Sd
+
+> ++
+
+. Restrict attention to invertible factor iterates, so that the polar factor of SY is unique and orthogonal. Then the fixed points of the factor update are exactly 
+
+Y = Σ 1/2 
+
+> ⋆
+
+R, R ∈ O(d),
+
+and the corresponding covariance fixed point is uniquely 
+
+X = Y Y ⊤ = Σ ⋆.
+
+The invertibility restriction is important. When factors or targets are singular, polar certificates can be nonunique, and a blanket fixed-point statement can fail under an unlucky certificate choice. Appendix A.7 gives a matched-rank PSD extension together with a counterexample showing why the certificate choice matters in singular cases. Additional equivariance properties under orthogonal changes of basis and joint rescaling are stated in Appendix A.6, with the necessary consistency condition for nonunique polar certifi-cates. 
+
+## 5. Experiments 
+
+We evaluate ITSPACE as a few-step inner-loop opti-mizer for the Gaussian Bures–Wasserstein (BW) objec-tive W 22 (·, Σ⋆) (Eq. (2) ). We study two settings: (i) rank-budgeted covariance alignment , where the goal is to reduce the exact BW objective under a fixed rank and step bud-get, and (ii) CovDrift-MR downstream transfer , where the aligned covariance is used inside a fixed prediction pipeline under controlled covariance drift. Unless stated otherwise, all alignment results are evaluated using the same closed-form BW value. 6ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+Experiment Overview. Experiment I (optimization). 
+
+Given X0 and Σ⋆, we run each method for K=20 steps under rank budget r=16 and report time-to-gap at τ ∈{0.1, 0.02 } using the algorithmic time axis talg (update + rank projection; BW-evaluation excluded). Experiment II (CovDrift-MR downstream). We freeze a linear classifier trained on source features, inject a stationary rank-16 co-variance drift into target features, and adapt using only unla-beled target batches. Under budgets K ∈ { 1, 2, 5, 20 }, each method outputs an aligned covariance and the correspond-ing whitening–recoloring transform, applied to target-test features before evaluation with the frozen head. 
+
+5.1. Metrics and Evaluation Protocol 
+
+Given X0 and Σ⋆, each method produces iterates {Xk}Kk=0 ,or factors Yk with Xk = YkY ⊤ 
+
+> k
+
+. We evaluate each iterate with the closed-form BW value W 22 (Xk, Σ⋆).
+
+Rank-Budgeted GAP and Time-to-GAP. With 
+
+rank( Xk) ≤ r < d , the BW objective generally cannot reach zero. We therefore report a normalized gap above a method-independent rank-r truncation reference. Let Πr (·)
+
+be rank-r PSD truncation and define 
+
+floor r (Σ ⋆) := 
+
+> d
+
+X
+
+> i=r+1
+
+λi(Σ ⋆), (18) where λi(Σ ⋆) are eigenvalues in descending order. Since 
+
+Πr (Σ ⋆) shares eigenvectors with Σ⋆, W 22 (Π r (Σ ⋆), Σ⋆) = floor r (Σ ⋆). We normalize the remaining BW excess by 
+
+gap r (Xk) := W 22 (Π r (Xk), Σ⋆) − floor r (Σ ⋆)
+
+W 22 (Π r (X0), Σ⋆) − floor r (Σ ⋆) . (19) Thus gap r (X0) = 1 , and smaller values indicate closer alignment under the same rank budget. For methods that operate directly in rank-r factors, Πr (Xk) = Xk and the projection is only notational. We report the first iterate with 
+
+gap r (Xk) ≤ τ for τ ∈ { 0.1, 0.02 }; if a threshold is not reached within K steps, we report NR .
+
+Timing and Fairness. We report cumulative algorithmic time talg := tupdate + tproj , where tproj is the explicit cost of enforcing the rank budget via truncation Πr (·) for meth-ods that produce full-rank iterates. Any method-internal computation required to produce an iterate, such as back-tracking or line-search checks, is included in tupdate . Shared BW-evaluation time for logging is excluded, and one-time preprocessing, such as forming Σ1/2 
+
+> ⋆
+
+, is excluded unless stated otherwise; both are reported in Appendix D.2. We report medians over seeds for timing and mean ±std for downstream metrics. 
+
+5.2. Datasets 
+
+Each instance specifies a target covariance Σ⋆ and an ini-tial covariance X0. We use fixed representations and per-domain empirical covariances, aligning source covariances toward a designated target domain. The three alignment instances correspond to Camelyon17 hospital shift, VisDA-2017 synthetic-to-real shift, and Terra/CCT-20 location shift; details of feature extraction and covariance construction are in Appendix D.1. 
+
+Rank and Iteration Budgets. We use r=16 and K=20 
+
+throughout to reflect an inner-loop constraint in which the evaluated covariance state must remain rank constrained. Methods that produce full-rank iterates are projected to rank 
+
+r via Πr (·) after each update, so all methods are compared under the same rank budget. 
+
+5.3. Experiment I: Covariance Alignment 
+
+Unless otherwise stated, we use r=16 , K=20 , and three seeds {0, 1, 2}, reporting medians. Figure 2 plots gap r ver-sus talg across all three covariance-shift instances. Across datasets, ITSPACE reaches the low-gap regime ( gap r ≤
+
+0.02 ) earlier in talg than BW-GD and methods based on other covariance geometries. Table 1 reports time-to-gap across datasets; NR indicates that a threshold is not reached within K steps, with parenthe-ses showing gap r (XK ). Projection costs are included for full-rank baselines because enforcing the rank budget is part of the evaluated state constraint. Sinkhorn variants often fail to reach the low-gap threshold under BW evaluation within 
+
+K steps, which is expected because they optimize a regu-larized sample-OT objective rather than the exact Gaussian BW objective. A speedup summary relative to BW-GD is reported in Ap-pendix Table 6. 
+
+5.4. Experiment II: CovDrift-MR Downstream Transfer Using Aligned Covariances 
+
+We test whether faster few-step alignment improves down-stream performance under a controlled covariance drift. For each dataset and seed, we train a fixed linear head on labeled source features, inject a rank-16 covariance drift into target features, and adapt using only unlabeled target batches. Each method produces an aligned covariance and the associated whitening–recoloring transform applied at test time. For Terra, we evaluate using a fixed closed-set protocol, using only target-test labels present in source train-ing; labels are used only for evaluation and the filtering is identical across methods. All methods share the same feature standardization, moment estimates, stabilization, rank enforcement, and transport-map implementation; the 7ITSPACE: Monotone Gaussian Optimal Transport Updates   
+
+> (a) Camelyon17 (b) VisDA-2017 (c) Terra/CCT-20
+
+Figure 2. Rank-budget GAP contraction under exact BW evaluation. All datasets use d=2048 , r=16 , K=20 , and three seeds. Curves plot gap r versus talg =tupdate +tproj ; dashed lines mark τ ∈ { 0.1, 0.02 }. ITSPACE reaches the low-gap regime fastest under the shared rank-budget timing protocol. 
+
+Table 1. Cross-dataset time-to-gap under a rank budget. Median talg (seconds) to reach gap r ≤ 0.1 / gap r ≤ 0.02 (Section 5.1). NR 
+
+indicates not reached within K=20 ; parentheses report gap r (XK ). All settings use r=16 and three seeds {0, 1, 2}. Best (fastest) entries per dataset are in bold.                                 
+
+> Dataset ITSPACE BW-GD Euclid. (+proj) Log–Euclid. (+proj) AIRM (+proj) BW geodesic Sinkhorn Sinkhorn–Gaussian Camelyon17 ( d=2048 )0.0214/0.0575 6.85/13.8 6.62/7.45 16.4/17.3 19/19 8.1/NR (0.0608) 7.8/NR (0.0991) 2.23/NR (0.0962) VisDA-2017 ( d=2048 )0.0369/0.055 7.32/13.2 6.22/7.47 16.6/17.4 19/19 NR (0.107) 2.17/NR (0.0652) 0.877/NR (0.0703) Terra/CCT-20 ( d=2048 )0.0188/0.0369 5.76/11.5 6.82/8.07 16.9/17.8 19.2/19.2 8.28/NR (0.0508) 1.73/NR (0.0512) 0.419/NR (0.0345)
+
+Table 2. CovDrift-MR downstream on Camelyon17 under strict step budgets. Mean ±std over three seeds. t5: adaptation time at K=5 seconds (shared preprocessing excluded). Settings: 
+
+r=16 , drift rank 16 , smax =1 .70 ; shared stabilization is as in Ap-pendix E.1.                
+
+> Method K=1 K=2 K=5 K=20 t5
+> No adapt 70 .22
+> ±2.17 70 .22
+> ±2.17 70 .22
+> ±2.17 70 .22
+> ±2.17 —ITSPACE 73 .94
+> ±1.79 74 .01
+> ±1.78 74 .01
+> ±1.78 74 .01
+> ±1.78 0.035
+> ±0.014
+> BW-geodesic 71 .92
+> ±2.09 72 .86
+> ±1.97 73 .54
+> ±1.92 74 .01
+> ±1.78 0.015
+> ±0.001
+> BW-GD 73 .97
+> ±1.78 73 .93
+> ±1.80 73 .97
+> ±1.77 74 .01
+> ±1.78 0.037
+> ±0.004
+> Euclidean 72 .11
+> ±2.10 72 .11
+> ±2.10 72 .11
+> ±2.10 74 .01
+> ±1.78 0.021
+> ±0.006
+> Log-Euclidean 70 .56
+> ±1.89 70 .91
+> ±1.95 71 .92
+> ±2.09 74 .01
+> ±1.78 0.013
+> ±0.002
+> AIRM 70 .56
+> ±1.89 70 .91
+> ±1.95 71 .92
+> ±2.09 74 .01
+> ±1.78 0.013
+> ±0.002
+> Sinkhorn 72 .67
+> ±2.45 72 .67
+> ±2.45 72 .67
+> ±2.45 72 .67
+> ±2.45 0.233
+> ±0.014
+> Sinkhorn-Gaussian 72 .88
+> ±2.92 72 .88
+> ±2.92 72 .88
+> ±2.92 72 .88
+> ±2.92 0.164
+> ±0.006
+
+only difference is the covariance-alignment update rule (Ap-pendix E.1). Table 2 gives the full strict-budget sweep on Camelyon17. ITSPACE recovers a large fraction of the drift-induced drop within one to two updates and reaches the endpoint-reference performance band under small budgets. Table 3 summarizes the same protocol across Camelyon17, VisDA-2017, and Terra at representative budgets. Across datasets, ITSPACE reaches endpoint-level downstream performance within one or two updates and keeps adaptation time small; sample-OT baselines can be competitive in task metric but require larger adaptation time. 
+
+Summary. 
+
+• Experiment I: Under a fixed rank budget, ITSPACE reaches both GAP thresholds fastest in talg across all evaluated covariance-shift datasets. • Experiment II: Under strict budgets ( K ≤ 5), ITSPACE gives fast covariance adaptation and com-petitive downstream recovery; the strongest down-stream method can depend on the dataset. • Stability: The sufficient-decrease theorem and the inexact-certificate bound align the update with the ex-act BW evaluator used in Experiment I. 
+
+## 6. Conclusion 
+
+We presented ITSPACE, a few-step method for rank-constrained covariance alignment under the exact Gaus-sian optimal-transport objective, equivalently the Bures– Wasserstein (BW) discrepancy between centered Gaussian covariances. The main idea is simple: instead of optimizing over dense covariance matrices, ITSPACE updates a square-root factor Y directly, so every iterate Xk = YkY ⊤ 
+
+> k
+
+remains positive semidefinite and rank constrained by construction. In this factorization, the BW objective becomes a quadratic term minus a nuclear norm; a polar/Procrustes certificate gives a tight linear minorization of the nuclear norm, lead-ing to a closed-form proximal majorization–minimization update. Thus BW covariance alignment can be used as a lightweight inner-loop primitive when only a small number of valid covariance updates are affordable. On the theory side, the update is not merely heuristic. We proved a sufficient-decrease guarantee for the true BW ob-8ITSPACE: Monotone Gaussian Optimal Transport Updates                                                              
+
+> Table 3. CovDrift-MR downstream summary across datasets. Numbers are mean ±std over three seeds. We report representative strict budgets for ITSPACE and the strongest non-ITSPACE method at K=5 under the same protocol. Full budget sweeps for VisDA-2017 and Terra are in Appendix Table 7.
+> Dataset / metric No adapt ITSPACE K=2 ITSPACE K=5 Strongest other at K=5 ITSPACE t5
+> Camelyon17 AUROC 70 .22 ±2.17 74 .01 ±1.78 74 .01 ±1.78 BW-GD: 73 .97 ±1.77 0.035 ±0.014
+> VisDA-2017 Acc. 75 .68 ±2.18 84 .26 ±1.18 84 .26 ±1.18 BW-GD: 83 .82 ±1.28 0.029 ±0.006
+> Terra Acc. 58 .89 ±2.53 63 .94 ±2.43 63 .94 ±2.43 Sinkhorn: 65 .00 ±1.59 0.024 ±0.002
+
+jective under exact polar computation, quantified the effect of finite-precision polar computation through an explicit certificate-gap bound, and characterized the full-rank in-vertible fixed points. The appendix also records a matched-rank PSD extension and shows why singular targets require care in the choice of polar certificate. These results give a compact optimization picture: ITSPACE preserves the desired matrix structure at every step while making certified progress on the exact Gaussian Wasserstein objective. Empirically, under a unified exact-BW evaluator and a com-mon rank-budget timing protocol, ITSPACE reaches low BW gaps substantially faster than BW-gradient descent and methods based on other covariance geometries. In CovDrift-MR, these fast covariance updates provide com-petitive downstream recovery under strict update budgets, with the strongest downstream method depending on the dataset. The scope of the method is deliberately covariance-level: ITSPACE is designed for Gaussian representations, second-order feature summaries, and modules that con-sume covariance factors, rather than as a replacement for full sample-level OT on arbitrary non-Gaussian distribu-tions. Within that scope, it provides a closed-form, rank-compatible, BW-descending update that can be plugged into domain adaptation, normalization, whitening–recoloring, and other covariance-based learning pipelines. Extending this few-step BW alignment primitive to nonlinear shifts, barycenters, and other structured PSD summaries is a natu-ral direction for future work. 
+
+## Acknowledgments 
+
+We thank the anonymous reviewers for constructive feed-back that helped improve the paper. This work was sup-ported by grant NIH/NHLBI 5R01HL167072. 
+
+## Impact Statement 
+
+Optimal transport is a core tool for comparing and aligning distributions, with applications spanning domain adaptation, representation learning, generative modeling, and proba-bilistic inference. In many modern pipelines, distributions are summarized through compact second-order descriptors such as feature covariances; in this regime, Gaussian opti-mal transport yields an exact, closed-form discrepancy on covariances. This work contributes an efficient iterative primitive for covariance alignment under this exact objec-tive, designed for settings where only a few adaptation steps are affordable and where covariances must remain well-posed throughout the update trajectory (e.g., fast test-time adaptation from unlabeled target batches, or inner-loop mod-ules used inside larger training and deployment systems). By reducing the number of updates required to reach a given alignment quality and by relying on lightweight linear-algebra operations, such methods can lower computational cost, latency, and energy use. Moreover, directly optimizing the exact Bures–Wasserstein loss can yield more faithful alignment toward a target covariance than surrogate geome-tries or regularized OT solvers, which may translate into improved reliability for downstream components that con-sume covariance estimates (e.g., whitening/normalization layers or Gaussian embeddings). ITSPACE is a general op-timization method and does not encode application-specific intent; like other broadly applicable ML tools, it may be misused by bad actors, and the community is encouraged to deploy distribution-alignment techniques in ways that benefit society. 
+
+## References 
+
+Arsigny, V., Fillard, P., Pennec, X., and Ayache, N. Log-Euclidean metrics for fast and simple calculus on diffu-sion tensors. Magnetic Resonance in Medicine , 56(2): 411–421, 2006. doi: 10.1002/mrm.20965. Beery, S., Van Horn, G., and Perona, P. Recognition in terra incognita. In Proceedings of the European Conference on Computer Vision , pp. 456–473, 2018. URL https: //openaccess.thecvf.com/content_ECCV_ 2018/html/Beery_Recognition_in_Terra_ ECCV_2018_paper.html .Bhatia, R. Positive Definite Matrices . Princeton Series in Applied Mathematics. Princeton University Press, Prince-ton, NJ, 2007. Bhatia, R., Jain, T., and Lim, Y. On the Bures–Wasserstein distance between positive definite matrices. Expositiones Mathematicae , 37(2):165–191, 2019. doi: 10.1016/j. exmath.2018.01.002. Bunne, C., Hsieh, Y.-P., Cuturi, M., and Krause, A. The Schr ¨odinger bridge between Gaussian mea-9ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+sures has a closed form. In Proceedings of The 26th International Conference on Artificial Intelli-gence and Statistics , volume 206 of Proceedings of Machine Learning Research , pp. 5802–5833. PMLR, 2023. URL https://proceedings.mlr.press/ v206/bunne23a.html .Cuturi, M. Sinkhorn distances: Lightspeed computation of optimal transport. In Advances in Neural Information Processing Systems , volume 26, pp. 2292–2300, 2013. Diao, M. Z., Balasubramanian, K., Chewi, S., and Salim, A. Forward-backward Gaussian variational inference via JKO in the Bures–Wasserstein space. In Krause, A., Brunskill, E., Cho, K., Engelhardt, B., Sabato, S., and Scarlett, J. (eds.), Proceedings of the 40th International Conference on Machine Learning , volume 202 of Pro-ceedings of Machine Learning Research , pp. 7960–7991. PMLR, 2023. URL https://proceedings.mlr. press/v202/diao23a.html .Dowson, D. C. and Landau, B. V. The Fr ´echet distance between multivariate normal distributions. Journal of Multivariate Analysis , 12(3):450–455, 1982. doi: 10. 1016/0047-259X(82)90077-X. Fan, J., Han, Y., Liu, Z., Cai, J.-F., Wang, Y., and Zhou, Z. On the convergence of projected Bures–Wasserstein gradient descent under Euclidean strong convexity. In Salakhutdinov, R., Kolter, Z., Heller, K., Weller, A., Oliver, N., Scarlett, J., and Berkenkamp, F. (eds.), Pro-ceedings of the 41st International Conference on Ma-chine Learning , volume 235 of Proceedings of Ma-chine Learning Research , pp. 12832–12857. PMLR, 2024. URL https://proceedings.mlr.press/ v235/fan24b.html .Feydy, J., S ´ejourn ´e, T., Vialard, F.-X., Amari, S.-i., Trouv ´e, A., and Peyr ´e, G. Interpolating between optimal trans-port and MMD using Sinkhorn divergences. In Chaud-huri, K. and Sugiyama, M. (eds.), Proceedings of the Twenty-Second International Conference on Artificial In-telligence and Statistics , volume 89 of Proceedings of Ma-chine Learning Research , pp. 2681–2690. PMLR, 2019. URL https://proceedings.mlr.press/v89/ feydy19a.html .Gelbrich, M. On a formula for the L2-Wasserstein met-ric between measures on Euclidean and Hilbert spaces. 
+
+Mathematische Nachrichten , 147(1):185–203, 1990. doi: 10.1002/mana.19901470121. Genevay, A., Cuturi, M., Peyr ´e, G., and Bach, F. Stochastic optimization for large-scale optimal transport. In Ad-vances in Neural Information Processing Systems , vol-ume 29, pp. 3440–3448, 2016. Han, A., Mishra, B., Jawanpuria, P. K., and Gao, J. On Riemannian optimization over positive definite matrices with the Bures–Wasserstein geometry. In Advances in Neural Information Processing Systems , volume 34, pp. 8940–8953, 2021. Haviv, D., Pooladian, A.-A., Pe’Er, D., and Amos, B. Wasserstein flow matching: Generative mod-eling over families of distributions. In Proceed-ings of the 42nd International Conference on Ma-chine Learning , volume 267 of Proceedings of Ma-chine Learning Research , pp. 22238–22258. PMLR, 2025. URL https://proceedings.mlr.press/ v267/haviv25a.html .Koh, P. W., Sagawa, S., Marklund, H., Xie, S. M., Zhang, M., Balsubramani, A., Hu, W., Yasunaga, M., Phillips, R. L., Gao, I., Lee, T., David, E., Stavness, I., Guo, W., Earnshaw, B., Haque, I., Beery, S. M., Leskovec, J., Kundaje, A., Pierson, E., Levine, S., Finn, C., and Liang, P. WILDS: A benchmark of in-the-wild distribution shifts. In Meila, M. and Zhang, T. (eds.), Proceedings of the 38th International Confer-ence on Machine Learning , volume 139 of Proceedings of Machine Learning Research , pp. 5637–5664. PMLR, 2021. URL https://proceedings.mlr.press/ v139/koh21a.html .Lambert, M., Chewi, S., Bach, F. R., Bonnabel, S., and Rigollet, P. Variational inference via Wasserstein gradient flows. In Advances in Neural Information Processing Systems , volume 35, pp. 14434–14447, 2022. Moakher, M. A differential geometric approach to the ge-ometric mean of symmetric positive-definite matrices. 
+
+SIAM Journal on Matrix Analysis and Applications , 26 (3):735–747, 2005. doi: 10.1137/S0895479803436937. Peng, X., Usman, B., Kaushik, N., Hoffman, J., Wang, D., and Saenko, K. VisDA: The visual domain adaptation challenge. arXiv preprint arXiv:1710.06924 , 2017. URL 
+
+https://arxiv.org/abs/1710.06924 .Peyr ´e, G. and Cuturi, M. Computational optimal transport: With applications to data science. Foundations and Trends in Machine Learning , 11(5–6):355–607, 2019. doi: 10. 1561/2200000073. Sinkhorn, R. and Knopp, P. Concerning nonnegative ma-trices and doubly stochastic matrices. Pacific Journal of Mathematics , 21(2):343–348, 1967. doi: 10.2140/pjm. 1967.21.343. Sun, B. and Saenko, K. Deep CORAL: Correlation align-ment for deep domain adaptation. In Computer Vision – ECCV 2016 Workshops , volume 9915 of Lecture Notes in Computer Science , pp. 443–450. Springer, 2016. doi: 10.1007/978-3-319-49409-8 35. 10 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+Takatsu, A. Wasserstein geometry of Gaus-sian measures. Osaka Journal of Math-ematics , 48(4):1005–1026, 2011. URL 
+
+https://projecteuclid.org/journals/ osaka-journal-of-mathematics/ volume-48/issue-4/ Wasserstein-geometry-of-Gaussian-measures/ ojm/1326291215.full .Villani, C. Optimal Transport: Old and New , volume 338 of Grundlehren der mathematischen Wissenschaften .Springer, Berlin, Heidelberg, 2009. doi: 10.1007/ 978-3-540-71050-9. Wang, R., Jin, S., Chen, Z., Luo, X., and Wu, X.-J. Learning to normalize on the SPD manifold under Bures– Wasserstein geometry. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 8289–8298, 2025. URL https://openaccess. thecvf.com/content/CVPR2025/papers/ Wang_Learning_to_Normalize_on_the_ SPD_Manifold_under_Bures-Wasserstein_ Geometry_CVPR_2025_paper.pdf .11 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+## A. Additional Theory: Proofs and Derivations 
+
+A.1. Validity of the Factor Iterates 
+
+Proof of Proposition 4.1. For any factor Yk ∈ Rd×r , the matrix Xk = YkY ⊤ 
+
+> k
+
+is symmetric and positive semidefinite. Moreover, 
+
+rank( Xk) = rank( YkY ⊤ 
+
+> k
+
+) ≤ rank( Yk) ≤ r. 
+
+If r = d and Yk is invertible, then Xk = YkY ⊤ 
+
+> k
+
+is positive definite, so Xk ∈ Sd
+
+> ++
+
+.
+
+A.2. Support Function, Polar Certificates, and the Majorizer 
+
+We first recall the support-function characterization of the nuclear norm. For any A ∈ Rd×r ,
+
+∥A∥∗ = max  
+
+> ∥Q∥2≤1
+
+tr( Q⊤A), (20) where ∥ · ∥ 2 denotes the operator norm. 
+
+Lemma A.1 (Support-Function Maximizer) . Let A ∈ Rd×r , and let A = U ΓV ⊤ be a compact singular value decomposition with rank ρ. If ρ > 0, then Q⋆ = U V ⊤ is feasible for (20) and attains the maximum. If A = 0 , then every feasible Q with 
+
+∥Q∥2 ≤ 1 is optimal; in particular, Q = 0 is a valid choice. Proof. Assume first that ρ > 0. Since U and V have orthonormal columns, ∥U V ⊤∥2 = 1 , so Q⋆ = U V ⊤ is feasible. Moreover, 
+
+tr  (Q⋆)⊤A = tr  V U ⊤U ΓV ⊤ = tr(Γ) = ∥A∥∗.
+
+Thus Q⋆ attains the maximum in (20) . If A = 0 , then tr( Q⊤A) = 0 = ∥A∥∗ for every feasible Q, so every feasible Q is optimal. Throughout the paper, polar( A) denotes a selected maximizer in (20): 
+
+polar( A) ∈ arg max  
+
+> ∥Q∥2≤1
+
+tr( Q⊤A).
+
+When A has full column rank, this coincides with the usual thin polar factor A(A⊤A)−1/2. When A is rank deficient, the maximizer may be nonunique and need not satisfy Q⊤Q = Ir .
+
+Lemma A.2 (Global Quadratic Majorizer) . Let 
+
+F (Y ) = ∥Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2∥SY ∥∗, S = Σ 1/2 
+
+> ⋆
+
+.
+
+Fix Yk, set Ak := SY k, choose an exact certificate Qk := polar( Ak), and define Bk := SQ k. Then, for every Y ,
+
+F (Y ) ≤ ∥ Y − Bk∥2 
+
+> F
+
++ Ck, Ck := tr(Σ ⋆) − ∥ Bk∥2 
+
+> F
+
+. (21) 
+
+Moreover, the bound is tight at Y = Yk.Proof. Since Qk is feasible in (20), for every Y ,
+
+∥SY ∥∗ ≥ tr( Q⊤ 
+
+> k
+
+SY ). (22) Since Qk is an exact maximizer for Ak = SY k, this inequality is tight at Y = Yk:
+
+∥SY k∥∗ = tr( Q⊤ 
+
+> k
+
+SY k). (23) Using (22) in the factor objective gives 
+
+F (Y ) = ∥Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2∥SY ∥∗
+
+≤ ∥ Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2 tr( Q⊤ 
+
+> k
+
+SY )= ∥Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2 tr( B⊤ 
+
+> k
+
+Y ). (24) Completing the square, 
+
+∥Y ∥2 
+
+> F
+
+− 2 tr( B⊤ 
+
+> k
+
+Y ) = ∥Y − Bk∥2 
+
+> F
+
+− ∥ Bk∥2 
+
+> F
+
+,
+
+which proves (21). Tightness at Y = Yk follows from (23). 12 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+A.3. Sufficient BW Descent under Exact Polar Certificates 
+
+Proof of Theorem 4.2. Fix k. By Lemma A.2, the exact polar certificate induces the tight global upper bound 
+
+F (Y ) ≤ ∥ Y − Bk∥2 
+
+> F
+
++ Ck.
+
+Adding the proximal term gives 
+
+Uk(Y ) := ∥Y − Bk∥2 
+
+> F
+
++ Ck + 12λ ∥Y − Yk∥2 
+
+> F
+
+. (25) Then 
+
+F (Y ) ≤ Uk(Y ) for all Y, Uk(Yk) = F (Yk).
+
+The minimizer of Uk is the update in Eq. (12). Since 
+
+α = 2λ
+
+1 + 2 λ , 1
+
+α = 1 + 12λ ,
+
+completion of squares gives 
+
+Uk(Y ) = Uk(Yk+1 ) + 1
+
+α ∥Y − Yk+1 ∥2 
+
+> F
+
+. (26) Evaluating (26) at Y = Yk gives 
+
+Uk(Yk) − Uk(Yk+1 ) = 1
+
+α ∥Yk − Yk+1 ∥2 
+
+> F
+
+.
+
+Therefore, 
+
+F (Yk) − F (Yk+1 ) ≥ Uk(Yk) − Uk(Yk+1 ) = 1
+
+α ∥Yk+1 − Yk∥2 
+
+> F
+
+.
+
+Finally, because 
+
+Yk+1 = αB k + (1 − α)Yk,
+
+we have 
+
+Yk+1 − Yk = α(Bk − Yk),
+
+and hence 1
+
+α ∥Yk+1 − Yk∥2 
+
+> F
+
+= α∥Bk − Yk∥2 
+
+> F
+
+.
+
+This proves Eq. (14) . Since F (Yk) = W 22 (YkY ⊤ 
+
+> k
+
+, Σ⋆), the BW objective is monotone nonincreasing along the covariance iterates. 
+
+A.4. Inexact Polar Certificate Bound 
+
+Proof of Proposition 4.3. Let Ak := SY k, and suppose bQk satisfies 
+
+∥ bQk∥2 ≤ 1, tr( bQ⊤ 
+
+> k
+
+Ak) ≥ ∥ Ak∥∗ − εk.
+
+Define the inexact surrogate 
+
+bUk(Y ) := ∥Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2 tr( bQ⊤ 
+
+> k
+
+SY ) + 12λ ∥Y − Yk∥2 
+
+> F
+
+.
+
+Feasibility of bQk gives 
+
+∥SY ∥∗ ≥ tr( bQ⊤ 
+
+> k
+
+SY ) for all Y, 
+
+and therefore 
+
+F (Y ) ≤ bUk(Y ) for all Y. 
+
+At the current iterate, 
+
+bUk(Yk) = ∥Yk∥2 
+
+> F
+
++ tr(Σ ⋆) − 2 tr( bQ⊤ 
+
+> k
+
+Ak)
+
+≤ ∥ Yk∥2 
+
+> F
+
++ tr(Σ ⋆) − 2∥Ak∥∗ + 2 εk
+
+= F (Yk) + 2 εk. (27) 13 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+Let Yk+1 = arg min Y bUk(Y ). The same completion-of-squares identity gives 
+
+bUk(Y ) = bUk(Yk+1 ) + 1
+
+α ∥Y − Yk+1 ∥2 
+
+> F
+
+.
+
+Setting Y = Yk and using (27), we obtain 
+
+F (Yk+1 ) ≤ bUk(Yk+1 )= bUk(Yk) − 1
+
+α ∥Yk+1 − Yk∥2
+
+> F
+
+≤ F (Yk) + 2 εk − 1
+
+α ∥Yk+1 − Yk∥2 
+
+> F
+
+. (28) Dropping the nonpositive last term gives 
+
+F (Yk+1 ) ≤ F (Yk) + 2 εk,
+
+which proves Eq. (17). When εk = 0 , (28) recovers the sufficient-descent bound. 
+
+A.5. Full-Rank Invertible Fixed Points 
+
+Proof of Proposition 4.4. Assume r = d and Σ⋆ ∈ Sd
+
+> ++
+
+, and restrict attention to invertible factor iterates. Let S = Σ 1/2 
+
+> ⋆
+
+.First, consider any factor of the form 
+
+Y = SR, R ∈ O(d).
+
+Then 
+
+SY = S2R = Σ ⋆R. 
+
+Since Σ⋆ is positive definite and R is orthogonal, Σ⋆R is invertible, and its polar factor is 
+
+polar(Σ ⋆R) = Σ ⋆R R⊤Σ2
+
+> ⋆
+
+R−1/2 = Σ ⋆R R⊤Σ−1 
+
+> ⋆
+
+R = R. 
+
+Substituting this into the update gives 
+
+Yk+1 = αSR + (1 − α)SR = SR, 
+
+so every Y = SR with R ∈ O(d) is a fixed point. Conversely, let Y be an invertible fixed point. Since S is invertible, SY is invertible, and the polar factor 
+
+R := polar( SY )
+
+is orthogonal. The fixed-point equation gives 
+
+Y = αS polar( SY ) + (1 − α)Y. 
+
+Since α ∈ (0 , 1) , this implies 
+
+Y = S polar( SY ) = SR. 
+
+Therefore every invertible factor fixed point is of the form Y = SR with R ∈ O(d). Its covariance is 
+
+Y Y ⊤ = SRR ⊤S = S2 = Σ ⋆.
+
+Thus the corresponding covariance fixed point in the full-rank invertible stratum is uniquely X = Σ ⋆.
+
+A.6. Equivariance under Consistent Certificate Selection 
+
+Because the support-function maximizer can be nonunique for rank-deficient matrices, equivariance statements require a consistent selection of polar certificates. This condition is automatic when the relevant polar certificate is unique, such as in the full-rank square case. 
+
+Proposition A.3 (Equivariance under Consistent Certificate Selection) . Let U be an orthogonal matrix and let c > 0.
+
+14 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+1. Suppose that, under the transformed initialization 
+
+Σ(U ) 
+
+> ⋆
+
+= U Σ⋆U ⊤, Y (U )0 = U Y 0,
+
+the polar certificates are selected consistently as 
+
+Q(U ) 
+
+> k
+
+= U Q k whenever Y (U ) 
+
+> k
+
+= U Y k.
+
+Then the covariance trajectory satisfies 
+
+X(U ) 
+
+> k
+
+= U X kU ⊤ for all k. 
+
+2. Suppose that, under the rescaled initialization 
+
+Σ(c) 
+
+> ⋆
+
+= cΣ⋆, Y (c)0 = √c Y 0,
+
+the polar certificates are selected consistently as 
+
+Q(c) 
+
+> k
+
+= Qk whenever Y (c) 
+
+> k
+
+= √c Y k.
+
+Then the covariance trajectory satisfies 
+
+X(c) 
+
+> k
+
+= cX k for all k. 
+
+Proof. For the orthogonal change of basis, the target square root transforms as 
+
+S(U ) = ( U Σ⋆U ⊤)1/2 = U SU ⊤.
+
+Assume inductively that Y (U ) 
+
+> k
+
+= U Y k. Then 
+
+S(U )Y (U ) 
+
+> k
+
+= U SU ⊤U Y k = U (SY k).
+
+Under the stated consistent certificate choice, Q(U ) 
+
+> k
+
+= U Q k. Therefore, 
+
+Y (U ) 
+
+> k+1
+
+= αS (U )Q(U ) 
+
+> k
+
++ (1 − α)Y (U ) 
+
+> k
+
+= αU SQ k + (1 − α)U Y k = U Y k+1 .
+
+Thus 
+
+X(U ) 
+
+> k
+
+= Y (U ) 
+
+> k
+
+(Y (U ) 
+
+> k
+
+)⊤ = U X kU ⊤
+
+for all k.For global rescaling, the target square root is 
+
+S(c) = ( cΣ⋆)1/2 = √c S. 
+
+Assume inductively that Y (c) 
+
+> k
+
+= √c Y k. Then 
+
+S(c)Y (c) 
+
+> k
+
+= cSY k.
+
+Since c > 0, the support-function maximizers for SY k and cSY k coincide as sets. Under the stated consistent certificate choice, Q(c) 
+
+> k
+
+= Qk. Hence 
+
+Y (c) 
+
+> k+1
+
+= αS (c)Q(c) 
+
+> k
+
++ (1 − α)Y (c) 
+
+> k
+
+= √c  αSQ k + (1 − α)Yk
+
+ = √c Y k+1 .
+
+Thus 
+
+X(c) 
+
+> k
+
+= Y (c) 
+
+> k
+
+(Y (c) 
+
+> k
+
+)⊤ = cX k
+
+for all k.15 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+A.7. Matched-Rank PSD Targets and Certificate Choice 
+
+The main text assumes Σ⋆ ∈ Sd
+
+> ++
+
+. We record here a matched-rank PSD extension. The result shows that a linear contraction holds when the target has rank r and the polar certificate is chosen in the target subspace. The example after the proposition shows why this certificate condition is necessary. 
+
+Proposition A.4 (Matched-Rank PSD Contraction) . Assume rank(Σ ⋆) = r and write 
+
+Σ⋆ = Ur ΛU ⊤ 
+
+> r
+
+, T := Ur Λ1/2 ∈ Rd×r ,
+
+where U ⊤ 
+
+> r
+
+Ur = Ir and Λ ∈ Rr×r is positive definite. Define 
+
+eF (Y ) := ∥Y ∥2 
+
+> F
+
++ ∥T ∥2 
+
+> F
+
+− 2∥T ⊤Y ∥∗ = min  
+
+> R∈O(r)
+
+∥Y − T R ∥2 
+
+> F
+
+. (29) 
+
+Let 
+
+Rk ∈ arg max  
+
+> R∈O(r)
+
+tr( R⊤T ⊤Yk),
+
+and choose the exact polar certificate 
+
+Qk = Ur Rk.
+
+Then the ITSPACE update satisfies eF (Yk+1 ) ≤ (1 − α)2 eF (Yk). (30) 
+
+Consequently, eF (Yk) ≤ (1 − α)2k eF (Y0).
+
+Proof. Let 
+
+S = Σ 1/2 
+
+> ⋆
+
+= Ur Λ1/2U ⊤ 
+
+> r
+
+= T U ⊤ 
+
+> r
+
+.
+
+For any Y ∈ Rd×r ,
+
+∥SY ∥∗ = ∥Ur Λ1/2U ⊤ 
+
+> r
+
+Y ∥∗ = ∥Λ1/2U ⊤ 
+
+> r
+
+Y ∥∗ = ∥T ⊤Y ∥∗,
+
+because left multiplication by Ur preserves the nonzero singular values. Thus eF is the rank-matched PSD analogue of the factor objective. The equality in (29) follows from the orthogonal Procrustes identity: 
+
+min  
+
+> R∈O(r)
+
+∥Y − T R ∥2 
+
+> F
+
+= ∥Y ∥2 
+
+> F
+
++ ∥T ∥2 
+
+> F
+
+− 2 max  
+
+> R∈O(r)
+
+tr( R⊤T ⊤Y ) = eF (Y ).
+
+By definition of Rk, Qk = Ur Rk is feasible with ∥Qk∥2 = 1 , and 
+
+tr( Q⊤ 
+
+> k
+
+SY k) = tr( R⊤ 
+
+> k
+
+U ⊤ 
+
+> r
+
+Ur Λ1/2U ⊤ 
+
+> r
+
+Yk) = tr( R⊤ 
+
+> k
+
+T ⊤Yk) = ∥T ⊤Yk∥∗ = ∥SY k∥∗.
+
+Thus Qk is an exact support-function certificate. Moreover, 
+
+Bk = SQ k = Ur Λ1/2U ⊤ 
+
+> r
+
+Ur Rk = T R k.
+
+The update therefore becomes 
+
+Yk+1 = αT R k + (1 − α)Yk.
+
+Using the same Rk as a feasible comparison in the Procrustes form of eF (Yk+1 ), we obtain 
+
+eF (Yk+1 ) = min  
+
+> R∈O(r)
+
+∥Yk+1 − T R ∥2
+
+> F
+
+≤ ∥ Yk+1 − T R k∥2
+
+> F
+
+= ∥(1 − α)( Yk − T R k)∥2
+
+> F
+
+= (1 − α)2∥Yk − T R k∥2
+
+> F
+
+= (1 − α)2 eF (Yk). (31) Iterating this inequality proves the final claim. 16 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+Remark A.5 (Why the Certificate Condition Is Necessary) . Consider 
+
+Σ⋆ = diag(1 , 1, 0) , r = 2 , Y0 = [ e1, 0] ,
+
+where ei denotes the ith coordinate vector in R3. Then S = Σ 1/2 
+
+> ⋆
+
+= Σ ⋆ and 
+
+SY 0 = [ e1, 0] .
+
+The matrix 
+
+Q0 = [ e1, e 3]
+
+is feasible with ∥Q0∥2 = 1 , and it is an exact support-function maximizer because 
+
+tr( Q⊤ 
+
+> 0
+
+SY 0) = 1 = ∥SY 0∥∗.
+
+However, 
+
+B0 = SQ 0 = [ e1, 0] = Y0,
+
+so the update gives 
+
+Y1 = αB 0 + (1 − α)Y0 = Y0.
+
+Thus the iteration stalls even though 
+
+Y0Y ⊤ 
+
+> 0
+
+= diag(1 , 0, 0) ̸ = diag(1 , 1, 0) = Σ ⋆.
+
+This example shows that, in singular cases, exactness of the polar certificate alone is not enough to guarantee the matched-rank contraction; the certificate must also be chosen consistently with the target subspace. 
+
+A.8. Derivation of the Factor Form 
+
+Derivation of Eq. (5) . Let X = Y Y ⊤ and S = Σ 1/2 
+
+> ⋆
+
+. From the BW closed form in Eq. (2), 
+
+W 22 (Y Y ⊤, Σ⋆) = tr( Y Y ⊤) + tr(Σ ⋆) − 2 tr 
+
+
+
+(SY Y ⊤S)1/2
+
+.
+
+We have tr( Y Y ⊤) = ∥Y ∥2 
+
+> F
+
+, and SY Y ⊤S = ( SY )( SY )⊤. Let A := SY . Then 
+
+tr 
+
+
+
+(SY Y ⊤S)1/2
+
+= tr 
+
+
+
+(AA ⊤)1/2
+
+= ∥A∥∗ = ∥SY ∥∗.
+
+Substituting these identities yields 
+
+W 22 (Y Y ⊤, Σ⋆) = ∥Y ∥2 
+
+> F
+
++ tr(Σ ⋆) − 2∥SY ∥∗,
+
+which is Eq. (5). 
+
+A.9. Commuting-Case Justification for the Rank-r Floor Lemma A.6 (Commuting Case) . Let Πr (Σ ⋆) be the rank-r truncation of Σ⋆ using the top r eigencomponents. Then 
+
+W 22 (Π r (Σ ⋆), Σ⋆) = 
+
+> d
+
+X
+
+> i=r+1
+
+λi(Σ ⋆),
+
+where λ1(Σ ⋆) ≥ · · · ≥ λd(Σ ⋆) ≥ 0.Proof. Since Πr (Σ ⋆) and Σ⋆ share eigenvectors, there exists an orthogonal basis in which both are diagonal: 
+
+Σ⋆ = diag( λ1, . . . , λ d), Πr (Σ ⋆) = diag( λ1, . . . , λ r , 0, . . . , 0) .
+
+17 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+For diagonal matrices, the BW closed form reduces to 
+
+W 22 (X, Σ⋆) = 
+
+> d
+
+X
+
+> i=1
+
+λi(X) + 
+
+> d
+
+X
+
+> i=1
+
+λi(Σ ⋆) − 2
+
+> d
+
+X
+
+> i=1
+
+pλi(X)λi(Σ ⋆).
+
+Substituting λi(X) = λi(Σ ⋆) for i ≤ r and λi(X) = 0 for i > r gives 
+
+W 22 (Π r (Σ ⋆), Σ⋆) = 
+
+> d
+
+X
+
+> i=r+1
+
+λi(Σ ⋆).
+
+## B. Implementation Details 
+
+This section documents practical choices for ITSPACE and for enforcing rank budgets. 
+
+B.1. Initialization and Factor Handling 
+
+We maintain Yk ∈ Rd×r and materialize Xk = YkY ⊤ 
+
+> k
+
+only when needed. Common initializations include: • From a PSD covariance X0: compute a square-root factor Y0 via an eigendecomposition (or Cholesky when SPD). • Rank-r from an SPD covariance: if X0 ≈ Ur Λr U ⊤ 
+
+> r
+
+(top-r eigenpairs), set Y0 = Ur Λ1/2 
+
+> r
+
+.• From centered features: if X0 = 1 
+
+> n−1
+
+Z⊤Z with centered Z ∈ Rn×d, then Y0 = 1√n−1 Z⊤ is a valid factor without forming X0 explicitly. 
+
+B.2. Polar Computation and Numerical Stabilization 
+
+At iteration k, ITSPACE forms Ak := SY k ∈ Rd×r and a certificate Qk := polar( Ak) ∈ arg max ∥Q∥2≤1 tr( Q⊤Ak).
+
+SVD route. Compute a compact SVD Ak = U ΣV ⊤ and set Qk := U V ⊤.
+
+Gram route (when r ≪ d). Form Gk := A⊤ 
+
+> k
+
+Ak ∈ Sr 
+
+> +
+
+and set Qk := Ak G−1/2 
+
+> k
+
+. If Gk is ill-conditioned, use 
+
+Gk,δ := Gk + δI and Qk := Ak G−1/2 
+
+> k,δ
+
+with δ > 0 (e.g., proportional to tr( Gk)/r ). 
+
+Feasibility normalization. For the inexact-certificate bound (Proposition 4.3), it suffices that ∥ bQk∥2 ≤ 1. If a numerical routine returns ∥ bQk∥2 > 1, enforce feasibility by 
+
+bQk ← bQk
+
+.
+
+max {1, ∥ bQk∥2}.
+
+SPD vs. PSD in practice. The theory assumes Σ⋆ ∈ Sd
+
+> ++
+
+. In experiments, when a baseline requires SPD and an estimated covariance is nearly singular, we apply a small diagonal floor (Appendix D.1). 
+
+B.3. Certificate Gap and Diagnostics 
+
+Given Ak = SY k and a feasible certificate bQk,
+
+εk := ∥Ak∥∗ − tr( bQ⊤ 
+
+> k
+
+Ak) ≥ 0.
+
+We also monitor ∥ bQ⊤ 
+
+> k
+
+bQk − I∥F (when applicable) as a numerical diagnostic. 
+
+B.4. Complexity Breakdown One-time preprocessing. Computing S = Σ 1/2 
+
+> ⋆
+
+is O(d3) time and O(d2) memory and is performed once per instance. 18 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+Table 4. Covariance-alignment baselines: objective targeted, guarantees, and complexity. We indicate whether a method targets the exact Gaussian OT objective (2) , whether it provides a monotonicity guarantee for the evaluated BW energy W 22 (·, Σ⋆), and its dense per-step cost. In rank-budget runs, full-rank methods are followed by a rank-r truncation, adding a projection term proj( d, r ) that is counted in talg .
+
+Method Objective / update rule Targets Gaussian W 22 ? Monotone W 22 (·, Σ⋆)? Cost / step ITSPACE Proximal MM updates for BW in a square-root factor-ization; polar/Procrustes certificate + damping Yes Yes † O(d2r + dr 2 + r3)
+
+BW geodesic Closed-form BW geodesic interpolation toward Σ⋆
+
+(displacement interpolation), then rank-r truncation in rank-budget runs Yes Yes (in geodesic parameter) O(d3) + proj( d, r )
+
+BW-GD (direct BW optimizer) BW-targeting gradient/Riemannian updates with optional backtracking, then rank-r truncation in rank-budget runs Yes Not in general ⋆ O(d3) + proj( d, r )
+
+Euclidean / Frobenius Ambient-space interpolation/update, then rank-r
+
+truncation in rank-budget runs No No O(d2) + proj( d, r )
+
+Log–Euclidean Log-domain geodesic / Log–Euclidean objective (full-matrix functions), then truncation No No O(d3) + proj( d, r )
+
+AIRM Affine-invariant metric geodesic / AIRM objective (full-matrix functions), then truncation No No O(d3) + proj( d, r )
+
+CORAL Whitening/re-coloring (second-moment match); used as a one-shot endpoint reference in downstream No ‡ N/A O(d3) + proj( d, r )
+
+Sinkhorn (entropic OT) Regularized OT between samples (biased objective) No (regularized) No O(T nm )
+
+Sinkhorn–Gaussian Regularized OT on Gaussian samples/embeddings (biased objective) No (regularized) No O(T nm ) 
+
+> †
+
+In exact arithmetic with an exact polar certificate. ⋆ Gradient methods can be made descending with sufficiently small step sizes and/or line search, but do not provide an inherent monotonicity certificate for BW without additional control. ‡ CORAL matches covariances in closed form in the unconstrained full-rank setting, but is not derived as a BW-descent method and does not address the few-step rank-budget regime. Here proj( d, r ) denotes the cost of rank-r PSD truncation (implementation-dependent; included in 
+
+talg ). 
+
+Table 5. Datasets and shifts. All datasets use covariance dimension d=2048 and, unless stated otherwise, rank budget r=16 , step budget 
+
+K=20 , and three seeds {0, 1, 2}.Dataset Shift (source → target) Camelyon17 (WILDS) (Koh et al., 2021) hospitals (train → test) VisDA-2017 (Peng et al., 2017) synthetic → real (train → validation) Terra Incognita / CCT-20 (Beery et al., 2018) location shift (CIS/TRANS) 
+
+Per-iteration update. Each iteration forms Ak = SY k and SQ k in O(d2r) time. The polar step costs: (i) O(dr 2)
+
+via compact SVD when r ≪ d, or (ii) O(dr 2 + r3) via the Gram route. Overall per-iteration update complexity is 
+
+O(d2r + dr 2 + r3).
+
+## C. Baselines: Taxonomy, Guarantees, and Cost 
+
+Table 4 summarizes the baseline families used in this paper. In rank-budget experiments, full-rank baselines are followed by a rank-r truncation Πr (·); the corresponding projection time is included in talg .
+
+## D. Experimental Protocol and Additional Results 
+
+D.1. Datasets and Covariance Construction Covariance Construction. Given features Z ∈ Rn×d whose rows are samples, we form the centered covariance 
+
+bΣ = 1
+
+n − 1 (Z − ¯Z)⊤(Z − ¯Z),
+
+and symmetrize via 
+
+bΣ ← 12 (bΣ + bΣ⊤).
+
+19 ITSPACE: Monotone Gaussian Optimal Transport Updates                     
+
+> Figure 3. Larger-format rank-budget GAP contraction plots. Left: VisDA-2017 synthetic →real, d=2048 ,r=16 ,K=20 . Right: Terra/CCT-20 CIS/TRANS, d=2048 ,r=16 ,K=20 . Curves plot gap rversus talg =tupdate +tproj , excluding shared BW-evaluation overhead; dashed lines mark τ∈ { 0.1,0.02 }.
+
+SPD Handling When Required. When a baseline requires SPD input and λmin (bΣ) ≤ 0, we use 
+
+bΣ ← bΣ + δI, δ = −λmin (bΣ) + 10 −8.
+
+The same stabilization rule is applied across methods whenever it is needed. 
+
+Rank-r Truncation. Rank-budgeted evaluation uses Πr (·), the top-r PSD truncation. When a baseline produces full-rank iterates, we apply Πr after each update; this projection time is included in talg .
+
+D.2. Timing Protocol 
+
+We decompose wall-clock time into three components: update time, projection time, and BW-evaluation time. Projection time refers to explicit rank-r truncation when used. BW-evaluation time refers to exact BW computation used only for logging or GAP calculation. 
+
+What Is Included in talg . The main-text time axis is cumulative algorithmic time 
+
+talg = tupdate + tproj .
+
+Method-internal checks, such as BW-GD backtracking or line-search evaluations, are counted in tupdate . For methods that produce full-rank iterates, projection time is included because the evaluated covariance state is required to satisfy the shared rank budget. 
+
+What Is Excluded from talg . Shared BW-evaluation time for logging is excluded. One-time target preprocessing that is constant across the inner loop, such as computing Σ1/2 
+
+> ⋆
+
+, is also excluded unless stated otherwise. 
+
+Measurement Details. For the covariance-alignment timing in Experiment I, runtimes are synchronized single-GPU wall-clock times measured on an NVIDIA RTX A6000 with an AMD EPYC 7763 CPU and approximately 503 GiB RAM. Runs are single-device and sequential across methods and seeds, not distributed or multi-GPU. We use time.perf counter ;for GPU runs, timing blocks are bracketed by torch.cuda.synchronize . Each configuration is run for seeds 
+
+{0, 1, 2}, and we report medians for timing. CovDrift-MR adaptation times are reported under the corresponding canonical downstream protocol and are used for within-protocol method comparisons. 
+
+D.3. Additional Rank-Budget Contraction Plots 
+
+Figure 3 provides larger-format versions of the VisDA-2017 and Terra/CCT-20 GAP contraction plots shown in Figure 2. The protocol is the same as in the main text: exact BW evaluator, r=16 , K=20 , and three seeds. 20 ITSPACE: Monotone Gaussian Optimal Transport Updates 
+
+Table 6. Speedup over BW-GD across datasets. Ratios are computed from median talg values in the time-to-gap protocol. All settings use r=16 , K=20 , and three seeds. 
+
+Dataset speedup at gap ≤ 0.1 speedup at gap ≤ 0.02 
+
+Camelyon17 ( d=2048 ) 319 .9× 239 .7×
+
+VisDA-2017 ( d=2048 ) 198 .2× 239 .8×
+
+Terra/CCT-20 ( d=2048 ) 306 .9× 310 .8×
+
+Table 7. CovDrift-MR downstream on VisDA-2017 and Terra (accuracy, %). Mean ±std over three seeds. t5 is method-specific adaptation time at K=5 seconds, excluding shared preprocessing. The protocol and hyperparameters match Table 2 in the main text.                                                                                                                                                                                                                                                                                    
+
+> VisDA-2017 (Accuracy, %) Terra (Accuracy, %) Method K=1 K=2 K=5 K=20 t5(s) K=1 K=2 K=5 K=20 t5(s) No adapt 75 .68 ±2.18 75 .68 ±2.18 75 .68 ±2.18 75 .68 ±2.18 <0.001 58 .89 ±2.53 58 .89 ±2.53 58 .89 ±2.53 58 .89 ±2.53 —ITSPACE 83 .93 ±1.18 84 .26 ±1.18 84 .26 ±1.18 84 .26 ±1.18 0.029 ±0.006 63 .83 ±2.36 63 .94 ±2.43 63 .94 ±2.43 63 .94 ±2.43 0.024 ±0.002
+> BW-geodesic 77 .04 ±0.76 78 .14 ±0.85 80 .95 ±0.55 84 .26 ±1.18 0.013 ±0.000 59 .78 ±2.78 60 .44 ±2.94 62 .00 ±2.62 63 .94 ±2.43 0.012 ±0.001
+> BW-GD 81 .00 ±1.10 82 .82 ±1.09 83 .82 ±1.28 84 .26 ±1.18 0.039 ±0.011 62 .22 ±2.53 63 .56 ±2.68 63 .89 ±2.75 63 .94 ±2.43 0.029 ±0.004
+> Euclidean 78 .18 ±1.16 79 .57 ±1.34 81 .39 ±1.32 84 .26 ±1.18 0.013 ±0.000 60 .72 ±3.08 61 .56 ±2.36 62 .72 ±2.36 63 .94 ±2.43 0.012 ±0.000
+> Log-Euclidean 76 .44 ±0.93 77 .09 ±1.18 79 .37 ±1.18 84 .26 ±1.18 0.018 ±0.008 59 .33 ±2.57 59 .89 ±2.76 60 .78 ±2.77 63 .94 ±2.43 0.016 ±0.007
+> AIRM 76 .44 ±0.93 77 .09 ±1.18 79 .37 ±1.18 84 .26 ±1.18 0.011 ±0.001 59 .33 ±2.57 59 .89 ±2.76 60 .78 ±2.77 63 .94 ±2.43 0.011 ±0.001
+> Sinkhorn 83 .50 ±1.11 83 .50 ±1.11 83 .50 ±1.11 83 .50 ±1.11 0.219 ±0.025 65 .00 ±1.59 65 .00 ±1.59 65 .00 ±1.59 65 .00 ±1.59 0.179 ±0.008
+> Sinkhorn-Gaussian 83 .71 ±0.89 83 .71 ±0.89 83 .71 ±0.89 83 .71 ±0.89 0.164 ±0.010 63 .56 ±2.61 63 .56 ±2.61 63 .56 ±2.61 63 .56 ±2.61 0.164 ±0.004
+
+## E. Additional Downstream Details and Results 
+
+E.1. Downstream: CovDrift-MR Protocol Purpose. CovDrift-MR isolates second-order covariance test-time adaptation under strict step and compute budgets. The predictor is a fixed linear head; adaptation uses only unlabeled target samples for moment estimation; methods differ only in the covariance-alignment update. 
+
+Fixed Head and Shared Preprocessing. For each seed s ∈ { 0, 1, 2}, we fit a source-only StandardScaler on Ztrain 
+
+s
+
+and train a linear classifier on standardized source features. The head is trained once per seed and frozen for all methods and budgets. 
+
+Matched-Rank Drift. We inject a stationary rank-r deformation into target features, with r = 16 and severity smax = 1 .70 .The drift is applied to Zunlab 
+
+t for moment estimation and to Ztest 
+
+t for evaluation; source features are not drifted. 
+
+Moment Estimation and Stabilization. Source and target moments (μs, Σs) and (μt, Σt) are estimated empirically from source training features and drifted unlabeled target features. All methods share identical stabilization: shrinkage γ = 0 .05 
+
+and eigenvalue floor 
+
+λmin = 10 −4 · tr( bΣ) /d. 
+
+Budgeted Adaptation and Evaluation. Each method aligns Σs toward Σt under rank budget r = 16 and budgets 
+
+K ∈ { 1, 2, 5, 20 }. From the aligned covariance estimate, we apply a shared whitening–recoloring map to drifted target-test features and evaluate with the frozen head. 
+
+Metrics and Timing. We report AUROC (%) on Camelyon17 and accuracy (%) on VisDA-2017 and Terra. We report method-specific adaptation time t5 at K = 5 seconds, excluding shared preprocessing. 
+
+Terra Closed-Set Evaluation. For Terra, we evaluate only target-test samples whose labels appear in source training. These labels are used only for evaluation and are handled identically across methods. 
+
+E.2. CovDrift-MR Results on VisDA-2017 and Terra 
+
+Table 7 reports the full budget sweeps underlying the cross-dataset downstream summary in Table 3. 21

@@ -6,22 +6,37 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-05
-- 运行时间：2026-07-05 20:25:37 UTC
+- 最新运行日期：2026-07-06
+- 运行时间：2026-07-06 21:43:02 UTC
 - 运行状态：成功
-- 本次总论文数：0
-- 精读区：0
-- 速读区：0
+- 本次总论文数：5
+- 精读区：2
+- 速读区：3
 
 ### 今日简报（AI）
-> 今日无新推荐，系统未产出可展示论文。
-- 详情：[/202607/05/README](/202607/05/README)
+1) 今日精读两篇8分论文：随机微分方程用于生成机器学习的变分视角，以及Sinkhorn算法的低熵正则化有效动力学。
+2) 最值得看的方向是扩散模型的数学基础（速读7.0），以及用累积分布函数高效计算切片Wasserstein距离（6.0）。
+3) 建议先精读变分视角的随机微分方程，再了解低熵正则化如何影响最优传输算法。
+- 详情：[/202607/06/README](/202607/06/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Introduction to Stochastic Differential Equations for Generative Machine Learning: A Variational Perspective](/202607/06/2606.31576v1-introduction-to-stochastic-differential-equations-for-generative-machine-learning-a-variational-perspective)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：随机微分方程用于生成建模
+2. [Effective dynamics of the Sinkhorn algorithm in the regime of low entropy regularization](/202607/06/2607.00665v1-effective-dynamics-of-the-sinkhorn-algorithm-in-the-regime-of-low-entropy-regularization)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：Sinkhorn算法用于最优传输
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [A Mathematical Introduction to Diffusion Models](/202607/06/2607.01693v1-a-mathematical-introduction-to-diffusion-models)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：扩散模型数学导论，涵盖生成采样桥
+2. [Highly Data Parallelizable Estimation of the Sliced-Wasserstein Distance Using Cumulative Distribution Functions](/202607/06/2606.30310v1-highly-data-parallelizable-estimation-of-the-sliced-wasserstein-distance-using-cumulative-distribution-functions)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：高效估计Wasserstein距离，是扩散桥中最优传输的关键工具
+3. [ITSPACE: Monotone Gaussian Optimal Transport Updates](/202607/06/2606.30523v1-itspace-monotone-gaussian-optimal-transport-updates)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：协方差矩阵的最优传输，与桥中的最优传输概念相关
 
 
 <div class="dpr-home-promo-card">

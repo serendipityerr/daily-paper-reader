@@ -1,0 +1,2615 @@
+Title: Highly Data Parallelizable Estimation of the Sliced-Wasserstein Distance Using Cumulative Distribution Functions
+
+URL Source: https://arxiv.org/pdf/2606.30310v1
+
+Published Time: Tue, 30 Jun 2026 02:20:35 GMT
+
+Number of Pages: 40
+
+Markdown Content:
+# Highly Data Parallelizable Estimation of the Sliced-Wasserstein Distance Using Cumulative Distribution Functions 
+
+Christophe Vauthier 
+
+Laboratoire de Mathématiques d’Orsay, Université Paris-Saclay Gif-sur-Yvette, France 
+
+christophe.vauthier@universite-paris-saclay.fr 
+
+Quentin Mérigot 
+
+Laboratoire de Mathématiques d’Orsay, Université Paris-Saclay Gif-sur-Yvette, France 
+
+quentin.merigot@universite-paris-saclay.fr 
+
+Anna Korba 
+
+Centre de recherche en économie et statistique, ENSAE Palaiseau, France 
+
+anna.korba@ensae.fr 
+
+## Abstract 
+
+The Sliced Wasserstein (SW) distance has emerged as a computationally attractive alternative to the Wasserstein distance by leveraging one-dimensional optimal transport along random projections. Standard estimators of the SW distance rely on Monte Carlo averages of one-dimensional Wasserstein distances computed via quantile functions, which require sorting projected samples and access to full datasets. In this work, we introduce a new class of estimators for the Sliced Wasserstein distance based on cumulative distribution functions (CDFs) of pro-jected measures, that avoid sorting and scale via massive dataset parallelism. This class includes several estimators, some of them being indexed by hyperparameters controlling their variance or smoothness. We show that they are especially well suited to scenarios in which CDFs are more tractable than quantile functions, such as mixtures of Gaussians, and moreover that they are also naturally compatible with federated learning, since CDFs of projected data can be computed and aggregated locally without requiring the exchange of raw samples. 
+
+## 1 Introduction 
+
+The Sliced Wasserstein (SW) distance [Rabin et al., 2012, Bonneel et al., 2015] has emerged as a widely used alternative to the Wasserstein distance for comparing high-dimensional probability measures. By projecting measures onto one-dimensional subspaces and averaging the resulting one-dimensional Wasserstein distances, the SW distance exploits the closed-form structure of optimal transport on the real line while significantly reducing computational complexity. As a result, SW distances have been successfully applied in a broad range of machine learning tasks, including generative modeling [Liutkus et al., 2019, Kolouri et al., 2018a, Nguyen et al., 2021, Nguyen and Ho, 2024], clustering [Kolouri et al., 2018a], variational inference [Yi and Liu, 2023], domain adaptation [Lee et al., 2019], approximate Bayesian computation [Nadjahi et al., 2020a]. 
+
+> Preprint.
+> arXiv:2606.30310v1 [stat.ML] 29 Jun 2026
+
+In practice, the SW distance is often estimated using Monte Carlo sampling over projection directions. For each sampled direction, the one-dimensional Wasserstein distance between projected measures is computed exactly via quantile functions, which for empirical measures amounts to sorting the projected samples. This procedure yields an unbiased estimator of the SW distance and scales as 
+
+O(LN log( N )) for L projections and N samples. While this complexity is substantially lower than that of high-dimensional optimal transport, quantile-based estimators of the SW distance suffer from structural limitations. The sorting operation requires access to all projected samples, which makes standard SW estimators poorly suited to distributed and federated learning settings, where data are split across multiple clients and cannot be centrally aggregated. Moreover, although different projections can be processed independently, the need to compute global order statistics on all samples limits parallelism. These limitations motivate the search for alternative estimators of the SW distance that preserve its favorable properties while relaxing its computational and structural constraints. A number of extensions of the Sliced Wasserstein distance have been proposed to improve flexibility or computational burden, including max-sliced Wasserstein distances [Deshpande et al., 2019], non linear projections [Kolouri et al., 2019], learned or adaptive projections [Nguyen et al., 2021, Ohana et al., 2023, Nguyen et al., 2023a, Dai and Seljak, 2021], orthogonal projections [Rowland et al., 2019] and hierarchical slicing schemes [Nguyen et al., 2023b]. Other works have proposed generalizations of SW distances where projections on lines are replaced by projections on a more advanced structure called tree systems [Le et al., 2019, Tran et al., 2025]. However, all these approaches still rely on quantile functions and therefore retain the need to compute global order statistics of the projected samples, that require access to the full dataset. In this work, we propose a novel approach to estimating the Sliced Wasserstein distance, based on cumulative distribution functions (CDFs) of projected measures rather than quantile functions. Our construction builds on integral representations of one-dimensional Wasserstein distances, which express Wasserstein distances of orders one and two directly in terms of CDFs. Leveraging these representations, we derive unbiased Monte Carlo estimators of the SW distance that require only pointwise evaluations of projected CDFs at randomly sampled locations, completely avoiding sorting operations. This CDF-based formulation yields estimators with several desirable properties. From a computational standpoint, evaluating a CDF reduces to a simple sum over projected samples and can be implemented in linear time, leading to estimators with complexity O(LN d ). Furthermore, the CDF of a dataset is naturally expressed as a sum of CDFs of subdatasets, making the proposed estimators massively data parallelizable. Yet, we empirically analyze the variance of the resulting estimators and show that a naive Monte-Carlo approximation may lead to poor accuracy for second-order SW distances. To address this issue, we introduce an importance sampling strategy that significantly improves estimation accuracy. A further challenge of CDF-based estimators is that empirical CDFs are not differentiable with respect to sample locations, which limits their direct use in gradient-based learning. To overcome this limitation, we introduce smooth approximations of CDFs that yield differentiable estimators of the Sliced-Wasserstein distance. These smoothed estimators converge to their original counterparts as the smoothing parameter vanishes, while enabling backpropagation in applications involving neural network training, such as generative modeling. Finally, the proposed estimators are particularly well suited to federated learning settings. Since CDFs of projected measures can be computed locally and aggregated by simple summation, the SW distance can be estimated without sharing raw data or projected samples. This property enables efficient and private computation of SW distances in distributed environments and allows SW distances to be integrated into federated learning algorithms. This paper is organized as follows. In Section 2, we provide background material on optimal transport, one-dimensional Wasserstein distances, and the Sliced Wasserstein distance. Section 3 introduces the proposed CDF-based estimators of the Sliced Wasserstein distance, analyzes their computational and statistical properties, and presents variance reduction and smoothing techniques. Section 4 discusses practical applications of the proposed estimators, with a particular focus on federated learning settings or Gaussian mixtures. Section 5 presents our experimental results on some generative modeling tasks, Gaussian mixture models and federated learning problems. 22 Background 
+
+Notations We denote P(Rd) the set of Borel probability measures on Rd, and, for every p ≥ 1, we denote Pp(Rd) the set of probability measures with finite p-th order moment. For every μ ∈ P (Rd)
+
+and every Borel measurable map T : Rd → Rm, we denote T#μ ∈ P (Rm) the pushforward of μ by T , defined by T#μ(A) := μ(T −1(A)) for every Borel set A ⊆ Rm. The support of a measure μ ∈ P (Rd), which is the complement of the largest open set of zero μ-measure, is denoted 
+
+spt( μ). Given X a compact differential manifold, we will denote U(X) the uniform probability distribution on X. We note Sd(R) the space of d × d symmetric matrices, and S++  
+
+> d
+
+(R) the space of symmetric positive definite matrices. For every m ∈ Rd and Σ ∈ S++  
+
+> d
+
+(R), we denote N (m, Σ) 
+
+the normal distribution with mean vector m and covariance matrix Σ. For every x ∈ R we denote 
+
+(x)+ := max(0 , x ) the positive part of x.
+
+Wasserstein distance Given p ≥ 1 and two probability measures μ, ν ∈ P p(Rd), the Wasserstein distance of order p between μ and ν is defined by 
+
+Wp(μ, ν ) := 
+
+
+
+min 
+
+> γ∈Π( μ,ν )
+
+Z
+
+|x − y|p dγ(x, y )
+
+1/p 
+
+(1) where Π( μ, ν ) is the set of γ ∈ P (Rd × Rd) such that π1# γ = μ and π2# γ = ν, where π1, π 2 :
+
+Rd × Rd → Rd are the projections on the first and second coordinate, and | · | denotes the Euclidean distance. When μ and ν are two point clouds of the form μ := 1
+
+> N
+
+PNi=1 δxi and ν := 1
+
+> N
+
+PNi=1 δyi ,(1) can be reformulated as a particular case of a linear program, and dedicated algorithms allow to compute the Wasserstein distance in time complexity O(N 2.5 log( N )) [Burkard et al., 2012]. 
+
+1D Wasserstein distance For a probability measure μ ∈ P (R), we note Fμ : R 7 → [0 , 1] its cumulative distribution function, defined by Fμ(x) := μ(( −∞ , x ]) . It is nondecreasing and right continuous. We also define its quantile function F −1 
+
+> μ
+
+to be the pseudo-inverse of Fμ, defined by 
+
+F −1 
+
+> μ
+
+(x) := inf {t ∈ R | Fμ(t) ≥ x} for every x ∈ [0 , 1] . It is well-known (see [Santambrogio, 2015, Chapter 2]) that in dimension d = 1 , the Wasserstein distance between two probability measures can be explicitly expressed as the Lp distance between their quantile functions: for every μ, ν ∈ P (R),
+
+Wpp(μ, ν ) = 
+
+Z 10
+
+|F −1 
+
+> μ
+
+(x) − F −1 
+
+> ν
+
+(x)|p dx (2) This property allows for efficient computation of the Wasserstein distance in dimension 1. Indeed, if 
+
+μ, ν are point clouds of the form μ := 1
+
+> N
+
+PNi=1 δxi and ν := 1
+
+> N
+
+PNi=1 δyi , the distance Wp(μ, ν ) can be computed in time O(N log( N )) , by sorting the xi’s and the yj ’s: letting σ, τ be two permutations of {1, . . . , N } such that xσ(1) ≤ . . . ≤ xσ(N ) and yτ (1) ≤ . . . ≤ yτ (N ), we have 
+
+Wpp(μ, ν ) = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+|xσ(i) − yτ (i)|p. (3) 
+
+Sliced Wasserstein distance Let p ≥ 1 and μ, ν ∈ P p(Rd). The Sliced Wasserstein distance of order p between μ and ν is 
+
+SW p(μ, ν ) := 
+
+Z 
+
+> Sd−1
+
+Wpp(μθ , ν θ ) d θ
+
+1/p 
+
+(4) where dθ is the uniform measure on the unit sphere Sd−1, and where μθ := Pθ#μ and νθ := Pθ#ν,with Pθ the projection x ∈ Rd 7 → ⟨ x|θ⟩ ∈ R on the direction θ. The Sliced Wasserstein distance between two point clouds μ := 1
+
+> N
+
+PNi=1 δxi and ν := 1
+
+> N
+
+PNi=1 δyi is usually computed using the Monte-Carlo estimator 
+
+gSW pp,L (μ, ν ) := 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+Wpp(μθl , ν θl ) (5) where L > 0 and θ1, . . . , θ L are i.i.d. random variables with θi ∼ U (Sd−1). This gives an unbiased estimator of SW pp(μ, ν ), which can be computed in time O(L(N log( N ) + N d )) .33 The CDF estimators of the Sliced Wasserstein 
+
+The estimators for empirical measures We describe here how to construct our alternative and novel estimators for the Sliced-Wasserstein distance. Our method is based on the following two observations made in [Bobkov and Ledoux, 2019]: 
+
+Theorem 3.1. [Bobkov and Ledoux, 2019, Theorem 2.9] Let μ, ν ∈ P 1(R), then we have 
+
+W1(μ, ν ) = 
+
+Z ∞−∞ 
+
+|Fμ(x) − Fν (x)| dx (6) 
+
+Theorem 3.2. [Bobkov and Ledoux, 2019, Theorem 2.11] Let μ, ν ∈ P 2(R), then we have 
+
+W22(μ, ν ) = 2 
+
+Z Z 
+
+> x≤y
+
+(Fμ(x) − Fν (y)) + + ( Fν (x) − Fμ(y)) + dx dy. (7) These theorems immediately give alternative expressions for the Sliced-Wasserstein distances of order 1 and 2. For every μ, ν ∈ P 1(Rd), we have 
+
+SW 1(μ, ν ) = 
+
+Z
+
+> Sd−1
+
+Z ∞−∞ 
+
+|Fμθ (x) − Fνθ (x)| dx dθ, (8) and for every μ, ν ∈ P 2(Rd), it holds 
+
+SW 22(μ, ν ) = 2 
+
+Z
+
+> Sd−1
+
+Z Z 
+
+> x≤y
+
+(Fμθ (x) − Fνθ (y)) + + ( Fνθ (x) − Fμθ (y)) + dx dy dθ. (9) Furthermore, if for every θ ∈ Sd−1, we let [aθ , b θ ] be any interval containing the supports of μθ and 
+
+νθ , then the inner integral in (8) can be restricted to [aθ , b θ ] and the inner double integral in (9) can be restricted to aθ ≤ x ≤ y ≤ bθ . Using these alternative expressions, we construct estimators for the 
+
+SW 1 and SW 2 between two discrete measures μ := PNi=1 αiδxi and ν := PMj=1 βj δyj . For every 
+
+θ ∈ Sd−1, let m− 
+
+> θ
+
+:= min(spt( μθ ) ∪ spt( νθ )) and m+ 
+
+> θ
+
+:= max(spt( μθ ) ∪ spt( νθ )) (so [m− 
+
+> θ
+
+, m + 
+
+> θ
+
+]
+
+is the smallest interval containing all the projections ⟨xi|θ⟩ and ⟨yj |θ⟩). Then, up to a change of variable ˜x = m− 
+
+> θ
+
++ rθ x, with rθ = m+ 
+
+> θ
+
+− m− 
+
+> θ
+
+, the inner integral in (8) and the inner double integral in (9) can be restricted to respectively [0 , 1] and the triangle T = {(x, y ) ∈ [0 , 1] 2 | x ≤ y}. This will make sampling easier in the definitions of the estimators. 
+
+Definition 3.3. Let L > 0, and let (θ1, U 1), . . . , (θL, U L) be i.i.d. variables with (θ1, U 1) ∼U(Sd−1 × [0 , 1]) . We define the estimator dSW 1,L (μ, ν ) of SW 1(μ, ν ) by 
+
+dSW 1,L (μ, ν ) := 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+rθl ∆(1)  
+
+> μ,ν
+
+(θl, ˜Ul) (10) where ∆(1)  
+
+> μ,ν
+
+(θ, u ) := |Fμθ (u) − Fνθ (u)| for every u ∈ R, and ˜Ul := Rescale( Ul, m − 
+
+> θl
+
+, m + 
+
+> θl
+
+) for every l = 1 , . . . , L , with Rescale( x, a, b ) := a + ( b − a)x for every x, a, b ∈ R.
+
+Definition 3.4. Let (θ1, U 1, V 1), . . . , (θL, U L, V L) be i.i.d. variables with (θ1, U 1, V 1) ∼ U (Sd−1 ×
+
+T ). We define the estimator dSW 22,L (μ, ν ) of SW 22(μ, ν ) by 
+
+dSW 22,L (μ, ν ) := 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+r2 
+
+> θl
+
+∆(2)  
+
+> μ,ν
+
+(θl, ˜Ul, ˜Vl) (11) where ∆(2)  
+
+> μ,ν
+
+(θ, u, v ) := ( Fμθ (u)−Fνθ (v)) + +( Fνθ (u)−Fμθ (v)) + for every u, v ∈ R and θ ∈ Sd−1,and again ˜Ul := Rescale( Ul, m − 
+
+> θl
+
+, m + 
+
+> θl
+
+) and ˜Vl := Rescale( Vl, m − 
+
+> θl
+
+, m + 
+
+> θl
+
+).It is easy to check using (8) and (9) that these estimators are unbiased, i.e. that 
+
+E[dSW pp,L (μ, ν )] = SW pp(μ, ν ), p ∈ { 1, 2}. (12) Computing the projections ⟨xi|θl⟩ and ⟨yj |θl⟩ can be done in time O(L(N + M )d). Moreover, for any a ∈ R, it holds Fμθ (a) = PNi=1 αi1⟨xi|θ⟩≤ a and Fνθ (a) = PMj=1 βj 1⟨yj |θ⟩≤ a, so to 4compute the cumulative distribution functions Fμθ (a) and Fνθ (a), we only need to sum the αi
+
+and βj of the points xi and yj whose projection on the line θ is less than or equal to a, which can be done in time respectively O(N ) and O(M ) (provided the ⟨xi|θ⟩ and ⟨yj |θ⟩ have already been computed). Therefore the time complexity of computing these estimators is of the order of 
+
+O(L(M +N )d). Note that, while this implies that for a fixed L the estimators dSW 1,L and dSW 22,L will be faster to compute than the usual Monte-Carlo estimators gSW 1,L , gSW 22,L , which have complexity 
+
+O(L(N log( N d ) + N d )) , this comes at the cost of higher variance, as we expect the integrands ∆(1) 
+
+> μ,ν
+
+and ∆(2)  
+
+> μ,ν
+
+to have higher variance than the integrand Wpp(μθ , ν θ ). We refer to Section A.3.1 for an empirical analysis of the time-accuracy tradeoff between the various estimators. 
+
+Figure 1: Plots of (Fμ(x) − Fν (y)) + on the tri-angle 0 ≤ x ≤ y ≤ 1 (bottom) and of the probability density functions and CDFs of μ, ν 
+
+(top) for various pairs (μ, ν ). The measures μ
+
+and ν are obtained by truncating normal distribu-tions N (m−, σ ) and N (m+, σ ) to [−1, 1] . Left: 
+
+m± = ±0.2 and σ = 1 . Middle: m± = ±0.9 and 
+
+σ = 1 . Right: m± = ±0.9 and σ = 0 .1.
+
+Variance minimization via importance sampling One drawback of the esti-mator dSW 22,L , which comes from the formula (9) on which it is based, is that for μ, ν ∈ P2(R), the function 
+
+(x, y ) → (Fμ(x) − Fν (y)) + is nonde-creasing in x and nonincreasing in y, so that if μ and ν are “close", it is highly likely that we will have Fμ(x) ≤ Fν (y)
+
+whenever the gap y − x > 0 is large. This is illustrated in Figure 1 which shows that, the more the measures μ and ν are close, the more the subset of T on which 
+
+(Fμ(x) − Fν (y)) + is nonzero is concen-trated near the diagonal x = y. There-fore, in this situation, computing dSW 22,L 
+
+by sampling the triangle (Ul, V l) ∈ T
+
+uniformly will likely lead to many zero terms, hence to a high variance. One way of compensating for this problem is to instead sample the triangle T using aprobability distribution η which gives more weight to pairs (x, y ) ∈ T with y − x
+
+small. 
+
+Definition 3.5. Let η ∈ P (T ) be with positive density f (that is dη(x, y ) = f (x, y ) d x dy). Let 
+
+(θ1, U 1, V 1), ..., (θL, U L, V L) be i.i.d. random variables with (θ1, U 1, V 1) ∼ U (Sd−1) × η. We define the estimator 
+
+dSW 22,L,η (μ, ν ) := 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+2r2
+
+> θl
+
+f (Ul, V l) ∆(2)  
+
+> μ,ν
+
+(θl, ˜Ul, ˜Vl). (13) One can check that this defines again an unbiased estimator of SW 22(μ, ν ), which can again be computed in time O(L(N + M )d). One possible choice of η is dηk(x, y ) = k(k + 1)( y −
+
+x)k−1 dx dy for some k ∈ (0 , 1] . This ensures that, if (X, Y ) ∼ ηk, then Y − X ∼ Beta( k, 2) 
+
+(see Theorem A.1). The lower the value of k, the more the law of η gives mass to small gaps y − x.For k = 1 , η1 is simply the uniform distribution on T , so that dSW 2,L,η 1 = dSW 2,L . We refer to Section A.1 for a more detailed theoretical and empirical analysis of the conditions under which using this importance sampling strategy with ηk leads to a decrease in variance. 
+
+Differentiability of the CDF estimators One of the main limitations of the estimators dSW 1,L ,
+
+dSW 2,L and dSW 2,L,η is that they only provide estimates of the SW distance and do not readily give access to the gradient of the Sliced-Wasserstein distance. Indeed, as we saw previously, the evaluations at a fixed point a ∈ R of the cumulative distribution functions Fμθ (a) and Fνθ (a) are linear combinations of indicator functions 1⟨xi|θ⟩≤ a, and thus are not differentiable with respect to the points xi and yj . This can be inconvenient since many practical applications of the Sliced Wasserstein 5distance require to differentiate it, as in the case for example in generative modeling. The workaround we propose is to smooth the cumulative distribution functions to make them differentiable. For any 
+
+ρ ∈ P (R) and a ∈ R, letting ε > 0 be a smoothing parameter, we introduce the smoothed version of the cumulative distribution function of ρF (ε) 
+
+> ρ
+
+(a) := 
+
+Z
+
+σ(−(x − a − √ε)/ε ) d ρ(x), (14) where σ is the sigmoid function σ(x) = 1 /(1 + e−x). We can then introduce smoothed estimators 
+
+dSW 1,L,ε , dSW 2,L,ε and dSW 2,L,η,ε which are defined by replacing the CDFs Fμθ , Fνθ by their smoothed counterparts F (ε) 
+
+> μθ
+
+, F (ε) 
+
+> νθ
+
+in respectively Theorem 3.3, Theorem 3.4 and Theorem 3.5. As the 
+
+F (ε) 
+
+> ρ
+
+are only approximations of Fρ, these estimators will be biased. Nevertheless, we can check that for any fixed ρ ∈ P (R) and a ∈ R, we have F (ε) 
+
+> ρ
+
+(a) → Fρ(a) when ε → 0+, so that the estimators 
+
+dSW 1,L,ε , dSW 2,L,ε and dSW 2,L,η,ε will converge respectively to dSW 1,L , dSW 2,L and dSW 2,L,η when 
+
+ε → 0+. Note that, while the process by which we smooth the CDFs in Equation (14) may seem at first glance to be ad hoc, it turns out that these smoothed estimators can be interpreted as (biased) estimators of a Sliced-Wasserstein distance between smoothed versions of μ and ν: we refer for further details to the theoretical analysis in Section A.2. 
+
+## 4 Practical Applications 
+
+In this section, we review practical applications of the estimators dSW 1,L , dSW 22,L , dSW 22,L,η , and their smoothed variants introduced in Section 3. We refer to these methods as the CDF-based estimators ,in contrast to the standard estimators gSW pp,L , which we call the quantile-based estimators since they rely on the quantile representation (2) of the one-dimensional Wasserstein distance. 
+
+Dataset parallelization It is well-known that the quantile-based estimator gSW pp,L can be computed in a parallel manner over the number L of directions, since each Wpp(μθl , ν θl ) in its definition (5) can be computed independently. This is still true for the CDF-based estimators, since the terms corresponding to each (θl, U l) ∈ Sd−1 × [0 , 1] or (θl, U l, V l) ∈ Sd−1 × T can be computed independently. However, thanks to the properties of cumulative distribution functions, a remarkable feature of the CDF-based SW estimators is that their computation can additionally be made parallel over N , where N is the number of samples of the compared measures. Consider indeed a setting where we have measures μ1, μ 2 ∈ P 2(Rd) of the form μi = Ppi 
+
+> j=1
+
+αi,j μi,j ,where the μi,j are probability measures held by p = p1 + p2 separate devices, and the αi,j are nonnegative weights such that Ppi 
+
+> j=1
+
+αi,j = 1 , i = 1 , 2. Then, in this case, for every i = 1 , 2 and 
+
+θ ∈ Sd−1, the CDF of μi,θ has the simple expression Fμi,θ = Ppi 
+
+> j=1
+
+αi,j Fμi,j,θ . This allows the computation of the CDF-based SW estimators to be done in parallel across the p devices using, for instance in the case of dSW 1,L (μ1, μ 2), the following algorithm: (1) A central server samples 
+
+(θ1, U 1), . . . , (θL, U L) uniformly from Sd−1 × [0 , 1] and sends them to the devices, (2) each device 
+
+(i, j ) computes its local CDFs (Fμi,j,θ l ( ˜Ul)) Ll=1 and sends them to the server, (3) which sums them to calculate the CDFs (Fμi,θ l ( ˜Ul)) Ll=1 , i = 1 , 2 and uses them to compute the value of dSW 1,L (μ1, μ 2).Of course, this algorithm can be adapted with minor changes to the CDF-based SW 2 estimators as well as their smoothed variants. 
+
+Federated learning Federated learning is a machine learning paradigm in which several clients collaborate to train a global model using locally stored data without sharing it [Kairouz et al., 2021]. While there exists a number of works aiming to devise dedicated algorithms for computing in a federated setting optimal transport distances such as the Wasserstein distance [Rakotomamonjy et al., 2024] or the Sinkhorn divergence [Kulcsar et al., 2025], it is notable that the parallel algorithm described in the previous paragraph can be straightforwardly adapted to a federated setting. Indeed, in this case, the p = p1 + p2 devices that the computation is parallelized over are not computation units within a single machine or cluster, but rather distinct clients with whom the central server communicates through a network, each holding a private dataset μi,j . It is thus possible to compute the CDF-based SW estimators in a federated setting. Moreover, while there may be privacy concerns 6regarding this algorithm (notably regarding the information revealed by the transmission of the local CDFs Fμi,j,θ l ), it can be given formal privacy guarantees in terms of (ε, δ )-differencial privacy through the addition of a noising scheme. We refer to Section B for a detailed description of the federated algorithms, pseudocode, and analysis of their privacy. 
+
+Gaussian mixtures Although we focused mainly in Section 3 on the case where the compared measures μ and ν are empirical measures, it must be noted that the CDF-based estimators defined in Theorem 3.3, Theorem 3.4 and Theorem 3.5 only require that the CDFs Fμθ and Fνθ are tractable. In fact, one strength of these estimators, compared to the usual quantile-based estimators gSW p, is that they are well-suited to the case where μ and ν have a form such that their CDFs Fμ and Fν are more practical to compute than their quantile functions F −1 
+
+> μ
+
+and F −1 
+
+> ν
+
+. This, for instance, is the case of 
+
+Gaussian mixtures . Recall that a Gaussian mixture is a probability measure μ ∈ P 2(Rd) of the form 
+
+μ = Pnk=1 αkN (mk, Σk) where α1, . . . , α n ∈ [0 , 1] are such that Pni=1 αi = 1 , m1, . . . , m n ∈ Rd,and Σ1, . . . , Σn ∈ S++  
+
+> d
+
+(R) are symmetric positive definite matrices. Then, for every θ ∈ Sd−1 and every x ∈ R, the projected measure μθ and its CDF Fμθ (x) have the form 
+
+μθ =
+
+> n
+
+X
+
+> k=1
+
+αkN (mk,θ , σ 2 
+
+> k,θ
+
+), Fμθ (x) = 
+
+> n
+
+X
+
+> k=1
+
+αkΦ
+
+ x − mk,θ 
+
+σk,θ 
+
+
+
+(15) with mk,θ := ⟨θ|mk⟩ and σ2 
+
+> k,θ
+
+:= θT Σkθ for every k, and with Φ the CDF of the standard normal distribution N (0 , 1) . In particular μθ is also a Gaussian mixture. Since Φ can be efficiently numeri-cally approximated and differentiated, we can thus directly use this expression in the computation of the CDF-based estimators, which will furthermore be straightforwardly differentiable with respect to the parameters αk, m k, Σk of the Gaussian mixture (unlike in the case of empirical measures, in Section 3, for which we needed to smooth the CDFs to obtain differentiable estimators !). On the other hand, there are no practical expression of the quantile functions F −1 
+
+> μθ
+
+of the projections of a Gaussian mixture. Therefore, in order to compute the usual quantile-based estimator, as is done for example in [Kolouri et al., 2018b], one needs to approximate the quantile functions by numerically inverting the CDFs Fμθ .
+
+Remark 4.1 . If μ is a Gaussian mixture, the bounds m± 
+
+> θ
+
+defined in Section 3 are infinite: indeed, the projected measure μθ has full support on R, so that m± 
+
+> θ
+
+= ±∞ . This makes it impossible to sample on [0 , 1] or T and rescale to m− 
+
+> θ
+
+≤ u ≤ m+ 
+
+> θ
+
+or m− 
+
+> θ
+
+≤ u ≤ v ≤ m+ 
+
+> θ
+
+. One possible workaround is to redefine m± 
+
+> θ
+
+as the max and min of S(μθ ) ∪ S(νθ ), where S(μθ ) := spt( μθ ) when 
+
+μθ has bounded support, and, when μ is a Gaussian mixture of the form μ = P 
+
+> k
+
+αkN (mk, Σk),
+
+S(μθ ) := Snk=1 [mk,θ − τ σ k,θ , m k,θ + τ σ k,θ ] for some fixed τ > 0. In other words, we ignore the points that are not within τ standard deviations of the mean of at least one of the components of μθ .This slightly biases the estimators downward (as this implies truncating the integrals in (8) and (9)), but for τ large enough the bias should be negligible 1.
+
+## 5 Experiments 
+
+In this section we describe several experiments showcasing applications of the CDF-based SW 
+
+estimators. Our code will be made publicly available. 
+
+Generative modeling In order to demonstrate the suitability of the smoothed CDF-based estimators for practical machine learning applications, we train a Generative Adversarial Network (GAN) on the datasets MNIST [LeCun and Cortes, 2010] and CelebA (rescaled to 64 × 64 ) [Liu et al., 2015], using the SW 2 distance as the discriminator loss, which we estimate using the quantile-based estimator 
+
+gSW 22,L and the CDF-based estimator dSW 22,L,η k ,ε with k = 1 and k = 0 .05 . Following the rule of thumb outlined in Section A.3.1, we take L = 10000 for the quantile estimator and L = 100000 for the CDF estimators to obtain comparable variance, and following the results of Section A.3.2, we take ε = 0 .01 . We reuse the architectures of [Nguyen and Ho, 2022] (in particular, we use spectral normalization), train for 100 epochs, with a batch size of 128, using Adam with learning rate 0.0002 .            
+
+> 1Recall that 99.7% of the mass of a normal distribution is within 3 standard deviations of its mean. Therefore, if τ= 3 ,then μθ(fspt( μθ)) ≥0.997 for every θ∈Sd−1.
+
+7Figure 2: Left: Results of fitting a Gaussian mixture model with 10 modes to a "ring-line-square" for three random initializations of the GMM, using the EM algorithm (top row) or by minimizing the CDF-based SW estimator with a few EM steps at the end (bottom row). Right: Histograms across 100 runs of the negative log likelihood (top) and of the SW 22 distance (bottom) between the fitted GMM and the target point cloud for both methods. We use the Fréchet Inception Distance (FID) [Heusel et al., 2017] to evaluate the quality of the images generated by the trained models. The FID scores obtained at the end of the training runs are reported in Table 1. We observe that the training runs using the CDF-based estimators achieve lower FID scores than the ones using the usual quantile-based estimator, while it does not seem that lowering the importance sampling parameter k systematically improves or worsens the final FID score. We refer to Section C for more detailed information on the architecture of the model and on the training. Table 1: FID scores (mean and standard deviation over 5 computations) for GANs trained with different datasets and estimators of the SW distance. 
+
+Estimator Quantile CDF (k=1) CDF (k=0.05) 
+
+MNIST 5.41 ± 0.02 4.69 ± 0.10 5.00 ± 0.09 
+
+CelebA 10 .08 ± 0.10 9.47 ± 0.02 9.34 ± 0.07 
+
+Gaussian mixture models The standard method for fitting the parameters of a Gaussian mix-ture model (GMM) μ = Pnk=1 αkN (mk, Σk) to a set of points X ∈ (Rd)N is the expectation-maximization (EM) algorithm, which minimizes the negative log-likelihood (NLL) of X with respect to μ. However, while it guarantees convergence to a stationary point of the NLL, random initial-izations of the EM algorithm converge to bad local minima with high probability[Kolouri et al., 2018b]. Another method of fitting the GMM is to minimize the Sliced-Wasserstein distance between 
+
+μ and the empirical measure representing the X. This method was investigated by Kolouri et al. [2018b], who showed that it is more robust to random initialization and yields solutions closer to the global minimum for both the SW and NLL objectives than the EM algorithm. While they used the quantile-based estimator of the SW in their analysis, we show that the benefits of their method can also be attained using the CDF-based estimators. To this end, we reproduce their experiment in [Kolouri et al., 2018b, Section 4.1] using the CDF-based estimators instead of the quantile-based ones. We consider a dataset of two-dimensional points X ∈ (R2)N consisting of a ring, a line and a square, and we fit a GMM with K = 10 components to X using one method among: (1) 200 steps of the EM algorithm or (2) 175 gradient descent steps of the loss dSW 22,L using RMSProp followed by 25 steps of the EM algorithm. For the second method, we take L = 1000 , and we set the RMSProp learning rates to be 0.05 for the 
+
+mk and 0.005 for the Σk. The component weights αk are fixed at αk = 1 /K during the RMSProp phase. The CDF-based SW estimator is calculated as explained in Section 4, using τ = 3 to compute the bounds m± 
+
+> θ
+
+. The results are shown in Figure 2. We see that, just as in [Kolouri et al., 2018b], 8Table 2: Performance for boosted FL algorithms. The average uplifts for OTDD are taken from Table 1 of Rakotomamonjy et al. [2024] ("Affinity" columns). Note that the higher uplifts for OTDD are in part due to the fact that the baseline performance ("Vanilla") is often lower in Rakotomamonjy et al. [2024], so that in our reimplementation the boosting has less room to improve from. MNIST CIFAR-10 Structure No structure Structure No structure Vanilla Clustering Vanilla Clustering Vanilla Clustering Vanilla Clustering FedAvg 20 58.0 ± 1.7 99.2 ± 0.1 65.6 ± 5.0 84.0 ± 4.3 32.9 ± 0.9 82.6 ± 3.9 35.5 ± 1.4 60.6 ± 2.2                                                                                                                                                                                                                                 
+
+> 40 51.7 ±3.6 99.0 ±0.0 71.3 ±3.7 77.0 ±3.3 31.8 ±1.1 84.0 ±0.3 35.2 ±1.9 57.5 ±1.8
+> 100 56.5 ±4.5 98.8 ±0.0 70.3 ±2.9 72.5 ±2.3 27.2 ±2.3 82.4 ±0.2 31.2 ±1.1 47.7 ±2.2
+> FedPer 20 98.0 ±0.5 99.2 ±0.0 95.7 ±1.1 97.9 ±0.3 81.6 ±0.5 84.7 ±0.2 81.9 ±2.5 84.2 ±2.4
+> 40 97.5 ±0.4 99.0 ±0.0 94.7 ±0.9 96.5 ±0.4 80.5 ±0.6 84.1 ±0.3 81.7 ±1.0 82.9 ±1.1
+> 100 95.9 ±2.4 98.8 ±0.0 94.7 ±1.2 96.1 ±0.6 76.9 ±0.8 82.3 ±0.2 77.8 ±1.1 80.5 ±0.7
+> FedRep 20 98.2 ±0.1 98.8 ±0.1 97.3 ±0.2 97.9 ±0.3 78.7 ±0.8 82.6 ±0.2 80.7 ±2.6 83.2 ±2.4
+> 40 97.4 ±0.2 98.7 ±0.1 95.7 ±1.2 97.3 ±0.5 76.5 ±0.6 81.3 ±0.3 78.2 ±1.2 81.1 ±1.1
+> 100 92.9 ±4.5 98.4 ±0.0 93.8 ±0.5 96.1 ±0.5 64.2 ±1.1 72.9 ±1.0 70.4 ±0.8 72.9 ±0.7
+> Average uplift MMDSW -15.7 ±19.8 -6.2 ±9.7 -24.3 ±27.2 -15.7 ±18.8 OTDD -26.4 ±27.5 -12.7 ±14.6 -17.6 ±19.6 -18.8 ±16.6
+
+minimizing the SW leads to a better fit of the model both visually, in terms of the SW distance, and in terms of the NLL, than the EM algorithm. 
+
+Boosting federated learning algorithms One of the issues which is known to impair federated learning algorithms is the heterogeneity of the client datasets. To address this, Rakotomamonjy et al. [2024] proposed an approach consisting of clustering clients with "similar" datasets and training a separate global model on each cluster. This approach makes use of the Optimal Transport Dataset Distance (OTDD) defined by Alvarez-Melis and Fusi [2021], which can be computed in a federated way, thanks to the federated estimator of the W2 distance (FedWaD) introduced by Rakotomamonjy et al. [2024]. We propose to use instead of the OTDD a SW -based dataset distance such as the Maximum Mean Discrepancy with Riesz SW kernel (MMDSW) [Bonet et al., 2025b], which we can compute in a federated way (see Section D.1) using our federated algorithms for the CDF-based SW 
+
+estimators (see Section 4). The MMDSW distance indeed has the advantage of being faster to compute than OTDD (both in practice and in terms of theoretical time complexity). Moreover, the federated CDF-based SW estimator (with which we compute MMDSW) has a number of advantages over FedWaD (with which OTDD is computed): first, the SW estimator only requires a single exchange of information between clients and server, while FedWaD requires approximating an interpolating measure over several iterations ; moreover, unlike FedWaD, the SW estimator can easily be given formal privacy guarantees (see Section B). We reimplemented the experiments of Rakotomamonjy et al. [2024] using the MMDSW instead of the OTDD. We compute the MMDSW using the dSW 22,L estimator with L = 10000 . We train classifiers on the MNIST [LeCun and Cortes, 2010] and CIFAR-10 [Krizhevsky and Hinton, 2009] datasets, using the federated algorithms FedAvg, FedPer [Arivazhagan et al., 2019] and FedRep [Collins et al., 2021], and with a number of clients C ∈ { 20 , 40 , 100 }. We use the spectral clustering algorithm of scikit-learn [Pedregosa et al., 2011], with K = 5 clusters. The results are shown in Table 2. In the “Structure" columns of the table, we simulate high heterogeneity by imposing a cluster structure on the client datasets: we assign to each client a random pair of labels chosen among 
+
+(0 , 1) , (2 , 3) , (4 , 5) , (6 , 7) , (8 , 9) , and, for every label l, the samples of the dataset with this label are split between the clients to whom the label l has been assigned. Conversely, in the “No structure" columns, no specific cluster structure has been imposed on the client datasets. We see in particular that our boosting procedure consistently increases the performance of the trained classifiers. More detailed explanations and results can be found in Section D. 
+
+## 6 Conclusion 
+
+In this work, we introduced a new class of estimators of the Sliced-Wasserstein distance which leverage the properties of cumulative distribution functions of projections of measures. We discussed applications of these estimators, some novel (such as federated learning), and illustrated them with various practical experiments. 9Limitations The CDF-based estimators suffer from a somewhat worse performance-accuracy trade-off than the quantile-based estimators, that the importance sampling strategy does not fully alleviate (see Section A.3.1). We lack a complete theoretical understanding of the smoothed CDF-based estimators, such as of their bias or of their convergence properties when the smoothing parameters 
+
+ε converges to 0. While we noted that the federated SW estimators could be made differentially private through a noising scheme (Section B), we did not investigate the trade-off between privacy and accuracy resulting from the implementation of such a scheme. 
+
+Future work Future avenues for research could include investigating the topological and statistical properties of these estimators in the same vein as Nadjahi et al. [2020b], Bayraktar and Guo [2021], Goldfeld and Greenewald [2021], their robustness and computational guarantees (as in Nietert et al. [2022]), implementing more sophisticated variance minimization strategies to improve the performance-accuracy trade-off, or adapting them to other settings such as measures supported on manifolds, slicing unbalanced optimal transport [Bonet et al., 2025a] or data with a latent hierarchy [Lin et al., 2025]. 
+
+## References 
+
+David Alvarez-Melis and Nicolò Fusi. Dataset Dynamics via Gradient Flows in Probability Space. In International conference on machine learning , pages 219–230. PMLR, 2021. Manoj Ghuhan Arivazhagan, V. Aggarwal, Aaditya Kumar Singh, and Sunav Choudhary. Federated learning with personalization layers. ArXiv , abs/1912.00818, 2019. Erhan Bayraktar and Gaoyue Guo. Strong equivalence between metrics of wasserstein type. Electronic Communications in Probability , 2021. Sergey Bobkov and Michel Ledoux. One-dimensional empirical measures, order statistics, and Kantorovich transport distances , volume 261 of Memoirs of the American Mathematical Society .American Mathematical Society, September 2019. ISBN 978-1-4704-5401-2 978-1-4704-5402-9 978-1-4704-3650-6. doi: 10.1090/memo/1259. ISSN: 0065-9266, 1947-6221 Issue: 1259. K. A. Bonawitz, Vladimir Ivanov, Ben Kreuter, Antonio Marcedone, H. Brendan McMahan, Sarvar Patel, Daniel Ramage, Aaron Segal, and Karn Seth. Practical secure aggregation for federated learning on user-held data. In NIPS Workshop on Private Multi-Party Machine Learning , 2016. Clément Bonet, Kimia Nadjahi, Thibault Sejourne, Kilian FATRAS, and Nicolas Courty. Slicing unbalanced optimal transport. Transactions on Machine Learning Research , 2025a. ISSN 2835-8856. Clément Bonet, Christophe Vauthier, and Anna Korba. Flowing datasets with wasserstein over wasserstein gradient flows. In Forty-second International Conference on Machine Learning ,2025b. Nicolas Bonneel, Julien Rabin, Gabriel Peyré, and Hanspeter Pfister. Sliced and radon wasserstein barycenters of measures. Journal of Mathematical Imaging and Vision , 51:22–45, 2015. Nicolas Bonnotte. Unidimensional and Evolution Methods for Optimal Transportation . PhD thesis, Université Paris Sud-Paris XI; Scuola normale superiore (Pise, Italie), 2013. Rainer Burkard, Mauro Dell’Amico, and Silvano Martello. Assignment Problems . Society for Industrial and Applied Mathematics, 2012. doi: 10.1137/1.9781611972238. Liam Collins, Hamed Hassani, Aryan Mokhtari, and Sanjay Shakkottai. Exploiting shared representa-tions for personalized federated learning. In Marina Meila and Tong Zhang, editors, Proceedings of the 38th International Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research , pages 2089–2099. PMLR, 18–24 Jul 2021. Biwei Dai and Uros Seljak. Sliced iterative normalizing flows. International Conference on Machine Learning , 2021. 10 Ishan Deshpande, Yuan-Ting Hu, Ruoyu Sun, Ayis Pyrros, Nasir Siddiqui, Sanmi Koyejo, Zhizhen Zhao, David Forsyth, and Alexander G Schwing. Max-sliced wasserstein distance and its use for gans. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pages 10648–10656, 2019. Ishani Deshpande, Ziyu Zhang, and Alexander G. Schwing. Generative modeling using the sliced wasserstein distance. 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 3483–3491, 2018. Cynthia Dwork and Aaron Roth. The algorithmic foundations of differential privacy. Found. Trends Theor. Comput. Sci. , 9(3–4):211–407, August 2014. ISSN 1551-305X. doi: 10.1561/0400000042. Ziv Goldfeld and Kristjan Greenewald. Sliced mutual information: A scalable measure of statistical dependence. Advances in Neural Information Processing Systems , 34:17567–17578, 2021. Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. In Proceedings of the 31st International Conference on Neural Information Processing Systems , NIPS’17, page 6629–6640, Red Hook, NY, USA, 2017. Curran Associates Inc. ISBN 9781510860964. Peter Kairouz, H. Brendan McMahan, Brendan Avent, Aurélien Bellet, Mehdi Bennis, Arjun Nitin Bhagoji, Kallista Bonawitz, Zachary Charles, Graham Cormode, Rachel Cummings, Rafael G. L. D’Oliveira, Hubert Eichner, Salim El Rouayheb, David Evans, Josh Gardner, Zachary Garrett, Adrià Gascón, Badih Ghazi, Phillip B. Gibbons, Marco Gruteser, Zaid Harchaoui, Chaoyang He, Lie He, Zhouyuan Huo, Ben Hutchinson, Justin Hsu, Martin Jaggi, Tara Javidi, Gauri Joshi, Mikhail Khodak, Jakub Koneˇ cný, Aleksandra Korolova, Farinaz Koushanfar, Sanmi Koyejo, Tancrède Lepoint, Yang Liu, Prateek Mittal, Mehryar Mohri, Richard Nock, Ayfer Özgür, Rasmus Pagh, Mariana Raykova, Hang Qi, Daniel Ramage, Ramesh Raskar, Dawn Song, Weikang Song, Sebastian U. Stich, Ziteng Sun, Ananda Theertha Suresh, Florian Tramèr, Praneeth Vepakomma, Jianyu Wang, Li Xiong, Zheng Xu, Qiang Yang, Felix X. Yu, Han Yu, and Sen Zhao. Advances and open problems in federated learning, 2021. Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In Yoshua Bengio and Yann LeCun, editors, 3rd International Conference on Learning Representations, ICLR 2015, San Diego, CA, USA, May 7-9, 2015, Conference Track Proceedings , 2015. Soheil Kolouri, Phillip E Pope, Charles E Martin, and Gustavo K Rohde. Sliced wasserstein auto-encoders. In International Conference on Learning Representations , 2018a. Soheil Kolouri, Gustavo K. Rohde, and Heiko Hoffmann. Sliced wasserstein distance for learning gaussian mixture models. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , June 2018b. Soheil Kolouri, Kimia Nadjahi, Umut Simsekli, Roland Badeau, and Gustavo Rohde. Generalized sliced wasserstein distances. Advances in neural information processing systems , 32, 2019. Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. Technical Report 0, University of Toronto, Toronto, Ontario, 2009. Jeremy Kulcsar, Vyacheslav Kungurtsev, Georgios Korpas, Giulio Giaconi, and William Shoosmith. Federated sinkhorn, 2025. Tam Le, Makoto Yamada, Kenji Fukumizu, and Marco Cuturi. Tree-sliced variants of wasserstein distances. Advances in neural information processing systems , 32, 2019. Yann LeCun and Corinna Cortes. MNIST handwritten digit database, 2010. Chen-Yu Lee, Tanmay Batra, Mohammad Haris Baig, and Daniel Ulbricht. Sliced wasserstein discrepancy for unsupervised domain adaptation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10285–10295, 2019. Ya-Wei Eileen Lin, Ronald R. Coifman, Gal Mishne, and Ronen Talmon. Tree-wasserstein distance for high dimensional data with a latent feature hierarchy. In The Thirteenth International Conference on Learning Representations , 2025. 11 Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Deep learning face attributes in the wild. In 
+
+2015 IEEE International Conference on Computer Vision (ICCV) , pages 3730–3738, 2015. doi: 10.1109/ICCV.2015.425. Antoine Liutkus, Umut Simsekli, Szymon Majewski, Alain Durmus, and Fabian-Robert Stöter. Sliced-wasserstein flows: Nonparametric generative modeling via optimal transport and diffusions. In International Conference on Machine Learning , pages 4104–4113. PMLR, 2019. Takeru Miyato, Toshiki Kataoka, Masanori Koyama, and Yuichi Yoshida. Spectral normalization for generative adversarial networks. In International Conference on Learning Representations , 2018. Kimia Nadjahi, Valentin De Bortoli, Alain Durmus, Roland Badeau, and Umut ¸ Sim¸ sekli. Approx-imate bayesian computation with the sliced-wasserstein distance. In ICASSP 2020-2020 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pages 5470–5474. IEEE, 2020a. Kimia Nadjahi, Alain Durmus, Lénaïc Chizat, Soheil Kolouri, Shahin Shahrampour, and Umut Simsekli. Statistical and topological properties of sliced probability divergences. Advances in Neural Information Processing Systems , 33:20802–20812, 2020b. Khai Nguyen and Nhat Ho. Amortized projection optimization for sliced wasserstein generative models. In Proceedings of the 36th International Conference on Neural Information Processing Systems , NIPS ’22, Red Hook, NY, USA, 2022. Curran Associates Inc. ISBN 9781713871088. Khai Nguyen and Nhat Ho. Energy-based sliced wasserstein distance. Advances in Neural Information Processing Systems , 36, 2024. Khai Nguyen, Nhat Ho, Tung Pham, and Hung Bui. Distributional sliced-wasserstein and applications to generative modeling. In International Conference on Learning Representations , 2021. Khai Nguyen, Tongzheng Ren, and Nhat Ho. Markovian sliced wasserstein distances: Beyond independent projections. Advances in Neural Information Processing Systems , 36:39812–39841, 2023a. Khai Nguyen, Tongzheng Ren, Huy Nguyen, Litu Rout, Tan Nguyen, and Nhat Ho. Hierarchical sliced wasserstein distance. International Conference on Learning Representations , 2023b. Sloan Nietert, Ziv Goldfeld, Ritwik Sadhu, and Kengo Kato. Statistical, robustness, and computational guarantees for sliced wasserstein distances. Advances in Neural Information Processing Systems ,35:28179–28193, 2022. Ruben Ohana, Kimia Nadjahi, Alain Rakotomamonjy, and Liva Ralaivola. Shedding a pac-bayesian light on adaptive sliced-wasserstein distances. In International Conference on Machine Learning ,pages 26451–26473. PMLR, 2023. Fabian Pedregosa, Gaël Varoquaux, Alexandre Gramfort, Vincent Michel, Bertrand Thirion, Olivier Grisel, Mathieu Blondel, Peter Prettenhofer, Ron Weiss, Vincent Dubourg, Jake Vanderplas, Alexandre Passos, David Cournapeau, Matthieu Brucher, Matthieu Perrot, and Edouard Duchesnay. Scikit-learn: Machine Learning in Python. Journal of Machine Learning Research , October 2011. Julien Rabin, Gabriel Peyré, Julie Delon, and Marc Bernot. Wasserstein barycenter and its application to texture mixing. In Scale Space and Variational Methods in Computer Vision: Third International Conference, SSVM 2011, Ein-Gedi, Israel, May 29–June 2, 2011, Revised Selected Papers 3 , pages 435–446. Springer, 2012. Alain Rakotomamonjy, Kimia Nadjahi, and Liva Ralaivola. Federated wasserstein distance. In The Twelfth International Conference on Learning Representations , 2024. Mark Rowland, Jiri Hron, Yunhao Tang, Krzysztof Choromanski, Tamas Sarlos, and Adrian Weller. Orthogonal estimation of wasserstein distances. In The 22nd International Conference on Artificial Intelligence and Statistics , pages 186–195. PMLR, 2019. F. Santambrogio. Optimal Transport for Applied Mathematicians: Calculus of Variations, PDEs, and Modeling . Progress in Nonlinear Differential Equations and Their Applications. Springer International Publishing, 2015. ISBN 9783319208282. 12 Hoang V Tran, Khoi NM Nguyen, Trang Pham, Thanh T Chu, Tam Le, and Tan M Nguyen. Distance-based tree-sliced wasserstein distance. International Conference on Learning Representations ,2025. Ulrike von Luxburg. A tutorial on spectral clustering. Statistics and Computing , 17(4):395–416, December 2007. ISSN 1573-1375. doi: 10.1007/s11222-007-9033-z. Mingxuan Yi and Song Liu. Sliced wasserstein variational inference. In Asian Conference on Machine Learning , pages 1213–1228. PMLR, 2023. 13 A Supplementary results on the CDF estimators 
+
+A.1 Importance sampling 
+
+Recall that for every α, β > 0, the beta distribution Beta( α, β ) is the probability distribution on the segment [0 , 1] whose probability density function is given by 
+
+Beta( x|α, β ) := xα−1(1 − x)β−1
+
+B(α, β ) , x ∈ (0 , 1) (16) where 
+
+B(α, β ) := Γ( α)Γ( β)Γ( α + β) (17) and Γ is the Gamma function. 
+
+Proposition A.1. Let k ∈ (0 , 1) and let X, Y be real random variables of law (X, Y ) ∼ ηk, where 
+
+ηk is the probability distribution defined in Section 3. Then Y − X ∼ Beta( k, 2) .Proof. Since we have 
+
+B(k, 2) = Γ( k)Γ(2) Γ( k + 2) = (k − 1)! (k + 1)! = 1
+
+k(k + 1) (18) (recall that Γ( n) = ( n−1)! for every integer n > 0), we have for every x ∈ (0 , 1) that Beta( x|k, 2) = 
+
+k(k + 1) xk−1(1 − x). Now, let φ : [0 , 1] → R+ be any Borel measurable function, then 
+
+E[φ(Y − X)] = 
+
+Z
+
+> T
+
+φ(y − x) d ηk(x, y ) = 
+
+Z 10
+
+Z 1
+
+> x
+
+φ(y − x)k(k + 1)( y − x)k−1 dy dx (19) 
+
+=
+
+Z 10
+
+Z 1−x
+
+> 0
+
+φ(u)k(k + 1) uk−1 du dx (20) 
+
+=
+
+Z 10
+
+Z 1−u
+
+> 0
+
+φ(u)k(k + 1) uk−1 dx du (21) 
+
+=
+
+Z 10
+
+φ(u)k(k + 1) uk−1(1 − u) d u =
+
+Z 10
+
+φ(u)Beta( u|k, 2) d u (22) 
+
+= EU ∼Beta( k, 2) [φ(U )] . (23) where we made the change of variables u = y − x in the second line. Therefore, we indeed have 
+
+Y − X ∼ Beta( k, 2) .This proposition shows that the distributions ηk are good candidates to be used with the dSW 22,L,η .Indeed, we expect this estimator to have decreased variance (compared to the estimator dSW 22,L ) when the distribution η, which it uses to sample from the triangle T = {0 ≤ x ≤ y ≤ 1}, gives more weight to pairs (x, y ) ∈ T where the gap y − x is small. This requirement is satisfied by the ηk
+
+when 0 < k < 1: indeed, by the previous proposition, if (X, Y ) ∼ ηk, then Y − X follows the law 
+
+Beta( k, 2) , which has density ∝ xk−1(1 − x) on [0 , 1] . Since xk−1 → +∞ when x → 0+, this law is concentrated near 0, and in fact the closer k is to 0, the more it is concentrated. We now provide a condition on the measures μ, ν under which using the distributions ηk does lead to a decrease in variance of the CDF-based estimator. We first have the following lemma: 
+
+Lemma A.2. Let L > 0, ε ∈ (0 , e −1/2), and μ, ν ∈ P (Rd) be compactly supported such that for every θ ∈ Sd−1 and (u, v ) ∈ T with v − u > ε , one has ∆(2)  
+
+> μ,ν
+
+(θ, m − 
+
+> θ
+
++ rθ u, m − 
+
+> θ
+
++ rθ v) = 0 (recall the notations ∆(2)  
+
+> μ,ν
+
+, m± 
+
+> θ
+
+and rθ from Section 3). Then there exists k0 = k0(ε) < 1 such that the function k ∈ (0 , 1] 7 → Var( dSW 22,L,η k (μ, ν )) is nondecreasing on [k0, 1] .Proof. Let k ∈ (0 , 1] . Recall that dηk(u, v ) = fk(u, v ) d u dv with fk(u, v ) = k(k + 1)( v − u)k−1.Recall from (13) that 
+
+dSW 22,L,η k = 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+2r2
+
+> θl
+
+fk(Ul, V l) ∆(2)  
+
+> μ,ν
+
+(θl, ˜Ul, ˜Vl) (24) 14 with (θl, U l, V l) ∼ U (Sd−1) × ηk i.i.d., with the notation ˜Ul = Rescale( Ul, m − 
+
+> θl
+
+, m + 
+
+> θl
+
+) and similarly for ˜Vl. Therefore, we have 
+
+Var 
+
+dSW 22,L,η k (μ, ν )
+
+
+
+= 1
+
+L Var 
+
+ 2r2
+
+> θ
+
+fk(u, v ) ∆(2)  
+
+> μ,ν
+
+(θ, ˜U , ˜V )
+
+
+
+(25) 
+
+= 1
+
+L E
+
+" 2r2
+
+> θ
+
+fk(u, v ) ∆(2)  
+
+> μ,ν
+
+(θ, ˜U , ˜V )
+
+2#
+
+− SW 42(μ, ν )
+
+!
+
+(26) where (θ, U, V ) ∼ U (Sd−1) × ηk and ˜U = Rescale( U, m − 
+
+> θ
+
+, m + 
+
+> θ
+
+) and similarly for ˜V , and we used the unbiasedness of dSW 22,L,η k in the second line. Using the fact that fk/2 is the density of ηk with respect to U(T ) (as dU(T )( u, v ) = 2 d u dv), we have in fact 
+
+Var 
+
+dSW 22,L,η k (μ, ν )
+
+
+
+= 1
+
+L
+
+
+
+E
+
+ 2r4
+
+> θ
+
+fk(u, v ) ∆(2)  
+
+> μ,ν
+
+(θ, ˜U , ˜V )2
+
+
+
+− SW 42(μ, ν )
+
+
+
+(27) where this time (θ, U, V ) ∼ U (Sd−1 × T ). If we fix 
+
+Φ( k) := E(θ,U,V )∼U (Sd−1×T )
+
+ 2r4
+
+> θ
+
+fk(u, v ) ∆(2)  
+
+> μ,ν
+
+(θ, ˜U , ˜V )2
+
+
+
+, (28) then we have Var 
+
+dSW 22,L,η k (μ, ν )
+
+
+
+= 1 
+
+> L
+
+(Φ( k)−SW 42(μ, ν )) so the dependency in k of the variance of the importance sampling estimator is determined by Φ. Now, we have 
+
+Φ( k) = 
+
+Z
+
+> Sd−1
+
+Z 10
+
+Z 1
+
+> u
+
+2r4
+
+> θ
+
+fk(u, v ) ∆(2)  
+
+> μ,ν
+
+(θ, ˜u, ˜v)22 d v du dθ (29) 
+
+= 1
+
+k(k + 1) 
+
+Z
+
+> Sd−1
+
+Z 10
+
+Z 1
+
+> u
+
+4r4
+
+> θ
+
+(v − u)k−1 ∆(2)  
+
+> μ,ν
+
+(θ, ˜u, ˜v)2 dv du dθ (30) where ˜u is shorthand for Rescale( u, m − 
+
+> θ
+
+, m + 
+
+> θ
+
+). Thus, taking the change of variable r = v − u, we obtain 
+
+Φ( k) = 1
+
+k(k + 1) 
+
+Z
+
+> Sd−1
+
+Z 10
+
+Z 1−u
+
+> 0
+
+4r4
+
+> θ
+
+rk−1 ∆(2)  
+
+> μ,ν
+
+(θ, ˜u, ]u + r)2 dr du dθ (31) 
+
+= 1
+
+k(k + 1) 
+
+Z 10
+
+1
+
+rk−1
+
+Z
+
+> Sd−1
+
+Z 1−r
+
+> 0
+
+4r4 
+
+> θ
+
+∆(2)  
+
+> μ,ν
+
+(θ, ˜u, ]u + r)2 du dθ dr (32) 
+
+= 1
+
+k(k + 1) 
+
+Z 10
+
+1
+
+rk−1 ∆( r) d r (33) where ∆ : [0 , 1] → R+ is the function defined by 
+
+∆( r) := 
+
+Z
+
+> Sd−1
+
+Z 1−r
+
+> 0
+
+4r4 
+
+> θ
+
+∆(2)  
+
+> μ,ν
+
+(θ, ˜u, ]u + r)2 du dθ. (34) Since ∆(2)  
+
+> μ,ν
+
+(θ, u, v ) is nondecreasing in u and nonincreasing in v, it is clear that ∆ is nonincreasing. Moreover, the assumption of the proposition implies that ∆( r) = 0 whenever r > ε . Differentiating 
+
+Φ with respect to k, we obtain 
+
+Φ′(k) = − 1
+
+k(k + 1) 
+
+Z 10
+
+ 1
+
+k + 1
+
+k + 1 + ln( r)
+
+ ∆( r)
+
+rk−1 dr. (35) Noticing that the function gk(r) = 1 
+
+> k
+
++ 1 
+
+> k+1
+
++ ln( r) has on [0 , 1] the antiderivative Gk defined by 
+
+Gk(r) = 
+
+ 1
+
+k + 1
+
+k + 1 
+
+ r2−k
+
+2 − k + r2−k
+
+(2 − k)2 ((2 − k) ln( r) − 1) , (36) after an integration by parts 2, since Gk(0) = 0 and ∆(1) = 0 (since ε < e −1/2 < 1), we obtain 
+
+Φ′(k) = 1
+
+k(k + 1) 
+
+Z 10
+
+Gk(r)∆ ′(r) d r. (37)     
+
+> 2Since ∆is nonincreasing, it has bounded variation, so the integration by parts makes sense if we take ∆′to be its distributional derivative, which is a negative measure.
+
+15 Now, it is not difficult to see that on the interval (0 , 1) , Gk is negative on (0 , r k), zero at rk, and positive on (rk, 1) , where rk is defined by 
+
+rk := exp 
+
+ 12 − k − 1
+
+k − 1
+
+k + 1 
+
+
+
+(38) The function k ∈ (0 , 1] → rk is continuous and increasing, with r1 = e−1/2 and rk → 0 when 
+
+k → 0. Since ε < e −1/2, there exists k0 ∈ (0 , 1] such that rk0 = ε. Thus, for every k ∈ (k0, 1] , we have rk > r k0 = ε. Since ∆ is nonincreasing, and ∆( r) = 0 for every r ≥ ε, this implies that ∆′ is a negative measure supported on [0 , ε ] ⊆ [0 , r k], so that 
+
+Φ′(k) = 1
+
+k(k + 1) 
+
+Z 10
+
+Gk(r)∆ ′(r) d r = 1
+
+k(k + 1) 
+
+Z rk
+
+> 0
+
+Gk(r)∆ ′(r) d r ≥ 0 (39) since Gk < 0 on (0 , r k). Thus Φ is nondecreasing on [k0, 1] , where k0 only depends on ε, and this finishes the proof. 
+
+Remark A.3 . The proof of Theorem A.2 works for arbitrary m± 
+
+> θ
+
+as long as sup( μθ ) ∪ sup( νθ ) ⊆
+
+[m− 
+
+> θ
+
+, m + 
+
+> θ
+
+] for every θ ∈ Sd−1, since this is the condition for dSW 22,L,η (μ, ν ) to be unbiased. If μ, ν ∈ P (Rd) are two compactly supported measures, then the W∞ distance between them is defined as 
+
+W∞(μ, ν ) := inf  
+
+> γ∈Π( μ,ν )
+
+esssup (x,y )∼γ |x − y| (40) 
+
+:= lim  
+
+> p→∞
+
+Wp(μ, ν ) (41) (these definitions are equivalent). It is a distance on the set of compactly supported measures, whose induced topology is stronger than the topology of weak convergence (we refer to [Bobkov and Ledoux, 2019, Section 2] for more details). If μ, ν ∈ P (Rd) and θ ∈ Sd−1, since (Pθ , P θ )#γ ∈ Π( μθ , ν θ )
+
+for any γ ∈ Π( μ, ν ) and |⟨ x|θ⟩ − ⟨ y|θ⟩| ≤ | x − y| for every x, y ∈ Rd, we have W∞(μθ , ν θ ) ≤
+
+W∞(μ, ν ). Then we have the following lemma: 
+
+Lemma A.4. Let μ, ν ∈ P (Rd) be compactly supported. Then, for every θ ∈ Sd−1 and u, v ∈ R
+
+such that v − u ≥ W∞(μ, ν ), we have ∆(2)  
+
+> μ,ν
+
+(θ, u, v ) = 0 .Proof. Let θ ∈ Sd−1 and u, v ∈ R such that v ≥ u and ∆(2)  
+
+> μ,ν
+
+(θ, u, v ) > 0. Then, without loss of generality, we may assume that Fμθ (u) > F νθ (v). However, by [Bobkov and Ledoux, 2019, Theorem 2.12], we have 
+
+W∞(μθ , ν θ ) = inf {h ≥ 0 | ∀ x ∈ R, F νθ (x − h) ≤ Fμθ (x) ≤ Fνθ (x + h)}. (42) This implies that v − u < W∞(μθ , ν θ ) ≤ W∞(μ, ν ). This finishes the proof. 
+
+Proposition A.5. Let R > 0, L > 0 and μ, ν ∈ P (B(0 , R )) be such that W∞(μ, ν ) < 2Re −1/2.Assume that, in the estimator dSW 22,L,η , the values m± 
+
+> θ
+
+are set to ±R for every θ ∈ Sd−1. Then there exists k0 = k0(R, W∞(μ, ν )) < 1 such that the function k ∈ (0 , 1] 7 → Var( dSW 22,L,η k (μ, ν )) 
+
+is nondecreasing on [k0, 1] .Proof. Let ε := W ∞(μ, ν )/(2 R) < e −1/2. We only need to show that μ and ν satisfy the condition of Theorem A.2 with ε. Let u, v ∈ T such that v − u > ε . Let θ ∈ Sd−1 and set ˜u := m− 
+
+> θ
+
++ rθ u and 
+
+˜v := m− 
+
+> θ
+
++ rθ v. Then rθ = m+ 
+
+> θ
+
+− m− 
+
+> θ
+
+= 2 R, so that ˜v − ˜u = rθ (v − u) = 2 R(v − u) > 2Rε =W∞(μ, ν ), and by Theorem A.4 we have ∆(2)  
+
+> μ,ν
+
+(θ, ˜u, ˜v) = 0 . Thus, we can apply Theorem A.2, and this finishes the proof. Thus, Theorem A.5 asserts that, if the measures μ, ν are close enough in terms of the W∞ distance, there exists a k < 1 such that performing importance sampling with the distribution ηk leads to a decrease of the variance of the CDF-based Sliced-Wasserstein estimator. 16 Figure 3: Distribution of the values of dSW 22,L,η k for various choices of k. The red lines denotes the mean of all the computations of the estimators, which is expected to be close to the true SW 22 value. However, this results does not tell us the concrete value of k that we should choose in practice. To guide our choice, we perform the following simple experiment. We sample two clouds of 
+
+N = 1000 points in the plane from the standard normal distribution N (0 , I 2) and denote μ and ν
+
+their corresponding empirical measures. We then compute 10 4 times the estimator dSW 22,L,η k with 
+
+L = 1000 and for various values of k. The resulting histograms are shown in Figure 3. Remembering that the estimator dSW 22,L,η k for k = 1 is simply the estimator dSW 22,L without importance sampling (as η1 is the uniform measure on T ), we observe that we indeed achieve a lower dispersion of the values when k < 1, with in this case an optimum near k ≈ 0.1. On the other hand, very low values of k, of the order of k ≈ 0.01 , lead to an increase of the dispersion of the estimator. 
+
+A.2 The smoothed estimators: a theoretical analysis 
+
+Let ε > 0 be a fixed smoothing parameter. Then for every ρ ∈ P (R), we recall that we defined the smoothed version of the cumulative distribution function of ρ by 
+
+F (ε) 
+
+> ρ
+
+(a) := 
+
+Z
+
+σ(−(x − a − √ε)/ε ) d ρ(x), a ∈ R (43) where σ is the sigmoid function σ(x) = 1 /(1 + e−x). For every L > 0 and η ∈ P (T ) with positive density f , we formally define the smoothed versions dSW 1,L,ε , dSW 2,L,ε and dSW 2,L,η,ε of the estimators dSW 1,L , dSW 2,L and dSW 2,L,η by: 
+
+dSW 1,L,ε (μ, ν ) := 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+rθl ∆(1) 
+
+> μ,ν,ε
+
+(θl, ˜Ul) (44) with the same notations as in Theorem 3.3 and with (θ1, U 1), . . . , (θL, U L) i.i.d. with (θ1, U 1) ∼U(Sd−1 × [0 , 1]) ,
+
+dSW 22,L,ε (μ, ν ) := 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+r2 
+
+> θl
+
+∆(2) 
+
+> μ,ν,ε
+
+(θl, ˜Ul, ˜Vl) (45) with the same notations as in Theorem 3.4 and with (θ1, U 1, V 1), . . . , (θL, U L, V L) i.i.d. with 
+
+(θ1, U 1, V 1) ∼ U (Sd−1 × T ), and 
+
+dSW 22,L,η,ε (μ, ν ) := 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+2r2
+
+> θl
+
+f (Ul, V l) ∆(2) 
+
+> μ,ν,ε
+
+(θl, ˜Ul, ˜Vl) (46) with the same notations as in Theorem 3.5 and with (θ1, U 1, V 1), . . . , (θL, U L, V L) i.i.d. with 
+
+(θ1, U 1, V 1) ∼ U (Sd−1) × η, and where 
+
+∆(1) 
+
+> μ,ν,ε
+
+(θ, u ) := |F (ε) 
+
+> μθ
+
+(u) − F (ε) 
+
+> νθ
+
+(u)| (47) 
+
+∆(2) 
+
+> μ,ν,ε
+
+(θ, u, v ) := ( F (ε) 
+
+> μθ
+
+(u) − F (ε) 
+
+> νθ
+
+(v)) + + ( F (ε) 
+
+> νθ
+
+(u) − F (ε) 
+
+> μθ
+
+(v)) +. (48) 17 It is straightforward to check that these estimators have expectancy 
+
+E[dSW 1,L,ε (μ, ν )] = 
+
+Z
+
+> Sd−1
+
+Z m+
+
+> θ
+> m−
+> θ
+
+|F (ε) 
+
+> μθ
+
+(u) − F (ε) 
+
+> νθ
+
+(u)| du dθ (49) and 
+
+E[dSW 22,L,ε (μ, ν )] = E[dSW 22,L,η,ε (μ, ν )] = 2 
+
+Z
+
+> Sd−1
+
+Z Z  
+
+> m−
+> θ≤u≤v≤m+
+> θ
+
+(F (ε) 
+
+> μθ
+
+(u) − F (ε) 
+
+> νθ
+
+(v)) + (50) 
+
++ ( F (ε) 
+
+> νθ
+
+(u) − F (ε) 
+
+> μθ
+
+(v)) + du dv dθ. (51) Therefore, the smoothed estimators can thus be seen as (biased) estimators of the quantities 
+
+SW 1,ε (μ, ν ) := 
+
+Z
+
+> Sd−1
+
+Z +∞−∞ 
+
+|F (ε) 
+
+> μθ
+
+(u) − F (ε) 
+
+> νθ
+
+(u)| du dθ (52) (for dSW 1,L,ε ) and 
+
+SW 22,ε (μ, ν ) := 2 
+
+Z
+
+> Sd−1
+
+Z Z 
+
+> u≤v
+
+(F (ε) 
+
+> μθ
+
+(u) − F (ε) 
+
+> νθ
+
+(v)) + + ( F (ε) 
+
+> νθ
+
+(u) − F (ε) 
+
+> μθ
+
+(v)) + du dv dθ. (53) (for dSW 2,L,ε and dSW 2,L,η,ε ). These quantities are in fact equal to a Sliced-Wasserstein distance between smoothed versions of the measures μ and ν:
+
+Proposition A.6. There exists a radial probability distribution ρ ∈ P (Rd) such that 
+
+SW 1,ε (μ, ν ) = SW 1(μ ∗ ρε, ν ∗ ρε) (54) 
+
+SW 2,ε (μ, ν ) = SW 2(μ ∗ ρε, ν ∗ ρε) (55) 
+
+where ρε := mε#ρ with mε(x) = εx , and ∗ denotes the convolution operation between probability measures. Proof. The sigmoid function σ is known to be the cumulative distribution function of the standard logistic distribution, which we denote ρ0. We will construct a radial probability distribution ρ ∈P(Rd) such that ρθ = ρ0 for every θ ∈ Sd−1.Let E1, . . . , E k, . . . be a sequence of independent random variables with Ek ∼ Exp( k2/2) for every 
+
+k > 0, where Exp( λ) denotes the exponential probability distribution with parameter λ, and let 
+
+Z ∼ N (0 , I d) be independent from the Ek. Set S := P∞ 
+
+> k=1
+
+Ek (which converges almost surely as E[Ek] = 2 /k 2), and set X := √SZ . Denote by ρ the law of X, which is clearly radial. Let 
+
+θ ∈ Sd−1, we want to prove that ρ0 = ρθ , which is equivalent to proving that ⟨X|θ⟩ has law ρ0. For this, all we need to do is to prove that the characteristic function of ⟨X|θ⟩ is equal to the characteristic function of ρ0, which is t ∈ R 7 → πt/ sinh( πt ). For every t ∈ R, we have 
+
+E[eit ⟨θ|X⟩] = E[eit √S⟨θ|Z⟩] (56) 
+
+= E[E[eit √S⟨θ|Z⟩|S]] (57) 
+
+= E[e− 12 t2S ] (58) 
+
+=
+
+> ∞
+
+Y
+
+> k=1
+
+E[e− 12 t2Ek ] (59) where the E[·| S] in the second line denotes the conditional expectancy with respect to S, the third line is obtained using the fact that the characteristic function of N (μ, Σ) is ξ ∈ Rd 7 → exp( μT ξ+ 12 ξT Σξ),and the inversion between the expectancy and the infinite product in the fourth line is justified by the independence of the Ek and standard arguments. Moreover, for every E ∼ Exp( λ) and u ∈ R, it holds 
+
+E[e−uE ] = 
+
+Z ∞
+
+> 0
+
+e−ux λe −λx dx =
+
+Z ∞
+
+> 0
+
+λe −(u+λ)x dx = λλ + u . (60) Injecting this into (59), we deduce that 
+
+E[eit ⟨θ|X⟩] = 
+
+> ∞
+
+Y
+
+> k=1
+
+E[e− 12 t2Ek ] = 
+
+> ∞
+
+Y
+
+> k=1
+
+k2
+
+t2 + k2 . (61) 18 Using the well-known fact that the hyperbolic sine has the infinite product expansion 
+
+sinh( x) = x
+
+> ∞
+
+Y
+
+> k=1
+
+
+
+1 + x2
+
+k2π2
+
+
+
+(62) for every x ∈ R, we deduce that 
+
+E[eit ⟨θ|X⟩] = πt 
+
+sinh( πt ) (63) which is the characteristic function of the standard logistic distribution ρ0. This proves that ρθ = ρ0.Now, let ρε := mε#ρ and ρ0ε := mε#ρ0, where mε is the multiplication by ε, and denote με := 
+
+μ ∗ ρε and νε := ν ∗ ρε. Fix θ ∈ Sd−1, then we have 
+
+(ρε)θ = Pθ#mε#ρ = mε#Pθ#ρ = mε#ρ0 = ρ0ε (64) and we have (με)θ = μθ ∗ (ρε)θ = μθ ∗ ρ0ε and similarly (νε)θ = νθ ∗ ρ0ε3. Since the CDF of ρ0 is the sigmoid Fρ0 = σ, it ensues that the CDF of ρ0ε is the rescaled sigmoid Fρ0ε = σ(·/ε ). Therefore, for every a ∈ R, it holds 
+
+F(με)θ (a) = Fμθ ∗ρ0ε (a) (65) 
+
+=
+
+Z Z 
+
+1t+s≤a dρ0ε(s) d μθ (t) (66) 
+
+=
+
+Z
+
+Fρ0ε (a − t) d μθ (t) (67) 
+
+=
+
+Z
+
+σ(( a − t)/ε ) d μθ (t) (68) 
+
+=
+
+Z
+
+σ(−(t − (a − √ε) − √ε)/ε ) d μθ (t) (69) 
+
+= F (ε) 
+
+> μθ
+
+(a − √ε) (70) and similarly 
+
+F(νε)θ (a) = F (ε) 
+
+> νθ
+
+(a − √ε). (71) Therefore, the CDFs of the projections of με and νε are (up to a translation by √ε) the smoothed CDFs of the projections of μ and ν. As a consequence, we have 
+
+SW 1,ε (μ, ν ) = 
+
+Z
+
+> Sd−1
+
+Z +∞−∞ 
+
+|F (ε) 
+
+> μθ
+
+(u) − F (ε) 
+
+> νθ
+
+(u)| du dθ (72) 
+
+=
+
+Z
+
+> Sd−1
+
+Z +∞−∞ 
+
+|F (ε) 
+
+> μθ
+
+(u − √ε) − F (ε) 
+
+> νθ
+
+(u − √ε)| du dθ (73) 
+
+=
+
+Z
+
+> Sd−1
+
+Z +∞−∞ 
+
+|F(με)θ (u) − F(νε)θ (u)| du dθ (74) 
+
+= SW 1(με, ν ε) (75) where we used (70) and (71) to obtain the third line, and Theorem 3.1 to obtain the fourth line ; and similarly, we have 
+
+SW 2,ε (μ, ν ) = SW 2(με, ν ε) (76) using this time Theorem 3.2. This finishes the proof. 
+
+Remark A.7 . The −√ε term in the definition (43) of the smoothed CDFs F (ε) 
+
+> ρ
+
+serves to ensure the pointwise convergence F (ε) 
+
+> ρ
+
+(a) → Fρ(a) when ε → 0+ for every a ∈ R. Without this term, the convergence would only hold in the case where a is not an atom of ρ, since we would instead have                            
+
+> 3Indeed for any pair of measures μ, ν ∈ P (Rd)it holds (μ∗ν)θ=μθ∗νθ, since for every measurable f:R→[0 ,∞]
+> we have
+> Z
+> fd( μ∗ν)θ=
+> Z
+> f(⟨x|θ⟩) d( μ∗ν)( x) =
+> Z Z
+> f(⟨x+y|θ⟩) d μ(x) d ν(y) =
+> Z Z
+> f(t+s) d μθ(t) d νθ(s) =
+> Z Z
+> fd( μθ∗νθ).
+
+19 Figure 4: Accuracy vs computing time for the different SW estimators. Left: SW 1 estimators, right: 
+
+SW 2 estimators. 
+
+F (ε) 
+
+> ρ
+
+(a) → ρ(( −∞ , a )) + 12 ρ({a}) for every a ∈ R. However, it would not have been consequential to omit this −√ε term: indeed, the set of atoms of any probability measure is at most countable, so the estimators dSW 1,L,ε , dSW 2,L,ε and dSW 2,L,η,ε would in this case still converge almost surely to respectively dSW 1,L , dSW 2,L and dSW 2,L,η when ε → 0+, as the ˜Ul and ˜Vl in their definitions would almost surely not be atoms of μθl and νθl . Moreover, Theorem A.6 would still hold, and its proof would be mostly unchanged (the main difference would be that (70) and (71) would be replaced by 
+
+F(με)θ (a) = F (ε) 
+
+> μθ
+
+(a) and F(νε)θ (a) = F (ε) 
+
+> νθ
+
+(a), which would allow us to skip the step (73) of the proof). 
+
+Remark A.8 . Our definition in Equation (43) does not represent the only way of smoothing CDFs. Indeed, we could have used instead of the sigmoid σ any monotone function on R that smoothly varies from 0 to 1. For example, we may have set 
+
+F (ε) 
+
+> ρ
+
+(a) := 
+
+Z
+
+Φ( −(x − a − √ε)/ε ) d ρ(x) (77) for every ρ ∈ P (R) and a ∈ R, where Φ is the CDF of the standard Gaussian. In this case, we would have SW 1,ε (μ, ν ) = SW 1(μ ∗ ρε, ν ∗ ρε) and SW 2,ε = SW 2(μ ∗ ρε, ν ∗ ρε) where ρ = N (0 , I d)
+
+and ρε := mε#ρ = N (0 , ε 2Id), so that the smoothed estimators would be (biased) estimators of a Sliced-Wasserstein distance between Gaussian smoothings of the measures. While it may appear more natural to work with Gaussian measures (compared to the elaborate construction of ρ in the proof of Theorem A.6), we nevertheless chose to use the sigmoid σ as it is more efficiently computable than 
+
+Φ.
+
+A.3 Experiments 
+
+All experiments in this section were conducted on a system equipped with an Intel Xeon CPU and a NVIDIA T4 GPU. 
+
+A.3.1 Time vs accuracy and trade-off 
+
+In this section we perform a simple experiment comparing the usual quantile function-based estimator and the CDF-based estimators of the SW distance in terms of the accuracy that can be obtained with a given time budget. We first fix two points clouds μ and ν of N = 10 6 points each in 
+
+d = 10 dimensions, sampled according to the standard d-dimensional Gaussian distribution. Then, for each estimator ˆSL among gSW 1,L (μ, ν ), gSW 22,L (μ, ν ), dSW 1,L (μ, ν ), and dSW 22,L,η k (μ, ν ) for 
+
+k ∈ { 0.05 , 0.1, 0.5, 1}, for various values of L, we compute 10 times ˆSL(μ, ν ) and derive the 20 Figure 5: Gradient descent on the smoothed CDF-based estimators dSW 22,L,ε for various values of ε.Solid lines: value of the smoothed CDF-based estimator. Dashed lines: actual value of the SW, as measured by a quantile-based estimator. standard deviation σL of the obtained values, while measuring the mean computation time tL of the estimator, and we draw the graph of the σL as a function of the tL. The chosen values of L range from 10 to 10000 for the quantile-based estimators, and from 100 to 100000 for the CDF-based estimators. The resulting graphs are shown in Figure 4. From this experiment we make the following observations: • In the case of the CDF estimators of the SW 2 distance, the estimators dSW 22,L,η k with k < 1
+
+do empirically achieve a better accuracy than the estimator dSW 22,L,η 1 = dSW 22,L . In other words, the importance sampling strategy does indeed improve the accuracy of the CDF-based 
+
+SW 2 estimator. • For a given time budget, the quantile-based estimators generally achieve a better accuracy than the CDF-based estimators. However, the CDF-based SW 1 estimator dSW 1,L and the 
+
+SW 2 estimators dSW 2,L,η k for k ≤ 0.1 achieve comparable accuracy (and sometimes better for dSW 1,L ) to their quantile-based counterparts. • Since, in Figure 4, the curves for the quantile-based estimators are plotted for L ranging from 10 to 10000, while those for the CDF-based estimators are plotted for L ranging from 100 to 100000, we infer that a rough rule-of-thumb is that to achieve comparable accuracy, the parameter L must be around one order of magnitude larger for the CDF-based estimators than for the quantile-based estimators. 
+
+A.3.2 Tuning the smoothing parameter 
+
+Our goal in this experiment is to determine which value to choose for the smoothing parameter ε in the CDF-based estimator dSW 22,L,η,ε . For this, we fit a point cloud X in the plane to approximate a target probability distribution ν, by performing a gradient descent on the loss function X ∈ (R2)N →
+
+dSW 22,L,η k ,ε (μX , ν ), with μX := 1
+
+> N
+
+PNi=1 δXi , for various values of the parameter ε, ranging from 
+
+ε = 1 .0 to ε = 0 .001 . The initial point cloud X0 ∈ (R2)N is sampled uniformly on the square 
+
+[−1, 1] 2, and ν is the standard Gaussian N (0 , I 2), which we approximate with M = 50000 random samples. We take N = 500 , L = 1000 and k = 0 .05 , and we run the gradient descent for 200 
+
+steps, with a gradient step size of 0.1N . Moreover, at every step of the gradient descent, we estimate the true value of SW 22(μX , ν ) by computing the quantile estimator gSW 22, ˜L(μX , ν ), with ˜L = 100 .21 The results are shown in Figure 5. We see that for the lowest value of ε, while the CDF-based estimator dSW 22,L,η k ,ε exhibits low bias (the solid and dashed lines stay close to each other in the graph), the gradient descent is instable and diverges. On the other hand, for the largest values of ε,while the gradient descent does converge, the true value of the SW (as measured by the quantile-based estimator) stays at a high value, so that the smoothed CDF-based estimator exhibits high bias. On the other hand, it appears from this experiment that ε ≃ 0.01 is a good choice for the smoothing parameter of the CDF-based estimator, as it allows both low bias and convergence of the gradient descent converges. 
+
+## B Differential privacy analysis of the federated Sliced-Wasserstein estimators 
+
+B.1 The federated estimator 
+
+In this section, we analyze the privacy of the federated version of the CDF-based SW estimators discussed in Section 4. Consider the setting where we have two datasets D1 ∈ (Rd)N1 and D2 ∈
+
+(Rd)N2 of respectively N1 and N2 samples, which are split between respectively C1 and C2 client datasets: D1 = D1,1
+
+` . . . ` D1,C 1 and D2 = D2,1
+
+` . . . ` D2,C 2 . We will represent every dataset 
+
+D = ( xi)Ni=1 ∈ (Rd)N by the empirical measure of its samples μD := 1
+
+> N
+
+PNi=1 δxi , so that we have for every i ∈ { 0, 1}
+
+μi := μDi =
+
+> Ci
+
+X
+
+> j=1
+
+αi,j μi,j (78) where μi,j := μDi,j , and αi,j = Ni,j /N i where Ni,j is the number of samples of the client dataset 
+
+Di,j . This implies in particular that for every θ ∈ Sd−1, we have 
+
+Fμi,θ =
+
+> Ci
+
+X
+
+> j=1
+
+αi,j Fμi,j,θ (79) We want to compute the SW 1 distance between the datasets D1 and D2, or more precisely between the probability measures μ1 and μ2 representing them, in a federated way. We compute it using the 
+
+dSW 1,L estimator, which we recall is defined for any pair μ, ν ∈ P 2(Rd) as 
+
+dSW 1,L (μ, ν ) = 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+(m+ 
+
+> θl
+
+− m− 
+
+> θl
+
+)|Fμθl ( ˜Ul) − Fνθl ( ˜Ul)| (80) where (θ1, U 1), ..., (θl, U l) are i.i.d. random variables with (θ1, U 1) ∼ U (Sd−1 × [0 , 1]) , where m+
+
+> θ
+
+and m− 
+
+> θ
+
+are respectively the max and the min of spt( μθ ) ∪ spt( νθ ), and for every l we have noted 
+
+˜Ul := Rescale( Ul, m − 
+
+> θl
+
+, m + 
+
+> θl
+
+). We then compute dSW 1,L (μ1, μ 2) using the following procedure: 1. The central server samples (θ1, U 1), ..., (θL, U L) from U(Sd−1 × [0 , 1]) , and broadcasts the vector (θ1, U 1, . . . , θ L, U L) to the clients. 2. For every i ∈ { 1, 2}, 1 ≤ j ≤ Ci, the client holding the dataset Di,j computes for every 
+
+1 ≤ l ≤ L the bounds m+ 
+
+> i,j,l
+
+:= max(spt( μi,j,θ l )) and m− 
+
+> i,j,l
+
+:= min(spt( μi,j,θ l )) , and sends the vector (m−
+
+> i,j, 1
+
+, m +
+
+> i,j, 1
+
+, . . . , m −
+
+> i,j,L
+
+, m +
+
+> i,j,L
+
+) to the server. 3. For every 1 ≤ l ≤ L the server computes m± 
+
+> θl
+
+by taking the maximum of the m+ 
+
+> i,j,l
+
+and the minimum of the m−
+
+> i,j,l
+
+. The server then broadcasts the vector (m− 
+
+> θ1
+
+, m + 
+
+> θ1
+
+, . . . , m − 
+
+> θL
+
+, m + 
+
+> θL
+
+) to the clients. 4. For every i ∈ { 1, 2}, 1 ≤ j ≤ Ci, the client holding the dataset Di,j computes the CDFs 
+
+Fμi,j,θ 1 ( ˜U1), ..., Fμi,j,θ L ( ˜UL) (he can compute the ˜Ul using the m± 
+
+> θl
+
+received from the server). It then sends the vector (Fμi,j,θ l ( ˜Ul)) Ll=1 to the server. 5. For every i ∈ { 1, 2}, the server computes the CDFs Fμi,l ( ˜Ul), 1 ≤ l ≤ L, using the data received from the clients and equation (79) (we assume that the client dataset sizes Ni,j are revealed to the server). 22 Algorithm 1 Federated computation of dSW 1,L , server side  
+
+> 1:
+
+Input: Parameter L, number of clients C1, C 2, client dataset sizes Ni,j , global dataset sizes 
+
+N1, N 2 
+
+> 2:
+
+Sample (θ1, U 1), . . . , (θL, U L) uniformly from Sd−1 × [0 , 1]  
+
+> 3:
+
+Broadcast (θ1, U 1, . . . , θ L, U L) to the clients  
+
+> 4:
+
+for i = 1 , 2 do  
+
+> 5:
+
+for j = 1 to Ci do  
+
+> 6:
+
+Receive (m−
+
+> i,j, 1
+
+, m +
+
+> i,j, 1
+
+, . . . , m −
+
+> i,j,L
+
+, m +
+
+> i,j,L
+
+) ∈ R2L from client (i, j ) 
+
+> 7:
+
+end for  
+
+> 8:
+
+end for  
+
+> 9:
+
+for l = 1 to L do  
+
+> 10:
+
+Compute m− 
+
+> l
+
+← min i,j m− 
+
+> i,j,l
+
+and m+ 
+
+> l
+
+← max i,j m+ 
+
+> i,j,l
+> 11:
+
+end for  
+
+> 12:
+
+Broadcast (m− 
+
+> 1
+
+, m +1 , . . . , m − 
+
+> L
+
+, m + 
+
+> L
+
+) to the clients  
+
+> 13:
+
+for i = 1 , 2 do  
+
+> 14:
+
+for j = 1 to Ci do  
+
+> 15:
+
+Receive (Fi,j, 1, . . . , F i,j,L ) ∈ RL from client (i, j ) 
+
+> 16:
+
+end for  
+
+> 17:
+
+for l = 1 to L do  
+
+> 18:
+
+Compute Fi,l ← PCi 
+
+> j=1
+
+Fi,j,l  
+
+> 19:
+
+end for  
+
+> 20:
+
+end for  
+
+> 21:
+
+Compute SW ← 1
+
+> L
+
+PLl=1 (m+ 
+
+> l
+
+− m− 
+
+> l
+
+)|F1,l − F2,l | 
+
+> 22:
+
+Return SW .
+
+Algorithm 2 Federated computation of dSW 1,L , client side. Here i ∈ { 1, 2} and j ∈ { 1, . . . , C i}
+
+denote the index of the client and are fixed.  
+
+> 1:
+
+Input: Private dataset μi,j ∈ P (Rd), private dataset size Ni,j , global dataset size Ni 
+
+> 2:
+
+Receive (θ1, U 1), . . . , (θL, U L) ∈ Sd−1 × [0 , 1] from server  
+
+> 3:
+
+for l = 1 to L do  
+
+> 4:
+
+Compute m− 
+
+> i,j,l
+
+← min(spt( μi,j,θ l )) and m+ 
+
+> i,j,l
+
+← max(spt( μi,j,θ l ))  
+
+> 5:
+
+end for  
+
+> 6:
+
+Send (m−
+
+> i,j, 1
+
+, m +
+
+> i,j, 1
+
+, . . . , m −
+
+> i,j,L
+
+, m +
+
+> i,j,L
+
+) to server  
+
+> 7:
+
+Receive (m− 
+
+> 1
+
+, m +1 , . . . , m − 
+
+> L
+
+, m + 
+
+> L
+
+) ∈ R2L from server  
+
+> 8:
+
+for l = 1 to L do  
+
+> 9:
+
+Compute ˜Ul ← m− 
+
+> l
+
++ Ul(m+ 
+
+> l
+
+− m− 
+
+> l
+
+) 
+
+> 10:
+
+Compute Fi,j,l ← Ni,j  
+
+> Ni
+
+Fμi,j,θ l ( ˜Ul) 
+
+> 11:
+
+end for  
+
+> 12:
+
+Send (Fi,j, 1, . . . , F i,j,L ) to server 6. Finally, the server computes dSW 1,L (μ1, μ 2) using the CDFs and equation (80). Pseudo-code corresponding to this procedure is presented in Algorithm 1 and Algorithm 2, for respectively the server-side and the client-side computations 4. In the case of the estimator dSW 2,L,η ,the procedure is similar. The main differences are that the server samples elements (θl, U l, V l) ∼U(Sd−1) × η and broadcasts them to the clients, and that the clients compute and send the CDFs 
+
+Fμi,j,θ l ( ˜Ul) and Fμi,j,θ l ( ˜Vl), which the server then use to compute the estimator using equation (13) .Moreover, in the case of the smoothed estimators dSW 1,L,ε and dSW 22,L,η,ε , we proceed likewise, except that the clients compute and the server aggregate the smoothed CDFs F (ε) 
+
+> μi,j,θ l
+
+( ˜Ul).    
+
+> 4For simplicity is is assumed that the server knows the client dataset sizes Ni,j and that each client knows the size Niof the global dataset it belongs to
+
+23 B.2 Privacy issues of the estimator 
+
+This procedure, however, pose a number of concerns in terms of privacy. Indeed, the data that is exchanged between the clients and the server contain information about the clients’ datasets that could compromise their privacy. In particular, since a one-dimensional probability measure μ ∈ P (R)
+
+is determined by its CDF Fμ, and a d-dimensional probability measure μ ∈ P (Rd) is determined by its projections μθ ([Bonnotte, 2013, Proposition 5.1.2]), it is in theory possible to reconstruct the client datasets Di,j using the CDFs exchanged at step 4 of the algorithm provided L is large enough. Fortunately, it is not difficult to significantly mitigate the privacy risks of this algorithm: • First, although the bounds m± 
+
+> i,j,l
+
+exchanged at step 2 may give information on the dataset 
+
+Di,j , it must be noted that if we replace m± 
+
+> θ
+
+in (80) by any upper and lower bounds of 
+
+spt( μθ ) ∪ spt( νθ ) (instead of the maximum and minimum of this set), we still obtain an unbiased estimator of SW 1(μ, ν ) (although with a larger variance). Therefore, the clients can obfuscate the bounds by sending the server m± 
+
+> i,j,l
+
+± R± 
+
+> i,j,l
+
+instead of m±
+
+> i,j,l
+
+, where R±
+
+> i,j,l
+
+is some random positive value. Moreover, in some cases, all the measures μi,j are supported in some bounded set B(0 , R ) (for instance, if the samples are images with pixel values ranging from 0 to 1, then all the measures are supported on [0 , 1] d ⊆ B(0 , √d)). In such a case, we may as well skip the steps 2-3 and directly use m± 
+
+> θ
+
+:= ±R for every θ ∈ Sd−1.• There exist so-called Secure Aggregation (SecAgg) protocols which allow to compute a sum Pnu∈U au of quantities au held by mutually distrustful users u ∈ U , which guarantee through cryptographic means that the individual values au are not revealed to the other users, as long as some given proportion of the users do not collude with each other (see for example [Bonawitz et al., 2016]). Therefore, at steps 4-5 of the algorithm, the clients and server may use such a SecAgg protocol in order to compute the sums Fμi,θ l ( ˜Ul) = 
+
+PCi 
+
+> j=1
+
+αi,j Fμi,j,θ l ( ˜Ul), i ∈ { 1, 2}, 1 ≤ l ≤ L, without revealing the clients’ local CDFs 
+
+Fμi,j,θ l ( ˜Ul) to the server and the other clients. • Finally, there is the question of whether the aggregated CDFs Fμi,θ l ( ˜Ul) themselves, and any value computed from them, may leak information about the client datasets Di,j . The main tool in machine learning for tackling such questions is that of differential privacy ,whose main concepts we will present below. 
+
+B.3 Differential privacy 
+
+We present in this section a brief reminder of some of the main results in differential privacy. We refer for further details to the book [Dwork and Roth, 2014]. Let X be a space of datasets, and ∼ abinary symmetric relation on X denoting "closeness" (for example, a typical choice in the literature is to take X = ( Rd)N the space of datasets with N entries, and for x, x ′ ∈ X to say that x ∼ x′ if they differ by at most one entry). Let M : X → Y be a random function, and let ε, δ > 0.
+
+Definition B.1. [Dwork and Roth, 2014, Definition 2.4] The random function M : X → Y is said to be (ε, δ )-differentially private if for every pair x, x ′ ∈ X such that x ∼ x′, and for every measurable set S ⊆ Y , one has 
+
+P[M(x′) ∈ S] ≤ eεP[M(x) ∈ S] + δ. (81) In the case δ = 0 , we say that M is ε-differentially private. Intuitively, (ε, δ )-differential privacy means that the randomized algorithm M will behave similarly on similar datasets. The notion of ε-differential privacy is stronger than (ε, δ )-differential privacy: indeed, to say that M is ε-differentially private means that for every run M(x), the output will be almost equally likely to be observed for a run of M on any x′ ∼ x ; while (ε, δ )-differential privacy means that for a given pair x ∼ x′, it is unlikely that a run of M(x) will yield an output that is significantly more or less likely to be observed after a run of M(x′) (see the discussion after [Dwork and Roth, 2014, Definition 2.4] for more details). One of the advantages of (ε, δ )-differential privacy is its ease of manipulation, as it is preserved by any computation: 
+
+Proposition B.2. [Dwork and Roth, 2014, Proposition 2.1] Let M : X → Y be an (ε, δ )-differentially private mechanism, and let f : Y → Y ′ be a (deterministic or random) function. Then f ◦ M : X → Y ′ is also (ε, δ )-differentially private. 
+
+24 Remark B.3 . Note that the definitions and results in [Dwork and Roth, 2014] are given for a specific choice of X and ∼. However, the proofs work for generic X , ∼.Moreover, different independent (ε, δ )-differentially private mechanisms can be combined: 
+
+Theorem B.4. [Dwork and Roth, 2014, Theorem 3.16] For every i = 1 , . . . , k , let Mi : X → Y i
+
+be a (εi, δ i)-differentially private random mechanism, such that the M1, . . . , Mk are independent. Then the random mechanism M : X → Πki=1 Yi defined by M(x) := ( M1(x), . . . , Mk(x)) is 
+
+(ε, δ )-differentially private, with ε := Pki=1 εi and δ := Pki=1 δi.
+
+Furthermore, given a (deterministic) function f : X → Rk, it is possible, provided some conditions are met, to turn it into an (ε, δ )-differentially private mechanism for arbitrary ε, δ by noising the output of f appropriately. To show this, we first introduce some definitions: 
+
+Definition B.5. [Dwork and Roth, 2014, Definition 3.2, Definition 3.8] Let p ≥ 1. Let ℓp-sensitivity of f : X → Rk is 
+
+∆p(f ) := max 
+
+> x,y ∈X
+> x∼y
+
+|f (x) − f (y)|p (82) where | · | p is the ℓp norm on Rk.Recall also that for every a ∈ R and b > 0, the Laplace distribution of mean a and scale b is the probability distribution on R denoted Lap( a, b ) with probability density function 
+
+Lap( x|a, b ) = 12b exp 
+
+
+
+− |x − a|
+
+b
+
+
+
+, x ∈ R. (83) The mean and variance of Lap( a, b ) are respectively a and 2b2. We will often note Lap( b) := Lap(0 , b ). We are now ready to construct the Laplace mechanism: 
+
+Theorem B.6. [Dwork and Roth, 2014, Theorem 3.3] Let f : X → Rk be some function with 
+
+ℓ1-sensitivity ∆1(f ) < +∞. Let ε > 0, and define the Laplace mechanism as the random function 
+
+ML,ε : X → Rk defined by 
+
+ML,ε (x) := f (x) + ( Y1, . . . , Y k) (84) 
+
+where the Yi are i.i.d. random variables with law Lap(∆ 1(f )/ε ). Then the Laplace mechanism 
+
+ML,ε is ε-differentially private. 
+
+One may also noise the output of f using Gaussian noises to obtain an (ε, δ )-differentially private mechanism: 
+
+Theorem B.7. [Dwork and Roth, 2014, Theorem 3.22] Let f : X → Rk be some function with 
+
+ℓ2-sensitivity ∆2(f ) < +∞. Let ε ∈ (0 , 1) , δ > 0 and σ > 0, and define the Gaussian mechanism 
+
+as the random function MG,σ : X → Rk defined by 
+
+MG,σ (x) := f (x) + ( Y1, . . . , Y k) (85) 
+
+where the Yi are i.i.d. random variables with law N (0 , σ 2). Then, provided that σ ≥p2 ln(1 .25 /δ )∆ 2(f )/ε , the Gaussian mechanism MG,σ is (ε, δ )-differentially private. 
+
+Although (ε, δ )-differential privacy is a weaker property than ε-differential privacy, it may sometimes be desirable to work with Gaussian noises due to their favorable properties. 
+
+B.4 A private federated estimator 
+
+We are now ready to provide modified versions of Algorithm 1 and Algorithm 2 that address the privacy issues raised in Section B.2. As in Section B.1, the analysis below will focus on the computation of the estimator dSW 1,L , but it again will be easily adaptable to the SW 2 CDF-based estimators and the smoothed CDF-based estimators. For simplicity, we will assume that the datasets 
+
+D1 and D2 have the same number of samples N = N1 = N2 and are split into the same number of clients C = C1 = C2, and that each client has the same number of samples Ni,j = N/C (so that 
+
+αi,j = 1 /C ). We also assume that all the measures μi,j are supported in some ball B(0 , R ), so that 25 Algorithm 3 Private federated computation of dSW 1,L , server side. Here SecAgg denotes any secure aggregation protocol.  
+
+> 1:
+
+Input: Parameter L, number of clients per dataset C, global dataset size N , global dataset support size R 
+
+> 2:
+
+Sample (θ1, U 1), . . . , (θL, U L) uniformly from Sd−1 × [0 , 1]  
+
+> 3:
+
+Broadcast (θ1, U 1, . . . , θ L, U L) to the clients  
+
+> 4:
+
+for i = 1 , 2 do  
+
+> 5:
+
+for l = 1 to L do  
+
+> 6:
+
+Compute Fi,l ← SecAgg( Fi, 1,l , . . . , F i,C,l ), where Fi,j,l is received from client (i, j ) 
+
+> 7:
+
+end for  
+
+> 8:
+
+end for  
+
+> 9:
+
+Compute SW ← 1
+
+> L
+
+PLl=1 2R|F1,l − F2,l | 
+
+> 10:
+
+Return SW 
+
+Algorithm 4 Private federated computation of dSW 1,L , client side. Here i ∈ { 1, 2} and j ∈{1, . . . , C i} denote the index of the client and are fixed.  
+
+> 1:
+
+Input: Private dataset μi,j ∈ P (Rd), number of clients C, global dataset size Ni, noising parameter σ, global dataset support size R 
+
+> 2:
+
+Receive (θ1, U 1), . . . , (θL, U L) ∈ Sd−1 × [0 , 1] from server  
+
+> 3:
+
+for l = 1 to L do  
+
+> 4:
+
+Compute ˜Ul ← − R + 2 RU l 
+
+> 5:
+
+Sample Zi,j,l from N (0 , σ 2) 
+
+> 6:
+
+Compute Fi,j,l ← 1 
+
+> C
+
+Fμi,j,θ l ( ˜Ul) + Zi,j,l  
+
+> 7:
+
+end for  
+
+> 8:
+
+Send (Fi,j, 1, . . . , F i,j,L ) to server. we may take m± 
+
+> θ
+
+= ±R for every θ ∈ Sd−15. The modified algorithms are shown in Algorithm 3 and Algorithm 4. The main changes are the fact that the knowledge of R allow to eliminate the phase devoted to computing the m± 
+
+> θl
+
+; the use of a secure aggregation protocol for summing the client CDFs ; and the introduction of a noising parameters σ > 0 at the client side. For every 1 ≤ l ≤ L, i ∈ { 1, 2}
+
+and 1 ≤ j ≤ C, the client (i, j ) sends to the server the noised value Fi,j,l = 1 
+
+> C
+
+Fμi,j,θ l ( ˜Ul) + Zi,j,l 
+
+where Zi,j,l ∼ N (0 , σ 2), so that what the value Fi,l the server receives after performing secure aggregation is not the exact value Fμi,θ l ( ˜Ul) of the CDF of the global dataset, but a noised value 
+
+Fi,l =
+
+> C
+
+X
+
+> j=1
+
+1
+
+C Fμi,j,θ l ( ˜Ul) + Zi,j,l = Fμi,θ l ( ˜Ul) + 
+
+> C
+
+X
+
+> j=1
+
+Zi,j,l . (86) Moreover, since every Zi,j,l has law N (0 , σ 2), the random variable PCj=1 Zi,j,l has law N (0 , Cσ 2),that is a centered Gaussian law of standard deviation √Cσ . The vector (Fi, 1, . . . , F i,L ) received by the server is thus in practice the result of a Gaussian mechanism applied to the CDF vector 
+
+(Fμi,θ l ( ˜Ul)) Ll=1 . The rest of this section will consist of an analysis of this vector using the framework of differential privacy (Section B.3). For this, we set X := ( Rd)N/C ×C×2 to be the dataset space. An entry x ∈ X is then a tuple 
+
+x = ( Di,j )i,j containing the client datasets Di,j ∈ (Rd)N/C for i = 1 , 2 and 1 ≤ j ≤ C. We will define two closeness relations ∼e and ∼c. Let x, x ′ ∈ X with x = ( Di,j )i,j and x′ = ( D′ 
+
+> i,j
+
+)i,j , then: • We note x ∼c x′ if there exists at most one pair (i, j ) with i ∈ { 1, 2} and 1 ≤ j ≤ C such that Di,j ̸ = D′ 
+
+> i,j
+
+.• We note x ∼e x′ if there exists at most one pair (i, j ) such that Di,j ̸ = D′ 
+
+> i,j
+
+, and if for such a (i, j ) the datasets Di,j and D′ 
+
+> i,j
+
+differ by at most one sample. 
+
+> 5In particular, we assume that this information is known to every client
+
+26 A differentially private mechanism for ∼c is one where one cannot learn much about individual clients from its output, while a differentially private mechanism for ∼e is one where one cannot learn much about individual entries (of the global dataset) from its output. One will therefore focus on either depending on the type of protection one wants to achieve. We thus choose ∼∈ {∼ e, ∼c}, and let ε, δ > 0 be fixed. For simplicity, we focus on a single computation of the estimator dSW 1,L , and we treat the (θ1, U 1), . . . , (θL, U L) as fixed values. We are interested in how the noising parameter σ of Algorithm 4 must be chosen to achieve (ε, δ )-differential privacy for ∼ of the CDF vectors (Fi, 1, . . . , F i,L ), i = 1 , 2 computed by the server. Indeed, if this is the case, since the noising for the two vectors i = 1 , 2 are independent, Theorem B.2 and Theorem B.4 will ensure that any data computed from them will be (2 ε, 2δ)-differentially private, including the dSW 1,L (μ, ν ) estimator. The question of the choice of σ is then answered by the following proposition: 
+
+Proposition B.8. Let i ∈ { 1, 2}, and set σ0 := p2 ln(1 .25 /δ )/ε . Then: 
+
+• If σ ≥ σ0 
+
+> √LC3/2
+
+, then the vector (Fi, 1, . . . , F i,L ) is (ε, δ )-differentially private for ∼c.
+
+• If σ ≥ σ0  
+
+> √LN√C
+
+, then the vector (Fi, 1, . . . , F i,L ) is (ε, δ )-differentially private for ∼e.Proof. Fix k ∈ { 1, 2} and let fk : X → RL be the function defined, for every x ∈ X corresponding to the measures (μi,j )i,j , by fk(x) := ( Fμk,θ l ( ˜Ul)) Ll=1 . Let x, x ′ ∈ X , with x = ( Di,j )i,j and 
+
+x′ = ( D′ 
+
+> i,j
+
+)i,j , corresponding respectively to the measures (μi,j )i,j and (μ′ 
+
+> i,j
+
+)i,j .• If x ∼c x′, then there exists at most one pair (i, j ) such that Di,j ̸ = D′ 
+
+> i,j
+
+. Since every client CDF Fμi,j,θ l contributes to the global CDF Fμi,θ l by some value in [0 , 1/C ], this implies that fk(x) and fk(x′) differ by at most 1/C at each coordinate. Therefore, the ℓ2-sensitivity (Theorem B.5) of fk (for ∼c) is bounded by 
+
+∆2(fk) ≤
+
+vuut LX
+
+> l=1
+
+ 1
+
+C
+
+2
+
+=
+
+√LC . (87) • If x ∼e x′, then x and x′ differ by at most one entry in one client dataset. Since every entry in a dataset Di,j contributes to the global CDF Fμi,θ l by either 0 or 1/N , this implies that 
+
+fk(x) and fk(x′) differ by at most 1/N at each coordinate. Therefore, the ℓ2-sensitivity of 
+
+fk (for ∼e) is bounded by 
+
+∆2(fk) ≤
+
+vuut LX
+
+> l=1
+
+ 1
+
+N
+
+2
+
+=
+
+√LN . (88) Since we have seen that the vector (Fk, 1, . . . , F k,L ) is a Gaussian mechanism applied to fk with a Gaussian noise of standard deviation √Cσ , the proposition is thus a direct consequence of Theo-rem B.7 along with the bounds of the ℓ2-sensitivity of fk for ∼c and ∼e derived above. 
+
+Remark B.9 . The considerations above hold for a single computation of dSW 1,L , with the slices 
+
+(θ1, U 1), . . . , (θL, U L) held fixed. However, it can straightforwardly be adapted to the case of T
+
+computations of dSW 1,L , with L1, . . . , L T slices for each successive computation. Indeed, in this case, we can set L = L1 +. . . +LT , and choose σ in Algorithm 4 so that the vectors (Ft,i,l )1≤t≤T, 1≤l≤Lt ∈
+
+RL, i = 1 , 2 (where Ft,i,l is the value of Fi,l computed by Algorithm 3 during its t-th execution) are (ε, δ )-differentially private. In this case, by Theorem B.2 and Theorem B.4, any data computed from them will be (2 ε, 2δ)-differentially private, including the computed values of dSW 1,L t (μ, ν ),
+
+t ∈ { 1, . . . , T }.27 Table 3: GAN architectures for MNIST (a) Gϕ
+
+Input : z ∈ R64 ∼ N (0 , 1) 
+
+Linear 
+
+64 → 32 × 7 × 7
+
+ResBlock upsample 32 ResBlock 32 ResBlock upsample 32 ResBlock 32 BatchNorm, ReLU, 
+
+3 × 3 Conv, Tanh (b) Tβ1
+
+Input : x ∈ [−1, 1] 28 ×28 
+
+ResBlock downsample 32 ResBlock downsample 32 ResBlock 32 ResBlock 32 (c) Tβ2
+
+Input : x ∈ R32 ×7×7
+
+ReLU Global sum pooling Linear 32 → 1
+
+(spectral normalization) 
+
+## C Details on the generative modeling experiments 
+
+The goal of this appendix is to provide additional details on the generative modeling experiments carried out in Section 5. 
+
+GANs and Sliced-Wasserstein GANs The architecture we employ is that of Generative Adversarial Networks (GANs). We follow here closely the formalism of Nguyen and Ho [2022]. Let μ ∈ P (Rd)
+
+be the data distribution from which we want to be able to sample. We want to train a neural network 
+
+Gϕ : Rdz → Rd parametrized by ϕ, called the generator , such that Gϕ#N (0 , I dz ) = μ. That is, our goal is to be able to sample from μ by sampling Z ∼ N (0 , I d) and computing Gϕ(Z). In order to train Gϕ, we use a second neural network Tβ : Rd → R, called the discriminator . During the training, the discriminator learns to differentiate the output of the generator from the true data, while the generator learns to trick the discriminator. Formally, the training of a GAN consists in solving alternatively the following two optimization problems: 
+
+min  
+
+> β
+
+Ex∼μ[min(0 , −1 + Tβ (x))] + Ez∼N (0 ,I dz )[min(0 , −1 − Tβ (x))] (89) 
+
+min  
+
+> ϕ
+
+Ez∼N (0 ,I dz )[−Tβ (Gϕ(z))] (90) In this experiment, we use instead the variant of GANs known as Sliced-Wasserstein GANs (SW-GANs) [Deshpande et al., 2018], where the discriminator is of the form Tβ = Tβ2 ◦ Tβ1 , with 
+
+β = ( β1, β 2) and where Tβ1 maps the data space to an intermediate feature space, and where the generator loss (90) is replaced by 
+
+min  
+
+> ϕ
+
+SW 22( ˜Tβ1,β 2#μ, ˜Tβ1,β 2#Gϕ#N (0 , I d)) (91) where ˜Tβ1,β 2 (x) := ( Tβ1 (x), T β2 (Tβ1 (x))) is the concatenation of the output of the discriminator and of the intermediate feature values. 
+
+Architecture details The detail of the architectures that we use for training on MNIST and CelebA are presented respectively in Table 3 and Table 4. They are taken and adapted from the code of Nguyen and Ho [2022] 6, which itself is an adaptation of the architectures used in Miyato et al. [2018] (which introduce the technique of spectral normalization, for stabilizing the training of the discriminator) to the SW-GAN framework of Deshpande et al. [2018]. 
+
+Hyperparameters For both datasets MNIST and CelebA, we train the models for 100 epochs and with a batch size of 128 (this represents a total of 46900 iterations for MNIST and of 127200 iterations for CelebA). We update the discriminator Tβ every iteration and the generator Gϕ every 5 iterations. We use the Adam optimizer during the training [Kingma and Ba, 2015], with learning rate 0.0002 and parameters (β1, β 2) = (0 , 0.9) 7. The discriminator loss (91) is computed using three different estimators of the SW 2 distance: • The usual, quantile-based, estimator gSW 22,L with L = 10000 .     
+
+> 6Which can be found at https://github.com/UT-Austin-Data-Science-Group/AmortizedSW
+> 7Those are the parameters of Adam and must not be confused with the parameters of the discriminator Tβ1and Tβ2!
+
+28 Table 4: GAN architectures for CelebA (a) Gϕ
+
+Input : z ∈ R128 ∼ N (0 , 1) 
+
+Linear 
+
+128 → 256 × 4 × 4
+
+ResBlock upsample 256 ResBlock upsample 256 ResBlock upsample 256 ResBlock upsample 256 BatchNorm, ReLU, 
+
+3 × 3 Conv, Tanh (b) Tβ1
+
+Input : x ∈ [−1, 1] 3×64 ×64 
+
+ResBlock downsample 128 ResBlock downsample 128 ResBlock downsample 128 ResBlock 128 ResBlock 128 (c) Tβ2
+
+Input : x ∈ R128 ×8×8
+
+ReLU Global sum pooling Linear 128 → 1
+
+(spectral normalization) 
+
+Figure 6: Samples from the GANs trained on MNIST • The CDF-based estimator dSW 22,L,ε with L = 100000 and ε = 0 .01 .• The CDF-based estimator dSW 22,L,η k ,ε with L = 100000 , k = 0 .05 and ε = 0 .01 .
+
+FID scores We compute FID scores using the pytorch-fid Python package. Each FID score is computed based on 10000 random samples from the trained model and the full training dataset. 
+
+Full results Figure 6 and Figure 7 show various images sampled from the trained generators for the different datasets and SW 2 estimators. 
+
+## D Details on the federated learning experiments 
+
+This section provides details on the federated learning algorithm boosting experiments described in Section 5. 29 Figure 7: Samples from the GANs trained on CelebA 
+
+D.1 The OTDD and MMDSW dataset distances 
+
+The Optimal Transport Dataset Distance (OTDD, [Alvarez-Melis and Fusi, 2021]) is a distance between labeled datasets of the form D = {(xi, l i)}Ni=1 ⊆ Rd × { 1, . . . , L }. It is defined the following way: for every label l ∈ { 1, . . . , L }, let 
+
+νD,l := 1#{i, x i = l}
+
+X
+
+> xi=l
+
+δxi ∈ P (Rd) (92) be the empirical measure of the samples of D with label l. We then represent the dataset D by the measure 
+
+μD := 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+δ(xi,ν D,l i ) ∈ P (Rd × P (Rd)) , (93) and we define the OTDD distance between the labeled datasets D1 and D2 by 
+
+OTDD 2(D1, D2) := min   
+
+> γ∈Π( μD1,μ D2)
+
+Z
+
+|x − x′|2 + W 22(ν, ν ′) d γ(( x, ν ), (x′, ν ′)) (94) where Π( μD1 , μ D2 ) is the set of transport plans between μD1 and μD2 , that is the set of probability measures γ ∈ P (( Rd × P (Rd)) 2) with respective first and second marginals μD1 and μD2 . The OTDD can thus be computed in a federated manner using the federated algorithm of Rakotomamonjy et al. [2024] for computing the Wasserstein distance W2.Another dataset distance is the Maximum Mean Discrepancy with Riesz SW kernel (MMDSW, [Bonet et al., 2025b]). Given a labeled dataset D, we can represent it by the measure 
+
+PD := 1
+
+L
+
+> L
+
+X
+
+> l=1
+
+δνD,l ∈ P (P(Rd)) . (95) Then the MMDSW between two labeled datasets D1 and D2 is defined as 
+
+MMDSW 2(D1, D2) = 
+
+Z Z 
+
+K(μ, ν ) d( PD1 − PD2 )( μ) d( PD1 − PD2 )( ν) (96) 30 Table 5: Classifier architectures for MNIST (left) and CIFAR-10 (right) Input : x ∈ [−1, 1] 784 
+
+Linear 784 → 256 
+
+ReLU Linear 256 → 128 
+
+ReLU Linear 128 → 32 
+
+ReLU Linear 32 → 10 
+
+Softmax Input : x ∈ [−1, 1] 3072 
+
+Linear 3072 → 512 
+
+ReLU Linear 512 → 256 
+
+ReLU Linear 256 → 64 
+
+ReLU Linear 64 → 10 
+
+Softmax where K(μ, ν ) := − SW 2(μ, ν ) for every μ, ν ∈ P 2(Rd). The MMDSW can therefore be com-puted in a federated manner using the federated algorithms of Section 4 for computing the Sliced-Wasserstein distance SW 2.
+
+D.2 The boosting procedure 
+
+Assume then that we are given a labeled dataset D split into sub-datasets D1, ..., DC among C
+
+clients. We wish to train a classifier Tθ : Rd → { 1, . . . , L } on this dataset D using a federated learning algorithm, but the distributions Dc may present some heterogeneity (for instance, some clients may not have samples from all the classes of D), which may worsen the performance of the trained model. To address this, Rakotomamonjy et al. [2024] proposed to compute, for every pair 
+
+c, c ′ of clients, the OTDD distance Dc,c ′ := OTDD( Dc, Dc′ ) between their datasets. Then, applying a spectral clustering algorithm (see von Luxburg [2007]) to the matrix D ∈ RC×C , they partition the set of clients into K clusters C1, ..., CK (with {1, . . . , C } = C1
+
+` . . . ` Ck), and, on every cluster Ck, they train one classifier Tθk using the federated learning algorithm. Through experiments using various datasets, numbers of clients and clustering and federated learning algorithms, they demonstrate that this approach leads to a consistent increase in the global accuracy of the trained models, which is even more marked when the heterogeneity of the client datasets is increased. We follow the same procedure in our experiment, except that we replace the OTDD with the MMDSW distance. 
+
+D.3 Practical details and results Client dataset construction When we want the client datasets to present a clear cluster structure, we construct them the following way: we assign to each client c ∈ { 1, . . . , C } a random pair (ic, j c)
+
+of labels among (0 , 1) , (2 , 3) , (4 , 5) , (6 , 7) , (8 , 9) . Then, for every label l of D, we split the set of samples of D with label l equally between the clients to whom l has been assigned. When we do not want the client datasets to present a clear cluster structure, we construct them the following way: we split the global dataset D into 2C shards of similar size, the samples of each shard having the same label, and we randomly assign two shards to each client. Figure 8 show the MMDSW distance matrices obtained after constructing the client datasets for MNIST and CIFAR-10 using these two procedures. We see in particular that when we impose a cluster structure on the clients, this structure is clearly visible on the distance matrix. 
+
+Classifier architectures The architectures for the classifiers are shown in Table 5. When using the algorithms FedPer or FedRep, we use the last linear layer of the model as the client’s personal head. 
+
+Hyperparameters We compute the MMDSW using the dSW 2,L estimator with L = 10000 . Each classifier is trained during 10 epochs with stochastic gradient descent, with a learning rate of 0.01 
+
+and a momentum of 0.5, and with a batch size of 10 . The number of clusters is set to K = 5 .
+
+Supplementary results Extended results for various settings of the experiment are reported in Table 6. "Vanilla" refers to the setting where we do not perform clustering and train a single classifier on the entire set of clients. In contrast, "Affinity", "Sparse G. (3)" and "Sparse G. (5)" denote three different spectral clustering algorithms: "Affinity" denotes the setting where the MMDSW distance matrix D is directly used (after rescaling) as an affinity matrix by the spectral clustering algorithm 31 Figure 8: Distance matrices for MMDSW with MNIST (top row) and CIFAR-10 (bottom row), with 20 clients. On the left column we have imposed a cluster structure on the clients, while on the right column we have not imposed a specific structure. (parameter affinity="precomputed" of sklearn.SpectralClustering ) while "Sparse G. (3)" and "Sparse G. (5)" denote the setting where D is used to construct a binary matrix of the 3 or 5 nearest neighbors between the clients, which is then used as the affinity matrix for spectral clustering (parameter affinity="precomputed_nearest_neighbors" ). Note that the spectral clustering algorithm used in Table 2 corresponds to the setting "Affinity". 32 Table 6: Performance for boosted FL algorithms (full results). The average uplifts for OTDD are taken from Tables 2-5 of Rakotomamonjy et al. [2024] (maximum between support sizes 10 and 100). Note that the higher uplifts for OTDD are in part due to the fact that the baseline performance ("Vanilla") is often lower in Rakotomamonjy et al. [2024], so that in our reimplementation the boosting has less room to improve from. Cluster structure No cluster structure Clustering Clustering Vanilla Affinity Sparse G. (3) Sparse G. (5) Vanilla Affinity Sparse G. (3) Sparse G. (5) MNIST FedAvg 10 58.2 ± 2.3 99.5 ± 0.0 97.9 ± 3.2 90.8 ± 4.8 66.5 ± 3.5 94.4 ± 3.1 96.1 ± 1.3 90.7 ± 4.2 20 58.0 ± 1.7 99.2 ± 0.1 98.6 ± 1.2 99.2 ± 0.1 65.6 ± 5.0 84.0 ± 4.3 85.2 ± 3.4 85.0 ± 3.4 40 51.7 ± 3.6 99.0 ± 0.0 93.8 ± 4.1 99.0 ± 0.0 71.3 ± 3.7 77.0 ± 3.3 76.8 ± 2.1 77.0 ± 1.9 
+
+100 56.5 ± 4.5 98.8 ± 0.0 96.7 ± 2.8 91.3 ± 7.5 70.3 ± 2.9 72.5 ± 2.3 64.8 ± 2.9 70.6 ± 0.6 FedPer 10 97.6 ± 1.4 99.5 ± 0.0 99.5 ± 0.0 99.3 ± 0.1 96.3 ± 1.7 99.0 ± 0.1 99.2 ± 0.1 98.7 ± 0.5 20 98.0 ± 0.5 99.2 ± 0.0 99.2 ± 0.1 99.2 ± 0.1 95.7 ± 1.1 97.9 ± 0.3 97.9 ± 0.4 97.8 ± 0.4 40 97.5 ± 0.4 99.0 ± 0.0 98.7 ± 0.3 99.0 ± 0.0 94.7 ± 0.9 96.5 ± 0.4 96.6 ± 0.6 97.0 ± 0.3 
+
+100 95.9 ± 2.4 98.8 ± 0.0 98.6 ± 0.3 98.6 ± 0.2 94.7 ± 1.2 96.1 ± 0.6 94.9 ± 1.2 96.6 ± 0.6 
+
+FedRep 10 98.5 ± 0.1 98.8 ± 0.1 98.8 ± 0.1 98.7 ± 0.1 98.1 ± 0.2 98.7 ± 0.1 98.7 ± 0.1 98.6 ± 0.2 20 98.2 ± 0.1 98.8 ± 0.1 98.8 ± 0.1 98.8 ± 0.1 97.3 ± 0.2 97.9 ± 0.3 98.0 ± 0.1 97.4 ± 0.5 40 97.4 ± 0.2 98.7 ± 0.1 98.4 ± 0.4 98.7 ± 0.1 95.7 ± 1.2 97.3 ± 0.5 97.3 ± 0.5 97.4 ± 0.3 
+
+100 92.9 ± 4.5 98.4 ± 0.0 98.1 ± 0.6 97.5 ± 0.9 93.8 ± 0.5 96.1 ± 0.5 94.9 ± 1.2 95.8 ± 0.6 Average uplift MMDSW 15.7 ± 19.8 15.2 ± 19.2 14.7 ± 18.8 - 6.2 ± 9.7 5.3 ± 11.0 5.9 ± 9.1 OTDD 29.8 ± 28.4 29.0 ± 27.2 27.6 ± 26.3 - 18.9 ± 18.9 15.7 ± 18.6 14.3 ± 18.1 
+
+CIFAR-10 FedAvg 10 33.5 ± 1.0 84.8 ± 0.2 81.2 ± 7.3 65.1 ± 4.9 34.4 ± 2.0 71.2 ± 3.9 70.4 ± 2.4 64.0 ± 4.5 20 32.9 ± 0.9 82.6 ± 3.9 80.3 ± 5.4 79.4 ± 6.4 35.5 ± 1.4 60.6 ± 2.2 62.8 ± 2.9 61.8 ± 2.7 40 31.8 ± 1.1 84.0 ± 0.3 81.2 ± 3.7 84.0 ± 0.3 35.2 ± 1.9 57.5 ± 1.8 53.9 ± 2.0 57.0 ± 3.6 100 27.2 ± 2.3 82.4 ± 0.2 67.5 ± 9.4 74.8 ± 7.5 31.2 ± 1.1 47.7 ± 2.2 40.5 ± 3.3 46.1 ± 2.0 FedPer 10 82.7 ± 0.6 84.5 ± 0.2 84.4 ± 0.4 84.1 ± 0.3 81.6 ± 3.5 84.0 ± 2.8 83.9 ± 2.8 84.0 ± 2.9 20 81.6 ± 0.5 84.7 ± 0.2 84.5 ± 0.2 84.4 ± 0.5 81.9 ± 2.5 84.2 ± 2.4 84.2 ± 2.0 84.3 ± 2.0 
+
+40 80.5 ± 0.6 84.1 ± 0.3 84.0 ± 0.3 84.1 ± 0.2 81.7 ± 1.0 82.9 ± 1.1 83.4 ± 1.1 83.7 ± 0.9 
+
+100 76.9 ± 0.8 82.3 ± 0.2 81.2 ± 0.5 81.8 ± 0.6 77.8 ± 1.1 80.5 ± 0.7 80.2 ± 1.2 80.8 ± 0.7 
+
+FedRep 10 81.1 ± 0.3 83.2 ± 0.4 83.0 ± 0.6 82.6 ± 0.4 80.9 ± 3.4 82.6 ± 3.0 82.9 ± 2.9 83.1 ± 2.7 
+
+20 78.7 ± 0.8 82.6 ± 0.2 82.5 ± 0.6 82.4 ± 0.4 80.7 ± 2.6 83.2 ± 2.4 82.8 ± 2.2 83.1 ± 2.0 40 76.5 ± 0.6 81.3 ± 0.3 80.7 ± 0.5 81.2 ± 0.3 78.2 ± 1.2 81.1 ± 1.1 81.2 ± 0.8 81.5 ± 1.0 
+
+100 64.2 ± 1.1 72.9 ± 1.0 70.0 ± 1.3 70.9 ± 2.1 70.4 ± 0.8 72.9 ± 0.7 72.5 ± 0.9 73.7 ± 0.5 
+
+Average uplift MMDSW 24.3 ± 27.2 22.6 ± 26.0 22.4 ± 25.6 - 15.7 ± 18.8 14.5 ± 17.9 15.4 ± 17.7 
+
+OTDD 20.0 ± 21.3 12.4 ± 15.1 13.3 ± 16.1 - 19.9 ± 18.0 8.6 ± 15.4 9.1 ± 16.6 
+
+33 NeurIPS Paper Checklist 
+
+1. Claims 
+
+Question: Do the main claims made in the abstract and introduction accurately reflect the paper’s contributions and scope? Answer: [Yes] Justification: The abstract and introduction reflect the paper’s contributions and scope. Guidelines: • The answer [N/A] means that the abstract and introduction do not include the claims made in the paper. • The abstract and/or introduction should clearly state the claims made, including the contributions made in the paper and important assumptions and limitations. A [No] or [N/A] answer to this question will not be perceived well by the reviewers. • The claims made should match theoretical and experimental results, and reflect how much the results can be expected to generalize to other settings. • It is fine to include aspirational goals as motivation as long as it is clear that these goals are not attained by the paper. 2. Limitations 
+
+Question: Does the paper discuss the limitations of the work performed by the authors? Answer: [Yes] Justification: The limitations are discussed in the conclusion. Guidelines: • The answer [N/A] means that the paper has no limitation while the answer [No] means that the paper has limitations, but those are not discussed in the paper. • The authors are encouraged to create a separate “Limitations” section in their paper. • The paper should point out any strong assumptions and how robust the results are to violations of these assumptions (e.g., independence assumptions, noiseless settings, model well-specification, asymptotic approximations only holding locally). The authors should reflect on how these assumptions might be violated in practice and what the implications would be. • The authors should reflect on the scope of the claims made, e.g., if the approach was only tested on a few datasets or with a few runs. In general, empirical results often depend on implicit assumptions, which should be articulated. • The authors should reflect on the factors that influence the performance of the approach. For example, a facial recognition algorithm may perform poorly when image resolution is low or images are taken in low lighting. Or a speech-to-text system might not be used reliably to provide closed captions for online lectures because it fails to handle technical jargon. • The authors should discuss the computational efficiency of the proposed algorithms and how they scale with dataset size. • If applicable, the authors should discuss possible limitations of their approach to address problems of privacy and fairness. • While the authors might fear that complete honesty about limitations might be used by reviewers as grounds for rejection, a worse outcome might be that reviewers discover limitations that aren’t acknowledged in the paper. The authors should use their best judgment and recognize that individual actions in favor of transparency play an impor-tant role in developing norms that preserve the integrity of the community. Reviewers will be specifically instructed to not penalize honesty concerning limitations. 3. Theory assumptions and proofs 
+
+Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof? Answer: [Yes] 34 Justification: We provide rigorous proofs of all of our theoretical claims in the appendix. Guidelines: • The answer [N/A] means that the paper does not include theoretical results. • All the theorems, formulas, and proofs in the paper should be numbered and cross-referenced. • All assumptions should be clearly stated or referenced in the statement of any theorems. • The proofs can either appear in the main paper or the supplemental material, but if they appear in the supplemental material, the authors are encouraged to provide a short proof sketch to provide intuition. • Inversely, any informal proof provided in the core of the paper should be complemented by formal proofs provided in appendix or supplemental material. • Theorems and Lemmas that the proof relies upon should be properly referenced. 4. Experimental result reproducibility 
+
+Question: Does the paper fully disclose all the information needed to reproduce the main ex-perimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)? Answer: [Yes] Justification: All the information needed to reproduce the experiments are disclosed in the paper and its appendix. Guidelines: • The answer [N/A] means that the paper does not include experiments. • If the paper includes experiments, a [No] answer to this question will not be perceived well by the reviewers: Making the paper reproducible is important, regardless of whether the code and data are provided or not. • If the contribution is a dataset and/or model, the authors should describe the steps taken to make their results reproducible or verifiable. • Depending on the contribution, reproducibility can be accomplished in various ways. For example, if the contribution is a novel architecture, describing the architecture fully might suffice, or if the contribution is a specific model and empirical evaluation, it may be necessary to either make it possible for others to replicate the model with the same dataset, or provide access to the model. In general. releasing code and data is often one good way to accomplish this, but reproducibility can also be provided via detailed instructions for how to replicate the results, access to a hosted model (e.g., in the case of a large language model), releasing of a model checkpoint, or other means that are appropriate to the research performed. • While NeurIPS does not require releasing code, the conference does require all submis-sions to provide some reasonable avenue for reproducibility, which may depend on the nature of the contribution. For example (a) If the contribution is primarily a new algorithm, the paper should make it clear how to reproduce that algorithm. (b) If the contribution is primarily a new model architecture, the paper should describe the architecture clearly and fully. (c) If the contribution is a new model (e.g., a large language model), then there should either be a way to access this model for reproducing the results or a way to reproduce the model (e.g., with an open-source dataset or instructions for how to construct the dataset). (d) We recognize that reproducibility may be tricky in some cases, in which case authors are welcome to describe the particular way they provide for reproducibility. In the case of closed-source models, it may be that access to the model is limited in some way (e.g., to registered users), but it should be possible for other researchers to have some path to reproducing or verifying the results. 5. Open access to data and code 
+
+Question: Does the paper provide open access to the data and code, with sufficient instruc-tions to faithfully reproduce the main experimental results, as described in supplemental material? 35 Answer: [Yes] Justification: Our code will be made public. Guidelines: • The answer [N/A] means that paper does not include experiments requiring code. • Please see the NeurIPS code and data submission guidelines ( https://neurips.cc/ public/guides/CodeSubmissionPolicy ) for more details. • While we encourage the release of code and data, we understand that this might not be possible, so [No] is an acceptable answer. Papers cannot be rejected simply for not including code, unless this is central to the contribution (e.g., for a new open-source benchmark). • The instructions should contain the exact command and environment needed to run to reproduce the results. See the NeurIPS code and data submission guidelines ( https: //neurips.cc/public/guides/CodeSubmissionPolicy ) for more details. • The authors should provide instructions on data access and preparation, including how to access the raw data, preprocessed data, intermediate data, and generated data, etc. • The authors should provide scripts to reproduce all experimental results for the new proposed method and baselines. If only a subset of experiments are reproducible, they should state which ones are omitted from the script and why. • At submission time, to preserve anonymity, the authors should release anonymized versions (if applicable). • Providing as much information as possible in supplemental material (appended to the paper) is recommended, but including URLs to data and code is permitted. 6. Experimental setting/details 
+
+Question: Does the paper specify all the training and test details (e.g., data splits, hyperpa-rameters, how they were chosen, type of optimizer) necessary to understand the results? Answer: [Yes] Justification: All the details necessary to understand the results are described in the paper and its appendix. Guidelines: • The answer [N/A] means that the paper does not include experiments. • The experimental setting should be presented in the core of the paper to a level of detail that is necessary to appreciate the results and make sense of them. • The full details can be provided either with the code, in appendix, or as supplemental material. 7. Experiment statistical significance 
+
+Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments? Answer: [No] Justification: The experiments in our papers do not involve error bars or statistical signif-icance tests. We report standard deviations for the classifier accuracies in the federated learning experiment and for the FID scores in the generative modeling experiment. Guidelines: • The answer [N/A] means that the paper does not include experiments. • The authors should answer [Yes] if the results are accompanied by error bars, confidence intervals, or statistical significance tests, at least for the experiments that support the main claims of the paper. • The factors of variability that the error bars are capturing should be clearly stated (for example, train/test split, initialization, random drawing of some parameter, or overall run with given experimental conditions). • The method for calculating the error bars should be explained (closed form formula, call to a library function, bootstrap, etc.) • The assumptions made should be given (e.g., Normally distributed errors). 36 • It should be clear whether the error bar is the standard deviation or the standard error of the mean. • It is OK to report 1-sigma error bars, but one should state it. The authors should preferably report a 2-sigma error bar than state that they have a 96% CI, if the hypothesis of Normality of errors is not verified. • For asymmetric distributions, the authors should be careful not to show in tables or figures symmetric error bars that would yield results that are out of range (e.g., negative error rates). • If error bars are reported in tables or plots, the authors should explain in the text how they were calculated and reference the corresponding figures or tables in the text. 8. Experiments compute resources 
+
+Question: For each experiment, does the paper provide sufficient information on the com-puter resources (type of compute workers, memory, time of execution) needed to reproduce the experiments? Answer: [Yes] Justification: In the case of the experiments on synthetic data in the appendix, where execution time is important, we give all the necessary information on the computer resources necessary to reproduce the experiments. Guidelines: • The answer [N/A] means that the paper does not include experiments. • The paper should indicate the type of compute workers CPU or GPU, internal cluster, or cloud provider, including relevant memory and storage. • The paper should provide the amount of compute required for each of the individual experimental runs as well as estimate the total compute. • The paper should disclose whether the full research project required more compute than the experiments reported in the paper (e.g., preliminary or failed experiments that didn’t make it into the paper). 9. Code of ethics 
+
+Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics https://neurips.cc/public/EthicsGuidelines ?Answer: [Yes] Justification: The research conducted in the paper is conform to the NeurIPS Code of Ethics. Guidelines: • The answer [N/A] means that the authors have not reviewed the NeurIPS Code of Ethics. • If the authors answer [No], they should explain the special circumstances that require a deviation from the Code of Ethics. • The authors should make sure to preserve anonymity (e.g., if there is a special consid-eration due to laws or regulations in their jurisdiction). 10. Broader impacts 
+
+Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed? Answer: [N/A] Justification: There are no direct negative societal impact downstream of the work. Guidelines: • The answer [N/A] means that there is no societal impact of the work performed. • If the authors answer [N/A] or [No], they should explain why their work has no societal impact or why the paper does not address societal impact. • Examples of negative societal impacts include potential malicious or unintended uses (e.g., disinformation, generating fake profiles, surveillance), fairness considerations (e.g., deployment of technologies that could make decisions that unfairly impact specific groups), privacy considerations, and security considerations. 37 • The conference expects that many papers will be foundational research and not tied to particular applications, let alone deployments. However, if there is a direct path to any negative applications, the authors should point it out. For example, it is legitimate to point out that an improvement in the quality of generative models could be used to generate Deepfakes for disinformation. On the other hand, it is not needed to point out that a generic algorithm for optimizing neural networks could enable people to train models that generate Deepfakes faster. • The authors should consider possible harms that could arise when the technology is being used as intended and functioning correctly, harms that could arise when the technology is being used as intended but gives incorrect results, and harms following from (intentional or unintentional) misuse of the technology. • If there are negative societal impacts, the authors could also discuss possible mitigation strategies (e.g., gated release of models, providing defenses in addition to attacks, mechanisms for monitoring misuse, mechanisms to monitor how a system learns from feedback over time, improving the efficiency and accessibility of ML). 11. Safeguards 
+
+Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse (e.g., pre-trained language models, image generators, or scraped datasets)? Answer: [N/A] Justification: The paper poses no such risks. Guidelines: • The answer [N/A] means that the paper poses no such risks. • Released models that have a high risk for misuse or dual-use should be released with necessary safeguards to allow for controlled use of the model, for example by requiring that users adhere to usage guidelines or restrictions to access the model or implementing safety filters. • Datasets that have been scraped from the Internet could pose safety risks. The authors should describe how they avoided releasing unsafe images. • We recognize that providing effective safeguards is challenging, and many papers do not require this, but we encourage authors to take this into account and make a best faith effort. 12. Licenses for existing assets 
+
+Question: Are the creators or original owners of assets (e.g., code, data, models), used in the paper, properly credited and are the license and terms of use explicitly mentioned and properly respected? Answer: [N/A] Justification: We do not use existing assets in the paper. Guidelines: • The answer [N/A] means that the paper does not use existing assets. • The authors should cite the original paper that produced the code package or dataset. • The authors should state which version of the asset is used and, if possible, include a URL. • The name of the license (e.g., CC-BY 4.0) should be included for each asset. • For scraped data from a particular source (e.g., website), the copyright and terms of service of that source should be provided. • If assets are released, the license, copyright information, and terms of use in the package should be provided. For popular datasets, paperswithcode.com/datasets 
+
+has curated licenses for some datasets. Their licensing guide can help determine the license of a dataset. • For existing datasets that are re-packaged, both the original license and the license of the derived asset (if it has changed) should be provided. 38 • If this information is not available online, the authors are encouraged to reach out to the asset’s creators. 13. New assets 
+
+Question: Are new assets introduced in the paper well documented and is the documentation provided alongside the assets? Answer: [N/A] Justification: We do not release new assets. Guidelines: • The answer [N/A] means that the paper does not release new assets. • Researchers should communicate the details of the dataset/code/model as part of their submissions via structured templates. This includes details about training, license, limitations, etc. • The paper should discuss whether and how consent was obtained from people whose asset is used. • At submission time, remember to anonymize your assets (if applicable). You can either create an anonymized URL or include an anonymized zip file. 14. Crowdsourcing and research with human subjects 
+
+Question: For crowdsourcing experiments and research with human subjects, does the paper include the full text of instructions given to participants and screenshots, if applicable, as well as details about compensation (if any)? Answer: [N/A] Justification: Our paper does not involve such research. Guidelines: • The answer [N/A] means that the paper does not involve crowdsourcing nor research with human subjects. • Including this information in the supplemental material is fine, but if the main contribu-tion of the paper involves human subjects, then as much detail as possible should be included in the main paper. • According to the NeurIPS Code of Ethics, workers involved in data collection, curation, or other labor should be paid at least the minimum wage in the country of the data collector. 15. Institutional review board (IRB) approvals or equivalent for research with human subjects 
+
+Question: Does the paper describe potential risks incurred by study participants, whether such risks were disclosed to the subjects, and whether Institutional Review Board (IRB) approvals (or an equivalent approval/review based on the requirements of your country or institution) were obtained? Answer: [N/A] Justification: Our paper does not involve such research. Guidelines: • The answer [N/A] means that the paper does not involve crowdsourcing nor research with human subjects. • Depending on the country in which research is conducted, IRB approval (or equivalent) may be required for any human subjects research. If you obtained IRB approval, you should clearly state this in the paper. • We recognize that the procedures for this may vary significantly between institutions and locations, and we expect authors to adhere to the NeurIPS Code of Ethics and the guidelines for their institution. • For initial submissions, do not include any information that would break anonymity (if applicable), such as the institution conducting the review. 16. Declaration of LLM usage 
+
+39 Question: Does the paper describe the usage of LLMs if it is an important, original, or non-standard component of the core methods in this research? Note that if the LLM is used only for writing, editing, or formatting purposes and does not impact the core methodology, scientific rigor, or originality of the research, declaration is not required. Answer: [N/A] Justification: The core method development in this paper does not involve LLMs as any important, original, or non-standard components. Guidelines: • The answer [N/A] means that the core method development in this research does not involve LLMs as any important, original, or non-standard components. • Please refer to our LLM policy in the NeurIPS handbook for what should or should not be described. 40

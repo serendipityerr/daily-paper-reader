@@ -1,0 +1,5150 @@
+Title: A Mathematical Introduction to Diffusion Models
+
+URL Source: https://arxiv.org/pdf/2607.01693v1
+
+Published Time: Fri, 03 Jul 2026 00:31:18 GMT
+
+Number of Pages: 61
+
+Markdown Content:
+A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 
+
+JIANFENG LU ABSTRACT . These notes give a proof-oriented introduction to diffusion models from the viewpoint of sam-pling, tracing a single arc from classical sampling dynamics to modern diffusion samplers, their error analy-sis, and inference-time control. They proceed in five movements. The first develops the sampling language and the Langevin toolkit—target distributions and discrepancies, Markov kernels, Fokker–Planck evolution, and entropy dissipation—and turns it into convergence guarantees for Langevin diffusion, the unadjusted Langevin algorithm, and its Metropolis-adjusted correction. The second builds continuous-time score-based diffusion models through Gaussian noising, Tweedie’s identity, the reverse-time SDE, and the probability flow ODE, and revisits the same Gaussian channel through stochastic localization and Polchinski flow. The third discretizes these continuous dynamics into implementable DDPM samplers— exact and Gaussian reverse kernels, the denoising-score equivalence—and carries out a sampling-error analysis that separates early stop-ping, KL telescoping, and score error, treated across Euler–Maruyama, Hessian control, and high-accuracy first-order rejection sampling. The fourth develops discrete diffusion on finite state spaces, where continuous-time Markov chains replace the noising SDE and the reverse kernel and its error analysis are recast in finite-state form. The fifth turns to inference-time steering of a trained model: guidance, reward tilting, path-space control, and inference-time reinforcement learning. Throughout, the material is layered into core definitions and identities proved in full, representative estimates proved under simplifying assumptions, and research-level theorems stated with a proof roadmap. The intended audience is beginning graduate students with a background in probability but no prior exposure to stochastic differential equations, stochastic numerics, or diffusion models. 
+
+CONTENTS 
+
+1. Introduction to Sampling and Langevin Dynamics 42. Convergence of Langevin Diffusion and ULA 10 3. Score-Based Diffusion Models 14 4. Stochastic Localization and Polchinski Flow 19 5. Discretizing Continuous Diffusion Models 26 6. Error Analysis for Diffusion Models 29 7. Discrete Diffusion Models 39 8. Guidance, Reward Tilting, and Inference-Time RL 49 Appendix A. Itô Calculus and Girsanov Theorem 57 Appendix B. Gaussian Toolbox 59 References 60 
+
+Date : July 2nd, 2026. Lecture notes for the John Tukey Summer Graduate School on Mathematics of Generative Models at SLMath (June 22nd, 2026 – July 2nd, 2026), co-organized and co-taught with Eric Vanden-Eijnden. We thank SLMath for the hospitality and students in the summer school for helpful feedback. The work is supported in part by the National Science Foundation via awards DMS-2309378 and IIS-2403276. 
+
+1 
+
+> arXiv:2607.01693v1 [cs.LG] 2 Jul 2026 2JIANFENG LU
+
+How to read these notes. The intended audience is beginning graduate students who have seen proba-bility, linear algebra, and multivariable calculus, but may not have prior exposure to stochastic differential equations or diffusion models. The notes therefore separate three levels of material. 
+
+• Core definitions and identities are proved in detail. These run through every section and include the Fokker–Planck equation and entropy dissipation, Tweedie’s identity and the reverse SDE, the probability flow ODE, the exact and Gaussian DDPM reverse kernels, the denoising-score equiv-alence, the finite-state reverse kernel of discrete diffusion, and the reward-tilting identity. 
+
+• Representative estimates are proved under simplifying assumptions, to show a mechanism in its cleanest form. For example, we prove KL contraction under a log-Sobolev inequality, compute the ULA bias exactly for a Gaussian target, and bound the one-step discretization and score-error contributions to the diffusion-model KL. 
+
+• Research-level theorems are stated in simplified form with a proof roadmap. These include the ULA and MALA convergence guarantees, high-accuracy diffusion sampling via first-order rejec-tion sampling and the discrete-diffusion error analysis. The goal is not to reproduce every tech-nical lemma of the original papers, but to make clear what each theorem is saying, why the as-sumptions appear, and how the proof is organized. Two appendices collect the analytic tools used repeatedly: Itô calculus and the Girsanov change-of-measure formula in Appendix A, and the Gaussian identities in Appendix B. A reader comfortable with these may skip them and refer back as needed. These notes are self-contained but deliberately selective, and they overlap with several excellent treat-ments that a reader may wish to consult in parallel. Yuansi Chen’s lecture notes for the ETH course Com-putational and Statistical Aspects of Diffusion Models [15] cover much of the same ground with a stronger emphasis on convergence proofs, guidance, and discrete diffusion, and are a useful companion to the later sections here. For the Langevin and log-concave sampling side, Chewi’s book [18] is the standard reference. For stochastic calculus and numerical analysis of SDEs and CTMCs, we refer to the book [21] by E, Li, and Vanden-Eijnden. Throughout, when a result first appeared in a research paper we cite the original; the lecture notes above are flagged here once, as a unified entry point to several of the topics that follow. These notes do not try to survey the full modern generative-modeling landscape. We focus on diffu-sion and Langevin mechanisms for which reverse-time SDEs, probability-flow ODEs, score-estimation identities, and inference-time control are the central actors. The notes treat learned-score error as an in-put to sampler guarantees, but do not discuss statistical learning theory for estimating scores from finite data. We also do not give detailed treatments of likelihood-based normalizing flows, adversarial and vari-ational models, autoregressive architectures, large-scale latent-diffusion engineering, or several newer continuous-time alternatives. For entry points to the latter, see flow matching [34], rectified flows [35], stochastic interpolants [1], consistency models [43], and recent one-step formulations such as mean flow [23]. These methods share much of the same language of probability paths, transport equations, denois-ers, and ODE/SDE samplers. 
+
+Minimal probability background. We use the following conventions repeatedly. If X is a random vari-able, then Law( X ) denotes its distribution. If X has density p, expectations are written either as E[ f (X )] or R f (x)p(x) d x. A conditional expectation E[Y | X = x] is best thought of as the best prediction of Y as a function of the observed value x. For a Markov chain, P (x, d y) denotes the distribution of the next state given the current state x. For an SDE, all formal differentiations can be justified under smoothness and decay assumptions; the notes use this formal calculus as a way to keep the main ideas visible. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 3
+
+We often use the same symbol for a probability law and its density when the meaning is clear from context. For example, pdata may denote the data law, the density of that law, or the measure pdata ( d x). Similarly, pt may denote either Law( Xt ) or its density. This common abuse of notation keeps the formulas readable, but when a density value is needed we write expressions such as ∇ log pt (x). 
+
+Recurring notation. The following symbols are used across several sections. More local notation is intro-duced where it is needed. Symbol Meaning 
+
+pdata data distribution, the target of generative modeling. 
+
+X0 clean data sample, X0 ∼ pdata .
+
+Xt , pt continuous-time forward-noised variable and its law/density. 
+
+Bt Brownian motion driving the forward noising SDE. 
+
+at , σt continuous Gaussian marginal parameters: Xt | X0 ∼ N ¡at X0, σ2 
+
+> t
+
+I ¢.
+
+s⋆ 
+
+> t
+
+, st true and learned continuous-time scores. 
+
+Y ← 
+
+> s
+
+, B← 
+
+> s
+
+reverse-time SDE sample path and its reverse Brownian motion, in reverse time s = T − t with Y ← 
+
+> 0
+
+∼ pT .
+
+Z ← 
+
+> s
+
+reverse-time probability-flow ODE sample path, Z ← 
+
+> 0
+
+∼ pT .
+
+Xk forward-noised variable at discrete time k.
+
+pk density/law of Xk .
+
+αk , ηk one-step noising parameters in Xk+1 | Xk ∼ N ¡αk Xk , α2 
+
+> k
+
+ηk I ¢; ηk is the one-step variance parameter. 
+
+hk reverse-step time increment tk+1 − tk in the discretization analysis; equals 
+
+ηk in the variance-exploding case. 
+
+ak , σk marginal parameters: Xk | X0 ∼ N ¡ak X0, σ2 
+
+> k
+
+I ¢.
+
+P → 
+
+> k
+
+(x → x′) forward transition density Law( Xk+1 | Xk = x). 
+
+P ← 
+
+> k
+
+(x′ → · ) exact backward transition density Law( Xk | Xk+1 = x′). 
+
+s⋆ 
+
+> k
+
+true score ∇ log pk .
+
+sk learned score estimate. 
+
+ε2 
+
+> k,score
+
+mean-square score error Epk
+
+°°sk − s⋆
+
+> k
+
+°°2.
+
+Algorithm acronyms. The following acronyms name algorithms or algorithmic discretizations used in several sections. 4 JIANFENG LU 
+
+Acronym Meaning MCMC Markov chain Monte Carlo, the strategy of sampling by running a Markov chain whose long-run law is the target. ULA unadjusted Langevin algorithm, the Euler–Maruyama discretization of overdamped Langevin diffusion. MALA Metropolis-adjusted Langevin algorithm, ULA with an accept-reject cor-rection using density ratios. DDPM denoising diffusion probabilistic model, the discrete Gaussian noising and learned reverse-sampling framework. DDIM denoising diffusion implicit model, a deterministic or partially stochastic DDPM-compatible sampler closely related to probability-flow discretiza-tion. EM Euler–Maruyama, the basic time-discretization rule for SDEs. 
+
+FORS first-order rejection sampling, a score-only correction mechanism for Gaussian tilts. 
+
+AI usage disclosure. Large-language-model tools were used in the preparation of these notes to help with drafting, editing, reorganization, and consistency checks. The mathematical content, exposition choices, references, and any remaining errors are the responsibility of the author. 1. I NTRODUCTION TO SAMPLING AND LANGEVIN DYNAMICS 
+
+Sampling is the problem of producing random points that look as if they were drawn from a given dis-tribution. This is easy to state but often hard to do: the distribution may be known only up to a normal-izing constant, or only through data, and drawing from it directly may be infeasible. The strategy running through these notes is indirect. Rather than sample the hard target in one shot, we build a random pro-cess that is easy to simulate and whose distribution gradually drifts toward the target, and we read off a sample once the process has run long enough. Making this idea precise calls for one habit above all: in-stead of following a single trajectory, track the whole distribution as it moves through the algorithm. This first section deliberately goes slowly, fixing that habit and the language we use to measure how far one distribution is from another. 1.1. The sampling problem. Let π be a probability distribution on Rd . In most applications, π is not available through exact samples. Instead we may have access to: 
+
+• the unnormalized density π(x) ∝ e−U (x);
+
+• the gradient ∇ log π(x) = −∇ U (x); 
+
+• samples from a noisy distribution related to π;The goal is to construct a random variable bX with law bπ such that D(bπ, π) ≤ ε, where D is an appropriate discrepancy. There is no single best choice of D. Let μ and ν be two probability laws on Rd . We recall three basic discrepancies. (1) Total variation asks whether every event has nearly the right probability: DTV (μ, ν) = sup 
+
+> A
+
+¯¯μ(A) − ν(A)¯¯ = 12
+
+Z ¯ ¯¯¯
+
+dμ
+
+dλ − dν
+
+dλ
+
+¯¯¯¯ dλ.Here λ is any measure such that both μ and ν are absolutely continuous with respect to λ, written 
+
+μ, ν ≪ λ; for example, we may take λ = μ + ν. The notation d μ/ d λ denotes the Radon–Nikodym A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 5
+
+derivative, the density of μ with respect to λ, characterized by 
+
+μ(A) =
+
+Z
+
+> A
+
+dμ
+
+dλ dλ
+
+for measurable sets A. The same applies to d ν/ d λ, and the value of the total-variation distance does not depend on which such reference measure λ is chosen. (2) Wasserstein-2 distance asks whether probability mass can be transported a short geometric dis-tance: 
+
+W 22 (μ, ν) = inf 
+
+> γ∈Π(μ,ν)
+
+Z °°x − y°°2 γ( d x, d y). Here Π(μ, ν) is the set of couplings of μ and ν, meaning probability measures γ on Rd × Rd whose first marginal is μ and whose second marginal is ν.(3) KL divergence asks whether μ can be encoded efficiently using ν as a reference: DKL (μ∥ν) =
+
+Z
+
+log 
+
+μ dμ
+
+dν
+
+¶
+
+dμ,when μ is absolutely continuous with respect to ν, and +∞ otherwise. Note that the KL divergence is asymmetric: D KL (μ∥ν)̸ = DKL (ν∥μ). In particular, KL is not a metric. KL is often the main bookkeeping divergence we will use in this course. The other metrics translate this information into statements about events, geometric displacement, or weak test functions. The ba-sic comparison begins with the Csiszár–Kullback–Pinsker inequality; see, for example, Bakry, Gentil, and Ledoux [6]: DTV (μ, ν) ≤
+
+r 12 DKL (μ∥ν). Thus a KL guarantee immediately gives a TV guarantee, and hence also a weak test-function guarantee. Another recurring rule is data processing : applying the same observation map to two random objects cannot increase KL. If T is measurable and T#μ denotes the law of T (X ) for X ∼ μ, then DKL (T#μ∥T#ν) ≤ DKL (μ∥ν). The same monotonicity holds for total variation. We use this principle repeatedly to pass from path-space comparisons to endpoint laws; a proof is given in Lemma A.1. Wasserstein distance is more geometric. If μ and ν are supported on a set of diameter R, then a maximal coupling gives 
+
+W 22 (μ, ν) ≤ R2 DTV (μ, ν) ≤ R2
+
+r 12 DKL (μ∥ν). Without a bounded-diameter or moment/functional-inequality assumption, there is no universal com-parison in the other direction: small W2 need not imply small TV or KL, and small TV or KL need not control W2 if a tiny amount of mass can move very far away. A more powerful comparison is available relative to a fixed reference law. A probability law ν satisfies a Talagrand T2 transport-entropy inequality with constant CT if 
+
+W 22 (μ, ν) ≤ 2CT DKL (μ∥ν) for all μ ≪ ν.One standard route to this inequality is through log-Sobolev. In the convention of these notes, if ν satisfies DKL (μ∥ν) ≤ CLSI 
+
+2 FI( μ∥ν), where FI( μ∥ν) =
+
+Z ° °°°∇ log dμ
+
+dν
+
+°°°°
+
+> 2
+
+dμ6 JIANFENG LU 
+
+when the derivative is well defined, then the Otto–Villani theorem gives the transport bound 
+
+W 22 (μ, ν) ≤ 2CLSI DKL (μ∥ν). This is one reason log-Sobolev and transport inequalities appear naturally in sampling theory; see Vil-lani [47] and Bakry, Gentil, and Ledoux [6]. 
+
+Example (Three distances see different things) . Let μ = δ0 and ν = δϵ on R. Then D TV (μ, ν) = 1 for every 
+
+ϵ̸ = 0, because the two point masses live on disjoint sets. On the other hand, W2(μ, ν) = ϵ and D KL (μ∥ν) =
+
+DKL (ν∥μ) = +∞ . Thus TV and KL are too strict for comparing a point mass to a tiny displacement of itself, while Wasserstein sees that the two laws are geometrically close. 1.2. Markov chain Monte Carlo. Markov chain Monte Carlo (MCMC) turns sampling into the problem of running a Markov chain. Instead of drawing directly from π, we choose a transition rule whose repeated application should have π as its equilibrium law. A Markov kernel P maps a current state x to a distribution 
+
+P (x, ·). If πP = π, then π is invariant, and the ideal MCMC chain runs 
+
+Xn+1 ∼ P (Xn , ·), n = 0, 1, . . . , with the hope that Law( Xn ) approaches π as n → ∞ .This viewpoint immediately separates two questions. First, is the transition kernel designed so that the right law is invariant? Second, how long must the chain run before it is close to equilibrium? For a genuine metric D, such as TV or W2, a typical algorithmic decomposition is 
+
+D(Law( Xn ), π) ≤ D(Law( Xn ), πh )
+
+| {z }
+
+> mixing to the algorithm’s invariant law
+
++ D(πh , π)
+
+| {z }
+
+> bias from approximation
+
+,where πh is the invariant distribution of the implementable algorithm. This is a triangle-inequality ar-gument, so it applies to genuine metrics but not to KL. In general there is no inequality of the form DKL (μ∥ρ) ≤ DKL (μ∥ν) + DKL (ν∥ρ). This decomposition separates the error caused by not running the algorithm long enough from the error caused by using a transition rule whose invariant law is not exactly π. For Langevin sampling, that second error appears when a continuous diffusion is replaced by a time-stepping rule. The discretization may lead to an implementable chain with πh̸ = π. In exact MCMC methods, such as Metropolis-adjusted Langevin, the transition is constructed so that πh = π.
+
+Definition 1.1 (Invariant and reversible kernels) . A probability distribution π is invariant for P if 
+
+Z
+
+π( d x)P (x, A) = π(A) for every measurable set A.It is reversible for P if the detailed balance identity 
+
+π( d x)P (x, d y) = π( d y)P (y, d x)holds as measures on pairs ( x, y). Reversibility implies invariance by integrating both sides over x.Caution: invariance is not convergence. Invariance is only a fixed-point statement: if X0 ∼ π, then one step of the chain still has law π. It does not by itself say that a chain started from another law will approach 
+
+π. For example, the identity kernel P (x, ·) = δx leaves every distribution invariant, but it never mixes. Even uniqueness of the invariant law is not quite enough without excluding periodic behavior: on the two-point space {0, 1}, the deterministic flip 0 7 → 1, 1 7 → 0 has the uniform distribution as an invariant reversible law, but a chain started from 0 oscillates forever. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 7
+
+Thus detailed balance is a convenient way to verify invariance, not a convergence theorem. To justify MCMC, one also needs an ergodicity mechanism, such as irreducibility and aperiodicity in finite state spaces, or the appropriate Harris recurrence and minorization conditions in general state spaces. Quan-titative sampling bounds then add still more structure: spectral gaps, conductance, contraction, or func-tional inequalities. See Meyn and Tweedie [37] for a classical treatment of these Markov-chain conditions. A common design principle for MCMC is therefore to start one level above the implementable chain. First design a continuous-time Markov process whose invariant law is π and whose convergence mecha-nism can be analyzed. Then discretize that process to obtain a computable Markov chain, possibly adding a Metropolis correction if one wants to remove discretization bias. Langevin dynamics is the canonical ex-ample of this principle: the continuous diffusion has π as its invariant law, while ULA and MALA are two different ways to turn that diffusion into an algorithm. 1.3. Overdamped Langevin diffusion. Assume π(x) ∝ e−U (x) with U : Rd → R smooth. The overdamped Langevin diffusion is the continuous-time Markov process (1.1) dXt = −∇ U (Xt ) d t + p2 d Bt = ∇ log π(Xt ) d t + p2 d Bt .The drift −∇ U = ∇ log π points toward regions where π is larger, much as gradient descent moves toward lower potential. The diffusion coefficient in the Brownian term is tuned so that the ensemble keeps pre-cisely the spread prescribed by π.This is the basic difference between optimization and sampling. Optimization asks for a point x⋆ with small objective value, whereas sampling asks for a law. If π is bimodal, with half of its mass near each of two separated modes, an optimizer may correctly return one mode, but a sampler must visit both modes with the correct frequencies. There are two complementary ways to read (1.1). Pathwise, each particle is pulled down the potential landscape by −∇ U while Brownian motion keeps the ensemble spread out. Distributionally, the density 
+
+qt of Xt evolves by a deterministic PDE. The corresponding Fokker–Planck equation is (1.2) ∂t qt = ∇ · (qt ∇U ) + ∆qt = ∇ · 
+
+³
+
+qt ∇ log qt
+
+π
+
+´
+
+.At this stage the point of (1.2) is simply that the stochastic particle system has a deterministic law-level description. The SDE picture is good for intuition and simulation. The PDE picture is good for proving invariance and entropy decay. To derive the Fokker–Planck equation, we recall Itô calculus in the form needed for our calculation, more details can be found in Appendix A. If dXt = b(Xt ) d t + σ dBt
+
+with constant diffusion matrix σ, then for a smooth test function ϕ,dϕ(Xt ) = ∇ϕ(Xt ), b(Xt )® dt + 12 Tr ¡σσ ⊤∇2ϕ(Xt )¢ dt + ∇ϕ(Xt ), σ dBt
+
+® .The last term is a martingale increment, so it disappears after taking expectations. For (1.1), b = −∇ U and 
+
+σ = p2 I . Applying the preceding formula to (1.1) gives ddt E[ϕ(Xt )] = E[− ∇U (Xt ), ∇ϕ(Xt )® + ∆ϕ(Xt )]. If Xt has density qt , then ddt
+
+Z
+
+ϕqt dx =
+
+Z £− ∇U , ∇ϕ® + ∆ϕ¤ qt dx.8 JIANFENG LU 
+
+Integrating by parts, assuming boundary terms vanish, 
+
+Z
+
+−qt ∇U , ∇ϕ® dx =
+
+Z
+
+ϕ ∇ · (qt ∇U ) d x,
+
+Z
+
+qt ∆ϕ dx =
+
+Z
+
+ϕ ∆qt dx.Since this holds for all test functions ϕ, we obtain 
+
+∂t qt = ∇ · (qt ∇U ) + ∆qt .Finally, π ∝ e−U implies ∇U = −∇ log π, and 
+
+∇ · (qt ∇U ) + ∆qt = ∇ · 
+
+³
+
+qt ∇ log qt
+
+π
+
+´
+
+.The differential operator that appeared in the test-function calculation, 
+
+L ϕ = − ∇U , ∇ϕ® + ∆ϕ,is called the infinitesimal generator of the Langevin diffusion. The Fokker–Planck equation is the adjoint equation on densities. In weak form, the calculation above says ddt
+
+Z
+
+ϕqt dx =
+
+Z
+
+(L ϕ)qt dx =
+
+Z
+
+ϕ(L ∗qt ) d x,so ∂t qt = L ∗qt , where 
+
+L ∗q = ∇ · (q∇U ) + ∆q.
+
+Proposition 1.2 (Stationarity) . The target density π ∝ e−U satisfies 
+
+L ∗π = 0. 
+
+Consequently, if q 0 = π, then the solution of the Fokker–Planck equation remains q t = π for all t . Thus π is an invariant law of (1.1) .Proof. Since ∇ log π = −∇ U , we have ∇π = − π∇U . Therefore 
+
+L ∗π = ∇ · (π∇U ) + ∆π = ∇ · (π∇U + ∇ π) = 0. Thus the right-hand side of the adjoint equation ∂t qt = L ∗qt vanishes at qt = π, so the density π is stationary. □
+
+Example (Ornstein–Uhlenbeck process) . Take π = N (0, I ), so U (x) = ∥ x∥2 /2. Langevin dynamics be-comes dXt = − Xt dt + p2 d Bt .The explicit solution is 
+
+Xt = e−t X0 + p2
+
+Z t
+
+> 0
+
+e−(t −s) dBs .If X0 is deterministic, then 
+
+Xt ∼ N ¡e−t X0, (1 − e−2t )I ¢ .This example is worth remembering: the mean contracts exponentially and the variance fills in to the target variance. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 9
+
+1.4. Entropy dissipation. Differentiating KL along the flow gives (1.3) ddt DKL (qt ∥π) = − 
+
+Z ° °°∇ log qt
+
+π
+
+°°°2
+
+qt dx = − FI( qt ∥π), where FI( q∥π) is the relative Fisher information. 
+
+Proof of (1.3) . We have DKL (qt ∥π) =
+
+Z
+
+qt log qt
+
+π dx.Because R ∂t qt dx = 0, differentiating gives ddt DKL (qt ∥π) =
+
+Z
+
+∂t qt log qt
+
+π dx.Using the equivalent form of the Fokker–Planck equation, 
+
+∂t qt = ∇ · 
+
+³
+
+qt ∇ log qt
+
+π
+
+´
+
+,and integrating by parts, 
+
+Z
+
+∇ · 
+
+³
+
+qt ∇ log qt
+
+π
+
+´
+
+log qt
+
+π dx = − 
+
+Z
+
+qt
+
+°°°∇ log qt
+
+π
+
+°°°2
+
+dx.This is exactly − FI( qt ∥π). □
+
+The identity just proved becomes a quantitative convergence estimate once it is combined with a func-tional inequality. If π satisfies a log-Sobolev inequality DKL (q∥π) ≤ CLSI 
+
+2 FI( q∥π), then (1.3) implies ddt DKL (qt ∥π) ≤ − 2
+
+CLSI 
+
+DKL (qt ∥π). By Grönwall’s inequality, DKL (qt ∥π) ≤ e−2t /CLSI DKL (q0∥π). Thus the continuous-time process reduces KL error exponentially. In particular, if the potential U is m-strongly convex, that is ∇2U ⪰ mI with m > 0, then by the Bakry– Émery criterion [6] the target satisfies the log-Sobolev inequality with CLSI ≤ 1/ m, and the estimate above becomes the clean exponential rate DKL (qt ∥π) ≤ e−2mt DKL (q0∥π). The main lesson is the mechanism: KL divergence is a Lyapunov function, the relative Fisher informa-tion is its dissipation rate, and a structural inequality for the target converts dissipation into convergence. Sampling arguments often follow this pattern: choose a discrepancy, compute its derivative along the dynamics, and use an inequality for the target law to turn the derivative into a rate. The same identity also has a geometric reading. In optimal-transport language, overdamped Langevin is the W2-gradient flow of D KL (·∥ π), and (1.3) is its energy-dissipation identity; see Ambrosio, Gigli, and Savaré [3]. For background on diffusion semigroups, entropy dissipation, and log-Sobolev inequalities, see Bakry, Gentil, and Ledoux [6]; for the transport viewpoint behind Wasserstein geometry, see Vil-lani [47]. 10 JIANFENG LU 
+
+2. C ONVERGENCE OF LANGEVIN DIFFUSION AND ULA The previous section established continuous-time convergence through the entropy identity and log-Sobolev inequality. We now ask what remains of that story after replacing the diffusion by an imple-mentable Markov chain. The main new issue is numerical error: a time-stepping rule may converge as a Markov chain, but its invariant law need not be the target law. For a modern treatment of log-concave sampling algorithms, including Langevin algorithms and their Metropolis-adjusted variants, see the ex-cellent book by Chewi [18]. 2.1. Unadjusted Langevin algorithm. Euler–Maruyama with step size h > 0 gives the unadjusted Langevin algorithm (ULA) (2.1) Xn+1 = Xn − h∇U (Xn ) + p2h ξn , ξn ∼ N (0, I ) . ULA is often the first sampler one considers because it is simple, gradient-based, and cheap. Its limitation is equally important: (2.1) is not an exact transition of (1.1), and in general does not preserve π.It is tempting to view ULA as “almost Langevin” and therefore assume that it must have almost the right stationary law. Already for a Gaussian target one can see exactly what “almost” means. For small step size the bias is small, but it does not vanish at fixed h no matter how long the chain is run. This is the difference between mixing error, which decreases with more iterations, and discretization bias, which is built into the transition rule itself. 
+
+Example (ULA bias for a standard Gaussian) . Let U (x) = x2/2 in one dimension, so the target is π =
+
+N (0, 1). ULA becomes the Markov chain 
+
+Xn+1 = (1 − h)Xn + p2hξn .Recall from the Gaussian toolbox, Lemma B.1, that affine transformations of Gaussians are Gaussian, and that independent Gaussian variances add. In stationarity, Xn and Xn+1 have the same law. Thus, if the invariant law is centered Gaussian with variance vh , then 
+
+Xn ∼ N (0, vh ) =⇒ Xn+1 ∼ N ¡0, (1 − h)2vh + 2h¢ ,because ξn ∼ N (0, 1) is independent of Xn . Equality of the stationary input and output variances gives the identity 
+
+vh = (1 − h)2vh + 2h.Solving, 
+
+vh = 2h
+
+1 − (1 − h)2 = 22 − h .Thus the invariant law of ULA is πh = N (0, 2/(2 − h)), not π = N (0, 1) unless h = 0. For small h, the variance bias is 2/(2 − h) − 1 = h/(2 − h) = O(h). The same bias can also be expressed as divergences between the two invariant laws: DKL (πh ∥π) = 12
+
+¡vh − 1 − log vh
+
+¢ , DKL (π∥πh ) = 12
+
+μ 1
+
+vh
+
+− 1 + log vh
+
+¶
+
+,and 
+
+W 22 (πh , π) = (pvh − 1) 2.All three quantities are h2/16 + O(h3) as h ↓ 0. This example is the cleanest way to see why unadjusted discretization creates bias. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 11 
+
+2.2. One-step KL discretization error. Let Ph (x, ·) be the exact Langevin transition for time h, and let 
+
+bPh (x, ·) be the ULA transition. To compare them in KL, interpolate one ULA step over the interval [0, h] by d bXs = −∇ U (x) d s + p2 d Bs , bX0 = x.The exact Langevin law started from the same point has drift field y 7 → −∇ U (y). Since the KL below is Law( bX[0, h]) relative to Law( X[0, h]), the Girsanov formula evaluates both drift fields along the first path, namely at bXs . Thus the formula reviewed in Appendix A gives the path-space comparison DKL 
+
+¡Law( bX[0, h])°°Law( X[0, h])¢ = 14
+
+Z h
+
+> 0
+
+E °°∇U ( bXs ) − ∇ U (x)°°2 ds.By the data-processing inequality reviewed in Lemma A.1, the KL between the endpoint laws is no larger. If ∇U is L-Lipschitz, then DKL 
+
+¡ bPh (x, ·)°°Ph (x, ·)¢ ≤ L2
+
+4
+
+Z h
+
+> 0
+
+E °° b Xs − x°°2 ds.Since bXs = x − s∇U (x) + p2 Bs ,
+
+E °° b Xs − x°°2 = s2 ∥∇ U (x)∥2 + 2d s ,and therefore (2.2) DKL 
+
+¡ bPh (x, ·)°°Ph (x, ·)¢ ≤ L2
+
+4
+
+μ
+
+dh 2 + h3
+
+3 ∥∇ U (x)∥2
+
+¶
+
+.This is the KL analogue of a local truncation error: freezing the drift for one short interval costs order dh 2,plus a term depending on the local drift size. 2.3. Direct KL recursion for ULA. The one-step estimate explains the scale of the discretization error, but it is not by itself a convergence theorem to π. Indeed, a comparison such as D KL ( bqk ∥qkh ) cannot simply be added to D KL (qkh ∥π), because KL has no triangle inequality. The modern KL-based analysis instead tracks the target-relative quantity D KL ( bqk ∥π) directly. The following result is a translation of the KL theorem of Vempala and Wibisono [46] into our notation. 
+
+Theorem 2.1 (ULA convergence in KL) . Assume that π( d x) ∝ e−U (x) dx satisfies the log-Sobolev inequality with constant C LSI in the convention 
+
+DKL (q∥π) ≤ CLSI 
+
+2 FI( q∥π), 
+
+and that ∇U is L-Lipschitz. Let bqk be the law of ULA (2.1) with step size 
+
+0 < h ≤ 14CLSI L2 .
+
+If DKL ( bq0∥π) < ∞ , then 
+
+(2.3) DKL ( bqk ∥π) ≤ e−kh /CLSI DKL ( bq0∥π) + 8CLSI L2dh .No convexity is assumed in this theorem. The log-Sobolev inequality supplies the global mixing mech-anism, while the bounded Hessian assumption supplies the local control needed to discretize the diffu-sion. Thus, to reach KL target D KL ( bqk ∥π) ≤ ε2, it suffices to choose 
+
+h ≲ min 
+
+½ 1
+
+CLSI L2 , ε2
+
+CLSI L2d
+
+¾
+
+and run for 
+
+k ≳ CLSI 
+
+h log DKL ( bq0∥π)
+
+ε212 JIANFENG LU 
+
+iterations. Equivalently, the iteration complexity is 
+
+k = eO
+
+ÃC 2
+
+> LSI
+
+L2d
+
+ε2
+
+!
+
+.The dependence on the ambient dimension is linear in this KL analysis. By the Bakry–Émery criterion for log-Sobolev inequalities (see Bakry, Gentil, and Ledoux [6]), under m-strong convexity one has CLSI ≤
+
+1/ m, so the bound becomes eO(κ2d/ε2) complexity, where κ = L/m is the condition number. 
+
+Proof sketch. Fix one step and start from law bqk . Interpolate the ULA update by running, for elapsed time 
+
+t ∈ [0, h], the frozen-drift diffusion d ¯ Xt = −∇ U ( ¯ X0) d t + p2 d Bt , ¯X0 ∼ bqk .Write νt = Law( ¯ Xt ), so νh = bqk+1. Differentiating D KL (νt ∥π) along this interpolated process gives the same negative Fisher-information term as in the continuous Langevin calculation, plus the error caused by freezing the drift: ddt DKL (νt ∥π) = − FI( νt ∥π) + E
+
+D
+
+∇U ( ¯ Xt ) − ∇ U ( ¯ X0), ∇ log νt
+
+π ( ¯ Xt )
+
+E
+
+.Young’s inequality gives, directly for the inner product above, 
+
+E
+
+D
+
+∇U ( ¯ Xt ) − ∇ U ( ¯ X0), ∇ log νt
+
+π ( ¯ Xt )
+
+E
+
+≤ 12 E
+
+°°°∇ log νt
+
+π ( ¯ Xt )
+
+°°°2
+
++ 12 E °°∇U ( ¯ Xt ) − ∇ U ( ¯ X0)°°2
+
+= 12 FI( νt ∥π) + 12 E °°∇U ( ¯ Xt ) − ∇ U ( ¯ X0)°°2 .By L-smoothness, °°∇U ( ¯ Xt ) − ∇ U ( ¯ X0)°° ≤ L °° ¯Xt − ¯X0
+
+°°, so ddt DKL (νt ∥π) ≤ − 12 FI( νt ∥π) + L2
+
+2 E °° ¯Xt − ¯X0
+
+°°2 .The log-Sobolev inequality turns the first term into contraction: FI( νt ∥π) ≥ 2C −1 
+
+> LSI
+
+DKL (νt ∥π). Thus ddt DKL (νt ∥π) ≤ − 1
+
+CLSI 
+
+DKL (νt ∥π) + L2
+
+2 E °° ¯Xt − ¯X0
+
+°°2 .It remains to bound the displacement of the frozen-drift interpolation. Since 
+
+E °° ¯Xt − ¯X0
+
+°°2 = t 2E bqk ∥∇ U ∥2 + 2d t ,the Brownian part contributes the local dh 2 term after integration over t ∈ [0, h]. For the drift part, use an optimal W2 coupling between bqk and π. Along such a coupling, smoothness gives ∥∇ U (x)∥2 ≤
+
+2 °°∇U (y)°°2 + 2L2 °°x − y°°2, and averaging gives 
+
+E bqk ∥∇ U ∥2 ≤ 2Eπ ∥∇ U ∥2 + 2L2W 22 ( bqk , π). The first term is at most 2 Ld , because integration by parts under π ∝ e−U gives Eπ ∥∇ U ∥2 = Eπ∆U ≤
+
+Ld . The second term is bounded by Talagrand’s comparison W 22 ( bqk , π) ≤ 2CLSI DKL ( bqk ∥π) from Subsec-tion 1.1. Hence the drift contribution is a lower-order dh 2 term plus a multiple of CLSI L4h3 DKL ( bqk ∥π), and the stated step-size condition makes this last piece small enough to be absorbed into the contraction. The resulting one-step inequality of Vempala and Wibisono [46], in our notation, is DKL ( bqk+1∥π) ≤ e−h/CLSI DKL ( bqk ∥π) + 6L2dh 2.Iterating this recursion gives DKL ( bqk ∥π) ≤ e−kh /CLSI DKL ( bq0∥π) + 6L2dh 2 k−1X 
+
+> j=0
+
+e− j h /CLSI .A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 13 
+
+Finally, Pk−1  
+
+> j=0
+
+e− j h /CLSI ≤ (1 − e−h/CLSI )−1 ≤ 4CLSI /(3 h) under the same small-step assumptions. The last term is therefore at most 8 CLSI L2dh , which gives (2.3). This is the discrete analogue of entropy dissipation: log-Sobolev supplies the contraction, while smoothness controls the Euler–Maruyama error. □
+
+Let us take a look at the result of the Theorem. The dependence on dimension is linear, but the depen-dence on accuracy is polynomial: to make the KL error of order ε2, ULA uses eO(C 2
+
+> LSI
+
+L2d/ε2) steps. This happens because the Euler discretization has a stationary bias of order h, so high accuracy forces a small step size. It is therefore natural to ask whether one can keep the Langevin proposal but remove the dis-cretization bias by an exact correction. Classical Metropolis adjustment does precisely this when density ratios are available. 2.4. Metropolis-adjusted Langevin algorithm. The Metropolis-adjusted Langevin algorithm (MALA) corrects the ULA proposal with an accept-reject step. The distinction from the gradient-only setting is central: density evaluations enable the classical high-accuracy rejection ideas, whereas gradient information alone does not provide the density ratios those ideas require. Let π( d x) ∝ e−U (x) dx. From a current state x, MALA first draws the ULA proposal 
+
+y ∼ qh (x, ·) = N (x − h∇U (x), 2 hI ) . It then accepts y with probability (2.4) ah (x, y) = 1 ∧ π(y)qh (y, x)
+
+π(x)qh (x, y) .If the proposal is rejected, the chain stays at x. The Metropolis ratio (2.4) enforces detailed balance: 
+
+π( d x)P MALA  
+
+> h
+
+(x, d y) = π( d y)P MALA  
+
+> h
+
+(y, d x). Consequently, π is exactly stationary for MALA. This is the basic advantage over ULA: the discretization bias is removed, at the price of needing the density ratio π(y)/ π(x). MALA is the cleanest example of a correction mechanism. The proposal uses only gradient informa-tion, just like ULA, but the accept-reject step asks whether the proposed move has the right probability under the target density. This single density-ratio check changes the invariant distribution from an ap-proximation πh back to the exact target π.Exact stationarity, however, is only the invariance part of the story. To turn MALA into a quantitative sampling algorithm, one still has to bound how many accepted-or-rejected proposals are needed before the chain is close to π. The modern high-accuracy theory separates this analysis into two tasks: sampling efficiently once a good initialization is available, and producing that initialization in the first place. Both are phrased relative to a warm start. A standard warm-start condition is the following: an initial law μ0 is 
+
+M -warm with respect to π if 
+
+μ0(A) ≤ M π(A) for every measurable set A,or equivalently (2.5) 
+
+°°°°
+
+dμ0
+
+dπ
+
+°°°°L∞(π)
+
+≤ M .Some warm-start preparation results use the finite-order Rényi version: 
+
+Dq (μ0∥π) = 1
+
+q − 1 log 
+
+Z μ dμ0
+
+dπ
+
+¶q
+
+dπ = O(1) for some q > 1. Note that in the Rényi notation, (2.5) can be written as D∞(μ0∥π) ≤ log M .14 JIANFENG LU 
+
+For the first task, fix a target total-variation accuracy ε ∈ (0, 1). Assuming an M -warm start, Wu, Schmi-dler, and Chen [51] prove that, for m-strongly log-concave and L-smooth targets in Rd , MALA mixes in 
+
+O
+
+μ
+
+κpd log 3max 
+
+½
+
+κ, d, M
+
+ε
+
+¾¶ 
+
+, κ = L/m,iterations, up to universal constants. Chen and Gatmiry [17] extend this warm-start MALA picture under smoothness and isoperimetry, recovering the same leading κpd behavior in the strongly log-concave case, again with logarithmic dependence on M /ε.For the second task, Altschuler and Chewi [2] show that kinetic Langevin, also called underdamped Langevin, can produce the required finite-order Rényi warm start with the same eO(pd) dimension de-pendence. At the level of dimension dependence, the high-accuracy picture is: use kinetic Langevin to prepare a warm start, then use MALA as the exact Metropolis-corrected sampler. The discussion above also shows the limitation of classical adjusted MCMC. MALA removes discretiza-tion bias when density evaluations are available, but its sharp convergence guarantees require structural assumptions such as strong log-concavity, log-Sobolev or isoperimetric inequalities, smoothness, and warm starts. A general data distribution may be multimodal, singular, or available only through samples, so these assumptions are not a natural starting point. This motivates a different question: if we are given data rather than an explicit target density, how should we design an algorithm to generate new samples? 3. S CORE -B ASED DIFFUSION MODELS 
+
+The previous section treated sampling from an explicit density: the algorithm could use ∇U , and MALA could even use density ratios to remove discretization bias. Diffusion models begin from a dif-ferent premise. The target law is represented by data, not by a tractable formula, so we do not try to run Langevin dynamics directly on the data distribution. Instead we add noise to the data, forming a path of smoother laws. At each positive noise level, the score of the noised law is the local vector field that guides a reverse dynamics back toward the data. The denoising-score connection underlying this approach goes back in part to the DDPM formulation of Ho, Jain, and Abbeel [26]. The continuous-time SDE and probability-flow formulation used here follows Yang Song, Sohl-Dickstein, Kingma, Kumar, Ermon, and Poole [44]. The basic picture is simple: at time 
+
+t , the noised distribution pt is a blurred version of the data, and ∇ log pt (x) points toward nearby regions where this blurred density is larger. Diffusion models learn this time-indexed field of local denoising directions. 3.1. Continuous-time forward noising. The cleanest conceptual starting point is continuous time. Let 
+
+X0 ∼ pdata and let ( Xt )t ∈[0, T ] solve a forward noising SDE (3.1) dXt = ft (Xt ) d t + gt dBt , X0 ∼ pdata .Here Bt is Brownian motion, ft is a drift field, and gt is a scalar diffusion coefficient. We write pt for the density of Xt . Most diffusion models use linear Gaussian forward processes for which, for deterministic functions at and σt ,(3.2) Xt | X0 ∼ N ¡at X0, σ2 
+
+> t
+
+I ¢ .
+
+Example (Two common continuous schedules) . For the variance-exploding heat flow, 
+
+Xt = X0 + pt Z , pt = pdata ∗ N (0, t I ) , with Gaussian transition kernel 
+
+Xt | X0 ∼ N (X0, t I ) . A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 15 
+
+For the Ornstein–Uhlenbeck or variance-preserving flow with constant rate, dXt = − 12 Xt dt + dBt ,one has 
+
+Xt | X0 ∼ N ¡e−t /2 X0, (1 − e−t )I ¢ .Both examples fit (3.2); only at and σt differ. The variance-preserving convention has a2 
+
+> t
+
++ σ2 
+
+> t
+
+= 1, so the total marginal variance is preserved when the data have unit scale. The two scalar functions at and σt summarize the signal-to-noise ratio. The coefficient at says how much of the original sample remains visible in the conditional mean, while σt says how much indepen-dent Gaussian uncertainty has been added. Early in the forward process, σt is small and the score may be complicated because it reflects the fine structure of the data. At large noise, pt is smoother and closer to a simple reference law, so the reverse sampler has an easier starting point. 3.2. Continuous-time Tweedie identity. The most natural way to undo the forward noising is to denoise: given a noisy observation Xt = x, estimate the clean sample that produced it, namely the posterior mean 
+
+E[X0 | Xt = x]. The object that encodes this denoising is the score of the noised law, (3.3) s⋆ 
+
+> t
+
+(x) = ∇ log pt (x), the true score at time t , approximated in practice by a learned model st (x) ≈ s⋆ 
+
+> t
+
+(x). The Gaussian marginal formula (3.2) makes the link between the score and denoising precise through a continuous-time form of Tweedie’s identity: (3.4) s⋆ 
+
+> t
+
+(x) = 1
+
+σ2
+
+> t
+
+E[at X0 − Xt | Xt = x]. Equivalently, whenever at̸ = 0, define the optimal denoiser 
+
+D⋆ 
+
+> t
+
+(x) : = E[X0 | Xt = x] = a−1
+
+> t
+
+¡x + σ2 
+
+> t
+
+s⋆ 
+
+> t
+
+(x)¢.A learned score st similarly determines a learned denoiser 
+
+Dt (x) : = a−1
+
+> t
+
+¡x + σ2 
+
+> t
+
+st (x)¢.Thus denoising and score estimation are two ways of describing the same posterior information. 
+
+Proof. The density of Xt is the Gaussian mixture 
+
+pt (x) =
+
+Z 1(2 πσ 2 
+
+> t
+
+)d/2 exp 
+
+Ã
+
+− ∥x − at x0∥2
+
+2σ2
+
+> t
+
+!
+
+pdata ( d x0). Write the Gaussian kernel in this integral as 
+
+ϕt (x | x0) = 1(2 πσ 2 
+
+> t
+
+)d/2 exp 
+
+Ã
+
+− ∥x − at x0∥2
+
+2σ2
+
+> t
+
+!
+
+.For fixed x0,
+
+∇x ϕt (x | x0) = at x0 − x
+
+σ2
+
+> t
+
+ϕt (x | x0). Thus, differentiating under the integral, 
+
+∇pt (x) = 1
+
+σ2
+
+> t
+
+Z
+
+(at x0 − x) ϕt (x | x0) pdata ( d x0). 16 JIANFENG LU 
+
+On the other hand, Bayes’ rule gives the conditional law of the clean sample given the noisy observation: 
+
+P(X0 ∈ dx0 | Xt = x) = ϕt (x | x0) pdata ( d x0)
+
+pt (x) .Dividing the previous display by pt (x) therefore gives 
+
+∇ log pt (x) = 1
+
+σ2
+
+> t
+
+E[at X0 − x | Xt = x], which is the same as (3.4), since the conditioning sets Xt = x. □
+
+This Tweedie identity explains why the score can be learned from empirical data. Fix t > 0. Under the Gaussian corruption Xt = at X0 + σt Z , with Z ∼ N (0, I ) independent of X0, the random vector inside this conditional expectation becomes 
+
+at X0 − Xt
+
+σ2
+
+> t
+
+= − Z
+
+σt
+
+.Thus the conditional mean of −Z /σt given at X0 +σt Z = x is exactly s⋆ 
+
+> t
+
+(x), which motivates the regression population loss: 
+
+E
+
+°°°°st (at X0 + σt Z ) + Z
+
+σt
+
+°°°°
+
+> 2
+
+.Replacing the expectation over X0 ∼ pdata by an empirical average over data points, while resampling the Gaussian noise, gives the basic denoising score-matching objective. This is why the learned field has a denoising interpretation rather than being an arbitrary vector field. The regression target is noisy for each individual corruption, but its conditional average points from the observation toward the posterior mean D⋆ 
+
+> t
+
+(x) of the clean sample. Equivalently, the score records the Bayes correction encoded by the noised data distribution. 3.3. Continuous-time reverse SDE. The forward SDE (3.1) is designed to move data toward a simple law. For sampling, the object we need is not a pathwise inverse of the Brownian motion. It is enough to con-struct a Markov process whose one-time marginals run through the same densities in the opposite order: if ( pt )0≤t ≤T are the forward noising marginals, then the reverse sampler ( Y ← 
+
+> s
+
+)0≤s≤T should satisfy Law( Y ← 
+
+> s
+
+) = pT −s for every s ∈ [0, T ]. This requirement is deliberately distributional. It says that the reverse sampler has the right snapshots, not that it retraces individual forward Brownian paths. We therefore first match the evolution of densities. Set qs = pT −s and write t = T − s. The forward density satisfies 
+
+∂t pt = −∇ · ( ft pt ) + 12 g 2 
+
+> t
+
+∆pt .Therefore, with t = T − s,
+
+∂s qs = ∇ · ( ft pt ) − 12 g 2 
+
+> t
+
+∆pt .The key step uses the identity ∆pt = ∇ · (pt ∇ log pt ), which brings in precisely the score s⋆ 
+
+> t
+
+= ∇ log pt from (3.3). This rewrites the density evolution as 
+
+∂s qs = −∇ · £¡ − ft + g 2 
+
+> t
+
+s⋆
+
+> t
+
+¢ pt
+
+¤ + 12 g 2 
+
+> t
+
+∆pt .This is the Fokker–Planck equation for the reverse-time diffusion (3.5) dY ← 
+
+> s
+
+= £− fT −s (Y ← 
+
+> s
+
+) + g 2  
+
+> T−s
+
+s⋆  
+
+> T−s
+
+(Y ← 
+
+> s
+
+)¤ ds + gT −s dB← 
+
+> s
+
+, Y ← 
+
+> 0
+
+∼ pT .Here B← 
+
+> s
+
+is Brownian motion in the reverse sampling time. By construction, if Y ← 
+
+> 0
+
+∼ pT , then Y ← 
+
+> s
+
+∼ pT −s
+
+for every s ∈ [0, T ]. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 17 
+
+The drift in the reverse SDE has two pieces. The term − fT −s reverses the deterministic transport part of the forward dynamics. The extra term g 2  
+
+> T−s
+
+s⋆  
+
+> T−s
+
+is exactly the score introduced in Subsection 3.2 as the denoising direction: it corrects the density evolution caused by diffusion by nudging each sample back toward regions of higher noised density, i.e. toward the posterior mean of the clean sample. This is the precise sense in which the denoiser of the previous subsection is the engine of the reverse dynamics. Re-placing the true score s⋆ 
+
+> t
+
+by a learned score st yields the score-based reverse SDE sampler, the continuous object that DDPM-type algorithms discretize. It is instructive to specialize (3.5) to the two schedules of the running example; we will revisit the same two processes from the probability-flow viewpoint in the next subsection. 
+
+Example (Variance-exploding reverse SDE) . For Xt = X0 + pt Z , we have ft = 0 and gt = 1, so the reverse SDE is dY ← 
+
+> s
+
+= s⋆  
+
+> T−s
+
+(Y ← 
+
+> s
+
+) d s + dB← 
+
+> s
+
+, Y ← 
+
+> 0
+
+∼ pT .The whole drift is the score: starting from a high-noise draw, the sampler repeatedly steps along the de-noising direction s⋆  
+
+> T−s
+
+while fresh Brownian noise is injected. 
+
+Example (Variance-preserving Ornstein–Uhlenbeck reverse SDE) . For dXt = − 12 Xt dt + dBt ,we have ft = − 12 x and gt = 1, so the reverse SDE is dY ← 
+
+> s
+
+=
+
+· 12 Y ← 
+
+> s
+
++ s⋆  
+
+> T−s
+
+(Y ← 
+
+> s
+
+)
+
+¸
+
+ds + dB← 
+
+> s
+
+, Y ← 
+
+> 0
+
+∼ pT .The term 12 Y ← 
+
+> s
+
+undoes the OU contraction toward the origin, while the score term s⋆  
+
+> T−s
+
+supplies the de-noising correction. In practice the reverse SDE is run in discrete time, and this discretization is exactly DDPM. One fixes a grid in the sampling time s, replaces the true score s⋆  
+
+> T−s
+
+by the learned model sT −s , and takes Euler– Maruyama steps of (3.5): each step nudges the current sample along the denoising drift and then adds fresh Gaussian noise of the appropriate variance. This is the DDPM sampler of Ho, Jain, and Abbeel [26], the stochastic counterpart of the deterministic DDIM update we will read off from the probability-flow ODE in the next subsection. The detailed Gaussian transition kernels and the resulting discretization error are taken up in Section 5. 3.4. Probability flow ODE. There is a deterministic ODE whose one-time marginals are the same as those of the forward SDE (3.1). This ODE is called the probability flow ODE . The probability flow ODE replaces Brownian randomness by a transport field that has the same effect on marginal densities. Define the velocity field (3.6) vt (x) = ft (x) − 12 g 2 
+
+> t
+
+s⋆ 
+
+> t
+
+(x) = ft (x) − 12 g 2 
+
+> t
+
+∇ log pt (x). The probability flow ODE is (3.7) dXt
+
+dt = vt (Xt ). If X0 ∼ p0, then the solution of (3.7) has marginal density pt at every time t for which the ODE is well posed. 18 JIANFENG LU 
+
+Derivation from the Fokker–Planck equation. The forward SDE (3.1) has Fokker–Planck equation (3.8) ∂t pt = −∇ · ( ft pt ) + 12 g 2 
+
+> t
+
+∆pt .Use the identity 
+
+∆pt = ∇ · (∇pt ) = ∇ · (pt ∇ log pt ) = ∇ · (pt s⋆ 
+
+> t
+
+). Then (3.8) becomes 
+
+∂t pt = −∇ · ( ft pt ) + 12 g 2 
+
+> t
+
+∇ · (pt s⋆ 
+
+> t
+
+) = −∇ · 
+
+·μ 
+
+ft − 12 g 2 
+
+> t
+
+s⋆
+
+> t
+
+¶
+
+pt
+
+¸
+
+.This is exactly the continuity equation (3.9) ∂t pt + ∇ · (pt vt ) = 0for the density transported by the deterministic flow ˙ Xt = vt (Xt ). Since pt satisfies this equation with initial condition p0, the ODE flow pushes p0 forward to pt . □
+
+Example (Variance-exploding probability flow) . For Xt = X0 + pt Z , we have ft = 0 and gt = 1. The prob-ability flow velocity is 
+
+vt (x) = − 12 ∇ log pt (x). The score points toward higher density, so − 12 ∇ log pt pushes mass outward and reproduces the smooth-ing effect of the variance-exploding noising process. To generate samples, one integrates the same ODE backward in time, which reverses this velocity. 
+
+Example (Variance-preserving Ornstein–Uhlenbeck flow) . For dXt = − 12 Xt dt + dBt ,the probability flow velocity is 
+
+vt (x) = − 12 x − 12 ∇ log pt (x). The first term is the deterministic OU contraction toward the origin. The second term is the transport representation of the Brownian smoothing. The reverse SDE and the probability flow ODE are two different machines that produce the same snap-shots when the score is exact. The SDE machine keeps injecting randomness; the ODE machine deter-ministically transports particles (starting from random initial data). Since many numerical and control questions depend on paths, not only snapshots, one should not freely replace one machine by the other without checking what quantity is being analyzed. For sampling, we use the same reverse-time convention as in (3.5): set s = T −t , start from a high-noise draw with law pT , and integrate from s = 0 to s = T . The reverse-time probability-flow sampler is the ODE dZ ←
+
+> s
+
+ds = − vT −s (Z ← 
+
+> s
+
+) = − fT −s (Z ← 
+
+> s
+
+) + 12 g 2  
+
+> T−s
+
+s⋆  
+
+> T−s
+
+(Z ← 
+
+> s
+
+), Z ← 
+
+> 0
+
+∼ pT .By the same continuity-equation calculation, Z ← 
+
+> s
+
+has law pT −s when the score is exact. Compare this with the reverse SDE drift in (3.5): − fT −s + g 2  
+
+> T−s
+
+s⋆  
+
+> T−s
+
+. The DDIM sampler of Song, Meng, and Ermon [42] is the standard sampler on this probability-flow side: it uses the same trained denoising model as DDPM, but follows the deterministic update suggested by the ODE viewpoint. The deterministic nature of the ODE has an important consequence for likelihoods. Along a solution of ˙ Xt = vt (Xt ), the continuity equation (3.9) implies (3.10) ddt log pt (Xt ) = −∇ · vt (Xt ). A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 19 
+
+Indeed, ddt log pt (Xt ) = ∂t log pt (Xt ) + vt (Xt ), ∇ log pt (Xt )® ,and dividing (3.9) by pt gives 
+
+∂t log pt + vt , ∇ log pt
+
+® = −∇ · vt .Therefore, if the map X0 7 → XT is obtained by integrating the probability flow ODE forward, log p0(X0) = log pT (XT ) +
+
+Z T
+
+> 0
+
+∇ · vt (Xt ) d t .This is the continuous normalizing-flow identity used to compute likelihoods from probability flow ODEs. 
+
+Remark. In practice the true score s⋆ 
+
+> t
+
+is replaced by a learned score st . Then neither the implemented reverse SDE nor the implemented probability flow ODE has exactly the target marginals. Their final sam-pling error comes from score error together with numerical discretization error: time-stepping error for the SDE, and ODE integration error for the probability flow. For likelihood computation with the proba-bility flow ODE, there is one more numerical issue: one must also approximate the divergence ∇· vt , often by automatic differentiation or stochastic trace estimators. 4. S TOCHASTIC LOCALIZATION AND POLCHINSKI FLOW 
+
+The previous section introduced diffusion models through Gaussian noising. We started from data, followed the noised marginals pt , learned the score ∇ log pt , and used that score to run either a reverse SDE or a probability-flow ODE. This section looks at the same Gaussian channel from two complementary angles: stochastic localization and Polchinski flow. All three viewpoints start from a clean random variable and the noisy observation (here and below we take the variance-exploding one) 
+
+Xt = X⋆ + pt Z ,but they organize the information in different ways. Diffusion models emphasize reverse-time sampling. Stochastic localization asks a Bayesian question: as the noisy observation becomes more precise, how does the posterior law of the hidden signal X⋆ evolve? Polchinski flow asks a density-level question: as the noise level changes, how do the smoothed density pt and the effective potential Ut = − log pt evolve? These two changes of perspective are useful because they expose structure that is less visible from the reverse SDE alone. In stochastic localization, the score appears as a posterior denoising correction. In Polchinski flow, the score is the negative gradient of a coarse-grained energy landscape. Both viewpoints lead naturally to quantitative tools, especially covariance identities, that will be useful later. We begin by treating stochastic localization as an observation model for the same Gaussian channel. This lets us compare diffusion time with localization precision, derive the posterior law, and connect its mean to the score. We then record the martingale structure that makes localization useful. Finally, we return to the density pt itself and write the corresponding Polchinski flow for the effective potential Ut .4.1. Stochastic localization. Let X⋆ ∼ μ be the signal, or clean data point. Here we write the law as μ
+
+rather than pdata , to emphasize that the construction applies to a general distribution and not only to the data law. Start with the Gaussian smoothing channel 
+
+Xt = X⋆ + pt Z , Z ∼ N (0, I ) . Here t is the noise variance, and pt = Law( Xt ) is the Gaussian convolution of the data law with covariance 
+
+t I . As t increases, the density becomes smoother; as t decreases, the channel approaches the original data distribution. 20 JIANFENG LU 
+
+Stochastic localization uses the same Gaussian channel, but parametrizes it by precision rather than variance. Observe the same unknown X⋆ through the continuous-time Gaussian observation process (4.1) dYu = X⋆ du + dWu , Y0 = 0. Here Wu is Brownian motion independent of X⋆. Conditional on X⋆ = x, we have Yu ∼ N (ux , uI ), and thus after a rescaling: ¯Yu := u−1Yu ∼ N ¡x, u−1 I ¢ .Hence the localization time u corresponds to the diffusion noise variance t = u−1:¯Yu = X⋆ + pt Z , t = 1
+
+u .The same noised observation can therefore be indexed either by variance t or by precision u. Diffusion notation emphasizes smoothing as t increases. Localization notation emphasizes Bayesian inference as 
+
+u increases and the observation becomes more informative. This precision parametrization is useful be-cause the posterior mean and covariance then obey simple martingale identities, as we will discuss below. We now write this posterior law explicitly. At precision u, the observation is Yu , and the basic object is the conditional law of the hidden signal X⋆. Let μu (· | y) = Law( X⋆ | Yu = y) be the posterior law after observing Yu = y. Bayes’ rule gives (4.2) μu ( d x | Yu = y) = 1
+
+Zu (y) exp 
+
+n
+
+y, x® − u
+
+2 ∥x∥2o
+
+μ( d x). The normalizing constant is 
+
+Zu (y) =
+
+Z
+
+exp 
+
+n
+
+y, x® − u
+
+2 ∥x∥2o
+
+μ( d x). This is why the method is called localization: the posterior is the original measure tilted by a random linear field and penalized by a growing quadratic function. As u grows, the posterior becomes increasingly concentrated near the hidden signal. 
+
+Derivation of (4.2) . Given X⋆ = x, the observation Yu has density proportional to exp 
+
+Ã
+
+−
+
+°°y − ux °°2
+
+2u
+
+!
+
+.Expanding the square, 
+
+−
+
+°°y − ux °°2
+
+2u = − 
+
+°°y°°2
+
+2u + y, x® − u
+
+2 ∥x∥2 .The first term is independent of x and is absorbed into the normalizing constant. Multiplying by the prior measure μ( d x) gives (4.2). □
+
+Now put the random observation back in and write 
+
+μu = μu (· | Yu ), Mu =
+
+Z
+
+x μu ( d x). The original stochastic-localization viewpoint is that the random measure ( μu )u≥0 itself evolves by a measure-valued SDE, which we now derive. Let F Yu = σ(Yr : 0 ≤ r ≤ u) and define the innovation pro-cess 
+
+Iu = Yu −
+
+Z u
+
+> 0
+
+Ms ds, dIu = dYu − Mu du.This subtracts the part of the next observation that is already predictable from the current posterior. In-tuitively, Iu records only the “surprise” in the observation stream: after conditioning on F Yu , the drift of A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 21 
+
+dYu is Mu du, so subtracting it leaves an increment with no predictable component and the same accu-mulated covariance as the original Brownian noise. More formally, one can check that Iu is a continuous 
+
+F Yu -martingale whose accumulated covariance over [0, u] is uI ; Levy’s characterization then identifies it as a Brownian motion with respect to F Yu . The posterior law satisfies (4.3) dμu ( d x) = 〈 x − Mu , d Iu 〉 μu ( d x). Equivalently, for every bounded test function f ,d
+
+Z
+
+f (x) μu ( d x) =
+
+¿Z 
+
+f (x)( x − Mu ) μu ( d x), d Iu
+
+À
+
+.The same identity applies componentwise to vector-valued test functions when the relevant moments are finite. In particular, for every Borel set A, the process u 7 → μu (A) = Pr( X⋆ ∈ A | F Yu ) is a martingale: 
+
+E[μv (A) | F Yu ] = μu (A), v ≥ u.Thus, in this formulation, stochastic localization is a measure-valued martingale whose random tilt con-centrates the prior while preserving conditional expectations. 
+
+Proof of (4.3) . It is enough to compute the differential of the normalized posterior weight. From (4.2), along the random observation path, 
+
+μu ( d x)
+
+μ( d x) = 1
+
+Zu
+
+exp 
+
+n
+
+〈Yu , x〉 − u
+
+2 ∥x∥2o
+
+.First, Itô’s formula gives d exp 
+
+n
+
+〈Yu , x〉 − u
+
+2 ∥x∥2o
+
+= exp 
+
+n
+
+〈Yu , x〉 − u
+
+2 ∥x∥2o μ
+
+〈x, d Yu 〉 − 12 ∥x∥2 du
+
+¶
+
++ 12 exp 
+
+n
+
+〈Yu , x〉 − u
+
+2 ∥x∥2o
+
+∥x∥2 du
+
+= exp 
+
+n
+
+〈Yu , x〉 − u
+
+2 ∥x∥2o
+
+〈x, d Yu 〉 .The middle line contains the Itô correction; it cancels the drift from the term − u 
+
+> 2
+
+∥x∥2 in the exponent. Integrating this identity in x gives dZu
+
+Zu
+
+= 〈 Mu , d Yu 〉 , d log Zu = 〈 Mu , d Yu 〉 − 12 ∥Mu ∥2 du.Therefore the log-density of μu with respect to μ satisfies d log μu ( d x)
+
+μ( d x) = 〈 x − Mu , d Yu 〉 − 12
+
+¡∥x∥2 − ∥ Mu ∥2¢ du.Applying Itô’s formula once more, now to the exponential of this log-density, gives dμu ( d x)
+
+μu ( d x) = 〈 x − Mu , d Yu 〉 − 〈 x − Mu , Mu 〉 du = 〈 x − Mu , d Iu 〉 .This is exactly (4.3); integrating against a bounded test function f gives the weak form. □22 JIANFENG LU 
+
+4.2. Posterior means and martingale structure. The previous subsection constructed the posterior law and its measure-valued martingale equation. We now pass to its first two moments. First we freeze the observation and connect the posterior mean to the diffusion-model score; then we put the random ob-servation back in and record the martingale dynamics. For a deterministic observation y, define the posterior mean and covariance 
+
+mu (y) = E[X⋆ | Yu = y], Σu (y) = Cov( X⋆ | Yu = y). The posterior mean is exactly a denoiser. Indeed, since ¯ Yu = Yu /u = X⋆ + u−1/2 Z , a deterministic obser-vation y corresponds to the noised sample y/u, and Tweedie’s identity (3.4) gives (4.4) mu (y) = yu + 1
+
+u ∇ log p1/ u
+
+³ yu
+
+´
+
+,where pt is the density of X⋆ + pt Z . Equivalently, 
+
+∇ log p1/ u (y/u) = u¡mu (y) − y/u¢.Thus learning a score is the same problem as learning the localization posterior mean. 
+
+Specializing Tweedie to the localization channel. The rescaled observation ¯Yu = X⋆ + u−1/2 Z is the for-ward channel Xt = X⋆ + pt Z at time t = 1/ u, in the variance-exploding convention at = 1, σ2 
+
+> t
+
+= t = 1/ u.Thus the continuous-time Tweedie identity (3.4) reads, in the current notation, 
+
+∇ log p1/ u (y/u) = u E[X⋆ − y/u | Yu = y] = u¡mu (y) − y/u¢,where we used E[X⋆ | Yu = y] = mu (y). Solving for mu (y) then yields (4.4). □
+
+The covariance, in turn, is the linear response of this denoiser: differentiating the posterior tilt (4.2) with respect to the observation gives (4.5) ∇y mu (y) = Σu (y). Combining this with Tweedie’s identity (4.4), and writing t = 1/ u, gives the score-Jacobian identity (4.6) ∇s⋆ 
+
+> t
+
+(x) = t −2Σ1/ t (x/t ) − t −1 I .Up to this time change, then, the Hessian of the noised log-density is precisely the posterior covariance of the localization process. Now return to the random localization path. We write Mu and Σu below for the random evaluations 
+
+mu (Yu ) and Σu (Yu ). The measure-valued equation (4.3) then turns the fixed-observation posterior mo-ments into stochastic dynamics. Start with the mean. Applying the weak form of (4.3) componentwise to the test function f (x) = x gives, under standard integrability assumptions, (4.7) dMu =
+
+μZ 
+
+x(x − Mu )⊤μu ( d x)
+
+¶
+
+dIu = Σu dIu .Thus the mean moves only in response to the innovation Brownian motion, and the size and direction of that motion are governed by the current posterior covariance. In particular, the posterior mean is a martingale: before seeing the next small piece of data, the current posterior mean is the best prediction of the next posterior mean. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 23 
+
+Why the posterior mean is a martingale. First note that Mu , although defined by conditioning on the sin-gle observation Yu , is unchanged if we condition on the entire history F Yu = σ(Yr : 0 ≤ r ≤ u). The reason is that Yu is a sufficient statistic for X⋆: by Girsanov’s theorem (Appendix A), the likelihood of the path (Yr )0≤r ≤u under the signal value X⋆ = x, relative to the Brownian motion, is exp 
+
+μZ u
+
+> 0
+
+〈x, d Yr 〉 − u
+
+2 ∥x∥2
+
+¶
+
+= exp 
+
+³
+
+〈x, Yu 〉 − u
+
+2 ∥x∥2´
+
+,which depends on the path only through the endpoint Yu . This is exactly the tilt appearing in (4.2), so the posterior given the whole history equals the posterior given Yu , and in particular 
+
+E[X⋆ | F Yu ] = E[X⋆ | Yu ] = Mu .The martingale property now follows from the tower property. For v ≥ u, since F Yu ⊆ F Yv ,
+
+E[Mv | F Yu ] = E[E[X⋆ | F Yv ] | F Yu ] = E[X⋆ | F Yu ] = Mu . □
+
+The covariance, which set the size of these mean fluctuations, has an evolution of its own. Unlike the mean, it carries a drift, and that drift is strictly dissipative: in one dimension, ddu E[Σu ] = − E[Σ2 
+
+> u
+
+] ≤ 0, and in multiple dimensions the trace satisfies (4.8) ddu E[Tr Σu ] = − E[Tr( Σ2 
+
+> u
+
+)] ≤ 0. Integrate (4.8) over u ∈ [0, ∞): the fundamental theorem of calculus gives 
+
+Z ∞
+
+> 0
+
+E Tr( Σ2 
+
+> u
+
+) d u = E Tr Σ0 − lim  
+
+> u→∞
+
+E Tr Σu ≤ E Tr Σ0,the inequality because Tr Σu ≥ 0. At u = 0 no observation has yet been made, so Σ0 = Cov( X⋆); hence if Cov( X⋆) ⪯ I ,(4.9) 
+
+Z ∞
+
+> 0
+
+E Tr( Σ2 
+
+> u
+
+) d u ≤ E Tr Σ0 ≤ d,so the total squared covariance accumulated along the entire path is bounded by the dimension. This is the geometric content of localization: the random posterior measure steadily concentrates, while its mean drifts by martingale increments whose size is set by the uncertainty that remains. 
+
+One-dimensional covariance calculation. In one dimension the posterior variance splits into a second moment and the square of the mean, 
+
+Σu = E[X 2 
+
+> ⋆
+
+| Yu ] − M 2 
+
+> u
+
+,and we track the two pieces separately. For the second moment, the weak form of (4.3) with test function 
+
+f (x) = x2 gives d E[X 2 
+
+> ⋆
+
+| Yu ] =
+
+³Z 
+
+x2(x − Mu ) μu ( d x)
+
+´
+
+dIu =
+
+³
+
+E[X 3 
+
+> ⋆
+
+| Yu ] − Mu E[X 2 
+
+> ⋆
+
+| Yu ]
+
+´
+
+dIu ,where we used E[X⋆ | Yu ] = Mu . For the squared mean, d Mu = Σu dIu and Itô’s formula give d( M 2 
+
+> u
+
+) = 2Mu Σu dIu + Σ2 
+
+> u
+
+du.Subtracting the two identities, dΣu =
+
+³
+
+E[X 3 
+
+> ⋆
+
+| Yu ] − Mu E[X 2 
+
+> ⋆
+
+| Yu ] − 2Mu Σu
+
+´
+
+dIu − Σ2 
+
+> u
+
+du.24 JIANFENG LU 
+
+The d Iu term is a martingale increment and has mean zero, so taking expectations leaves only the drift, ddu E[Σu ] = − E[Σ2 
+
+> u
+
+]. In d dimensions the same computation, now with the matrix-valued test function f (x) = xx ⊤, gives the covariance SDE, in components, (4.10) d( Σu )i j = X
+
+> k
+
+E£(X⋆ − Mu )i (X⋆ − Mu )j (X⋆ − Mu )k | Yu
+
+¤ ( d Iu )k − (Σ2 
+
+> u
+
+)i j du.The first term is a mean-zero martingale increment, so taking traces and expectations recovers (4.8),  
+
+> ddu
+
+E[Tr Σu ] = − E[Tr( Σ2 
+
+> u
+
+)]. □
+
+This martingale-and-covariance structure is what makes stochastic localization useful as an analytical tool. Rather than bounding the original high-dimensional measure directly, one embeds it in a random path of progressively tilted posteriors and argues along the path, where the mean is a martingale and the covariance dissipates. Many static questions thereby reduce to estimating quantities averaged over the localization path, with the covariance identities (4.8)–(4.9) supplying the bookkeeping. The main early applications of stochastic localization [22] were in high-dimensional geometry. For an isotropic log-concave measure, the Kannan–Lovász–Simonovits (KLS) conjecture asks, in one formula-tion, for a dimension-free lower bound on the Cheeger isoperimetric constant. This problem is closely tied to spectral gaps, Poincaré inequalities, thin-shell estimates, and concentration of measure. Eldan in-troduced stochastic localization to relate thin-shell and spectral-gap/KLS bounds up to logarithmic fac-tors [22]. Lee and Vempala developed the method further for isoperimetry, concentration, and mixing, improving the known KLS-type bounds for isotropic log-concave measures [32]. Later work of Chen ob-tained an almost constant lower bound for the KLS isoperimetric coefficient using related localization techniques [14]. Chen and Eldan also made the sampling connection explicit: their localization-schemes framework associates Markov chains to localized martingales of measures and proves mixing bounds by analyzing the localization process [16]. For our purposes, the lesson is that stochastic localization con-verts global geometric or sampling questions into estimates on the random posterior covariance process. The same covariance-budget viewpoint is what later reappears in analyses of diffusion models [38, 9]. 4.3. Polchinski flow for the effective potential. The localization picture describes the Gaussian chan-nel through posterior quantities. Polchinski flow describes the same channel at the level of the noised marginals. In diffusion-model language, this is the variance-exploding forward process from the previous section: 
+
+Xt = X0 + pt Z ,whose marginal density is the Gaussian-smoothed density 
+
+pt = p0 ∗ N (0, t I ) . It solves the heat equation (4.11) ∂t pt = 12 ∆pt .Define the effective potential 
+
+Ut (x) = − log pt (x). A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 25 
+
+The diffusion-model score at noise level t is therefore s⋆ 
+
+> t
+
+= ∇ log pt = −∇ Ut . Thus Polchinski flow is not a new sampling process; it is a way to track how the same score field evolves as the forward diffusion smooths the data distribution. The heat equation becomes the nonlinear PDE (4.12) ∂t Ut = 12 ∆Ut − 12 ∥∇ Ut ∥2 .This is the finite-dimensional Polchinski equation . It is the isotropic Gaussian-convolution version of the Polchinski renormalization flow [41, 7]. The density formulation is linear, but the effective potential formulation is nonlinear because logarithms turn smoothing into a viscous Hamilton–Jacobi equation. 
+
+Proof. Since pt = e−Ut ,
+
+∆pt = ∆(e−Ut ) = e−Ut ¡∥∇ Ut ∥2 − ∆Ut
+
+¢.Using (4.11), 
+
+∂t Ut = − ∂t pt
+
+pt
+
+= − 12
+
+∆pt
+
+pt
+
+= 12 ∆Ut − 12 ∥∇ Ut ∥2 . □
+
+Because the score is the negative gradient of the effective potential, 
+
+s⋆ 
+
+> t
+
+(x) = ∇ log pt (x) = −∇ Ut (x), the score satisfies the viscous Burgers equation (4.13) ∂t s⋆ 
+
+> t
+
+= 12 ∆s⋆ 
+
+> t
+
++ ∇ 
+
+μ 12
+
+°°s⋆
+
+> t
+
+°°2
+
+¶
+
+.Diffusion models are usually trained by score matching, rather than solving the Burgers equation. The equation nevertheless explains why regularity of the score improves at positive noise levels and why small-noise estimates are delicate: as t ↓ 0, the smoothing that controls derivatives disappears. The Polchinski equation (4.12) is useful because it shows what forward noising does to the energy land-scape. Sharp wells, ridges, and nonsmooth features of U0 = − log p0 are averaged out by convolution. At positive noise, Ut is smoother and its gradient is better behaved. The reverse model is trying to follow this family of smoothed landscapes backward, where the geometry becomes progressively sharper. This is the renormalization interpretation of diffusion models. Historically, renormalization entered statistical physics through the idea that one should describe a system at a chosen resolution and then track how the effective description changes when microscopic degrees of freedom are averaged out. Kadanoff’s block-spin scaling picture [29] gave the physical image of coarse-graining near criticality. Wilson’s renor-malization group made this image into a systematic flow of effective theories and explained universality at critical points [48, 49]; the review of Wilson and Kogut [50] is the classical reference. Polchinski’s exact renormalization group equation [41] then expressed this flow directly at the level of effective Lagrangians. The finite-dimensional equation (4.12) is the diffusion-model shadow of the same idea. Renormalization group language says that forward noising integrates out microscopic information. In image models this statement is metaphorical but useful: the data distribution is gradually blurred, high-frequency details become harder to distinguish, and the effective potential Ut describes the log-density of the coarse-grained law. In field-theoretic applications the same idea can be literal: one chooses a covari-ance schedule that removes degrees of freedom by scale, and the corresponding effective action follows a Polchinski-type equation. In the work of Bauerschmidt and collaborators, this flow is used precisely in this rigorous sense: it is an evolution equation for scale-dependent effective potentials, so estimates along the flow turn renormalization into analytic control of stochastic dynamics and Gibbs measures [7]. 26 JIANFENG LU 
+
+4.4. A dictionary. The same Gaussian smoothing operation can now be summarized in three languages: diffusion dynamics, posterior localization, and renormalization by Gaussian coarse-graining. 
+
+Diffusion-model view Stochastic-localization view Polchinski/RG view Forward noising Xt = X0 + pt Z Observation d Yu = X⋆ du + dWu Coarse-graining by Gaussian con-volution Noised law pt Posterior law μu (· | Yu ) with t =
+
+1/ u
+
+Effective potential Ut = − log pt
+
+Score s⋆ 
+
+> t
+
+= ∇ log pt Posterior mean Mu = E[X⋆ | Yu ] Action gradient −∇ Ut
+
+Tweedie denoiser x + t s⋆ 
+
+> t
+
+(x) Localization mean mu (y) Inverse RG drift for sampling Reverse SDE or probability flow ODE Martingale posterior-mean pro-cess Hamilton–Jacobi/Polchinski PDE 
+
+5. D ISCRETIZING CONTINUOUS DIFFUSION MODELS 
+
+We now pass from ideal continuous dynamics to algorithms. A sampler must choose a finite time grid and replace each exact reverse transition by a computable transition kernel. This section sets up the formulas needed for the numerical analysis. A useful way to keep the presentation organized is to separate the three implementation questions. First, the reverse chain must be initialized from a simple high-noise law rather than the exact terminal law. Second, the reverse dynamics use learned scores or denoisers rather than the true ones. Third, the contin-uous reverse dynamics, or equivalently the exact Bayes reverse kernels on a grid, must be discretized. The analysis is built around exactly this trichotomy: initialization error, statistical score error, and discretiza-tion error. 5.1. The DDPM grid, scores, and exact reverse kernels. Let X0 ∼ pdata on Rd . Choose a time grid 0 = t0 < t1 < · · · < tK = T.The goal is to replace the continuous noising process by a finite Markov chain with the same prescribed one-time marginals. Recall from (3.2) that these marginals are 
+
+Xt | X0 ∼ N ¡at X0, σ2 
+
+> t
+
+I ¢ .On the grid, we write 
+
+Xk = Xtk , ak = atk , σk = σtk .The grid schedule determines the one-step noising parameters. We choose a Gaussian forward transition (5.1) Xk+1 | Xk ∼ N ¡αk Xk , α2 
+
+> k
+
+ηk I ¢ .If 
+
+Xk = ak X0 + σk Zk , Zk ∼ N (0, I ) , then (5.1) is equivalently 
+
+Xk+1 = αk Xk + αk
+
+pηk ξk , ξk ∼ N (0, I )and hence 
+
+Xk+1 | X0 ∼ N ¡αk ak X0, α2 
+
+> k
+
+(σ2 
+
+> k
+
++ ηk )I ¢ .Matching this with the target marginal Xk+1 | X0 ∼ N ¡ak+1 X0, σ2 
+
+> k+1
+
+I ¢ gives 
+
+αk = ak+1
+
+ak
+
+, ηk = σ2
+
+> k+1
+
+α2
+
+> k
+
+− σ2 
+
+> k
+
+.A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 27 
+
+The variance-preserving case has a2 
+
+> k
+
++ σ2 
+
+> k
+
+= 1. The variance-exploding case has ak ≡ 1 and an increasing noise scale σ2 
+
+> k
+
+= tk .The reverse sampler has to invert one grid step: given a noisy point at level k+1, it needs the conditional law of the previous point at level k. This is where denoising and score information enter. Let pk denote the density of Xk . The true score at time k is 
+
+s⋆ 
+
+> k
+
+(x) = ∇ log pk (x). The score determines the posterior mean of the clean sample. This is the grid-time specialization of the continuous-time Tweedie identity (3.4), with at , σt read off on the grid: (5.2) s⋆ 
+
+> k
+
+(x) = 1
+
+σ2
+
+> k
+
+E[ak X0 − Xk | Xk = x]. Equivalently, the grid-time version of the optimal denoiser from Subsection 3.2 is 
+
+D⋆ 
+
+> k
+
+(x) : = E[X0 | Xk = x] = a−1
+
+> k
+
+¡x + σ2 
+
+> k
+
+s⋆ 
+
+> k
+
+(x)¢.This is the grid-time notation corresponding to the posterior mean mu (y) from stochastic localization: in the variance-exploding normalization σ2 
+
+> t
+
+= t , one has D⋆ 
+
+> t
+
+(x) = x + t s⋆ 
+
+> t
+
+(x) = m1/ t (x/t ). A score model sk is equivalently a denoiser model 
+
+Dk (x) : = a−1
+
+> k
+
+¡x + σ2 
+
+> k
+
+sk (x)¢, Dk (x) − D⋆ 
+
+> k
+
+(x) = a−1 
+
+> k
+
+σ2
+
+> k
+
+¡sk (x) − s⋆ 
+
+> k
+
+(x)¢.In the variance-exploding normalization at ≡ 1 and σ2 
+
+> t
+
+= t , the reverse drift can be written as 
+
+s⋆ 
+
+> t
+
+(x) = D⋆ 
+
+> t
+
+(x) − xt .Thus one may either think of the sampler as using a score field, or as using an optimal denoiser whose value is frozen over each discrete reverse step. Before approximating the reverse step with a score model, let us write the exact Bayes kernel in terms of the marginal density pk . Let P ← 
+
+> k
+
+(x′ → · ) be the density of the backward transition Law( Xk | Xk+1 = x′), and let P → 
+
+> k
+
+(x → x′) denote the forward transition density in (5.1). For fixed x,
+
+P → 
+
+> k
+
+(x → x′) = (2 πα 2 
+
+> k
+
+ηk )−d/2 exp 
+
+Ã
+
+−
+
+°°x′ − αk x°°2
+
+2α2 
+
+> k
+
+ηk
+
+!
+
+.Bayes’ rule gives 
+
+P ← 
+
+> k
+
+(x′ → x) = pk (x)P → 
+
+> k
+
+(x → x′)
+
+pk+1(x′) , pk+1(x′) =
+
+Z
+
+pk (y)P → 
+
+> k
+
+(y → x′) d y.So the exact reverse kernel is (5.3) P ← 
+
+> k
+
+(x′ → x) ∝ pk (x) exp 
+
+Ã
+
+−
+
+°°x − α−1 
+
+> k
+
+x′°°2
+
+2ηk
+
+!
+
+.Thus each reverse step is a Bayes update: pk is the prior at the previous noise level, and the Gaussian factor is the likelihood of the rescaled observation α−1 
+
+> k
+
+x′ under the channel α−1 
+
+> k
+
+Xk+1 = Xk + pηk ξk . If pk
+
+were known as a density, (5.3) could be used directly. In diffusion models, the learned object is only the score ∇ log pk , so the next step is to approximate this Bayes update locally. 28 JIANFENG LU 
+
+5.2. The Gaussian reverse update. A common sampler replaces (5.3) by a Gaussian transition. With the notation of this section, (5.4) bP ← 
+
+> k
+
+(x′ → · ) = N ¡α−1 
+
+> k
+
+x′ + ηk αk sk+1(x′), ηk I ¢ ,where we use the same step-size parameter ηk for the Gaussian variance. This should be contrasted with the exact reverse kernel (5.3), which need not be Gaussian because of the prior factor pk (x). To see why the mean in (5.4) has this form, apply Tweedie’s identity to the single forward step itself. After rescaling the next observation, 
+
+α−1 
+
+> k
+
+Xk+1 = Xk + pηk ξk .Tweedie’s identity for this channel gives 
+
+E[Xk | Xk+1 = x′] = α−1 
+
+> k
+
+x′ + αk ηk ∇ log ¡pk+1(x′)¢
+
+= α−1 
+
+> k
+
+x′ + αk ηk s⋆
+
+> k+1
+
+(x′). Thus the center of (5.4) is the exact posterior mean with s⋆ 
+
+> k+1
+
+replaced by the learned score sk+1. The remaining approximation is to replace the exact posterior covariance by the local Gaussian scale ηk I :when the prior density pk is smooth, the likelihood in (5.3) confines Xk to a ball of radius pηk around the observation, up to leading order. Let us also present a complementary derivation from the numerical SDE viewpoint. Choose a forward noising SDE on [0, T ] whose marginals agree with the channel Xt | X0 ∼ N ¡at X0, σ2 
+
+> t
+
+I ¢. Assume the sched-ule is smooth, at > 0, with the usual normalization a0 = 1 and σ0 = 0, and define 
+
+λt = ˙at
+
+at
+
+, ft (x) = λt x, g 2 
+
+> t
+
+= ddt σ2 
+
+> t
+
+− 2λt σ2 
+
+> t
+
+.Assume the last quantity is non-negative, so that gt is well defined, then the linear SDE dXt = λt Xt dt + gt dBt
+
+has conditional mean at X0 and conditional variance σ2 
+
+> t
+
+I : the variance solves ˙ vt = 2λt vt + g 2 
+
+> t
+
+with v0 = 0, hence vt = σ2 
+
+> t
+
+. Applying (3.5) to this particular choice of ft and gt gives the reverse SDE dY ← 
+
+> s
+
+= ©−λT −s Y ← 
+
+> s
+
++ g 2  
+
+> T−s
+
+∇ log pT −s (Y ← 
+
+> s
+
+)ª ds + gT −s dB← 
+
+> s
+
+.Now apply Euler–Maruyama to this reverse SDE on the grid. For the reverse step from time tk+1 to time 
+
+tk , write hk = tk+1 − tk and start from x′ at noise level tk+1. Freezing the coefficients and the score at the beginning of this reverse step, namely at tk+1 in forward time, and using the grid shorthand λk+1 := λtk+1
+
+and gk+1 := gtk+1 , gives 
+
+x′ − hk λk+1x′ + hk g 2
+
+> k+1
+
+sk+1(x′) + gk+1
+
+phk ξ.The discrete parameters are exactly the grid versions of the same schedule: 
+
+αk = ak+1
+
+ak
+
+, ηk = σ2
+
+> k+1
+
+α2
+
+> k
+
+− σ2 
+
+> k
+
+.A Taylor expansion at tk+1 gives 
+
+α−1 
+
+> k
+
+= 1 − hk λk+1 + O(h2 
+
+> k
+
+), αk ηk = hk g 2 
+
+> k+1
+
++ O(h2 
+
+> k
+
+), which agrees with the Gaussian reverse update discussed above. It is worth being explicit about the two step parameters here, since both recur in the error analysis: hk = tk+1 − tk is the time increment of the reverse step, while ηk is the variance of the one-step Gaussian kernel (5.1). In a general schedule they are different quantities, related by αk ηk = hk g 2 
+
+> k+1
+
++ O(h2 
+
+> k
+
+), but they coincide, ηk = hk , in the variance-exploding normalization ( αk = 1, gt ≡ 1) used in Section 6. The update (5.4) can therefore be viewed A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 29 
+
+either as a local approximation to the exact Bayes kernel or as an Euler–Maruyama discretization of the reverse SDE associated with the same Gaussian noising channel. The discretization analysis asks how much error is introduced by making this local replacement at every reverse step. 6. E RROR ANALYSIS FOR DIFFUSION MODELS 
+
+The previous section isolated the local numerical question: each step has an exact Bayes kernel (5.3), while a practical sampler uses an implementable approximation such as (5.4). We now turn this local comparison into a global guarantee. Beyond the early-stopping gap between the smoothed target and the raw data law, the reverse-chain error splits into the same three sources isolated in the previous section: how the chain is initialized, how accurately the score has been learned, and how accurately each reverse kernel is discretized. Before getting into the details, it is worth laying out the roadmap of the whole analysis; each piece is made precise in the subsections that follow. Throughout, P ← 
+
+> k
+
+(xk+1 → · ) denotes the exact reverse kernels (5.3), and bP ← 
+
+> k
+
+(xk+1 → · ) the implemented reverse kernels of a sampler. For each time k, the L2(pk ) score error is (6.1) ε2 
+
+> k,score
+
+= EXk ∼pk
+
+°°sk (Xk ) − s⋆ 
+
+> k
+
+(Xk )°°2 .The implemented reverse chain is initialized at the high-noise endpoint with error DKL (pK ∥ bpK ) ≤ ε2
+
+> init
+
+,and the accumulated one-step kernel error splits into a pure discretization part and a score-error part,  
+
+> K−1
+
+X
+
+> k=1
+
+EXk+1∼pk+1 DKL 
+
+¡P ← 
+
+> k
+
+(Xk+1 → · )°° b P ← 
+
+> k
+
+(Xk+1 → · )¢ ≤ ε2 
+
+> disc
+
++ c 
+
+> K−1
+
+X
+
+> k=1
+
+ηk ε2
+
+> k+1, score
+
+.Putting these together, the error decomposition we will establish reads (6.2) DKL (p1∥ bp1) ≤ ε2 
+
+> init
+
++ ε2 
+
+> disc
+
++ c 
+
+> K−1
+
+X
+
+> k=1
+
+ηk ε2
+
+> k+1, score
+
+,with the early-stopping comparison between p1 and pdata handled separately as a geometric smoothing estimate, naturally controlled in W2.This decomposition is mainly a bookkeeping statement. Instead of comparing only the final samples, we compare the exact and implemented reverse chains as full paths. Data processing then says that the KL between the final marginals is no larger than the path-space KL. The path-space chain rule breaks this latter quantity into two pieces: the mismatch between the two initial laws at the high-noise endpoint, and the sum of the one-step KL errors accumulated along the reverse chain. The factor multiplying the score error has a simple origin. In Gaussian DDPM or Euler–Maruyama updates, the learned score changes the mean of the one-step Gaussian kernel by about ηk (sk+1 −s⋆
+
+> k+1
+
+). KL between Gaussians with the same covariance ηk I divides the squared mean error by the variance, leaving a contribution of order ηk ε2
+
+> k+1, score
+
+. Thus score errors at times with larger reverse steps matter more, while errors on very small steps are naturally downweighted. Here ηk is the one-step variance parameter of Section 5.1; in the variance-exploding chain analyzed in the rest of this section it is exactly the reverse-time step hk = tk+1 − tk , which is why these weights act as step sizes. The term ε2 
+
+> disc
+
+collects the error that would remain even with the exact score. For Euler–Maruyama this is the cost of freezing the score or denoiser during a step. The stochastic-localization argument controls that cost through posterior covariance budgets, and the high-accuracy correction later reduces it by sam-pling the local Gaussian tilt more faithfully. The subsections below unpack the pieces in this order: early 30 JIANFENG LU 
+
+stopping, KL telescoping, score-error contribution, Euler–Maruyama discretization and its localization refinement, and finally the high-accuracy correction. 6.1. Early stopping. The first issue is the endpoint of the reverse process. We stop at a small positive noise level and target the smoothed law p1. This early-stopped law is the right object for the KL analysis: path-space chain rules and Girsanov-type estimates give direct control of D KL (p1∥ bp1) for the sampler output bp1. The raw data distribution may be singular, supported on a lower-dimensional set, or otherwise mutually singular with any smooth sampler output, so it cannot generally be compared to bp1 in KL. Thus we keep two error measurements separate. The early-stopping error is a geometric smoothing error and is controlled in W2. The algorithmic error between p1 and bp1 is controlled later in KL. The W2 estimate is immediate from the forward noising coupling. In the grid notation of the previous section, X1 = a1 X0 + σ1 Z , so coupling X1 with the same clean sample X0 gives (6.3) W 22 (pdata , p1) ≤ (1 − a1)2E ∥X0∥2 + σ21d.Thus early stopping is harmless when σ1 and 1 − a1 are small relative to the scale of the data. 
+
+Proof of the early-stopping estimate. Couple p1 and pdata by using the same clean data point X0 and the same Gaussian noise used to form 
+
+X1 = a1 X0 + σ1 Z , Z ∼ N (0, I ) . Then 
+
+X1 − X0 = (a1 − 1) X0 + σ1 Z .Using EZ = 0 and independence of Z and X0,
+
+E ∥X1 − X0∥2 = (1 − a1)2E ∥X0∥2 + σ21E ∥Z ∥2 = (1 − a1)2E ∥X0∥2 + σ21d.Since W 22 is the infimum over all couplings, it is bounded by the cost of this particular coupling. □
+
+6.2. KL telescoping transition error. The algorithmic comparison in this section is DKL (p1∥ bp1), where p1 is the law produced by the exact reverse chain and bp1 is the law produced by the implemented chain, both stopped at the first positive noise level. We control this final KL by first comparing the two reverse chains as full paths and then projecting those paths to their endpoint. The reason this helps is simple: a Markov chain path density is a product of an initial density and transition densities. Taking a logarithm turns that product into a sum, and taking expectation gives an additive KL identity. This is the basic telescoping mechanism behind the error decomposition: a long reverse sampling procedure is reduced to many one-step reverse-kernel comparisons. 
+
+Lemma 6.1 (KL chain rule for reverse Markov kernels) . Let μK PK −1 · · · P1 and νK QK −1 · · · Q1 be two path laws on (XK , . . . , X1), where P k (xk+1 → · ) and Q k (xk+1 → · ) transition from level k + 1 to level k. Let μk+1 be the marginal law of X k+1 under the first path law. Then 
+
+DKL (μK PK −1 · · · P1∥νK QK −1 · · · Q1) = DKL (μK ∥νK ) + 
+
+> K−1
+
+X
+
+> k=1
+
+EXk+1∼μk+1 DKL (Pk (Xk+1 → · )∥Qk (Xk+1 → · )). 
+
+Proof. Write the two path densities as 
+
+μK (xK ) 
+
+> K−1
+
+Y
+
+> k=1
+
+Pk (xk+1 → xk ), νK (xK ) 
+
+> K−1
+
+Y
+
+> k=1
+
+Qk (xk+1 → xk ). A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 31 
+
+The log-ratio is therefore log μK (xK )
+
+νK (xK ) + 
+
+> K−1
+
+X
+
+> k=1
+
+log Pk (xk+1 → xk )
+
+Qk (xk+1 → xk ) .Taking expectation under the first path law gives the initial term D KL (μK ∥νK ). For the kth transition term, condition on Xk+1. Under the first path law, the conditional law of Xk given Xk+1 is Pk (Xk+1 → · ), while the law of Xk+1 itself is μk+1. Thus 
+
+E log Pk (Xk+1 → Xk )
+
+Qk (Xk+1 → Xk ) = EXk+1∼μk+1 DKL (Pk (Xk+1 → · )∥Qk (Xk+1 → · )). Summing over k gives the identity. The general measure-theoretic statement follows by replacing densi-ties with Radon–Nikodym derivatives. □
+
+Remark. The marginal KL at the final time is at most the path-space KL by data processing; see Lemma A.1 in Appendix A. Therefore a path-space calculation gives a valid, often convenient upper bound for the final sampling error. This is the path-space substitute for the triangle inequality that KL lacks: the additivity comes from comparing two full path laws with factored initial distributions and transition kernels. 
+
+Proposition 6.2 (From local reverse-kernel error to final error) . Let the exact reverse chain start from p K
+
+and use the exact reverse kernels P ← 
+
+> k
+
+(xk+1 → · ) from (5.3) , k = 1, . . . , K − 1, producing final law p 1. Let an approximate reverse chain start from bpK and use kernels bP ← 
+
+> k
+
+(xk+1 → · ), producing final law bp1. Then 
+
+DKL (p1∥ bp1) ≤ DKL (pK ∥ bpK ) + 
+
+> K−1
+
+X
+
+> k=1
+
+EXk+1∼pk+1 DKL 
+
+¡P ← 
+
+> k
+
+(Xk+1 → · )°° b P ← 
+
+> k
+
+(Xk+1 → · )¢ .
+
+Proof. Consider the exact path law of ( XK , . . . , X1) and the approximate path law of ( bXK , . . . , bX1). Apply Lemma 6.1 to these path laws. The initial contribution is D KL (pK ∥ bpK ), and the transition contribution at reverse step k is 
+
+EXk+1∼pk+1 DKL 
+
+¡P ← 
+
+> k
+
+(Xk+1 → · )°° b P ← 
+
+> k
+
+(Xk+1 → · )¢ .Thus the KL divergence between the two full path laws is at most the right-hand side above. Projecting a path to its final coordinate is a measurable map, so data processing for KL gives the claimed bound on DKL (p1∥ bp1). □
+
+This proposition is the path-space part of the error decomposition (6.2). The remaining work is to estimate the one-step terms in the sum. 
+
+Remark (Putting the metrics together) . The main estimates above live in their natural metrics: W2 for early stopping and KL for the reverse-chain error. If one wants a single weak observable guarantee, one can introduce the bounded-Lipschitz distance DBL (μ, ν) = sup 
+
+∥f ∥∞≤1, ∥f ∥Lip ≤1
+
+¯¯Eμ f − Eν f ¯¯ .Then D BL (pdata , p1) ≤ W2(pdata , p1) by the coupling argument in the definition of W2: for any 1-Lipschitz 
+
+f and any coupling ( X , Y ) of μ and ν,
+
+¯¯E f (X ) − E f (Y )¯¯ ≤ E ∥X − Y ∥ ≤ 
+
+q
+
+E ∥X − Y ∥2,and then one takes the infimum over couplings. On the algorithmic side, DBL (p1, bp1) ≤ 2 D TV (p1, bp1) ≤ 2pDKL (p1∥ bp1)/2. Thus a final D BL statement can be obtained after the native W2 and KL estimates are proved, but it is not the metric driving either part of the analysis. 32 JIANFENG LU 
+
+6.3. How score error contributes to KL. Proposition 6.2 reduces the global KL error to local KL compar-isons between the exact reverse kernel P ← 
+
+> k
+
+and the implemented kernel bP ← 
+
+> k
+
+. Each local comparison can contain several sources of error. One source is numerical: even with the exact score, the implemented transition may only approximate the Bayes reverse kernel. Another source is statistical: the sampler uses a learned score s in place of the true score s⋆.In the rest of this section we specialize the DDPM grid of Section 5.1 to the variance-exploding case (αk = 1, σ2 
+
+> k
+
+= tk ), now run backward from a large noise level T down to an early-stopping level δ > 0: 
+
+δ = t1 < t2 < · · · < tK = T, hk = tk+1 − tk .The reverse step indexed by k moves from noise level tk+1 to tk , for k = 1, . . . , K − 1, so the chain ends at t1 = δ; the final law written p1 in the earlier subsections is thus the early-stopped law pδ. The one-step variance parameter then reduces to the time increment, ηk = hk , and we write hk from here on to emphasize that the reverse step is a genuine time step of an SDE discretization. This subsection isolates the statistical part. The implemented reverse step is the Gaussian update (5.4) – equivalently, an Euler–Maruyama discretization of the reverse SDE – in which the score enters only through the mean of the kernel. A score error therefore becomes a mean error, which we now quantify. To keep the notation separate, first fix the Gaussian discretization. Let (6.4) P EM  
+
+> k
+
+(x′ → · ) = N ¡x′ + hk s⋆
+
+> k+1
+
+(x′), hk I ¢
+
+be the exact-score Euler kernel, and let (6.5) bP EM  
+
+> k
+
+(x′ → · ) = N ¡x′ + hk sk+1(x′), hk I ¢
+
+be the learned-score Euler kernel. These are not the exact Bayes reverse kernel P ← 
+
+> k
+
+; they are the true-score and learned-score versions of the same Gaussian approximation (5.4). The following KL therefore isolates the statistical score error after the discretization has been fixed. For fixed x′, applying Lemma B.2 gives DKL 
+
+³
+
+P EM  
+
+> k
+
+(x′ → · )
+
+°°° b P EM  
+
+> k
+
+(x′ → · )
+
+´
+
+= 12hk
+
+°°hk
+
+¡sk+1(x′) − s⋆
+
+> k+1
+
+(x′)¢° °2 .Averaging over Xk+1 ∼ pk+1 and using the definition of ε2 
+
+> k+1, score
+
+gives (6.6) EXk+1∼pk+1 DKL 
+
+³
+
+P EM  
+
+> k
+
+(Xk+1 → · )
+
+°°° b P EM  
+
+> k
+
+(Xk+1 → · )
+
+´
+
+= hk
+
+2 ε2
+
+> k+1, score
+
+,which is the score-estimation contribution in the error decomposition (6.2), after the discretization choice has been separated, with ηk = hk and c = 12 .Summing these one-step terms over the reverse chain, the total score contribution has the form (6.7)  
+
+> K−1
+
+X
+
+> k=1
+
+hk ε2
+
+> k+1, score
+
+,the discrete analogue of the path-space estimate 
+
+Z T
+
+> δ
+
+EXt ∼pt
+
+°°st (Xt ) − s⋆ 
+
+> t
+
+(Xt )°°2 dt .The weight hk is what makes this estimate informative: a score model need not be equally accurate at all times, since an error matters less when the sampler takes only a small step, while an error during a large reverse step has a larger effect. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 33 
+
+6.4. Euler–Maruyama. We now turn to the numerical error of the simplest reverse-time integrator, the Euler–Maruyama scheme, in the variance-exploding setting fixed at the start of this section. Here the ini-tialization term in the error decomposition (6.2) is explicit. If the implemented reverse chain is initialized from N (0, T I ), then (6.8) ε2 
+
+> init
+
+:= DKL (pT ∥N (0, T I )) ≤
+
+Z
+
+DKL (N (x, T I )∥N (0, T I )) pdata ( d x) = E ∥X0∥2
+
+2T .Here we used the representation pT = R N (x, T I ) pdata ( d x) and convexity of KL in its first argument. The other, and more substantial, contribution is the discretization error accumulated over the reverse steps, whose size is governed by the step lengths hk . Choosing the grid well is therefore the central design question, and the relevant local scale against which to measure hk is the current noise level. Indeed, the reverse drift contains s⋆ 
+
+> t
+
+= (D⋆ 
+
+> t
+
+− x)/ t , so the same absolute step size is much more aggressive near the early-stopping level than it is at large noise. A uniform grid would therefore force all steps to be as small as the lowest noise scale δ, leading to a poor dependence on T /δ. The standard non-uniform-grid remedy is to use a relative control, as in Chen, Lee, and Lu [12]: (6.9) hk ≤ ¯h t k+1, ¯h ≤ 12 .The canonical example is the geometric grid (6.10) tk = (1 − ¯h)K −k T, δ = t1 = (1 − ¯h)K −1T.For this grid, 
+
+K ≍ ¯h−1 log T
+
+δ , ¯h ≍ log( T /δ)
+
+K .With this convention, the exact Bayes reverse kernel is (6.11) P ← 
+
+> k
+
+(x′ → dx) ∝x pk (x) exp 
+
+Ã
+
+−
+
+°°x − x′°°2
+
+2hk
+
+!
+
+dx,where x′ is the state at noise level tk+1. A first-order Gaussian approximation freezes the score at the beginning of the reverse step. This is the exact-score Euler kernel P EM  
+
+> k
+
+from (6.4); the learned sampler uses bP EM  
+
+> k
+
+from (6.5), replacing s⋆ 
+
+> k+1
+
+by sk+1. The superscript EM is just a reminder that the score has been frozen during the step. In the general DDPM notation of (5.4), these formulas are obtained by setting 
+
+αk = 1 and ηk = hk .There are two local error sources. The score-estimation part has already been isolated in the previous subsection: in the present variance-exploding normalization, (6.6) contributes hk ε2 
+
+> k+1, score
+
+up to con-stants. The new issue in this subsection is the numerical error caused by Euler–Maruyama itself. Thus we first compare the exact reverse kernel P ← 
+
+> k
+
+with the exact-score Euler kernel P EM  
+
+> k
+
+. This is the error made by freezing the true reverse drift during one time step. 
+
+Proposition 6.3 (Euler–Maruyama discretization error) . Suppose that, over reverse step k, the exact score field is Lipschitz at scale L k on the region where the process typically lies. Then the exact-score Euler kernel satisfies a one-step estimate of the form 
+
+EXk+1∼pk+1 DKL 
+
+³
+
+P ← 
+
+> k
+
+(Xk+1 → · )
+
+°°°P EM  
+
+> k
+
+(Xk+1 → · )
+
+´
+
+≲ d L 2 
+
+> k
+
+h2 
+
+> k
+
+,
+
+up to lower-order schedule factors. Proof. We write the single reverse step in reverse time. Condition on the starting point Xk+1 = x′ at noise level tk+1, and let 0 ≤ r ≤ hk . The exact reverse diffusion on this interval has drift s⋆ 
+
+> tk+1−r
+
+:dY ← 
+
+> r
+
+= s⋆ 
+
+> tk+1−r
+
+(Y ← 
+
+> r
+
+) d r + dB← 
+
+> r
+
+, Y ← 
+
+> 0
+
+= x′.34 JIANFENG LU 
+
+Its endpoint law is P ← 
+
+> k
+
+(x′ → · ). The exact-score Euler–Maruyama interpolation freezes the drift at the beginning of the step: d ¯ Y ← 
+
+> r
+
+= s⋆
+
+> k+1
+
+(x′) d r + dB← 
+
+> r
+
+, ¯Y ← 
+
+> 0
+
+= x′,whose endpoint law is precisely P EM  
+
+> k
+
+(x′ → · ). By the Girsanov KL formula in Appendix A, followed by data processing (Lemma A.1), the endpoint comparison is bounded by the path comparison DKL 
+
+³
+
+P ← 
+
+> k
+
+(x′ → · )
+
+°°°P EM  
+
+> k
+
+(x′ → · )
+
+´
+
+≤ 12 E
+
+Z hk
+
+> 0
+
+°°°s⋆ 
+
+> tk+1−r
+
+(Y ← 
+
+> r
+
+) − s⋆
+
+> k+1
+
+(x′)
+
+°°°2
+
+dr.This display is the basic Euler discretization estimate: the whole cost is the cost of replacing the moving score along the ideal reverse path by the frozen score at the left endpoint. Under the local Lipschitz bound, the score difference is controlled by the motion of the reverse path during the step, up to lower-order terms coming from the deterministic change of the noise level. Since the Brownian displacement over time r has squared size of order dr , the local estimate is 
+
+E
+
+°°°s⋆ 
+
+> tk+1−r
+
+(Y ← 
+
+> r
+
+) − s⋆
+
+> k+1
+
+(x′)
+
+°°°2
+
+≲ L2 
+
+> k
+
+d r ,again suppressing schedule-dependent lower-order terms. Integrating in r ∈ [0, hk ] gives 12 L2 
+
+> k
+
+d
+
+Z hk
+
+> 0
+
+r dr ≲ d L 2 
+
+> k
+
+h2 
+
+> k
+
+.Finally average this conditional bound over Xk+1 ∼ pk+1. □
+
+Proposition 6.3 is only the exact-score discretization estimate. When the sampler uses sk+1 instead of 
+
+s⋆
+
+> k+1
+
+, the extra contribution is the statistical Gaussian mean-error term computed in (6.6), which becomes 
+
+hk ε2 
+
+> k+1, score
+
+in the variance-exploding normalization. Combining Proposition 6.3, the score-error contribution (6.6), and Proposition 6.2 gives the standard Euler–Maruyama diffusion-sampling bound: (6.12) DKL (pδ∥ bpδ) ≲ ε2 
+
+> init
+
++ 
+
+> K−1
+
+X
+
+> k=1
+
+d L 2 
+
+> k
+
+h2 
+
+> k
+
++ 
+
+> K−1
+
+X
+
+> k=1
+
+hk ε2
+
+> k+1, score
+
+.The three terms are initialization at the high-noise endpoint, Euler discretization, and score estimation. This is the KL telescoping estimate of Proposition 6.2 with the local Gaussian calculation inserted, so it is the Euler–Maruyama specialization of the error decomposition (6.2). 
+
+Remark (Comparison with ULA) . The discretization term in (6.12) has the same origin as the ULA error in (2.3). In both cases, the numerical scheme freezes a drift over a short time interval. The Brownian displacement during that interval produces a local KL cost of order dL 2h2, or dL 2 
+
+> k
+
+h2 
+
+> k
+
+on a nonuniform diffusion grid, and summing over the grid gives an accumulated discretization bias proportional to the mesh size: dL 2h for ULA and Pk dL 2 
+
+> k
+
+h2 
+
+> k
+
+here. The difference is in the surrounding argument. For ULA, (2.3) is a mixing theorem for a Markov chain targeting a fixed density, so it needs a global contraction mechanism such as a log-Sobolev inequality, together with smoothness to control the Euler error. For diffusion models, the reference path pt is already supplied by the forward noising process, and the reverse sampler is compared to this path by KL telescoping and Girsanov. Thus global structural assumptions on the data distribution, such as convexity, log-Sobolev or isoperimetric inequalities, or warm starts, are not needed; they are replaced by initialization and score-estimation terms. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 35 
+
+In fact, the discretization error in estimate (6.12) can be sharpened, as the next subsection shows. Once initialization and score estimation have been separated, the exact-score Euler sampler pays only for freez-ing the true score during each reverse step. Let t + denote the next grid point at or above the current noise level, so t + = tk+1 for t ∈ [tk , tk+1]. The discretization cost is measured by the pathwise quantity (6.13) 
+
+Z T
+
+> δ
+
+E °°s⋆ 
+
+> t
+
+(Xt ) − s⋆  
+
+> t+
+
+(Xt + )°°2 dt ,up to deterministic schedule factors in more general schedules. This is the pathwise version of the finite-grid Pk dL 2 
+
+> k
+
+h2 
+
+> k
+
+term: Euler–Maruyama freezes the score at the high-noise endpoint t + of each reverse step, and the discretization error is governed by the change in the true score along the ideal reverse path as the noise time decreases from t + to t .In the error analysis above, the passage from this score difference to the bound dL 2 
+
+> k
+
+h2 
+
+> k
+
+used a worst-case control: the score was bounded by a Lipschitz constant Lk , or equivalently by a pointwise Hessian bound for log pt . The factor d comes from the Brownian displacement during one step; the potential loss comes from multiplying it by a uniform operator-norm bound on the Hessian. Under weak assumptions, this worst-case curvature can be much larger than the average curvature seen by the reverse process, es-pecially near the early-stopping time. The next subsection replaces this pointwise control by an averaged posterior-covariance quantity, leading to the nearly linear-in-d discretization bound. 6.5. Hessian control. The difficulty left by the previous subsection is the pathwise score difference in (6.13). The aim of this subsection is to replace the worst-case Hessian estimate by the more averaged bound score-freezing cost ≲ ¯h × posterior-covariance budget. We first derive the local score-freezing estimate where the factor ¯h appears, and then rewrite the remain-ing weighted quadratic variation in terms of posterior covariance. For t ∈ [tk , tk+1], write t + = tk+1. The Girsanov score-freezing cost in (6.13) is, up to the constant 12 and schedule factors, the sum over grid intervals of 
+
+Z tk+1
+
+> tk
+
+E °°s⋆ 
+
+> t
+
+(Xt ) − s⋆  
+
+> t+
+
+(Xt + )°°2 dt .The useful variable is not the score itself but the optimal denoiser. In the variance-exploding normal-ization, 
+
+D⋆ 
+
+> t
+
+(x) : = E[X0 | Xt = x] = x + t s⋆ 
+
+> t
+
+(x), s⋆ 
+
+> t
+
+(x) = D⋆ 
+
+> t
+
+(x) − xt .The stochastic-localization martingale identity (4.7), rewritten in the noise-time coordinate, says that for 
+
+t ≤ t +,
+
+E °°D⋆ 
+
+> t
+
+(Xt ) − D⋆  
+
+> t+
+
+(Xt + )°°2 =
+
+Z t +
+
+> t
+
+E °°∇D⋆ 
+
+> r
+
+(Xr )°°2F dr.This is the replacement for a pointwise Hessian bound: it measures the actual quadratic variation of the denoiser along the noising path. Now estimate one grid interval. Using s⋆ 
+
+> t
+
+= (D⋆ 
+
+> t
+
+− x)/ t and keeping only the curvature term explicitly, the score increment is bounded by the denoiser increment with the natural t −2 weight: 
+
+E °°s⋆ 
+
+> t
+
+(Xt ) − s⋆  
+
+> t+
+
+(Xt + )°°2 ≲ 1
+
+t 2 E °°D⋆ 
+
+> t
+
+(Xt ) − D⋆  
+
+> t+
+
+(Xt + )°°2 .36 JIANFENG LU 
+
+Here we have omitted some error terms coming from the explicit factor x/t , which can be handled easily. Substituting the martingale identity and applying Fubini gives 
+
+Z tk+1
+
+> tk
+
+E °°s⋆ 
+
+> t
+
+(Xt ) − s⋆  
+
+> t+
+
+(Xt + )°°2 dt
+
+≲
+
+Z tk+1
+
+> tk
+
+1
+
+t 2
+
+Z tk+1
+
+> t
+
+E °°∇D⋆ 
+
+> r
+
+(Xr )°°2F dr dt
+
+=
+
+Z tk+1
+
+> tk
+
+E °°∇D⋆ 
+
+> r
+
+(Xr )°°2F
+
+μZ rtk
+
+dtt 2
+
+¶
+
+dr
+
+=
+
+Z tk+1
+
+> tk
+
+E °°∇D⋆ 
+
+> r
+
+(Xr )°°2F
+
+r − tk
+
+r t k
+
+dr.Since r − tk ≤ hk and the mesh condition (6.9) with ¯h ≤ 1/2 gives tk ≥ tk+1/2, we get 
+
+Z tk+1
+
+> tk
+
+E °°s⋆ 
+
+> t
+
+(Xt ) − s⋆  
+
+> t+
+
+(Xt + )°°2 dt ≲ hk
+
+tk+1
+
+Z tk+1
+
+> tk
+
+E °°∇D⋆ 
+
+> r
+
+(Xr )°°2F
+
+r dr.This is the point at which ¯h enters: the ratio hk /tk+1 is the relative step size on the interval, and (6.9) says it is at most ¯h. Summing over k therefore gives 
+
+X
+
+> k
+
+Z tk+1
+
+> tk
+
+E °°s⋆ 
+
+> t
+
+(Xt ) − s⋆  
+
+> t+
+
+(Xt + )°°2 dt ≲ ¯h
+
+Z T
+
+> δ
+
+E °°∇D⋆ 
+
+> t
+
+(Xt )°°2F
+
+t dt .It remains to express the weighted quadratic variation in a more intrinsic form. Let 
+
+Σt (x) = Cov( X0 | Xt = x)be the posterior covariance in the variance-exploding noising channel. The linear-response identity (4.5) and the score-Jacobian identity (4.6), translated to this notation, give 
+
+∇D⋆ 
+
+> t
+
+(x) = I + t ∇s⋆ 
+
+> t
+
+(x) = t −1Σt (x). The covariance-dissipation identity (4.8), ddu E[Tr Σu ] = − E[Tr( Σ2 
+
+> u
+
+)], after the change of variables t = 1/ u,gives 
+
+E °°∇D⋆ 
+
+> t
+
+(Xt )°°2F = ∂t E Tr Σt (Xt ). Thus Z T
+
+> δ
+
+E °°∇D⋆ 
+
+> t
+
+(Xt )°°2F
+
+t dt =
+
+Z T
+
+> δ
+
+∂t E Tr Σt (Xt )
+
+t dt .Integrating by parts, 
+
+Z T
+
+> δ
+
+∂t E Tr Σt (Xt )
+
+t dt = E Tr ΣT (XT )
+
+T − E Tr Σδ(Xδ)
+
+δ +
+
+Z T
+
+> δ
+
+E Tr Σt (Xt )
+
+t 2 dt .The middle term is nonpositive, so the first and third terms give an upper bound. Following the notation of Chewi [18, Chapter 12], define the covariance budget (6.14) Dδ,T (pdata ) : = EXT ∼pT Tr ΣT (XT )
+
+T +
+
+Z T
+
+> δ
+
+EXt ∼pt Tr Σt (Xt )
+
+t 2 dt .Combining the previous displays gives the clean summary 
+
+X
+
+> k
+
+Z tk+1
+
+> tk
+
+E °°s⋆ 
+
+> t
+
+(Xt ) − s⋆  
+
+> t+
+
+(Xt + )°°2 dt ≲ ¯h Dδ,T (pdata ). A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 37 
+
+This is the key identification: the discretization error is governed by the weighted quadratic variation of the optimal denoiser, and Dδ,T packages that variation after the DDPM time weights have been accounted for. A careful version of this estimate, together with the score-error term, gives (6.15) DKL (pδ∥ bpδ) ≤ ε2 
+
+> init
+
++ 4 
+
+> K−1
+
+X
+
+> k=1
+
+hk Epk+1
+
+°°sk+1 − s⋆
+
+> k+1
+
+°°2 + 2 ¯h Dδ,T (pdata ), where the middle term is the time-weighted score error. The important lesson is that Dδ,T (pdata ) replaces a global Lipschitz constant for the score as the data-dependent factor in the discretization complexity. The remaining question is how large this covariance budget can be. A useful ambient-dimensional estimate comes directly from its posterior-variance form: for any distribution with finite second moment, 
+
+E Tr Σt (Xt ) = E ∥X0 − E[X0 | Xt ]∥2 ≤ E ∥X0 − Xt ∥2 = d t ,because Xt itself is an admissible estimator of X0. Substituting this into (6.14) gives 
+
+Dδ,T (pdata ) ≤ d
+
+μ
+
+1 + log T
+
+δ
+
+¶
+
+.Combining this estimate with (6.15) and the geometric-grid relation (6.10), the exact-score discretization term is controlled by 
+
+O
+
+μ d log 2(T /δ)
+
+K
+
+¶
+
+.Thus, when the initialization and score-estimation errors are also O(ε2), it is enough to take 
+
+K = eO
+
+μ d log 2(T /δ)
+
+ε2
+
+¶
+
+reverse steps. This is the nearly d-linear dependence proved by Benton, De Bortoli, Doucet, and Deli-giannidis [9] under a finite second-moment assumption. Related KL guarantees under finite Fisher-information assumptions were obtained by Conforti, Durmus, and Gentiloni Silveri [19]. The covari-ance budget can be bounded more sharply when the data are intrinsically low-dimensional: entropy or covering-number estimates for the smoothed law pδ replace the ambient dimension by an intrinsic di-mension at scale pδ.6.6. First-order rejection sampling and high accuracy. The Hessian-control bound explains why Euler– Maruyama can be analyzed under weak assumptions, but it also exposes a limitation of the sampler itself. Euler–Maruyama does not try to sample the exact one-step Bayes kernel; it linearizes the log density and relies on the step size being small enough that the nonlinear remainder is negligible. Thus, as for ULA before the Metropolis correction, high accuracy is bought by a fine grid and hence by a polynomial de-pendence on the target accuracy. The natural MALA-like question is whether this dependence can be reduced to logarithmic, or at least polylogarithmic, dependence on 1/ ε.Here the analogy with MALA also reveals the main obstruction. MALA obtains its correction from a log-density ratio. In a diffusion model, the one-step target involves the noised density pk , but pk (x) and log pk (x) are not available as numerical quantities; the learned object is only the score s⋆ 
+
+> k
+
+= ∇ log pk . Thus the question is sharper than simply applying a Metropolis step: can a score-only correction emulate the missing log-density-ratio test and correct the local Gaussian proposal toward the exact Bayes kernel? For the variance-exploding chain, this question has a useful local structure. The exact backward kernel (6.11) is not merely a Gaussian with a shifted mean; it is a Gaussian tilt of the form (6.16) pk (x) exp 
+
+Ã
+
+−
+
+°°x − x′°°2
+
+2hk
+
+!
+
+,38 JIANFENG LU 
+
+where x′ is the state at noise level tk+1. Euler–Maruyama corresponds to replacing this tilt by the Gaussian obtained from a first-order expansion of log pk . The high-accuracy idea is to sample the tilted law (6.16) more faithfully while still using only first-order information. This is where the algorithmic innovation enters. First-order rejection sampling, denoted FORS [11], replaces direct log-density-ratio evaluation by randomized first-order estimates. Although log pk (x) and log pk (y) are unavailable separately, their difference can be written as a path integral involving only the score: for any smooth path γ with γ0 = y and γ1 = x,log pk (x) − log pk (y) =
+
+Z 10
+
+˙γr , s⋆ 
+
+> k
+
+(γr )® dr.Sampling a random point along the path turns this integral into an unbiased estimate of the log-density difference. Thus, even though the endpoint log densities themselves are unavailable, score queries can produce a randomized estimate of exactly the log tilt that a rejection correction needs. There is still one conversion to make. Rejection sampling needs an acceptance weight proportional to the exponential of the log tilt, not just an estimate of the log tilt itself. Exponentiating an unbiased estimate would not usually give the right average, so FORS uses a Poisson product identity to build the exponential tilt from first-order random estimates. In abstract form, suppose a proposal is drawn from a law Q and the desired law is the exponential tilt of Q with Radon–Nikodym derivative proportional to ew(x). Assume that, given the proposal x, one can sample bounded random variables W1,W2, . . . with E[W1 | x] = w(x). In the simplest bounded form, assume |Wj | ≤ R almost surely for a deterministic envelope R. Take J ∼
+
+Poisson (2 R) and accept a proposal x with probability 
+
+> J
+
+Y 
+
+> j=1
+
+R + Wj
+
+2R .The probability generating function of a Poisson random variable makes the average acceptance factor proportional to ew(x). Hence the accepted proposals follow the exponentially tilted law. If R = Θ(1), the number of first-order queries is constant in expectation and logarithmic with high probability. 
+
+Poisson-product calculation. Condition on the proposed point x and write 
+
+A(x) = E
+
+" JY 
+
+> j=1
+
+R + Wj
+
+2R
+
+¯¯¯¯¯x
+
+#
+
+.Given J , the factors are independent and have conditional mean ( R + w(x))/(2 R). Therefore 
+
+A(x) = E
+
+"μ R + w(x)2R
+
+¶J ¯¯¯¯¯x
+
+#
+
+.The generating function of J ∼ Poisson (2 R) gives 
+
+A(x) = exp 
+
+μ
+
+2R
+
+μ R + w(x)2R − 1
+
+¶¶ 
+
+= ew(x)−R .The extra factor e−R is independent of x. Hence the joint law of an accepted proposal is proportional to 
+
+ew(x)Q( d x), which is exactly the exponential tilt. The number of score queries is J , so its mean is 2 R and a standard Poisson tail bound gives logarithmic high-probability control when R is bounded. □
+
+Thus FORS is the score-only analogue of a Metropolis correction. MALA uses density ratios to correct a Gaussian proposal; FORS uses randomized first-order estimates to correct a Gaussian tilt without eval-uating the density. Instead of accepting the Gaussian linearization as the sampler, the algorithm corrects that local proposal toward the true Gaussian tilt. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 39 
+
+In the notation of the error decomposition (6.2), FORS changes the size of the exact-score algorithmic term ε2
+
+> disc
+
+. By sampling each local Gaussian tilt accurately enough, the accumulated local algorithmic error can be made O(ε2) using only polylogarithmically many reverse steps in the target accuracy ε. In a simplified ambient-dimension form, the result of Chen, Chewi, Daskalakis, and Rakhlin [11] says that, suppressing schedule constants and taking the initialization and local algorithmic budgets of order ε2,there is a reverse sampler using score evaluations for which (6.17) DKL (pδ∥ bpδ) ≲ ε2 + 
+
+> K−1
+
+X
+
+> k=1
+
+hk ε2
+
+> k+1, score
+
+with 
+
+K = eO¡d polylog(1/ ε)¢
+
+in a basic ambient-dimension reading. The full theorem contains sharper dimension measures and re-finements under additional structure, but the key message here is simpler: the expensive dependence on the accuracy parameter is replaced by a polylogarithmic one. Together with the variance-exploding early-stopping estimate W 22 (pdata , pδ) ≤ δd, this separates the two error measurements: the initial smoothing is controlled in W2, while the implemented reverse chain is controlled in KL. Note that the same time-integrated score-error term appears in (6.17): FORS improves the local sampling step, but it does not remove the need for an accurate learned score. 7. D ISCRETE DIFFUSION MODELS 
+
+The development so far built and analyzed diffusion models on continuous state spaces. We now turn to a different modeling question: what if the state space itself is not continuous? Reverse-time Bayes rules, denoising objectives, and path-space error decompositions survive on finite state spaces; Euclidean gradients and Brownian motion do not. Discrete diffusion models therefore force us to state the sampling ideas in a form that does not rely on calculus. 7.1. Forward and reverse kernels on a finite state space. Images in pixel space can often be treated as continuous, but language, symbolic sequences, molecules, graphs, and many scientific configurations are inherently discrete. If x is a token sequence, an expression such as x + pt Z is meaningless. There is no small Gaussian perturbation of the word “cat” inside the vocabulary. Instead of adding Brownian noise, a discrete diffusion model applies a sequence of Markov kernels on a finite state space. The probabilistic skeleton is exactly the one we have used throughout: a forward chain that degrades the data toward a reference law, and a reverse chain recovered by Bayes’ rule. We therefore keep the same symbols as in the continuous case. The forward transition P → 
+
+> k
+
+and the backward transition P ← 
+
+> k
+
+of Subsection 5.1 are now read as stochastic matrices on the finite set, rather than as transition densities on 
+
+Rd . The only genuine loss is the calculus: there is no gradient ∇ log pk , so the score must be replaced by a finite-difference object. Let X be a finite state space. The data law pdata may be supported on a subset X0 ⊆ X ; we view it as a law on X by assigning zero mass outside X0. For ordinary categorical sequences one can take 
+
+X0 = X = V L , while for the masked diffusions treated below the noisy state space X also contains mask symbols. A discrete forward diffusion is a Markov chain (7.1) X0 ∼ pdata , Xk+1 ∼ P → 
+
+> k
+
+(Xk → · ), k = 0, . . . , K − 1, where each P → 
+
+> k
+
+is a stochastic matrix on X :
+
+P → 
+
+> k
+
+(x → y) ≥ 0, X
+
+> y∈X
+
+P → 
+
+> k
+
+(x → y) = 1. 40 JIANFENG LU 
+
+Let pk be the law of Xk . In row-vector notation, 
+
+pk+1 = pk P → 
+
+> k
+
+, pk = pdata P → 
+
+> 0
+
+P → 
+
+> 1
+
+· · · P →
+
+> k−1
+
+.The forward kernels are chosen so that pK is close to a simple reference distribution πref , such as all-mask tokens, independent uniform tokens, or a product distribution. The design principle is the same as in continuous diffusion. The forward process should be simple enough that we can sample from it and know its transition probabilities, and destructive enough that after many steps the distribution is close to a reference law. The reverse process is then the learned part. What changes is the nature of corruption: tokens are replaced, masked, or resampled rather than moved by small Gaussian increments. 7.2. Exact reverse kernels and ratio scores. The exact reverse kernel is again obtained from Bayes’ rule. For fixed x′ ∈ X ,(7.2) P ← 
+
+> k
+
+(x′ → x) = P(Xk = x | Xk+1 = x′) = pk (x)P → 
+
+> k
+
+(x → x′)
+
+pk+1(x′) .This is the discrete analogue of (5.3), in the same P ← 
+
+> k
+
+notation: there the continuous backward kernel equalled pk times a Gaussian likelihood, renormalized; here it equals pk times a transition likelihood 
+
+P → 
+
+> k
+
+(x → x′), renormalized. If we knew pk exactly, (7.2) would give an exact reverse sampler. In learning, we approximate either the reverse kernel P ← 
+
+> k
+
+(x′ → · ) directly or an object from which it can be computed, such as the posterior distribution of X0 given Xk .The reverse-kernel identity (7.2) shows exactly what must be learned. The forward transition P → 
+
+> k
+
+is known by design, but the intermediate law pk contains information about the data distribution and is unknown. Learning a discrete diffusion model means learning enough about these intermediate laws to simulate the reverse Bayes kernels. One way to represent this missing information is through ratios of the unknown law. Indeed, for two candidate predecessors x and y of the same current state x′, the normalizing factor pk+1(x′) in (7.2) cancels: 
+
+P ← 
+
+> k
+
+(x′ → y)
+
+P ← 
+
+> k
+
+(x′ → x) = pk (y)P → 
+
+> k
+
+(y → x′)
+
+pk (x)P → 
+
+> k
+
+(x → x′) .Since P → 
+
+> k
+
+is known, the unknown part is the same-time density ratio (7.3) s⋆ 
+
+> k
+
+(x, y) = pk (y)
+
+pk (x) , x, y ∈ X .In continuous space, the score tells us the infinitesimal log-density change when we move from x to x+ dx.On a graph or finite set, the ratio pk (y)/ pk (x) tells us the finite log-density change when we move from 
+
+x to a neighboring state y. If the forward kernel permits only local changes, these ratios are enough to specify local reverse transition probabilities. For many modern discrete diffusion models, however, the denoising posterior is the more convenient target: 
+
+D⋆ 
+
+> k
+
+(x0 | x) = P(X0 = x0 | Xk = x), x0 ∈ X0, x ∈ X .This is the discrete counterpart of the continuous posterior mean E[X0 | Xk = x] in Tweedie’s identity. The ratio-score and denoiser views are closely related by Bayes’ rule: 
+
+D⋆ 
+
+> k
+
+(x0 | x) = pdata (x0)P(Xk = x | X0 = x0)
+
+pk (x) .A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 41 
+
+Thus comparing the posterior probabilities at two noisy states recovers the density ratio pk (y)/ pk (x) up to the known forward-likelihood ratio. The denoiser therefore contains the ratio-score information, but in a form that is often easier to learn by supervised clean-token prediction. 7.3. Masked diffusion. The cleanest example is masked diffusion for token sequences. Let the vocabulary be V , and add a special mask symbol [ M]. Here X0 = V L , while the noisy state space is the augmented sequence space 
+
+XM := (V ∪ {[ M]}) L .For x, y ∈ XM, write xi and yi for their i th coordinates. Define the forward step by (7.4) P → 
+
+> k
+
+(x → y) =
+
+> L
+
+Y 
+
+> i=1
+
+
+
+1 − βk , yi = xi , xi ∈ V ,
+
+βk , yi = [M], xi ∈ V ,1, xi = yi = [M], 0, otherwise. Thus an unmasked token either stays unchanged or becomes masked, and once a token is masked it remains masked. Variants may use coordinate-dependent masking rates, but the same sequence-level form applies. Let ¯αk =
+
+> k−1
+
+Y
+
+> s=0
+
+(1 − βs ). For each coordinate i , conditional on X0, i = a ∈ V ,
+
+P(Xk,i = a | X0, i = a) = ¯αk , P(Xk,i = [M] | X0, i = a) = 1 − ¯αk .This is analogous to the Gaussian formula Xk | X0 ∼ N ¡ak X0, σ2 
+
+> k
+
+I ¢: the scalar attenuation measures how much information about X0 remains. Masked diffusion is especially transparent because corruption is irreversible in the forward direction. Once a token is masked, the forward process has forgotten its identity. The reverse model must therefore use the surrounding context and the learned data distribution to infer plausible clean tokens. This makes the Bayesian nature of denoising visible without any calculus. At the coordinate level, the reverse step has only two cases. 
+
+• If Xk+1, i = a ∈ V is unmasked, then necessarily Xk,i = a. There is nothing to sample at that coor-dinate. 
+
+• If Xk+1, i = [M], then Xk,i may either already be masked or may be the original clean token. The reverse sampler must decide whether to unmask, and if so which token to place. Specializing the reverse kernel (7.2) to (7.4) gives the sequence-level formula (7.5) P ← 
+
+> k
+
+(x′ → x) = pk (x)
+
+pk+1(x′) P → 
+
+> k
+
+(x → x′). This is still a coordinatewise masking rule through the known factor P → 
+
+> k
+
+(x → x′), but the unknown data-dependent weight is the full sequence law pk (x). Thus the distribution of an unmasked token generally depends on the entire partially masked sequence. 42 JIANFENG LU 
+
+7.4. Training objective for masked diffusion. The model is usually trained to predict masked clean to-kens from a corrupted sequence. Let Mk ⊆ {1, . . . , L} be the set of masked coordinates at time k, and let xk
+
+be the masked sequence. A denoising model Dk (i , · | xk ) outputs a distribution over vocabulary tokens for coordinate i . The population loss is (7.6) Lmask (D) = E
+
+" X 
+
+> i∈Mk
+
+− log Dk (i , X0, i | Xk )
+
+#
+
+.This is cross-entropy with the clean token as the label. The population minimizer is the coordinate mar-ginal of the posterior, 
+
+D⋆ 
+
+> k
+
+(i , a | xk ) = P(X0, i = a | Xk = xk ). Thus the cross-entropy objective is not an arbitrary language-modeling loss. It is the discrete analogue of denoising score matching. In the Gaussian case, the optimal prediction is a posterior mean and can be converted into a score by Tweedie’s identity. In the masked-token case, the optimal prediction is the full posterior distribution of the hidden clean token. 
+
+Proof. For fixed ( i , xk , k), the conditional contribution to the loss is 
+
+X
+
+> a∈V
+
+P(X0, i = a | Xk = xk ) [ − log Dk (i , a | xk )]. This is the cross-entropy between the true posterior distribution and the model distribution Dk (i , · | xk ). It is minimized uniquely by setting the model distribution equal to the true posterior. □
+
+7.5. Sampling from a masked model. A trained denoiser turns the posterior predictions above into a reverse-time update rule. In the absorbing case the terminal state is the all-mask sequence. Starting from that state, a sampler repeatedly chooses a set A ⊆ Mk of currently masked coordinates and fills those coordinates by drawing 
+
+bxi ∼ Dk (i , · | xk ), i ∈ A.Coordinates outside A are left unchanged, unless the chosen algorithm deliberately remasks or resamples them. Thus the schedule is the rule that chooses A and the time label k at each stage of the reverse process. This viewpoint makes the any-order character of masked diffusion explicit. The model is not tied to a left-to-right factorization: it is trained to denoise from partially masked contexts, so at inference time the sampler may reveal coordinates in any order. This order-agnostic view goes back to the order-agnostic training of NADE [45], and was tied directly to absorbing/masked diffusion by the autoregressive diffu-sion models of Hoogeboom et al. [28]. For an ordering or sequence of blocks A1, A2, . . . , Am ⊆ {1, . . . , L}, the sampler updates the still-masked coordinates in A j using posterior predictions conditioned on the current partial sequence. Singleton blocks give an autoregressive-like sampler with a chosen order; larger blocks give parallel decoding; adaptive blocks chosen from model confidence give a coarse-to-fine or easy-to-hard reveal schedule. The reason this freedom is legitimate is that training never fixes an order in the first place. The ob-jective (7.6) masks a random subset of coordinates and asks the model to predict the clean tokens at the masked positions from the unmasked ones. Across training examples, noise levels, and random masks, the masked set Mk ranges over essentially all subsets of {1, . . . , L}, so the model is implicitly trained to approximate the entire family of conditionals 
+
+P
+
+³
+
+X0, i = a | Xk,M ck = xM ck
+
+´
+
+, Mk ⊆ {1, . . . , L}, i ∈ Mk ,of a clean coordinate i given the visible entries of the partially masked sequence. Two features of masked diffusion make this exact. First, the forward process only masks tokens, never alters them, so Xk,M ck =A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 43 
+
+X0, M ck : conditioning on the visible part of Xk is the same as conditioning on the corresponding clean values. Second, whether a coordinate is masked is decided independently of the token values, so the masking pattern carries no information beyond which coordinates are observed. Hence the population optimum D⋆ 
+
+> k
+
+(i , · | xk ) of (7.6) is exactly the above conditional. An inference order is therefore just a rule for choosing which conditional to query next. Revealing coordinate i from the currently observed set M ck uses P(X0, i | Xk,M ck = xM ck ), a member of the family the model already learned. Every order factorizes the joint into conditionals drawn from this one family, which is why any order is supported by the same trained model. The choice of block size, however, is still a sampling choice. If a block contains several coordinates and the sampler draws them independently from the same context, it is using a factorized approximation to the joint conditional for that block. The next two subsections make this distinction precise: first by writing the general KL accounting for approximate reverse kernels, and then by isolating the extra error created by parallel block updates. 7.6. Error analysis parallel to the continuous case. A schedule together with a denoiser defines approx-imate reverse kernels bP ← 
+
+> k
+
+(x′ → · ), while the exact kernels are P ← 
+
+> k
+
+(x′ → · ) from (7.2). Let bp0 be the final distribution generated by the approximate reverse chain, and let bpK be the law used to initialize that chain at time K . A KL path-space argument gives (7.7) DKL (p0∥ bp0) ≤ DKL (pK ∥ bpK ) + 
+
+> K−1
+
+X
+
+> k=0
+
+EXk+1∼pk+1 DKL 
+
+¡P ← 
+
+> k
+
+(Xk+1 → · )°° b P ← 
+
+> k
+
+(Xk+1 → · )¢ .This is the exact analogue of the continuous diffusion decomposition: continuous diffusion discrete diffusion meaning 
+
+pK ≈ N (0, I ) pK ≈ πref initialization at noise 
+
+P ← 
+
+> k
+
+∝ pk × Gaussian likelihood P ← 
+
+> k
+
+∝ pk × P → 
+
+> k
+
+exact reverse kernel 
+
+sk ≈ s⋆ 
+
+> k
+
+bP ← 
+
+> k
+
+≈ P ← 
+
+> k
+
+or Dk ≈ D⋆ 
+
+> k
+
+learned denoising information 
+
+Pk ηk ε2
+
+> k,score
+
+Pk E DKL (P ← 
+
+> k
+
+∥ bP ← 
+
+> k
+
+) statistical/model error The justification is verbatim the KL telescoping argument of Section 6: apply Lemma 6.1 to the exact and approximate reverse path laws, then project the paths to their final state using data processing. The decomposition (7.7) isolates the same two error sources as in the continuous case: the initializa-tion gap D KL (pK ∥ bpK ) and the per-step reverse-kernel KL summed over the reverse steps. In absorbing masked diffusion, finiteness of these KL terms is already informative. If the sampler starts from the deter-ministic all-mask state, then bpK = δ[M]L , so the initialization term is finite only when the forward terminal law pK is also supported on the all-mask state. For the independent masking chain (7.4), this requires ¯αK = 0, for instance through a terminal step with βk = 1. Once the supports are compatible so that the KL terms are finite, the second term in (7.7) is tied to the quantity the model actually trains on. For masked diffusion the model does not learn the reverse kernel directly; it learns posterior clean-token distributions through the cross-entropy objective (7.6). Schemat-ically, we have the bound 
+
+E DKL (P ← 
+
+> k
+
+(Xk+1 → · )∥ bP ← 
+
+> k
+
+(Xk+1 → · )) ≲ E X 
+
+> i∈Mk+1
+
+DKL 
+
+¡D⋆
+
+> k+1
+
+(i , · | Xk+1)°°Dk+1(i , · | Xk+1)¢ .This bound is the cross-entropy regret of the posterior predictions, the part that training controls: it van-ishes as the learned posterior Dk+1 approaches the true posterior D⋆
+
+> k+1
+
+. It is the entire per-step error when the sampler unmasks one coordinate at a time, because each single-coordinate reverse step queries a true conditional (as explained in Subsection 7.5), so the approximate reverse chain reproduces the exact one. 44 JIANFENG LU 
+
+With a perfect denoiser, single-coordinate decoding is therefore exact in any order. Its drawback is cost— revealing a single coordinate per step takes as many network evaluations as there are coordinates—which raises the question of the next subsection: can we instead reveal several coordinates at once, and what accuracy does that sacrifice? 7.7. Parallel masked inference. To avoid spending one network evaluation per coordinate, practical masked samplers often reveal a whole block of coordinates in a single reverse step. This can mean two different things. The simplest implementation is factorized block decoding : if A is the set of coordinates to reveal from the current partially observed sequence xk , it samples 
+
+aA ∼ Y 
+
+> i∈A
+
+Dk (i , ai | xk ). The exact object, however, is the joint conditional law 
+
+P(X0, A = aA | Xk = xk ). Equivalently, for any ordering A = {i1, . . . , im }, the chain rule writes this joint conditional as 
+
+> m
+
+Y
+
+> ℓ=1
+
+P¡X0, iℓ = aiℓ | Xk = xk , X0, i1 = ai1 , . . . , X0, iℓ−1 = aiℓ−1
+
+¢ .Thus a block can be sampled exactly by sequentially querying updated conditionals, but the product of one-coordinate posteriors from the same context is exact only under conditional independence. The gap between these two laws is the factorization error. The inference schedule therefore sets a speed–accuracy tradeoff: larger blocks shorten the reverse chain but introduce conditional-independence bias, while sin-gleton blocks remove the bias at the cost of as many reverse evaluations as there are coordinates. Lavenant and Zanella [31] analyze this error directly for masked diffusions with factorized approximations, decom-posing the relative-entropy error into learning and factorization terms and relating the optimal block-size schedule to an information profile of the data distribution. This is not the only possible approach of parallel inference. The block sampler above is a factorized ap-proximation to the joint conditional; a different question is whether one can parallelize the exact sequen-tial conditional-sampling procedure itself. In an oracle model with access to exact conditional marginals of a target law on V L , Anari, Gao, and Rubinstein [5] show how to organize the queries to sample arbi-trary product-space laws in eO(L2/3 ) parallel time. Anari et al. [4] improve the parallel time to eO(L1/2 ) using autospeculative rejection sampling. These results are best read as a corrected-parallel counterpart to the simple block update: they do not replace a joint conditional by independent marginals, but instead use parallel queries to simulate the sequential conditionals with a correction. 7.8. CTMC setup and learning. The discussion so far used a discrete-time masked chain because it makes the Bayes rule and the denoising posterior easy to see. For analyzing practical samplers, however, the sharper language is continuous time: it lets us describe the exact reverse dynamics as one coordinate jump at a time, and then view parallel updates as a numerical approximation to those dynamics. This is one reason that most modern discrete diffusion models are phrased not with the stochastic ma-trices P → 
+
+> k
+
+but as a continuous-time Markov chain (CTMC), the finite-state analogue of the forward SDE. The forward corruption is run as a CTMC whose rate matrix factorizes over coordinates, so each coor-dinate is noised independently. This has a decisive consequence for the reverse process: at any instant only one coordinate changes, because the probability that two independent coordinates jump in the same infinitesimal interval is o( d t ). The exact reverse dynamics are therefore unambiguous and update a sin-gle coordinate at a time, and the parallel-update bias described above reappears in a controlled form, as A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 45 
+
+the error of approximating these dynamics on a finite time grid ( τ-leaping ). Continuous time thus sepa-rates the posterior/score error from the discretization error cleanly, produces the cleanest analogue of the score, and admits a flexible family of reverse samplers [10, 36]. A CTMC on a finite set X is generated by a time-dependent forward rate matrix R → 
+
+> t
+
+with 
+
+R→ 
+
+> t
+
+(x, y) ≥ 0 ( y̸ = x), R→ 
+
+> t
+
+(x, x) = − X 
+
+> y̸=x
+
+R→ 
+
+> t
+
+(x, y). Thus the off-diagonal entries are jump rates, and the diagonal entry makes each row sum to zero. Over an infinitesimal step, 
+
+P(Xt + dt = y | Xt = x) =
+
+
+
+R→ 
+
+> t
+
+(x, y) d t + o( d t ), y̸ = x,1 + R→ 
+
+> t
+
+(x, x) d t + o( d t ), y = x.Equivalently, 
+
+P(Xt + dt = y | Xt = x) = δx y + R→ 
+
+> t
+
+(x, y) d t + o( d t ). If pt (x) = P(Xt = x) is written as a row vector, then its evolution is (7.8) ∂t pt = pt R→ 
+
+> t
+
+, ∂t pt (y) = X
+
+> x∈X
+
+pt (x)R→ 
+
+> t
+
+(x, y). This is the finite-state counterpart of the Fokker–Planck equation (1.2): a rate matrix replaces the drift-and-diffusion operator acting on continuous densities. The rate matrix is also where the corruption family is specified. An absorbing (masked) generator sends each token to [ M] at a schedule-dependent rate and is the continuous-time version of the masked diffu-sion of the previous subsections; a uniform generator pushes each token toward the uniform distribution over V ; other choices encode structured token graphs. Masked diffusion is therefore a special case of this CTMC picture. The reverse process is again a CTMC, and its rates are fixed by a Bayes-ratio formula that is the time-continuous version of the reverse kernel (7.2). For y̸ = x,(7.9) R← 
+
+> t
+
+(y, x) = R→ 
+
+> t
+
+(x, y) pt (x)
+
+pt (y) .With the diagonal chosen so that rows sum to zero, these rates are exactly the ones that track the same marginal in reverse time. Indeed, for each y with pt (y) > 0, (pt R← 
+
+> t
+
+)( y) = X 
+
+> x̸=y
+
+pt (x)R← 
+
+> t
+
+(x, y) − pt (y) X 
+
+> x̸=y
+
+R← 
+
+> t
+
+(y, x)
+
+= X 
+
+> x̸=y
+
+pt (x)R→ 
+
+> t
+
+(y, x) pt (y)
+
+pt (x) − pt (y) X 
+
+> x̸=y
+
+R→ 
+
+> t
+
+(x, y) pt (x)
+
+pt (y)
+
+= pt (y) X 
+
+> x̸=y
+
+R→ 
+
+> t
+
+(y, x) − X 
+
+> x̸=y
+
+pt (x)R→ 
+
+> t
+
+(x, y)
+
+= − ∂t pt (y), where the last equality is the forward equation (7.8). Thus −∂t pt = pt R← 
+
+> t
+
+, which is the forward equa-tion for the chain when it is simulated from time T down to time 0. Starting the reverse CTMC from pT
+
+therefore gives marginal pt at every intermediate time. As in the continuous case, the forward rates R→
+
+> t
+
+are known by design and the only unknown ingredient is the collection of same-time density ratios over neighboring states. We write the exact score as 
+
+s⋆ 
+
+> t
+
+(x, y) : = pt (y)
+
+pt (x) , y̸ = x, R→ 
+
+> t
+
+(y, x) > 0. 46 JIANFENG LU 
+
+This is the continuous-time form of the ratio score (7.3), the discrete analogue of ∇ log pt that records the finite relative change of the noised law along each admissible move. Let st (x, y) > 0 be the learned prediction, st (x, y) ≈ s⋆ 
+
+> t
+
+(x, y). The orientation is chosen for reverse sampling: when the reverse chain is at 
+
+x, a candidate predecessor y is admissible exactly when the forward CTMC can jump from y to x. With this convention the learned reverse rate is 
+
+bR← 
+
+> t
+
+(x, y) = R→ 
+
+> t
+
+(y, x) st (x, y), y̸ = x.At first the training target looks inaccessible, since the ratio contains the unknown marginal law pt . The key denoising identity is that this unknown ratio can be written as a posterior average of known forward likelihood ratios. (7.10) s⋆ 
+
+> t
+
+(x, y) = E
+
+· P(Xt = y | X0)
+
+P(Xt = x | X0)
+
+¯¯¯¯ Xt = x
+
+¸
+
+.Thus training can sample clean data X0, corrupt it to Xt = x, and use the known forward likelihood ratio inside the loss. Score-entropy training [36] turns this identity into a supervised loss for positive ratios by first choos-ing a scalar discrepancy for one reverse edge. Let s⋆ > 0 denote the exact ratio, let s > 0 be the learned prediction, and set F (u) = − log u on u > 0. Score entropy uses the scaled Bregman divergence 
+
+s⋆DF (s, s⋆) = s⋆¡F (s) − F (s⋆) − F ′(s⋆)( s − s⋆)¢ = s − s⋆ log s + s⋆ log s⋆ − s⋆.This quantity is nonnegative, has derivative 1 −s⋆/s, and is minimized at s = s⋆; note that it is defined only for positive ratios, so the learned st (x, y) must be constrained to remain positive. In the learning objective the terms s⋆ log s⋆ − s⋆ are independent of the learned score. Thus the model-dependent part of one edge is st (x, y) − s⋆ 
+
+> t
+
+(x, y) log st (x, y). In training, the unknown ratio s⋆ 
+
+> t
+
+(x, y) is replaced by the computable forward likelihood ratio from the noising process. A schematic denoising score-entropy loss is (7.11) Et ,X0
+
+X
+
+> x∈X
+
+P(Xt = x | X0) X  
+
+> y:R→
+> t(y,x)>0
+
+wt (x, y)
+
+·
+
+st (x, y) − P(Xt = y | X0)
+
+P(Xt = x | X0) log st (x, y)
+
+¸
+
+,up to terms independent of the learned score. Here wt (x, y) ≥ 0 is a chosen weight, often the incoming forward rate R→ 
+
+> t
+
+(y, x) or a multiple of it. The reason this objective has the correct population target is exactly the denoising identity (7.10) above. Since the displayed loss is affine in the likelihood ratio appearing in (7.10), averaging over the unknown clean data simply replaces it by its conditional mean. The resulting edgewise risk is, up to con-stants, st (x, y) − s⋆ 
+
+> t
+
+(x, y) log st (x, y), and is minimized at the exact score st (x, y) = s⋆ 
+
+> t
+
+(x, y) on each reverse-admissible edge. The special choice wt (x, y) = R→ 
+
+> t
+
+(y, x) gives this denoising loss its sampling interpretation. On the edge from the current state x back to a possible predecessor y, the true reverse rate is R→ 
+
+> t
+
+(y, x)s⋆ 
+
+> t
+
+(x, y), while the learned reverse rate is R→ 
+
+> t
+
+(y, x)st (x, y). The corresponding per-edge contribution to the CTMC path-space relative entropy is (as will be shown in (7.12)) 
+
+R→ 
+
+> t
+
+(y, x)
+
+·
+
+st (x, y) − s⋆ 
+
+> t
+
+(x, y) + s⋆ 
+
+> t
+
+(x, y) log s⋆ 
+
+> t
+
+(x, y)
+
+st (x, y)
+
+¸
+
+.After dropping terms independent of the learned score, this is exactly the objective in (7.11) with wt (x, y) =
+
+R→ 
+
+> t
+
+(y, x). Thus the rate-weighted choice matches the path-space error quantity used in the CTMC sam-pling analysis below. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 47 
+
+7.9. CTMC sampling. Once the learned ratios have specified the reverse rates, the remaining problem is numerical simulation of the resulting jump process. τ-leaping is a standard acceleration of the stochastic simulation algorithm for chemical reaction networks, introduced by Gillespie [24]. The idea is to group many small jumps over a short interval, while pretending that the jump rates are essentially constant during that interval. For the learned reverse CTMC, keep the same forward-time grid convention as before, 0 = t0 < t1 < · · · < tK = T, hk = tk+1 − tk .The reverse sampler moves from tk+1 down to tk . If the current state is x at time tk+1, the simplest tau-leap freezes the learned reverse rates at ( tk+1, x) and uses the first-order kernel 
+
+P( bXtk = z | bXtk+1 = x) = hk bR← 
+
+> tk+1
+
+(x, z) + O(h2 
+
+> k
+
+), z̸ = x,with the remaining probability assigned to staying at x. Equivalently, for product spaces one draws in-dependent Poisson clocks Nz ∼ Poisson (hk bR← 
+
+> tk+1
+
+(x, z)) for the admissible local moves and applies the pro-posed coordinate changes in parallel, with a fixed tie-breaking convention if several incompatible clocks ring. This is the discrete analogue of an Euler–Maruyama step: it replaces the time-varying reverse gener-ator by a frozen one and, in parallel implementations, introduces a local independence error by allowing several coordinates to update during one step. We refer to [21, Chapter 13] for a more detailed discussion of τ-leaping and related algorithms. Tau-leaping is convenient, but it is still an approximation because the rates are frozen over a whole interval. A closely related exact construction is uniformization , originally introduced by Grassmann [25], applied to chemical reaction simulation by Beentjes and Baker [8], and applied to discrete diffusion mod-els by Chen and Ying [13]. Let us describe how uniformization works. On the interval [ tk , tk+1], choose a clock rate 
+
+Λk ≥ sup  
+
+> s∈[tk,tk+1]
+> x∈X
+
+X 
+
+> z̸=x
+
+bR← 
+
+> s
+
+(x, z). Starting from the state at time tk+1, draw Poisson event times in [ tk , tk+1] with rate Λk and process them in decreasing time. At an event time s, if the current state is x, jump to z̸ = x with probability bR← 
+
+> s
+
+(x, z)/ Λk
+
+and otherwise stay at x. The stay-put events are virtual jumps. Since the clock dominates all outgoing rates, this thinning construction has exactly the jump law of the learned reverse CTMC on the interval, without a frozen-rate approximation. 7.10. Error analysis for CTMC samplers. Having described the two CTMC simulation schemes, we now ask how their output laws differ from the desired data law. The numerical analysis can be organized in the same way as in Section 6. There are three contributions. First, the exact reverse process should start from pT , whereas the sampler is initialized from some implementable law bpT . This gives the common initialization gap. Define 
+
+ε2 
+
+> init
+
+:= DKL (pT ∥ bpT ). Two common choices of bpT should be interpreted differently. If bpT is a point mass, then ε2 
+
+> init
+
+is mainly a support condition. In absorbing masked diffusion, for instance, one often takes bpT = δ[M]L ; the KL is finite only if the forward terminal law pT is also supported on the all-mask state. With a finite integrated masking rate this may fail, so one should either force exact terminal absorption or measure the endpoint error in a weaker metric. 48 JIANFENG LU 
+
+If bpT is full-support, the same term is an ordinary initialization error. For example, if bpT is uniform and the forward CTMC contracts KL to bpT at rate ρ, then 
+
+ε2 
+
+> init
+
+≤ e−ρT DKL (p0∥ bpT ) ≤ e−ρT log |X |.On product token spaces X = V L , this term is of order L(log |V |)e−T for the usual independent-coordinate corruption. After initialization, fix a simulator and first imagine running that simulator with the true reverse rates, and only afterwards replace the true ratio score by the learned ratio score: 
+
+p0 −→ pnum ,∗ 
+
+> 0
+
+−→ bpnum  
+
+> 0
+
+.Here pnum ,∗ 
+
+> 0
+
+denotes the output law of the chosen numerical simulator when it is run with the true re-verse rates. The first comparison isolates numerical error, while the second comparison isolates score-estimation error. Strictly speaking, KL has no triangle inequality, so the rigorous proof usually performs this split on path space, or directly in the log-intensity integrand, rather than by adding two marginal KL divergences. Nevertheless, this bookkeeping is useful for organizing the error analysis. The score-estimation term has a path-space form analogous to Girsanov’s theorem for diffusions. We write it in the same epsilon-squared convention as the continuous score error: 
+
+ε2 
+
+> SE
+
+:=
+
+Z T
+
+> 0
+
+EXt ∼pt
+
+X   
+
+> y:R→
+> t(y,Xt)>0
+
+R→ 
+
+> t
+
+(y, Xt )
+
+·
+
+st (Xt , y) − s⋆ 
+
+> t
+
+(Xt , y) + s⋆ 
+
+> t
+
+(Xt , y) log s⋆ 
+
+> t
+
+(Xt , y)
+
+st (Xt , y)
+
+¸
+
+dt .(7.12) This is the same score-entropy Bregman loss that appears in the learning objective (7.11), which explains why it is a natural training loss. 
+
+Proof of (7.12) . Compare the exact reverse CTMC with rates R← 
+
+> t
+
+(x, y) = R→ 
+
+> t
+
+(y, x)s⋆ 
+
+> t
+
+(x, y) to the learned reverse CTMC with rates bR← 
+
+> t
+
+(x, y) = R→ 
+
+> t
+
+(y, x)st (x, y), and assume the learned rates are positive wherever the exact rates are positive. Over a small interval of length d t , condition on the current state x. Using the diagonal for the stay-put probability, the one-step KL is 
+
+X 
+
+> y̸=x
+
+R← 
+
+> t
+
+(x, y) d t log R← 
+
+> t
+
+(x, y) d t
+
+bR← 
+
+> t
+
+(x, y) d t + ¡1 + R← 
+
+> t
+
+(x, x) d t ¢ log 1 + R← 
+
+> t
+
+(x, x) d t
+
+1 + bR← 
+
+> t
+
+(x, x) d t + o( d t )
+
+= dt X 
+
+> y̸=x
+
+"bR← 
+
+> t
+
+(x, y) − R← 
+
+> t
+
+(x, y) + R← 
+
+> t
+
+(x, y) log R← 
+
+> t
+
+(x, y)
+
+bR← 
+
+> t
+
+(x, y)
+
+#
+
++ o( d t ). Substituting the two reverse rates cancels the common factor R→ 
+
+> t
+
+(y, x) inside the logarithm and gives 
+
+X  
+
+> y:R→
+> t(y,x)>0
+
+R→ 
+
+> t
+
+(y, x)
+
+·
+
+st (x, y) − s⋆ 
+
+> t
+
+(x, y) + s⋆ 
+
+> t
+
+(x, y) log s⋆ 
+
+> t
+
+(x, y)
+
+st (x, y)
+
+¸
+
+dt + o( d t ). The exact reverse process has marginal pt at noise time t . Averaging over Xt ∼ pt and integrating over 
+
+t ∈ [0, T ] gives (7.12); if the two reverse chains start from different laws, the additional contribution is the initialization KL error. □
+
+For τ-leaping, the exact-score numerical law is not the true reverse CTMC law. On each interval [tk , tk+1] it replaces the time-dependent true reverse rates by the frozen rates R← 
+
+> tk+1
+
+. Replacing these frozen true rates by bR← 
+
+> tk+1
+
+then adds the score-estimation part. Let ¯h denote the mesh parameter controlling the reverse step sizes, and let ¯R be an upper bound on the total outgoing reverse rate, 
+
+Pz̸ =x R← 
+
+> s
+
+(x, z) ≤ ¯R on [0, T ]. A stochastic-integral analysis of the combined comparison gives, under bounded-rate and regularity assumptions, a bound of the schematic form (7.13) DKL 
+
+¡p0
+
+°° bpτ
+
+> 0
+
+¢ ≲ ε2 
+
+> init
+
++ ε2 
+
+> SE
+
++ ¯R 2 ¯hT .A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 49 
+
+The three terms are the initialization error, the score-estimation error, and the exact-score tau-leaping discretization error. For product token spaces X = V L , more recent work gives a sharper version of the same message with explicit dependence on the vocabulary size. If the learned ratios are clipped to [ B−1, B] and the reverse grid is controlled by mesh parameter ¯h, then the standard tau-leaping sampler obeys, suppressing logarithmic factors and endpoint regularity constants, (7.14) DKL 
+
+¡p0
+
+°° bpτ
+
+> 0
+
+¢ ≲ ε2 
+
+> init
+
++ ε2 
+
+> SE
+
++ ¯h L 2|V | T,as in the analysis of Liang et al. [33]. For the usual independent-coordinate corruption one may substi-tute ε2 
+
+> init
+
+≲ L(log |V |)e−T . Thus making the tau-leaping discretization error of order ε requires ¯h of order 
+
+eO(ε/( L2|V |T )), and hence a deterministic grid with roughly eO(L2|V |/ε) reverse steps in this analysis. We can achieve high-accuracy sampling using uniformization. With the true ratio score, it simulates the true reverse CTMC exactly, so puni ,∗ 
+
+> 0
+
+= p0 if the reverse process is initialized from pT . Thus, for the learned score, the error estimate of uniformization reduces to (7.15) DKL 
+
+¡p0
+
+°° bpuni 0
+
+¢ ≤ ε2 
+
+> init
+
++ ε2
+
+> SE
+
+.On product token spaces X = V L with the usual independent-coordinate corruption, one may substitute 
+
+ε2 
+
+> init
+
+≲ L(log |V |)e−T in (7.15), giving D KL (p0∥ bpuni 0 ) ≲ L(log |V |)e−T + ε2
+
+> SE
+
+. Choosing T ≍ log( L log |V |/ε2)and learning the ratio score so that ε2 
+
+> SE
+
+≲ ε2 gives D KL (p0∥ bpuni 0 ) ≲ ε2. Chen and Ying [13] further show that, with adaptive dominating rates, the expected number of Poisson events is nearly linear in the hyper-cube dimension. Their theorem is stated for {0, 1} d ; for an alphabet of size |V |, a fixed binary encoding uses 
+
+q = ⌈ log 2 |V |⌉ bits per token, so d = Lq . In token notation this gives an expected event count eO¡L log |V |¢
+
+for ε2 KL error. 8. G UIDANCE , R EWARD TILTING , AND INFERENCE -T IME RL So far we have built diffusion samplers, continuous and discrete, that aim to reproduce the data distri-bution, or a slightly smoothed version of it. In many applications one instead wants a controlled modifi-cation of that base sampler: generate samples satisfying a condition, prefer high-reward outputs, or adapt a model at inference time. Guidance, reward tilting, and inference-time RL are all mechanisms for bias-ing the base model toward preferred outputs while staying close to the pretrained distribution, and their common mathematical language is the KL-regularized change of measure developed in this section. 8.1. Reward-tilted targets and KL-regularized optimization. Let p0 denote the clean-output distribu-tion produced by the pretrained sampler; we keep the diffusion convention that clean samples are writ-ten as x0. At this point we specify only the desired law on clean outputs; the corresponding reverse-time dynamics will be derived below. Given a reward r : Rd → R and inverse temperature β ≥ 0, define the exponentially tilted target (8.1) pβ 
+
+> 0
+
+(x0) = 1
+
+Zβ
+
+p0(x0)eβr (x0).Here 
+
+Zβ =
+
+Z
+
+p0(x0)eβr (x0) dx0 = EX0∼p0 eβr (X0)
+
+is the normalizing constant, assumed finite. Equivalently, for any test function f ,
+
+Epβ
+
+> 0
+
+f (X0) = Ep0
+
+£ f (X0)eβr (X0)¤
+
+Ep0 eβr (X0) .50 JIANFENG LU 
+
+Thus the target is obtained from the base model by reweighting samples according to their clean-output reward. The case β = 0 recovers p0, while larger β places more mass on high-reward regions and therefore trades diversity under the base model for reward improvement. Conditional generation fits the same form. If y is an observation, class label, or prompt and p(y | x0) is the corresponding likelihood or compatibility model, then Bayes’ rule gives 
+
+p0(x0 | y) ∝ p0(x0)p(y | x0). This is an exponential tilt with reward function x0 7 → log p(y | x0) and β = 1; a classifier score or learned preference model plays the same role when an explicit likelihood is unavailable. The inference-time prob-lem is to modify the reverse sampler so that its clean-output law approximates such a tilted or conditional target while still reusing the pretrained base dynamics. The same tilted law has a useful variational meaning. Among all distributions q over final samples, it is the optimizer of (8.2) sup 
+
+> q
+
+©βEq r − DKL (q∥p0)ª .Equivalently, if β > 0, 
+
+pβ 
+
+> 0
+
+= arg max q
+
+½
+
+Eq r − 1
+
+β DKL (q∥p0)
+
+¾
+
+.Thus β controls the tradeoff between reward improvement and staying close to the base model. Large β
+
+pushes hard toward high reward and risks mode collapse or reward hacking; small β preserves the base distribution but gives weaker alignment. 
+
+Proof. Let pβ 
+
+> 0
+
+(x) = Z −1 
+
+> β
+
+p0(x)eβr (x). For any q,DKL (q∥pβ 
+
+> 0
+
+) =
+
+Z
+
+q(x) log q(x)
+
+p0(x)eβr (x)/Zβ
+
+dx = DKL (q∥p0) − βEq r + log Zβ.Rearranging, 
+
+βEq r − DKL (q∥p0) = log Zβ − DKL (q∥pβ 
+
+> 0
+
+) ≤ log Zβ,with equality iff q = pβ 
+
+> 0
+
+. □
+
+8.2. Guidance as score tilting. To run a diffusion sampler for the tilted target pβ 
+
+> 0
+
+we need the score of its noised marginals, so the question is how that score differs from the base score we have already learned. Let pt and pβ 
+
+> t
+
+be the noised marginals of p0 and pβ 
+
+> 0
+
+. Write P → 
+
+> 0, t
+
+(x0 → x) for the density of the clean-to-noisy marginal forward kernel Law( Xt | X0 = x0). Because the reward acts only on the clean sample x0,noising the tilted law gives 
+
+pβ 
+
+> t
+
+(x) = 1
+
+Zβ
+
+Z
+
+P → 
+
+> 0, t
+
+(x0 → x) eβr (x0)p0(x0) d x0 = pt (x)
+
+Zβ
+
+hβ 
+
+> t
+
+(x), hβ 
+
+> t
+
+(x) : = E
+
+h
+
+eβr (X0) | Xt = x
+
+i
+
+.The noised tilted law is thus the base noised law reweighted by the posterior tilt factor h β 
+
+> t
+
+, which reads off, from the current noisy state, the expected exponential reward of the clean sample it will denoise to. Because this marginal is a product, its log-gradient splits into the base score plus a correction, 
+
+∇ log pβ 
+
+> t
+
+(x) = ∇ log pt (x) + ∇ log hβ 
+
+> t
+
+(x), so exact guidance merely adds the tilt gradient ∇ log hβ 
+
+> t
+
+to the base score, and practical methods differ only in how they approximate it. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 51 
+
+For conditional generation, the reward function is x0 7 → log p(y | x0). The same posterior-tilt notation gives the noisy likelihood 
+
+ht (x | y) : = E[p(y | X0) | Xt = x]. This is the quantity a noisy classifier estimates. It is not the noised conditional density itself; rather, it tilts the base noisy density. If the condition is fixed, the noised conditional density is 
+
+pt (x | y) ∝ pt (x)ht (x | y), where the missing normalizing constant is independent of x. Taking a log-gradient at noise level t gives (8.3) ∇ log pt (x | y) = ∇ log pt (x) + ∇ log ht (x | y). This is classifier guidance [20]: train or use a classifier on noisy inputs, then add its gradient to the uncon-ditional score. Classifier-free guidance [27] estimates the same increment without a separate classifier. We use the already established score notation in the form 
+
+st (x) ≈ ∇ log pt (x), st (x | y) ≈ ∇ log pt (x | y). Thus (8.3) suggests 
+
+st (x | y) − st (x) ≈ ∇ log ht (x | y). With guidance strength β ≥ 0, classifier-free guidance replaces the unconditional score by (8.4) st (x) 7 −→ st (x) + β¡st (x | y) − st (x)¢.The choice β = 1 gives the conditional score estimate st (x | y), while β > 1 extrapolates the conditional-score increment; empirically this often improves condition satisfaction, at the cost of moving farther from the base distribution. If the two learned scores were exact and β = 1, the approximation (8.4) would recover the conditional score in (8.3). For β̸ = 1, it instead gives the score of the noise-level power tilt 
+
+pt (x)ht (x | y)β, whereas the clean reward tilt (8.1) would involve the posterior factor hβ 
+
+> t
+
+(x) = E[p(y | X0)β |
+
+Xt = x]. Powering the noisy likelihood is not the same as tilting by the noisy expectation of the powered clean likelihood, so the two coincide only at β = 1. For small tilts, the posterior tilt factor has a linear approximation. Since hβ 
+
+> t
+
+(x) = 1+βVt (x)+O(β2) with 
+
+Vt (x) = E[r (X0) | Xt = x], we have (8.5) ∇ log pβ 
+
+> t
+
+(x) ≈ ∇ log pt (x) + β∇Vt (x), Vt (x) = E[r (X0) | Xt = x]. In the small-tilt regime, then, guidance perturbs the score by the gradient of the posterior expected reward 
+
+Vt , so a reward model need only capture this first-order landscape. The simplification is that Vt averages the reward r itself, whereas the exact factor hβ 
+
+> t
+
+averages eβr ; the two agree only to first order in β. Exact guidance uses the full hβ 
+
+> t
+
+, and the small-tilt form trades it for a cheaper reward-gradient correction. 8.3. Reward tilting as a Polchinski flow. Stepping back from the practical methods, the tilt factor hβ
+
+> t
+
+ties guidance to the renormalization viewpoint of Section 4. Recall the variance-exploding normalization 
+
+Xt = X0 + pt Z used there, in which pt = p0 ∗ N (0, t I ) and the effective potential Ut = − log pt solves the finite-dimensional Polchinski equation (4.12). Reading the integral that defines hβ 
+
+> t
+
+the other way, the un-normalized tilted marginal hβ 
+
+> t
+
+pt = (eβr p0) ∗ N (0, t I ) is the same forward channel applied to the reward-reweighted data measure eβr p0—noising the tilted data and tilting the noised data by hβ 
+
+> t
+
+coincide—so it is a heat flow and solves (4.11) just as pt does. Dividing out pt leaves a forward Kolmogorov equation for the tilt factor, (8.6) ∂t hβ 
+
+> t
+
+= 12 ∆hβ 
+
+> t
+
++ s⋆ 
+
+> t
+
+· ∇ hβ 
+
+> t
+
+,52 JIANFENG LU 
+
+so hβ 
+
+> t
+
+is transported by the score-driven generator 12 ∆ + s⋆ 
+
+> t
+
+· ∇ . Equivalently, the tilted effective potential 
+
+U β 
+
+> t
+
+:= − log( hβ 
+
+> t
+
+pt ) obeys the same Polchinski equation, (8.7) ∂t U β 
+
+> t
+
+= 12 ∆U β 
+
+> t
+
+− 12
+
+°°°∇U β
+
+> t
+
+°°°2
+
+,only with the bare potential shifted from U0 = − log p0 to U β 
+
+> 0
+
+= − log p0 − βr . Reward tilting therefore runs the renormalization flow from a reward-shifted initial potential, and the guided score −∇ U β 
+
+> t
+
+= s⋆ 
+
+> t
+
++∇ log hβ
+
+> t
+
+is exactly the additive guidance correction of the previous subsection. It should be emphasized that this is a reformulation, not a recipe. Solving the tilt equation (8.6) or the Polchinski equation (8.7) is no easier than evaluating the posterior expectation hβ 
+
+> t
+
+(x) = E[eβr (X0) | Xt = x]that defines it: the PDE carries the same computational difficulty as the conditional expectation. 8.4. Path-space control and the Doob transform. The score-tilting, classifier-guidance, and Polchinski-flow descriptions of the previous subsections are all exact, but they all rest on the same intractable object, the posterior tilt hβ 
+
+> t
+
+. To see how it is approximated in practice it helps to pass from marginals to whole reverse trajectories: on path space the tilt becomes a stochastic control problem, and its exact solution— the Doob transform of the base reverse chain—exposes precisely which conditional expectations must be estimated. Let us write a continuous reverse sampler in generation time as dY ← 
+
+> s
+
+= bs (Y ← 
+
+> s
+
+) d s + σs dB← 
+
+> s
+
+, 0 ≤ s ≤ T,and let P0 be its path law on full reverse trajectories ( Y ← 
+
+> s
+
+)0≤s≤T , with clean output Y ← 
+
+> T
+
+.Reward-tilted sampling trades terminal reward against the cost of departing from this base law. At the level of path laws it is the KL-regularized optimization (8.8) sup 
+
+> Q
+
+©βEQr (Y ← 
+
+> T
+
+) − DKL (Q∥P0)ª = log EP0 eβr (Y ← 
+
+> T)
+
+,the path-space version of the Gibbs variational principle (8.2). Its optimizer is the Gibbs path law (8.9) dQ⋆
+
+dP0
+
+¡(Y ← 
+
+> s
+
+)0≤s≤T
+
+¢ = eβr (Y ← 
+
+> T)
+
+EP0 eβr (Y ←  
+
+> T)
+
+.
+
+Proof. The proof is identical to the finite-dimensional reward-tilting proof. Define d Q⋆ ∝ eβr (Y ←  
+
+> T)
+
+dP0.Then DKL (Q∥Q⋆) = DKL (Q∥P0) − βEQr (Y ← 
+
+> T
+
+) + log EP0 eβr (Y ← 
+
+> T)
+
+.Rearranging and using nonnegativity of KL proves (8.8), with the supremum attained at Q⋆. □
+
+To turn this into a sampler we express it as a control problem on the drift. A controlled sampler changes only the drift, dY ← 
+
+> s
+
+= ¡bs (Y ← 
+
+> s
+
+) + σs us (Y ← 
+
+> s
+
+)¢ ds + σs dB← 
+
+> s
+
+,with path law Pu ; using the same diffusion coefficient means the two path laws differ only through the drift. Under the usual absolute-continuity and integrability assumptions, the Girsanov KL formula in Appendix A gives (8.10) DKL (Pu ∥P0) = 12 EPu
+
+Z T
+
+> 0
+
+°°us (Y ← 
+
+> s
+
+)°°2 ds,A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 53 
+
+with us (Y ← 
+
+> s
+
+) a progressively measurable control, so the quadratic control energy is exactly the KL cost of steering the sampler away from its base law. Restricting Q to controlled diffusions Pu and substituting this cost into (8.8) makes the Gibbs problem the equivalent stochastic control problem over drifts (8.11) sup 
+
+> u
+
+EPu
+
+·
+
+βr (Y ← 
+
+> T
+
+) − 12
+
+Z T
+
+> 0
+
+°°us (Y ← 
+
+> s
+
+)°°2 ds
+
+¸
+
+.The two are the same optimization stated at the level of measures and of drifts. Reading the optimizer (8.9) back at the level of drifts recovers the slogan “guidance is control”: the optimal control’s drift increment is exactly the value-gradient term of the ideal guided reverse dynamics of Subsection 8.2, now in this generation-time parametrization. The KL cost (8.10), which measured dis-cretization error in Section 6, is here a deliberately chosen guidance budget, spent where it raises expected terminal reward most efficiently. From here to the end of the section we adopt the discrete-time point of view, working with the time-discretized reverse chain ( XK , . . . , X0) of Section 5 rather than the continuous SDE. The reason is that the objects we now build—the Doob transform below, the sequential Monte Carlo weights of Subsection 8.5, and the policies of Subsection 8.6—all act step by step, and a finite chain of reverse kernels states them without stochastic-calculus bookkeeping; the continuous formulas above are recovered in the small-step limit. In this notation the clean output is indexed by 0, so a terminal reward is written as r (X0). The path-space optimizer has an explicit Markov-kernel form: each base reverse proposal is reweighted by the tilt factor of its continuations and normalized by the tilt factor at the current state. This kernel reweighting is the Doob transform of the base reverse chain. 
+
+Theorem 8.1 (Optimal path tilt and Doob transform) . Let P0 be a base reverse Markov chain on 
+
+(XK , XK −1, . . . , X0) with initial law p 0 
+
+> K
+
+and reverse kernels P 0, ← 
+
+> k
+
+(xk+1 → dxk ). For a terminal reward r (X0),define hk (xk ) = EP0
+
+h
+
+eβr (X0) | Xk = xk
+
+i
+
+.
+
+Then the optimizer of the path-space Gibbs problem (8.8) is the tilted path law 
+
+dQ⋆
+
+dP0 = eβr (X0)
+
+EP0 eβr (X0) .
+
+Moreover, Q⋆ is Markov, and its reverse kernels are 
+
+(8.12) P ⋆,← 
+
+> k
+
+(xk+1 → dxk ) = P 0, ← 
+
+> k
+
+(xk+1 → dxk ) hk (xk )
+
+hk+1(xk+1) , hk+1(xk+1) =
+
+Z
+
+hk (y)P 0, ← 
+
+> k
+
+(xk+1 → dy). 
+
+Proof. The variational optimality of the tilted path law follows from nonnegativity of KL. It remains to compute its kernels. Condition on the current reverse-time state Xk+1 = xk+1. Under the tilted law, the conditional distribution of the next state Xk is proportional to the base conditional distribution multiplied by the expected future weight: 
+
+P ⋆,← 
+
+> k
+
+(xk+1 → dxk ) ∝ P 0, ← 
+
+> k
+
+(xk+1 → dxk )EP0
+
+h
+
+eβr (X0) | Xk = xk
+
+i
+
+.By definition, the expectation is hk (xk ). The normalizing constant is 
+
+Z
+
+hk (y)P 0, ← 
+
+> k
+
+(xk+1 → dy) = EP0
+
+h
+
+eβr (X0) | Xk+1 = xk+1
+
+i
+
+= hk+1(xk+1), where the middle equality uses the Markov property. This gives the displayed Doob-transform kernel and shows that the tilted path law is again Markov. □54 JIANFENG LU 
+
+The value function hk is intractable, and the two ways of coping with this organize the rest of the sec-tion. One route uses an approximate value only as a proposal and removes its bias by reweighting, giving an exact sampler in the limit (Subsection 8.5); the other approximates the value and accepts the resulting bias, the inference-time-RL view (Subsection 8.6). 8.5. Feynman–Kac correction and sequential Monte Carlo. Theorem 8.1 gives the exact guided sampler, but its kernels require the value functions hk (xk ) = EP0 [eβr (X0) | Xk = xk ], which are exactly as unavailable as the posterior reward-to-go in the score picture. This subsection takes the first route of the fork above: use an approximate value only as a proposal and remove its bias by reweighting. That is the Feynman– Kac / sequential Monte Carlo route, and it is the mechanism behind inference-time scaling of guided samplers. The name comes from the value function. Along the base reverse process, h is a conditional expecta-tion of a terminal functional, hence a martingale, 
+
+hk+1(xk+1) =
+
+Z
+
+hk (y) P 0, ← 
+
+> k
+
+(xk+1 → dy), the same identity that appeared in Theorem 8.1. In continuous time it solves the backward equation 
+
+∂s hs + Ls hs = 0 with terminal data h = eβr , where Ls is the generator of the base reverse diffusion; this is the reverse-time companion of the noising-time equation (8.6) for the same tilt factor in Subsection 8.3. At the clean end k = 0 the state is X0 itself, so the terminal value is exactly h0(x0) = eβr (x0).The key fact is that the entire telescoping of the Doob transform collapses to a single terminal weight. 
+
+Proposition 8.2 (Untwisted reweighting) . Let P0 be the base reverse chain of Theorem 8.1 and Q⋆ the tilted path law with dQ⋆/ d P0 = eβr (X0)/Zβ. Then on trajectories, 
+
+dQ⋆
+
+dP0 (xK , . . . , x0) = eβr (x0)
+
+Zβ
+
+, Zβ = EP0 eβr (X0).
+
+Proof. Write the tilted path law from its initial law and Doob kernels. Its initial law is p⋆ 
+
+> K
+
+( d xK ) =
+
+p0 
+
+> K
+
+( d xK ) hK (xK )/ Zβ, and its kernels are P ⋆,← 
+
+> k
+
+= P 0, ← 
+
+> k
+
+hk (xk )/ hk+1(xk+1). Multiplying, dQ⋆
+
+dP0 = hK (xK )
+
+Zβ 
+
+> K−1
+
+Y
+
+> k=0
+
+hk (xk )
+
+hk+1(xk+1) = hK (xK )
+
+Zβ
+
+· h0(x0)
+
+hK (xK ) = h0(x0)
+
+Zβ
+
+,and h0(x0) = eβr (x0). □
+
+This suggests the simplest exact algorithm: draw N trajectories from the base model, weight each by 
+
+eβr (x0), and resample. As N → ∞ the weighted empirical law converges to Q⋆, so the clean marginal converges to the tilted target pβ 
+
+> 0
+
+. The catch is variance: if the base model rarely produces high-reward outputs, almost all weight lands on a few trajectories and the effective sample size collapses. Sequential Monte Carlo fixes this by twisting the proposal with the approximate value and resampling along the way. Replace the base kernel by a proposal that follows an approximate Doob transform, (8.13) bP ← 
+
+> k
+
+(xk+1 → dxk ) = P 0, ← 
+
+> k
+
+(xk+1 → dxk ) bhk (xk )
+
+bgk+1(xk+1) , bgk+1(xk+1) =
+
+Zbhk (y) P 0, ← 
+
+> k
+
+(xk+1 → dy), where bhk ≈ hk is any tractable value estimate (a classifier, a reward model, a learned value, or the lin-earized small-tilt value of (8.5)) with the exact terminal value bh0 = eβr . If the particles are initialized from the base noisy law p0 
+
+> K
+
+, they also carry the initial weight bhK (XK ); if one can instead sample from the twisted A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 55 
+
+noisy law proportional to p0 
+
+> K
+
+bhK , this initial weight is constant. Running N particles through bP ← 
+
+> k
+
+and car-rying an incremental importance weight at each reverse step, then resampling when the effective sample size drops, gives a consistent estimator of Q⋆.At each reverse step the particle picks up an incremental importance weight: the ratio of the base tran-sition weighted by the current value bhk (xk ) to the twisted proposal weighted by the next value bhk+1(xk+1). Substituting the proposal (8.13), this collapses to 
+
+P 0, ← 
+
+> k
+
+(xk+1 → dxk ) bhk (xk )
+
+bP ← 
+
+> k
+
+(xk+1 → dxk ) bhk+1(xk+1) = bgk+1(xk+1)
+
+bhk+1(xk+1) .Thus the incremental weight is (8.14) wk (xk+1) = bgk+1(xk+1)
+
+bhk+1(xk+1) .It measures the one-step mismatch between the value bhk+1 assumed at the current state and the value 
+
+bgk+1 obtained by propagating bhk one base step. If the twist is exact, bh = h, then bgk+1 = hk+1 by the mar-tingale identity and all incremental weights are one; the only nonconstant weight left is the initial twist weight if the sampler starts from p0 
+
+> K
+
+. All of the approximation error is thus pushed into nonuniform weights, which resampling removes in the large-N limit; a good bh keeps the weights near uniform and the variance low. For conditional generation, take the terminal reward to be log p(y | x0). Then hk (xk ) = P0(y | Xk = xk ), and a noisy classifier or conditional likelihood model gives a tractable bhk . When this twist is realized as a guidance gradient ∇ log bhk that only moves the particles, the proposal is exactly a classifier-guided sampler, and the weights above are the SMC correction that restores the conditional target in the large-particle limit. 
+
+Remark. This is the “Feynman–Kac steering” or “twisted diffusion sampler” family of methods [52]. It separates two roles cleanly: guidance supplies an approximate value bh that biases the proposal toward high-reward regions, while the weights (8.14) and resampling guarantee that the limiting law is the exact 
+
+tilt rather than a biased approximation. Spending more inference-time compute—more particles, more frequent resampling, or a more accurate twist—reduces the variance of the correction rather than chang-ing its target. 8.6. Inference-time reinforcement learning. The previous subsections describe the ideal sampler for a reward tilt: if the posterior value functions hk were known exactly, the reverse kernels would be the Doob transforms in Theorem 8.1. The setting here is genuinely inference-time: the pretrained reverse sampler stays fixed as the reference law, and a policy changes only how that sampler is run at test time. The RL problem is therefore over sampler choices during generation, not over retraining the base score model. In a finite-horizon formulation, the reverse sampler takes actions during sampling. Let π = (πk ) be a possibly randomized policy: after observing Xk+1 at step k, it chooses an action ak ∼ πk (· | Xk+1), and the reverse step uses the corresponding kernel, 
+
+ak ∼ πk (· | Xk+1), Xk ∼ P ak ,← 
+
+> k
+
+(Xk+1 → · ), ak ∈ A .The action may be a guidance scale, a timestep choice, an injected-noise level, a rejection or resampling decision, or an additive drift correction. In a masked language diffusion sampler, it may choose how many tokens to unmask, which positions to update, or how sharply to sample from a token posterior. The terminal reward is measured only after the final object X0 is produced. 56 JIANFENG LU 
+
+The objective is the same KL-regularized change of measure, restricted to the family of sampler modi-fications available at inference time: (8.15) J (π) = Eπ
+
+"
+
+r (X0) − 1
+
+β
+
+X
+
+> k
+
+DKL 
+
+³
+
+P ak ,← 
+
+> k
+
+(Xk+1 → · )
+
+°°°P 0, ← 
+
+> k
+
+(Xk+1 → · )
+
+´#
+
+.Here β > 0 is the same inverse temperature as in the variational principle (8.2); larger β means weaker KL regularization and stronger reward seeking. The KL term keeps the policy-induced sampler close to the pretrained sampler at each reverse step. This mirrors the variational identity: reward improvement is meaningful only relative to a reference distribution. Without this reference cost, policy optimization can exploit flaws in the reward model or collapse to a narrow set of high-scoring samples. If the action class is rich enough to choose the whole next-step kernel, this optimization does not pro-duce a new sampler: it recovers the Doob-transformed kernel of Theorem 8.1, now reached by dynamic programming rather than by tilting the path law. To see the same object appear, define the regularized value-to-go from xk by 
+
+vk (xk ) = sup 
+
+> π0,..., πk−1
+
+Eπ
+
+"
+
+r (X0) − 1
+
+β
+
+> k−1
+
+X 
+
+> j=0
+
+DKL 
+
+³
+
+P a j ,← 
+
+> j
+
+(X j +1 → · )
+
+°°°P 0, ← 
+
+> j
+
+(X j +1 → · )
+
+´ ¯¯¯¯¯ Xk = xk
+
+#
+
+,with the empty-sum convention v0(x0) = r (x0). The local Gibbs variational principle gives 
+
+P ⋆,← 
+
+> k
+
+(xk+1 → dxk ) ∝ P 0, ← 
+
+> k
+
+(xk+1 → dxk ) exp ¡βvk (xk )¢ .Writing hk (xk ) = exp( βvk (xk )) makes this exactly the normalization in (8.12): the same reweighting we already have, only now the value is presented as a Bellman value-to-go rather than a posterior tilt factor. The two letters are the two coordinates of one object: the multiplicative tilt factor hk that enters the Doob kernel and the SMC weights, and its log-domain soft value v k = β−1 log hk , so that β times its gradient (in the continuous picture) is added to the score, matching ∇ log hβ 
+
+> t
+
+= β∇vt . The posterior expected reward 
+
+Vt of (8.5) is the small-β linearization of this soft value. Soft dynamic programming is therefore the finite-state computational form of the path-space tilt; what is genuinely new here is not the optimal kernel but how its value is obtained, since guidance methods approximate this value information while RL methods estimate it from sampled rewards. For a parameterized policy πθ with reverse-path density pθ (xK , . . . , x0), sampled rewards can be turned into updates by the likelihood-ratio identity 
+
+∇θ E(XK ,..., X0)∼pθ [r (X0)] = E(XK ,..., X0)∼pθ
+
+£r (X0)∇θ log pθ (XK , . . . , X0)¤ ,In implementations one often subtracts a baseline from the reward to reduce variance, but that is not part of the change-of-measure identity. Along a reverse diffusion chain, log pθ (xK , . . . , x0) = log pθ,K (xK ) + X
+
+> k
+
+log pθ (xk | xk+1), with the initial-law term disappearing from the gradient when the noisy initialization is fixed. Thus the update decomposes across the guidance decisions made along the trajectory. For the KL-regularized ob-jective (8.15), the return is replaced by the regularized return inside the brackets, with any explicit deriva-tive of the KL penalty added when the transition family is differentiable. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 57 
+
+This perspective is also how to read current inference-time RL methods. One can combine the base sampler with a reward-aligned proposal, spend particles on resampling and trajectory correction, or es-timate a drift/Doob correction more directly. These are different approximations to the same ideal con-trolled path law. The useful message for these notes is not that one particular recent algorithm has re-placed the others; it is that reward tilting, KL-regularized control, and Doob transforms provide the com-mon language for comparing ways of changing the sampler at inference time. 8.7. Guidance and reward tilting in the discrete case. Everything in this section carries over almost un-changed to the discrete diffusion models of Section 7, because the target and objective never used con-tinuous structure. The reward-tilted target (8.1) and the KL-regularized variational principle (8.2) are de-fined on any space; the Feynman–Kac/twisted-SMC correction of Subsection 8.5 reweights particles by the same potentials; and inference-time RL (8.15) differentiates the trajectory likelihood—for a discrete chain a sum Pk log P ← 
+
+> k,θ
+
+(xk+1 → xk ) of log transition probabilities—with respect to θ rather than the state, so it transfers verbatim. The one step that changes form is guidance. The optimal tilt is again the Doob h-transform of The-orem 8.1, now of a jump process: with the soft value vt (x) = β−1 log E[exp( βr (X0)) | Xt = x], the guided reverse rates are reweighted by value differences, 
+
+R←,guided  
+
+> t
+
+(y → x) = R← 
+
+> t
+
+(y → x) exp ¡β(vt (x) − vt (y)) ¢,the exact analogue of adding β∇vt to the reverse drift, with the gradient replaced by a finite difference of vt
+
+across admissible moves—the same score-to-ratio substitution as in (7.3). As before vt is intractable and is approximated, by a learned predictor of the reward, a predictor-free interpolation, or a Taylor expansion around the predicted clean token [39]. APPENDIX A. I TÔ CALCULUS AND GIRSANOV THEOREM 
+
+This appendix collects the stochastic-calculus facts used in the notes. The statements below are written in the smooth, non-explosive setting in which the formal calculations in the text are valid. For rigorous hypotheses and proofs, see the texts of E, Li and Vanden-Eijnden [21], Karatzas and Shreve [30] or Øk-sendal [40]. 
+
+Itô formula, generator, and adjoint. Let Xt solve dXt = bt (Xt ) d t + σt (Xt ) d Bt ,where Bt is an m-dimensional Brownian motion and σt (x) ∈ Rd×m . Write at (x) = σt (x)σt (x)⊤. For a smooth test function ϕ, Itô’s formula gives dϕ(Xt ) = ∇ϕ(Xt ), bt (Xt )® dt + 12 Tr ¡at (Xt )∇2ϕ(Xt )¢ dt + ∇ϕ(Xt ), σt (Xt ) d Bt
+
+® .The last term is a martingale increment and has mean zero under the usual integrability assumptions. Thus ddt E[ϕ(Xt )] = E[( Lt ϕ)( Xt )], where the infinitesimal generator is 
+
+Lt ϕ = bt , ∇ϕ® + 12 Tr( at ∇2ϕ). If Xt has density qt , then the Fokker–Planck equation is the adjoint equation 
+
+∂t qt = L ∗ 
+
+> t
+
+qt ,58 JIANFENG LU 
+
+where, in coordinates, 
+
+L ∗ 
+
+> t
+
+q = −∇ · (bt q) + 12
+
+> d
+
+X   
+
+> i,j=1
+
+∂i ∂j
+
+¡(at )i j q¢ .For overdamped Langevin, b = −∇ U and a = 2I , so this reduces to 
+
+∂t qt = ∇ · (qt ∇U ) + ∆qt .
+
+Girsanov’s theorem. Girsanov’s theorem compares two diffusions that share the same initial law and the same diffusion coefficient but may carry different drifts. We fix the coefficient p2 I , the Langevin conven-tion used in the notes. Let P and Q be the laws on path space C ([0, T ]; Rd ) of dXt = bP 
+
+> t
+
+(Xt ) d t + p2 d Bt and dXt = bQ 
+
+> t
+
+(Xt ) d t + p2 d Bt .Under the usual absolute-continuity and integrability assumptions, the two laws are equivalent on FT ,the terminal σ-algebra of the Brownian filtration, with Radon–Nikodym density (A.1) dP
+
+dQ
+
+¯¯¯FT
+
+= exp 
+
+μ 12
+
+Z T
+
+> 0
+
+D
+
+bP 
+
+> t
+
+− bQ 
+
+> t
+
+, d Xt − bQ 
+
+> t
+
+dt
+
+E
+
+− 14
+
+Z T
+
+> 0
+
+°°°bP 
+
+> t
+
+− bQ
+
+> t
+
+°°°2
+
+dt
+
+¶
+
+,where all integrands are evaluated at Xt .To obtain the KL divergence, take logarithms in (A.1) and average under P:DKL (P∥Q) = EP
+
+·
+
+log dP
+
+dQ
+
+¸
+
+= 12 EP
+
+Z T
+
+> 0
+
+D
+
+bP 
+
+> t
+
+− bQ 
+
+> t
+
+, d Xt − bQ 
+
+> t
+
+dt
+
+E
+
+− 14 EP
+
+Z T
+
+> 0
+
+°°°bP 
+
+> t
+
+− bQ
+
+> t
+
+°°°2
+
+dt .The second term is already a plain expectation of a path integral, so it is left as is. For the first term, recall that under P, we have d Xt − bQ 
+
+> t
+
+dt = (bP 
+
+> t
+
+− bQ 
+
+> t
+
+) d t + p2 d Bt , and 12 EP
+
+Z T
+
+> 0
+
+D
+
+bP 
+
+> t
+
+− bQ 
+
+> t
+
+, d Xt − bQ 
+
+> t
+
+dt
+
+E
+
+= 12 EP
+
+Z T
+
+> 0
+
+°°°bP 
+
+> t
+
+− bQ
+
+> t
+
+°°°2
+
+dt + 1
+
+p2 EP
+
+Z T
+
+> 0
+
+D
+
+bP 
+
+> t
+
+− bQ 
+
+> t
+
+, d Bt
+
+E
+
+.The expectation of the final integral vanishes, and we arrive at (A.2) DKL (P∥Q) = 14 EP
+
+Z T
+
+> 0
+
+°°°bP 
+
+> t
+
+(Xt ) − bQ 
+
+> t
+
+(Xt )
+
+°°°2
+
+dt .So far the two processes share the same initial law. If instead they start from different initial laws, the density (A.1) acquires the extra factor d Law P(X0)/ d Law Q(X0) at t = 0, and the KL gains the corresponding initial term: DKL (P∥Q) = DKL 
+
+¡Law P(X0) °° Law Q(X0)¢ + 14 EP
+
+Z T
+
+> 0
+
+°°°bP 
+
+> t
+
+(Xt ) − bQ 
+
+> t
+
+(Xt )
+
+°°°2
+
+dt .
+
+Lemma A.1 (Data processing) . Let μ and ν be probability laws on a measurable space, and let T be a measurable map into another measurable space. Then 
+
+DKL (T#μ∥T#ν) ≤ DKL (μ∥ν) and DTV (T#μ, T#ν) ≤ DTV (μ, ν). 
+
+Proof. If μ is not absolutely continuous with respect to ν, the KL bound is trivial. Otherwise let Z = dμ/ d ν.Under T#ν, the Radon–Nikodym derivative of T#μ with respect to T#ν is 
+
+Eν[Z | T ]. Therefore Jensen’s inequality gives DKL (T#μ∥T#ν) = Eν
+
+£Eν[Z | T ] log Eν[Z | T ]¤ ≤ Eν[Z log Z ] = DKL (μ∥ν). For total variation, take the supremum over events B in the target space: 
+
+¯¯T#μ(B ) − T#ν(B)¯¯ = ¯¯μ(T −1B) − ν(T −1B)¯¯ ≤ DTV (μ, ν). □A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 59 
+
+Thus, for any measurable map F on path space, DKL (F#Pu ∥F#P0) ≤ DKL (Pu ∥P0). Taking F (ω) = ωT gives the endpoint KL bound used in the one-step ULA calculation. APPENDIX B. G AUSSIAN TOOLBOX 
+
+This short toolbox collects facts used throughout the notes. These are good warm-up exercises for students who have not recently worked with Gaussian densities. 
+
+Lemma B.1 (Affine Gaussian maps and sums) . Let X ∼ N (m, Σ) in Rd . For a matrix A and vector b, AX + b ∼ N ¡Am + b, AΣA⊤¢ .
+
+If X and Y are independent Gaussians, then X + Y is Gaussian and 
+
+Cov( X + Y ) = Cov( X ) + Cov( Y ). 
+
+In particular, in one dimension, if X and Y are independent and centered, then 
+
+Var( aX + bY ) = a2 Var( X ) + b2 Var( Y ). 
+
+Proof. The affine statement follows from the Gaussian characteristic function: 
+
+Eei 〈t ,AX +b〉 = exp 
+
+μ
+
+i 〈t , Am + b〉 − 12 t ⊤ AΣA⊤t
+
+¶
+
+.For independent Gaussians, characteristic functions multiply, so the means and covariances add. The one-dimensional variance formula is the corresponding special case. □
+
+Lemma B.2 (KL between Gaussians with equal covariance) . For m , bm ∈ Rd and positive definite Σ,
+
+DKL (N (m, Σ)∥N ( bm, Σ)) = 12 ∥m − bm∥2 
+
+> Σ−1
+
+, ∥v∥2 
+
+> Σ−1
+
+= v⊤Σ−1v.
+
+In particular, if Σ = ηI , the KL is ∥m − bm∥2 /(2 η).Proof. The log density ratio is 
+
+− 12 ∥x − m∥2 
+
+> Σ−1
+
++ 12 ∥x − bm∥2 
+
+> Σ−1
+
+.Taking expectation under x ∼ N (m, Σ) cancels the covariance terms and leaves 12 ∥m − bm∥2 
+
+> Σ−1
+
+. □
+
+Lemma B.3 (Gaussian convolution score) . Let X t = X0 + pt Z , where Z ∼ N (0, I ) is independent of X 0. If pt is the density of X t , then 
+
+∇ log pt (x) = 1
+
+t (E[X0 | Xt = x] − x) . 
+
+Proof. This is the special case at = 1, σ2 
+
+> t
+
+= t of the continuous-time Tweedie identity (3.4), obtained there by differentiating the Gaussian mixture for pt and dividing by pt (x). □60 JIANFENG LU 
+
+REFERENCES [1] M. S. Albergo, N. M. Boffi, and E. Vanden-Eijnden. Stochastic interpolants: a unifying framework for flows and diffusions, 2023. arXiv:2303.08797. [2] J. M. Altschuler and S. Chewi. Faster high-accuracy log-concave sampling via algorithmic warm starts. In IEEE Symposium on Foundations of Computer Science (FOCS) , pages 2169–2176, 2023. arXiv:2302.10249. [3] L. Ambrosio, N. Gigli, and G. Savaré. Gradient Flows in Metric Spaces and in the Space of Probability Measures . Lectures in Mathematics ETH Zürich. Birkhäuser, second edition, 2008. [4] N. Anari, C. Baronio, CJ Chen, A. Haqi, F. Koehler, A. Li, and T.-D. Vuong. Parallel sampling via autospeculation, 2025. arXiv:2511.07869. [5] N. Anari, R. Gao, and A. Rubinstein. Parallel sampling via counting, 2024. arXiv:2408.09442. [6] D. Bakry, I. Gentil, and M. Ledoux. Analysis and Geometry of Markov Diffusion Operators . Grundlehren der mathematischen Wissenschaften 348. Springer, 2014. [7] R. Bauerschmidt, T. Bodineau, and B. Dagallier. Stochastic dynamics and the Polchinski equation: an introduction. Probability Surveys , 21:200–290, 2024. arXiv:2307.07619. [8] C. H. L. Beentjes and R. E. Baker. Uniformisation techniques for stochastic simulation of chemical reaction networks. The Jour-nal of Chemical Physics , 150:154107, 2019. arXiv:1811.00948. [9] J. Benton, V. De Bortoli, A. Doucet, and G. Deligiannidis. Nearly d-linear convergence bounds for diffusion models via stochastic localization. In International Conference on Learning Representations (ICLR) , 2024. arXiv:2308.03686. [10] A. Campbell, J. Benton, V. De Bortoli, T. Rainforth, G. Deligiannidis, and A. Doucet. A continuous time framework for discrete denoising models. In Advances in Neural Information Processing Systems 35 , 2022. arXiv:2205.14987. [11] F. Chen, S. Chewi, C. Daskalakis, and A. Rakhlin. High-accuracy sampling for diffusion models and log-concave distributions, 2026. arXiv:2602.01338. [12] H. Chen, H. Lee, and J. Lu. Improved analysis of score-based generative modeling: user-friendly bounds under minimal smoothness assumptions, 2023. arXiv:2211.01916. [13] H. Chen and L. Ying. Convergence analysis of discrete diffusion model: exact implementation through uniformization, 2024. arXiv:2402.08095. [14] Y. Chen. An almost constant lower bound of the isoperimetric coefficient in the KLS conjecture. Geometric and Functional Analysis , 31:34–61, 2021. arXiv:2011.13661. [15] Y. Chen. Computational and statistical aspects of diffusion models. Lecture notes, course 401-4634-24L, ETH Zürich, Spring 2026, 2026. https://metaphor.ethz.ch/x/2026/fs/401-4634-24L/ .[16] Y. Chen and R. Eldan. Localization schemes: a framework for proving mixing bounds for Markov chains, 2022. arXiv:2203.04163. [17] Y. Chen and K. Gatmiry. A simple proof of the mixing of Metropolis-adjusted Langevin algorithm under smoothness and isoperimetry, 2023. arXiv:2304.04095. [18] S. Chewi. Log-concave sampling. Book draft, 2026. https://chewisinho.github.io/ .[19] G. Conforti, A. Durmus, and M. Gentiloni Silveri. KL convergence guarantees for score diffusion models under minimal data assumptions, 2024. arXiv:2308.12240. [20] P. Dhariwal and A. Nichol. Diffusion models beat GANs on image synthesis. In Advances in Neural Information Processing Sys-tems 34 , 2021. arXiv:2105.05233. [21] W. E, T. Li, and E. Vanden-Eijnden. Applied Stochastic Analysis . Graduate Studies in Mathematics 199. American Mathematical Society, 2019. [22] R. Eldan. Thin shell implies spectral gap up to polylog via a stochastic localization scheme. Geometric and Functional Analysis ,23:532–569, 2013. arXiv:1203.0893. [23] Z. Geng, M. Deng, X. Bai, J. Z. Kolter, and K. He. Mean flows for one-step generative modeling, 2025. arXiv:2505.13447. [24] D. T. Gillespie. Approximate accelerated stochastic simulation of chemically reacting systems. The Journal of Chemical Physics ,115:1716–1733, 2001. [25] W. Grassmann. Transient solutions in Markovian queues. European Journal of Operational Research , 1(6):396–402, 1977. [26] J. Ho, A. N. Jain, and P. Abbeel. Denoising diffusion probabilistic models. In Advances in Neural Information Processing Systems 33 , pages 6840–6851, 2020. arXiv:2006.11239. [27] J. Ho and T. Salimans. Classifier-free diffusion guidance. NeurIPS 2021 Workshop on Deep Generative Models, 2022. arXiv:2207.12598. [28] E. Hoogeboom, A. A. Gritsenko, J. Bastings, B. Poole, R. van den Berg, and T. Salimans. Autoregressive diffusion models. In 
+
+International Conference on Learning Representations (ICLR) , 2022. arXiv:2110.02037. [29] L. P. Kadanoff. Scaling laws for Ising models near Tc . Physics Physique Fizika , 2:263–272, 1966. A MATHEMATICAL INTRODUCTION TO DIFFUSION MODELS 61 
+
+[30] I. Karatzas and S. E. Shreve. Brownian Motion and Stochastic Calculus . Graduate Texts in Mathematics 113. Springer, second edition, 1991. [31] H. Lavenant and G. Zanella. Error bounds and optimal schedules for masked diffusions with factorized approximations, 2025. arXiv:2510.25544. [32] Y. T. Lee and S. S. Vempala. Eldan’s stochastic localization and the KLS conjecture: isoperimetry, concentration and mixing, 2016. arXiv:1612.01507. [33] Y. Liang, Y. Liang, L. Lai, and N. Shroff. Discrete diffusion models: novel analysis and new sampler guarantees, 2025. arXiv:2509.16756. [34] Y. Lipman, R. T. Q. Chen, H. Ben-Hamu, M. Nickel, and M. Le. Flow matching for generative modeling. In International Confer-ence on Learning Representations (ICLR) , 2023. arXiv:2210.02747. [35] X. Liu, C. Gong, and Q. Liu. Flow straight and fast: learning to generate and transfer data with rectified flow, 2022. arXiv:2209.03003. [36] A. Lou, C. Meng, and S. Ermon. Discrete diffusion modeling by estimating the ratios of the data distribution. In International Conference on Machine Learning (ICML), PMLR 235 , 2024. arXiv:2310.16834. [37] S. P. Meyn and R. L. Tweedie. Markov Chains and Stochastic Stability . Cambridge University Press, second edition, 2009. [38] A. Montanari. Sampling, diffusions, and stochastic localization, 2023. arXiv:2305.10690. [39] H. Nisonoff, J. Xiong, S. Allenspach, and J. Listgarten. Unlocking guidance for discrete state-space diffusion and flow models. In International Conference on Learning Representations (ICLR) , 2025. arXiv:2406.01572. [40] B. Øksendal. Stochastic Differential Equations: An Introduction with Applications . Springer, sixth edition, 2003. [41] J. Polchinski. Renormalization and effective lagrangians. Nuclear Physics B , 231:269–295, 1984. [42] J. Song, C. Meng, and S. Ermon. Denoising diffusion implicit models. In International Conference on Learning Representations (ICLR) , 2021. arXiv:2010.02502. [43] Y. Song, P. Dhariwal, M. Chen, and I. Sutskever. Consistency models. In International Conference on Machine Learning (ICML), PMLR 202 , 2023. arXiv:2303.01469. [44] Y. Song, J. Sohl-Dickstein, D. P. Kingma, A. Kumar, S. Ermon, and B. Poole. Score-based generative modeling through stochastic differential equations. In International Conference on Learning Representations (ICLR) , 2021. arXiv:2011.13456. [45] B. Uria, I. Murray, and H. Larochelle. A deep and tractable density estimator. In International Conference on Machine Learning (ICML) , 2014. arXiv:1310.1757. [46] S. S. Vempala and A. Wibisono. Rapid convergence of the unadjusted Langevin algorithm: isoperimetry suffices. In Advances in Neural Information Processing Systems 32 , 2019. arXiv:1903.08568. [47] C. Villani. Optimal transport: old and new . Springer, 2009. [48] K. G. Wilson. Renormalization group and critical phenomena. I. Renormalization group and the Kadanoff scaling picture. Phys-ical Review B , 4:3174–3183, 1971. [49] K. G. Wilson. Renormalization group and critical phenomena. II. Phase-space cell analysis of critical behavior. Physical Review B, 4:3184–3205, 1971. [50] K. G. Wilson and J. Kogut. The renormalization group and the ϵ expansion. Physics Reports , 12:75–199, 1974. [51] K. Wu, S. Schmidler, and Y. Chen. Minimax mixing time of the Metropolis-adjusted Langevin algorithm for log-concave sam-pling. Journal of Machine Learning Research , 23(270):1–63, 2022. arXiv:2109.13055. [52] L. Wu, B. L. Trippe, C. A. Naesseth, D. M. Blei, and J. P. Cunningham. Practical and asymptotically exact conditional sampling in diffusion models. In Advances in Neural Information Processing Systems 36 , 2023. arXiv:2306.17775. MATHEMATICS DEPARTMENT , D UKE UNIVERSITY , B OX 90320, D URHAM , NC 27705 USA. 
+
+Email address : jianfeng@math.duke.edu

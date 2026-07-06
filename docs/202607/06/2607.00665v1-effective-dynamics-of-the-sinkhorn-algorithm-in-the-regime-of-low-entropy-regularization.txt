@@ -1,0 +1,5599 @@
+Title: Effective dynamics of the Sinkhorn algorithm in the regime of low entropy regularization
+
+URL Source: https://arxiv.org/pdf/2607.00665v1
+
+Published Time: Thu, 02 Jul 2026 00:57:49 GMT
+
+Number of Pages: 45
+
+Markdown Content:
+# Effective dynamics of the Sinkhorn algorithm in the regime of low entropy regularization 
+
+## Guillaume Wang ∗
+
+## July 2, 2026 
+
+Abstract 
+
+The Sinkhorn algorithm is the de facto standard method for numerically solving entropy-regularized optimal transport problems over finite sets. In this work, we investigate a phe-nomenon arising when Sinkhorn is applied with a small regularization parameter τ : the evolution of the dual variables (the logarithm of the scaling factors) is approximately piecewise-linear, while the primal variables (the approximate transport plans) exhibit a saddle-to-saddle type behavior. We prove that as τ → 0, the Sinkhorn iterates indeed converge to a continuous-time curve consistent with these observations, when time is rescaled as t = τ k , and we characterize the limiting “cold Sinkhorn” dynamics explicitly. In particular, we show that it acts as a dual optimization dynamics for the unregularized problem with properties analogous to the simplex algorithm. Notably, this dynamics converges in finite time to an unregularized solution, imply-ing a novel guarantee for the Sinkhorn algorithm itself: it achieves ˜O(τ ) dual suboptimality in 
+
+k = O(τ −1) iterations, instead of k = O(τ −2) as existing analyses would suggest. 
+
+# 1 Introduction 
+
+Consider the discrete optimal transport (OT) problem with target marginals μ ∈ ∆m and ν ∈ ∆n—where ∆m denotes the probability simplex in dimension m—and with transport cost matrix 
+
+C ∈ Rm×n:
+
+min 
+
+> π∈∆m×n
+
+∑
+
+> ij
+
+Cij πij subject to 
+
+{
+
+∀i ≤ m, ∑ 
+
+> j
+
+πij = μi
+
+∀j ≤ n, ∑ 
+
+> i
+
+πij = νj . (1.1) Optimization problems of this form arise throughout machine learning and data science [PC19; CNR25], computer vision [RTG00], computational biology [Sch+19], and economics [Gal16]. Closely related is the problem of entropic optimal transport (EOT) with an entropy regularization parameter, or temperature, τ > 0:
+
+min 
+
+> π∈∆m×n
+
+∑
+
+> ij
+
+Cij πij + τ H (π∥μ ⊗ ν) subject to 
+
+{
+
+∀i ≤ m, ∑ 
+
+> j
+
+πij = μi
+
+∀j ≤ n, ∑ 
+
+> i
+
+πij = νj . (1.2) Here H (π∥μ ⊗ ν) = ∑ 
+
+> ij
+
+πij log πij  
+
+> μiνj
+
+≥ 0 denotes the relative entropy between discrete probability distributions. EOT can be used as a proxy for unregularized OT for computational purposes [Cut13], but it is also an important problem in its own right due to its connection to the Schrödinger bridge problem [Léo13], with applications in generative modeling [DTHD21; PN25] and trajectory inference [LZKS21; CZHS22]. Over the past decades, there has been much research activity around designing and analyzing optimization algorithms for these problems. Algorithms for OT (1.1) can be roughly divided into two categories: those using linear programming or combinatorial approaches, and those leveraging methods for EOT with a well-chosen τ . Indeed for any prescribed tolerance ε, an ε-minimizer 
+
+> ∗
+
+Courant Institute School, New York University guillaume.wang@nyu.edu 
+
+1
+
+> arXiv:2607.00665v1 [math.OC] 1 Jul 2026
+
+for (1.1) can be obtained by exactly solving (1.2) with τ = ε  
+
+> max πH(π∥μ⊗ν))
+
+= ε 
+
+> −log( μmin νmin )
+
+where μmin = min i μi and νmin = min j νj .1 While the theoretical state-of-the-art computational complexity is at present only attained by algorithms from the first category [Bra+20], methods from the second category are equally prevalent in practice [PC19]. For the EOT problem (1.2) , one method stands out: the Sinkhorn algorithm, recalled in Sec. 2. On the methodology side, this simple yet remarkably efficient algorithm is currently the de facto standard for this problem, as witnessed by its use in all mainstream computational optimal transport libraries [Fey+19; Fla+21; Cut+22]. It also proves highly adaptable, with numerous variants tailored to large-scale computations [ABRN19; SC20; SCP21], streaming data [MP20; WPS23], more than two marginals [BCCNP15; Car22], or unbalanced optimal transport settings [CPSV16; SVP22]. On the theoretical side, much effort has been devoted to finely understanding this algorithm’s convergence properties, both in the general-cost discrete setting considered here [Kni08; ANR17; DGK18; Lég21; AKL22; Chi24; GN25] and in structured continuous settings (EOT between continuous probability measures μ, ν with a smooth transport cost function) [CDG23; CDV26; CCGT24]. Since the Sinkhorn algorithm is our main object of study in this work, we defer a brief discussion of alternative algorithms for EOT computation to Related works below. In this work, we study the behavior of the Sinkhorn algorithm in the regime of small entropy regularization τ . As a motivating example, we display in Fig. 1 the results of a simple numerical experiment where m = 5 , n = 6 , and the Sinkhorn algorithm is run with τ = 0 .005 . Strikingly, we observe that 2
+
+• (Fig. 1a) The suboptimality of the Sinkhorn iterates evolves approximately piecewise linearly when measured by the dual EOT objective Ψ( f k, g k). It also evolves in an approximately piecewise constant manner when measured by the distance between the primal variable’s marginals and the target marginals μ, ν , consistent with [ANR17, Lemma 2]. 
+
+• (Fig. 1b) The dual Sinkhorn iterates (f k, g k) themselves evolve approximately piecewise linearly, i.e., their one-iteration increments are approximately piecewise constant. Moreover, at any iteration k outside of the “phase transitions”, the m components of the increment 
+
+(f ki −f k−2 
+
+> i
+
+)i≤m collapse onto a number of values smaller than m, and likewise for the increment of gk. Furthermore, the set of values taken by (f ki − f k−2 
+
+> i
+
+)i≤m then approximately coincides with that taken by (−gkj + gk−2 
+
+> j
+
+)j≤n.
+
+• Experimenting with even smaller values of τ reveals that, when time is rescaled as t = k · τ ,the iterates (f ⌊t/τ ⌋, g ⌊t/τ ⌋) appear to converge to a truly piecewise linear curve in t. That is, the “jumps” in Fig. 1b become sharper as τ decreases. 
+
+• Experimenting with other cost matrices C, the marginals μ, ν being kept fixed, reveals that the set of values that can be taken by the one-iteration increments f ki − f k−2 
+
+> i
+
+, −(gkj − gk−2 
+
+> j
+
+)
+
+is finite and independent of C.
+
+• The corresponding primal variables πkij = e[−Cij +f ki +gkj ]/τ μiνj , which are known to converge to an optimal solution of (1.2) , evolve in an approximately piecewise constant manner. They are not represented in Fig. 1, but we refer to Fig. 2 for a plot of their evolution in a rescaled log-domain, on a smaller example. Two other similar experiments are also presented in App. A, with m = n = 50 and m = n = 400 
+
+respectively.                            
+
+> 1One can also use an approximate solution of (1.2) , naturally, or even an approximate solution of its dual thanks to the rounding procedure of [ANR17]; see Related works for details. The fact that max π∈∆m×nH(π∥μ⊗ν)=
+> −log (μmin νmin )can be seen by noting that by convexity of relative entropy, the max must be attained at an extremal point of ∆m×n, i.e., at some π=1(i0,j 0). As also shown in [ANR17], in fact it is sufficient to use τ=ε
+> log( mn ),because changing H(π∥μ⊗ν)to H
+
+(π∥∥ 1m  
+
+> m⊗1n
+> n
+
+) in (1.2) does not change the problem’s optimal solution.  
+
+> 2Python code to reproduce the experiments is publicly available online at https://github.com/guillaumew16/ cold-sinkhorn .
+
+2(a) Suboptimality in dual objective Ψτ              
+
+> (2.2) and in ℓ1-norm error of the marginals.
+> (b) Evolution of the Sinkhorn iterates fk, g krepresented by their one-iteration increments, rescaled by τ. Note that the increments of gkare represented with a negative sign.
+
+Figure 1: Behavior of the Sinkhorn algorithm on (1.2) for m = 5 , n = 6 , uniform target marginals, and a generic cost matrix (drawn randomly with i.i.d. Gaussian entries), with τ = 0 .005 . The x-axes represent iteration count scaled by τ . If a smaller τ is used, the figures look almost identical, only with sharper transitions between the piecewise-linear phases. These phenomena have not been reported previously in the literature, to our knowledge, despite their generality across all of our numerical experiments. This may be due to the fact that the piecewise-linear phases tend to be shorter, and can become indiscernible compared to the algorithm’s total runtime until approximate convergence, when m and n are large. The purpose of this work is to explain these phenomena and investigate their implications. Specifically, our contributions are as follows. 
+
+• We prove that as τ → 0, the time-rescaled Sinkhorn iterates (f ⌊2t/τ ⌋, g ⌊2t/τ ⌋) converge to a continuous curve (f (t), g (t)) which we describe explicitly (Def. 3.1, Thm. 4.1). In particular, all of the phenomena observed above are explained. This limiting curve acts as a continuous-time dual optimization dynamics for the unregularized OT problem, termed the cold Sinkhorn 
+
+dynamics, with properties analogous to the simplex algorithm (Lem. 3.1–Lem. 3.6). 
+
+• We show that the cold Sinkhorn dynamics converges in finite time, after a finite number of piecewise linear phases, to a solution of the dual OT problem (Lem. 3.5). This implies a novel guarantee for the Sinkhorn algorithm itself: it achieves ˜O(τ ) dual suboptimality and 
+
+˜O(√τ ) ℓ1-norm marginal error in O(1 /τ ) iterations (Thm. 4.4, Coroll. 4.5), where ˜O(·) hides constants dependent on μ, ν , and C as well as logarithmic factors. This generalizes [Ber20, Corollary 1.3] to the general-cost, finite-domain case and shows that geometric structure is actually not needed for such an estimate to hold. 
+
+• We also describe the corresponding evolution of the primal variables explicitly. Namely, we show that as τ → 0, (π2⌊t/τ ⌋, π 2⌊t/τ ⌋+1 ) converges to a piecewise-constant curve in t, and we characterize the “saddle points” as the minimizers of a certain sequence of EOT problems (Thm. 5.2). 
+
+• As an ingredient for the proof of our main results, we generalize the best-known convergence guarantees for the Sinkhorn algorithm to the non-scalable case, which may be of independent interest (Prop. 2.8, Prop. 2.10). 31.1 Related work 
+
+Convergence analyses for the Sinkhorn algorithm. The convergence behavior of the Sinkhorn algorithm has been the topic of much research interest since its introduction for the purpose of matrix scaling by [SK67], and even more so since its advantageous properties for computational optimal transport were put forward by [Cut13]. For the standard finite-domain EOT problem as presented in (1.2) , local and global exponential convergence bounds were established by [Sin67; FL89; Sou91; Kni08; QGGU25]; the rates in the last reference are sharp. This line of work reveals that the exponential rate (one minus the contraction coefficient) scales as e−Θ(1 /τ ) in the worst case [PC19, Remark 4.15]. In parallel, polynomial convergence bounds were established by [KLRS08; ANR17; DGK18; LHJ22; GN25], leading to bounds that scale more gracefully when τ is small, in 
+
+O(1 /√τ k ) or O(1 /(τ k )) . For EOT in “structured” continuous-domain cases, the exponential rate’s scaling can be much more favorable: Θ( τ ) instead of e−Θ(1 /τ ), as shown by [CDV26]. Besides computational optimal transport, analyzing the Sinkhorn algorithm is also of interest for matrix scaling. Indeed, solving the dual EOT problem ( (2.2) below) is equivalent to finding diagonal matrices D, D ′ such that DAD ′ has row-sums μ1, ..., μ m and column-sums ν1, ..., ν n, where 
+
+A = (e−Cij /τ ) 
+
+> ij
+
+[Ide16]. In this context, it is desirable to also treat the case where A can have zero entries, corresponding to C having infinite entries—which is rarely of interest in computational optimal transport, but will turn out to be relevant for our investigation in this paper. Our analysis will rely on results in this direction by [BV24; QGGU25], as well as [KLRS08; ALOW17] via [Wan26]. 
+
+Saddle-to-saddle behavior in gradient-based optimization. While most convergence anal-yses of the Sinkhorn algorithm are relatively ad hoc, let us highlight a line of work based on interpreting Sinkhorn as an instance of mirror descent, allowing for a connection to the broader optimization literature [Lég21; AKL22; KHK24]. Two variants of this interpretation exist: in the first, the variables of mirror descent are the primal variables’ marginals (∑ 
+
+> j
+
+πkij )i ∈ ∆m [Lég21]; in the second, they are the primal variables πk themselves [AKL22]. In terms of both of these variants, the phenomenon investigated in our work corresponds to a saddle-to-saddle behavior 
+
+of the algorithm, as explained in Sec. 5. Saddle-to-saddle behaviors in first-order optimization dynamics were studied in special cases by [JGŞHG21; Ber23; PF23; Ber25]. Very recently, a general analysis for mirror flow on quadratic objectives was performed by [BP26], with essentially identical phenomenology as ours, indicating that their results may extend beyond quadratics. 
+
+Other algorithms for EOT computation. As mentioned in the introduction, many variants of the Sinkhorn algorithm have been proposed. From the point of view of convergence guarantees, some are more amenable to analysis than others, notably the Greenkhorn algorithm [ANR17; LHJ22; AG18; KSP22] and the overrelaxed and damped Sinkhorn algorithms [TCDP21; LVSU22; VC23]. Besides the Sinkhorn algorithm and its variants, another remarkably simple and effective ap-proach to solving the EOT problem (1.2) is to apply gradient-based algorithms to its semi-dual formu-lation [CP18], i.e., to min g∈Rn ˜Ψτ (g) where ˜Ψτ (g) = min Ψτ (·, g ) = τ ∑ 
+
+> i
+
+μi log ( ∑  
+
+> j
+
+e[−Cij +gj ]/τ νj
+
+)−
+
+ν⊤g. This idea goes back at least to [KY94], who propose using (various time-discretizations of) gradient flow for ˜Ψτ , under the name “invisible hand algorithm”. This approach has recently received renewed attention in the context of semi-discrete optimal transport, where the marginal μ
+
+is actually a probability density function over a continuous set, because the semi-dual objective can then be put in the form of an expectation over i ∼ μ and is thus amenable to stochastic gradient descent [GCPB16; MZKC25; GGVW26]. This approach, being closer to the standard framework of gradient methods for optimization compared to Sinkhorn, has also recently inspired momentum-based algorithms with provably fast polynomial rates of convergence [XLH22; LXH23]. We note that experimentally, Greenkhorn, 3 damped Sinkhorn, and gradient flow on the semi-dual all exhibit the same piecewise-linear evolution phenomenon for small τ as vanilla Sinkhorn. Explaining these observations theoretically is left for future work.       
+
+> 3However we also note that there does not seem to be a numerically stable way to implement Greenkhorn for small τwhile preserving the O(m∨n)per-iteration cost.
+
+4Reducing unregularized OT computation to dual EOT computation. The authors of [ANR17] proposed an approach to unregularized OT computation which proved quite influential (see the aforecited [DGK18; LHJ22; XLH22; LXH23; Li+25], among others), and which we now briefly review. As explained in the introduction, approximately solving the OT problem (1.1) can be reduced to approximately solving the EOT problem (1.2) with a small enough choice of τ . On the other hand, the Sinkhorn algorithm yields approximate solutions not for (1.2) but only for the 
+
+dual EOT problem, (2.2) below. Fortunately, this is still sufficient thanks to the rounding algorithm of [ANR17, Alg. 2], which incurs negligible computational overhead and comes with the following guarantee: if dual EOT with τ = ε 
+
+> log( mn )
+
+is solved up to a ℓ1-norm marginal error of ε
+
+> ∥C∥∞
+
+, then the rounding algorithm yields a feasible and O(ε)-optimal solution for primal unregularized OT. The approach to OT computation proposed by [ANR17] is thus to approximately solve dual EOT with a small τ , and to apply their rounding algorithm as a post-processing step. When the Sinkhorn algorithm is used for the first step, our results suggest that this effectively amounts to running the cold Sinkhorn dynamics for the unregularized OT problem. 
+
+Effective dynamics of Sinkhorn for squared-Euclidean transport costs. Consider the case where μ, ν arise from the space-discretization of some smooth and compactly-supported probability density functions on Rd onto some fixed grid {x1, ..., x n}, and where the transport costs are given by Cij = ∥xi − xj ∥2. Call h the edge length of the grid. Then it was shown by [Ber20, Theorem 1.2] that as τ, h → 0 jointly with h ≲ τ 1/2+ ε for any ε > 0, the Sinkhorn iterates 
+
+f ⌊2t/τ ⌋, g ⌊2t/τ ⌋ converge to smooth functions f (t, x ), g (t, x ) over R+ × Rd. The proved convergence is pointwise in time and uniform in space (recall the marginals are compactly supported), and the limiting function f (t, x ) is characterized as the solution of a PDE called the parabolic Monge-Ampère equation (and symmetrically for g(t, x )). Combined with the fact that the parabolic Monge-Ampère equation converges in time to an optimal Kantorovich potential f ∗(x)—i.e., (f ∗, g ∗)
+
+is an optimal solution of the continuous-space dual OT problem for some g∗—this implies that 
+
+max i
+
+∣∣f ki − f ∗(xi)∣∣ ≲ τ log(1 /τ ) after k ≳ τ −1 log(1 /τ ) iterations [Ber20, Corollary 1.3]. These results were refined by [DKPS23] in the fully continuous-domain setting, i.e., assum-ing μ, ν themselves are probability densities, corresponding to h = 0 . Namely, it was shown there that the corresponding primal variables’ marginals also converge to smooth curves, that is, 
+
+∫ 
+
+> y
+
+e 1 
+
+> τ
+
+[−∥ x−y∥2+f 2⌊t/τ ⌋(x)+ g2⌊t/τ ⌋(y)]μ(d x)ν(d y) converges to an absolutely continuous probability measure μt(d x) for all t (and symmetrically for the second marginal). This is equivalent to convergence of the rescaled increments of f ⌊2t/τ ⌋(x) to the time-derivatives of f (t, x ), as can be seen from (2.6) below. Additionally, this reference proposes an interpretation of the parabolic Monge-Ampère equation as a mirror flow for the μt in probability space, by leveraging the mirror descent interpretation of Sinkhorn from [Lég21]. On the one hand, our results can be viewed as analogs of those of [Ber20; DKPS23] for the finite-domain case without geometric structure—though in our case, interpreting the cold Sinkhorn dynamics as a mirror flow seems to be impossible (Rem. 5.1). On the other hand, our results apply in the fixed-grid setting described above whenever τ ≤ τ0, for some constant τ0 = τ0(μ, ν, h )
+
+that could be determined from our analysis, to be contrasted with the regime h ≲ τ 1/2+ ε studied by [Ber20]. So it remains to determine quantitatively the regime τ0(μ, ν, h ) where our results apply, and to study the limiting behavior of the Sinkhorn algorithm in the intermediary regime 
+
+h−1/2−ε ≫ τ > τ 0(μ, ν, h ); we leave these questions open for future research. The paper is organized as follows. In Sec. 2, we present preliminary definitions and facts around the Sinkhorn algorithm—some of which are new, presented in Sec. 2.3, Sec. 2.4. In Sec. 3, we introduce and analyze the convergence of the cold Sinkhorn dynamics. In Sec. 4, we prove that the Sinkhorn iterates converge to the cold Sinkhorn dynamics at a rate ˜O(τ ), and deduce a new convergence guarantee for the Sinkhorn algorithm. In Sec. 5, we spell out the corresponding limiting dynamics for the primal variables πk. We conclude in Sec. 6 with perspectives and possible directions for future work. 52 Preliminaries 
+
+## 2.1 Background on (entropic) optimal transport and Sinkhorn algorithm 
+
+All of the notions reviewed in this section are standard in computational optimal transport [PC19]. 
+
+The dual OT problem. The dual of the unregularized OT problem (1.1) , viewed as a linear program, is 
+
+max   
+
+> f∈Rm, g ∈Rn
+
+f ⊤μ + g⊤ν subject to ∀i, j, f i + gj ≤ Cij . (2.1) For ease of presentation, we define the minimization objective and the feasible set 
+
+Ψ0(f, g ) = −f ⊤μ − g⊤ν, F = {(f, g ) ∈ Rm × Rn; ∀i, j, f i + gj ≤ Cij } ,
+
+so that the dual OT problem rewrites min f,g Ψ0(f, g ) subject to (f, g ) ∈ F. We also introduce the operators, called C-transform resp. C-transform in the optimal transport literature, 
+
+∀g ∈ Rn, f 0[g]i = min  
+
+> j
+
+Cij − gj and ∀f ∈ Rm, g 0[f ]j = min  
+
+> i
+
+Cij − fi.
+
+We will repeatedly use the following characterization in the sequel. 
+
+Lemma 2.1. Define the Pareto frontier of F as the subset ∂F such that 
+
+∀(f, g ) ∈ F, (f, g ) ∈ ∂F ⇐⇒ {(f ′, g ′) ∈ F s.t. ∀i, f ′ 
+
+> i
+
+≥ fi, ∀j, g ′ 
+
+> j
+
+≥ gj
+
+} = {(f, g )}.
+
+For any f ∈ Rm, g ∈ Rn, the following conditions are equivalent: 
+
+• (f, g ) ∈ ∂F.
+
+• f = f0[g] and g = g0[f ].
+
+• fi + gj ≤ Cij for all (i, j ), and the bipartite graph ({1 . . . m } ⊔ { 1 . . . n }, E) with edge set 
+
+E = {(i, j ); fi + gj = Cij } has no isolated vertex. 
+
+The dual EOT problem. The dual of the EOT problem (1.2) , viewed as a convex optimization problem, is 
+
+max   
+
+> f∈Rm, g ∈Rn
+
+−Ψτ (f, g ) ≡ min   
+
+> f∈Rm, g ∈Rn
+
+Ψτ (f, g )
+
+where, for ease of presentation, we define 
+
+Ψτ (f, g ) = τ
+
+( ∑
+
+> ij
+
+e[−Cij +fi+gj ]/τ μiνj − 1
+
+)
+
+− f ⊤μ − g⊤ν. (2.2) The KKT stationarity condition linking primal variables π ∈ ∆m×n and dual variables (f, g ) ∈
+
+Rm × Rn is: ∀i, j, f i + gj = τ log πij  
+
+> μiνj
+
++ Cij + c for some normalizing constant c ∈ R, or equivalently, 
+
+π = πτ [f, g ] where we define 
+
+πτ [f, g ]ij = 1
+
+Zτ (f, g ) e[−Cij +fi+gj ]/τ μiνj where Zτ (f, g ) = ∑
+
+> i′j′
+
+e[−Ci′j′ +fi′ +gj′ ]/τ μi′ νj′ .
+
+The Sinkhorn algorithm. For a given initial pair (f 0, g 0), typically (0 , 0) , the Sinkhorn iterates 
+
+(f k, g k)k≥0 are defined by the update rule for k ≥ 0 even, f k+1 = fτ [gk] and gk+1 = gk
+
+for k odd, f k+1 = f k and gk+1 = gτ [f k]
+
+where fτ [g] = argmin Ψ τ (·, g ) and gτ [f ] = argmin Ψ τ (f, ·). More explicitly, 
+
+∀g ∈ Rn, f τ [g]i = −τ log ∑
+
+> j
+
+e[−Cij +gj ]/τ νj and ∀f ∈ Rm, g τ [f ]j = −τ log ∑
+
+> i
+
+e[−Cij +fi]/τ μi.
+
+These operators are sometimes called the soft-C-transform resp. soft-C-transform in the literature. 6We also set πk = πτ [f k, g k] for all k ≥ 0. Note that by explicit computations, 
+
+∀g, Z τ (fτ [g], g ) = 1 and ∀f, Z τ (f, g τ [f ]) = 1 ,
+
+so that Zτ (f k, g k) = 1 and πkij = e[−Cij +f ki +gkj ]/τ μiνj for all k ≥ 1 (but not for k = 0 in general). Note that the iterates (f k, g k) for k ≥ 1 are determined solely by g0, since the initial value f 0
+
+gets “overwritten” at the very first iteration. So in this description of the algorithm, f 0 doesn’t play any role, i.e., its value could be chosen arbitrarily without affecting any of the subsequent iterates. Nonetheless, introducing notation for f 0 and π0 is useful for consistency with the following alternative description of the algorithm (where, correspondingly, w1 doesn’t play any role). 
+
+Reformulation of the algorithm in terms of the increments. Let us introduce notation for the one-iteration increments rescaled by τ :
+
+∀k ≥ 2, v k = ( f k − f k−2)/τ and wk = ( gk − gk−2)/τ. (2.3) Also set v1 = ( f 1 − f 0)/τ and let w1 be any arbitrary vector; for convenience, take w1 = 0 . Further denote the “logits” of πk w.r.t. μ ⊗ ν by 
+
+∀k ≥ 0, U kij = ( f ki + gkj − Cij )/τ. (2.4) Then the Sinkhorn algorithm can be fully re-expressed in terms of the variables vk, w k, U k instead of (f k, g k), as they follow the self-contained update rule for k ≥ 0 even, vk+1 = v[U k] and wk+1 = wk and U k+1  
+
+> ij
+
+= U kij + vk+1  
+
+> i
+
+(2.5) for k odd, vk+1 = vk and wk+1 = w[U k] and U k+1  
+
+> ij
+
+= U kij + wk+1 
+
+> j
+
+where 
+
+∀U ∈ Rm×n, v[U ]i = − log ∑
+
+> j
+
+eUij νj and w[U ]j = − log ∑
+
+> i
+
+eUij μi.
+
+In this formulation—which is the standard one in the matrix scaling literature, up to a component-wise logarithm—the cost matrix C and the temperature τ only come into play via the initialization 
+
+U 0 
+
+> ij
+
+= ( f 0 
+
+> i
+
++ g0 
+
+> j
+
+− Cij )/τ .Also note that the vk, w k are related to the primal variables πk via for k ≥ 1 even, vk+1  
+
+> i
+
+= v[U k]i = − log 
+
+( ∑
+
+> j
+
+eU kij μiνj / μ i
+
+)
+
+= log 
+
+(
+
+μi / ∑ 
+
+> j
+
+πkij 
+
+)
+
+(2.6) and likewise for the wk. The case k = 0 is slightly different, as Zτ (f 0, g 0)̸ = 1 in general: we have 
+
+v1 = log 
+
+(
+
+μi / ∑ 
+
+> j
+
+π0
+
+> ij
+
+)
+
+− log Zτ (f 0, g 0).
+
+## 2.2 The Sinkhorn algorithm in the case with infinite costs 
+
+Our work relies on previous results by Baradat and Ventre [BV24] on the behavior of the Sinkhorn algorithm when applied to cost matrices C with entries in R ∪ { +∞} . In this section, we briefly review their relevant results restated in our notations. Fix μ ∈ ∆m, ν ∈ ∆n, with μmin , ν min > 0 without loss of generality, and C ∈ (R ∪ {∞} )m×n.The Sinkhorn algorithm for target marginals μ, ν and transport cost matrix C is defined by the same update rules as in the previous section, provided that one uses the convention exp (−∞ ) = 0 .Equivalently, all summations in the previous section should be restricted to neighboring vertices in the bipartite graph G = ( {1 . . . m } ⊔ { 1 . . . n }, E) where E = {(i, j ); Cij < ∞} . For example, in the definitions of fτ [g]i and v[U ]i, ∑ 
+
+> j
+
+should be replaced by ∑ 
+
+> j:( i,j )∈E
+
+. If there is a vertex with no neighbors in G, the Sinkhorn algorithm is undefined. 7For ease of notation, let us introduce the shorthands 
+
+∀π ∈ ∆E , (X♯π)i = ∑
+
+> j:( i,j )∈E
+
+πij and (Y♯π)j = ∑
+
+> i:( i,j )∈E
+
+πij .
+
+Naturally, X♯π ∈ ∆m and Y♯π ∈ ∆n. We will use the same shorthands X♯, Y ♯ regardless of the set 
+
+E ⊂ { 1 . . . m } × { 1 . . . n } under consideration. With these notations, a fundamental result of [BV24] is as follows. 
+
+Theorem 2.2 ([BV24, Theorem 3.2, Proposition 4.5]) . Let μ ∈ ∆m, ν ∈ ∆n, C ∈ (R ∪ {∞} )m×n,and denote E = {(i, j ); Cij < ∞} . Suppose μmin , ν min > 0 and that the bipartite graph ({1 . . . m } ⊔ {1 . . . n }, E) has no isolated vertex. Consider vk, w k the rescaled one-iteration increments and 
+
+U k ∈ (R ∪ {−∞} )m×n the “logits” of the Sinkhorn algorithm defined as in (2.3) , (2.4) . Then for any initialization U 0 
+
+> ij
+
+= ( f 0 
+
+> i
+
++ g0 
+
+> j
+
+− Cij )/τ of the algorithm: 
+
+• Let v∗ 
+
+> i
+
+= log( μi/μ ∗ 
+
+> i
+
+), w∗ 
+
+> j
+
+= log( νj /ν ∗ 
+
+> j
+
+) where 
+
+μ∗ = argmin 
+
+> μ
+
+H (μ∥μ) subject to ∃Q ∈ ∆E ; X♯Q = μ and Y♯Q = νν∗ = argmin 
+
+> ν
+
+H (ν∥ν) subject to ∃P ∈ ∆E ; X♯P = μ and Y♯P = ν. 
+
+Then (vk, w k) → (v∗, w ∗) as k → ∞ . Moreover, these vectors satisfy 
+
+∀(i, j ) ∈ E , v ∗ 
+
+> i
+
++ w∗ 
+
+> j
+
+≤ 0.
+
+• (U 2k)k≥0 and (U 2k+1 )k≥0 converge in (R ∪ {−∞} )m×n to two possibly distinct matrices U ∞
+
+> even
+
+,
+
+U ∞ 
+
+> odd
+
+respectively. These limit matrices depend on U 0 and are characterized explicitly by [BV24, Eq. (3.2)]. 4
+
+Note that the μ∗, ν ∗ and v∗, w ∗ defined in the first item of Thm. 2.2 depend only on μ, ν , and E.They do not depend on the specific coefficients of C, nor on τ , nor on the algorithm’s initialization. For ease of future reference, we denote them by 
+
+μ∗(E) := μ∗ ν∗(E) := ν∗
+
+v∗(E) := v∗ = (log( μi/μ ∗ 
+
+> i
+
+)) i w∗(E) := w∗ = (log( νj /ν ∗ 
+
+> j
+
+)) 
+
+> j
+
+,
+
+leaving their dependency on μ and ν implicit. Let us furthermore record the following facts, also from [BV24]. 
+
+Theorem 2.3. In the setting of the previous theorem, denote 
+
+S = {(i, j ) ∈ E ; v∗ 
+
+> i
+
++ w∗ 
+
+> j
+
+= 0 }
+
+and 
+
+Seven (U 0) = {(i, j ); ( U ∞
+
+> even
+
+)ij > −∞} , Sodd (U 0) = {(i, j ); ( U ∞
+
+> odd
+
+)ij > −∞} .
+
+Then the sets Seven (U 0) and Sodd (U 0) are equal, and moreover they are in fact independent of U 0.That is, S := Seven (U 0) = Sodd (U 0) depends only on μ, ν , and E.5
+
+Moreover, S ⊂ S ⊂ E . (Both inclusions can be strict simultaneously in general.) Furthermore, the bipartite graph on {1 . . . m } ⊔ { 1 . . . n } with edge set S has no isolated vertex. A fortiori, the same is true for S.                              
+
+> 4Convergence of matrices in (R∪{−∞} )m×ncan be understood as convergence of the component-wise exponentials. The P∗, Q ∗, R appearing in [BV24, Eq. (3.2)] correspond in our notations to (eUij μiνj)ij for U=U∞
+> odd , U ∞
+> even , U 0
+> respectively. See also the first item of Lem. 5.1 for a restatement of this result.
+> 5Specifically, it follows from [BV24, Eq. (3.2)] that (i0, j 0)∈ S ⇐⇒ ∃ Q∈∆E;X♯Q=μ∗, Y ♯Q=ν, and Qi0j0>0.
+
+82.3 Three auxiliary lemmas 
+
+We now prove three new lemmas related to the Sinkhorn algorithm in the case with infinite costs. The first one clarifies the relation between the sets S, S, E appearing in Thm. 2.3. 
+
+Lemma 2.4. Let μ, ν, C, E be as in Thm. 2.2 and let S, S be as in Thm. 2.3. Then 
+
+μ∗(S) = μ∗(S) = μ∗(E) and ν∗(S) = ν∗(S) = ν∗(E).
+
+Proof. Recall from Sec. 2.1 that the Sinkhorn algorithm can be expressed purely in terms of the increments vk, w k and the logits U k via the update rule (2.5) . Further recall from the introduction of Sec. 2.2 that this formulation of the algorithm is valid both for C ∈ Rm×n and for C ∈ (R∪{∞} )m×n,provided that one sets exp( −∞ ) = 0 .By Thm. 2.2, v∗(E) and w∗(E) are characterized as the limits of vk, w k when the algorithm is initialized at any U 0 such that {(i, j ); U 0 
+
+> ij
+
+> −∞ } = E. Now, 
+
+• Consider the iterates (vk, w k, U 2k, U 2k+1 )k of the algorithm initialized at U0 = ( f 0 
+
+> i
+
++g0 
+
+> j
+
+−Cij )/τ 
+
+for some f 0 ∈ Rm, g 0 ∈ Rn. Then (vk, w k, U 2k, U 2k+1 ) → (v∗(E), w ∗(E), U ∞
+
+> even
+
+, U ∞
+
+> odd
+
+).
+
+• Consider the iterates ( ˜vk, ˜wk, ˜U 2k, ˜U 2k+1 )k of the algorithm initialized at ˜U 0 = U ∞
+
+> even
+
+. Then by definition of U ∞
+
+> even
+
+, the iterates stay constant: ( ˜vk, ˜wk, ˜U 2k, ˜U 2k+1 ) = ( v∗(E), w ∗(E), U ∞
+
+> even
+
+, U ∞
+
+> odd
+
+)
+
+for all k. On the other hand, since 
+
+{
+
+(i, j ); ˜U 0 
+
+> ij
+
+> −∞ 
+
+}
+
+= {(i, j ); ( U ∞
+
+> even
+
+)ij > −∞} = S, we have lim k→∞ (˜ vk, ˜wk) = ( v∗(S), w ∗(S)) . Thus, v∗(E) = v∗(S) and w∗(E) = w∗(S).This shows that μ∗(S) = μ∗(E) and ν∗(S) = ν∗(E).By definition of μ∗(E) = argmin μ H (μ∥μ) subject to ∃Q ∈ ∆E ; X♯Q = μ and Y♯Q = ν, since 
+
+S ⊂ S ⊂ E , then 
+
+H (μ∗(S)∥μ) ≥ H (μ∗(S)∥∥μ) ≥ H (μ∗(E)∥μ) .
+
+Now since μ∗(S) = μ∗(E), the above inequalities are actually equalities. In particular, μ∗(S) is (feasible and) optimal for the optimization problem defining μ∗(E), and so μ∗(S) = μ∗(E). A similar reasoning shows that ν∗(S) = ν∗(E).Our second result shows that the rescaled one-iteration increments of the Sinkhorn algorithm are bounded uniformly after the first two updates. Importantly, the bound depends only on μmin 
+
+and νmin , and is independent of C and τ . As an immediate consequence, we also get a bound on the limiting increments. Even in the case of finite transport costs, this lemma appears to be new. 
+
+Lemma 2.5. Let μ, ν, C, E be as in Thm. 2.2. Let the rescaled one-iteration increments vk, w k and the logits U k of the Sinkhorn algorithm be defined as in (2.3) , (2.4) . Then we have, uniformly over the initialization U 0 
+
+> ij
+
+= ( f 0 
+
+> i
+
++ g0 
+
+> j
+
+− Cij )/τ of the algorithm, 
+
+∀i, ∀k ≥ 3, log μmin ≤ vki ≤ − log νmin and ∀j, ∀k ≥ 4, log νmin ≤ wkj ≤ − log μmin .
+
+Meanwhile, for the first two iterations, denoting δ = max i′j′ U 0 
+
+> i′j′
+
+and δ = − min (i′,j ′)∈E U 0 
+
+> i′j′
+
+,
+
+∀i, −δ ≤ v2 
+
+> i
+
+= v1 
+
+> i
+
+≤ − log νmin + δ and ∀j, log νmin ≤ w3 
+
+> j
+
+= w2 
+
+> j
+
+≤ − log μmin + δ + δ. 
+
+Proof. For the lower bounds, as we remarked in (2.6), we have 
+
+∀k ≥ 1 even , v k+1  
+
+> i
+
+= log (μi/(X♯πk)i
+
+) ≥ log μi ≥ log μmin 
+
+and symmetrically for wk+1 for k ≥ 1 odd ( k = 0 is excluded because Zτ (f 0, g 0)̸ = 1 in general). Hence the lower bound on vk for k ≥ 3, resp. on wk for k ≥ 2.9For the upper bounds, by definition of the update (2.5), 
+
+∀k ≥ 0 even , ∀i, ∑
+
+> j
+
+eU k+1  
+
+> ij
+
+νj = ∑
+
+> j
+
+eU kij +vk+1  
+
+> i
+
+νj = 1 
+
+∀k ≥ 0 odd , ∀j, ∑
+
+> i
+
+eU k+1  
+
+> ij
+
+μi = ∑
+
+> i
+
+eU kij +wk+1  
+
+> j
+
+μi = 1 
+
+(still with the convention exp( −∞ ) = 0 so that the terms with (i, j )̸ ∈ E equal 0). So for any i,
+
+∀k ≥ 2 even , −vk+1  
+
+> i
+
+= log ∑
+
+> j
+
+eU kij νj = log ∑
+
+> j
+
+eU k−1  
+
+> ij +wkj
+
+νj
+
+≥ log 
+
+(
+
+emin j′ wkj′
+
+∑
+
+> j
+
+eU k−1 
+
+> ij
+
+νj
+
+)
+
+= min  
+
+> j′
+
+wkj′ ≥ log νmin .
+
+Symmetrically, ∀k ≥ 3 odd, −wk+1  
+
+> j
+
+≥ min i′ vki′ ≥ log μmin . Hence the upper bound on vk for k ≥ 3,resp. on wk for k ≥ 4.It only remains to show the bounds for v2 = v1 and the upper bound for w3 = w2. For v1,
+
+− max  
+
+> i′j′
+
+U 0 
+
+> i′j′
+
+≤ v1 
+
+> i
+
+= − log ∑
+
+> j
+
+eU 0 
+
+> ij
+
+νj ≤ − log 
+
+(
+
+min  
+
+> (i′,j ′)∈E
+
+eU 0 
+
+> i′j′
+
+νmin 
+
+)
+
+= − log νmin − min  
+
+> (i′,j ′)∈E
+
+U 0 
+
+> i′j′
+
+.
+
+For w2, similarly, since min (i,j )∈E U 1 
+
+> ij
+
+≥ min (i,j )∈E U 0 
+
+> ij
+
++ min i v1 
+
+> i
+
+,
+
+w2 
+
+> j
+
+≤ − log μmin − min  
+
+> E
+
+U 1 ≤ − log μmin − min  
+
+> E
+
+U 0 + max U 0,
+
+as announced. 
+
+Corollary 2.6. For any μ ∈ ∆m, ν ∈ ∆n such that μmin , ν min > 0, for any E ⊂ { 1 . . . m } × { 1 . . . n }
+
+such that the bipartite graph with edge set E has no isolated vertex, we have 
+
+∀i, log μmin ≤ v∗ 
+
+> i
+
+(E) ≤ − log νmin and ∀j, log νmin ≤ w∗ 
+
+> j
+
+(E) ≤ − log μmin .
+
+In particular, min i μ∗ 
+
+> i
+
+(E), min j ν∗ 
+
+> j
+
+(E) ≥ μmin νmin .Proof. Take the limit k → ∞ in the inequalities of Lem. 2.5. The lower bound on the μ∗ 
+
+> i
+
+(E) follows by noting that ∀i, log (μi/μ ∗ 
+
+> i
+
+(E)) = v∗ 
+
+> i
+
+(E) ≤ − log νmin =⇒ log μ∗ 
+
+> i
+
+(E) ≥ log (μiνmin ) ≥ log (μmin νmin ),and likewise for the ν∗ 
+
+> j
+
+(E).Our third lemma controls the discrepancy between the Sinkhorn iterates for an EOT problem with high but finite costs, and those for the problem with infinite costs. 
+
+Lemma 2.7. Let (f k, g k)k be the iterates of the Sinkhorn algorithm applied to the EOT problem (1.2) .Let E ⊂ { 1 . . . m } × { 1 . . . n } such that the bipartite graph with edge set E has no isolated vertex, and let ( ˜f k, ˜gk)k be the iterates of the Sinkhorn algorithm applied to the EOT problem with the same target marginals μ, ν but with the cost matrix 
+
+˜C ∈ (R ∪ {∞} )m×n, ˜Cij =
+
+{
+
+Cij if (i, j ) ∈ E 
+
++∞ otherwise ,
+
+and with an initialization ( ˜f 0, ˜g0) possibly different from (f 0, g 0). Let δ and (M k)k≥0 be such that 
+
+∀(i, j ) ∈ E , −δ ≤ ( ˜f 0 
+
+> i
+
++ ˜ g0 
+
+> j
+
+− Cij 
+
+) /τ ≤ δ and ∀(i, j )̸ ∈ E , ∀k, (f ki + gkj − Cij 
+
+) /τ ≤ − M k.
+
+Further denote ˜v1 = ( ˜f 1 − ˜f 0)/τ , ˜w2 = ( ˜g2 − ˜g0)/τ . Then ∆k = ∥∥f k − ˜f k∥∥∞ ∨ ∥∥gk − ˜gk∥∥∞ satisfies 
+
+∀k ≥ 2, ∆k ≤ ∆0 + τ
+
+[
+
+e(max ˜ v1)−M 0
+
++ e(max ˜ w2)−M 1
+
++ ( μmin ∧ νmin )−1
+
+> k−1
+
+∑
+
+> l=3
+
+e−M l
+
+]
+
+≤ ∆0 + τ (μmin ∧ νmin )−1
+
+[
+
+e2δ (e−M 0
+
++ e−M 1
+
+) + 
+
+> k−1
+
+∑
+
+> l=3
+
+e−M l
+
+]
+
+.
+
+10 Proof. Let ˜vk, ˜wk denote the rescaled one-iteration increments of ( ˜f k, ˜gk) as defined in (2.3) . For any k ≥ 0 even, for any i, by definition of the Sinkhorn update, 
+
+(f k+1  
+
+> i
+
+− ˜f k+1 
+
+> i
+
+) /τ = − log 
+
+∑ 
+
+> j
+
+e[gkj −Cij ]/τ νj
+
+∑ 
+
+> j:( i,j )∈E
+
+e[˜ gkj −Cij ]/τ νj
+
+= − log 
+
+∑ 
+
+> j:( i,j )∈E
+
+e(gkj −˜gkj )/τ e[˜ gkj −Cij ]/τ νj + ∑ 
+
+> j:( i,j )̸∈E
+
+e[gkj −Cij ]/τ νj
+
+∑ 
+
+> j:( i,j )∈E
+
+e[˜ gkj −Cij ]/τ νj
+
+= − log 
+
+eλ/τ + e( ˜f ki −f ki )/τ 
+
+∑ 
+
+> j:( i,j )∈E
+
+e[ ˜f ki +˜ gkj −Cij ]/τ νj
+
+∑
+
+> j:( i,j )̸∈E
+
+e[f k +gkj −Cij ]/τ νj
+
+
+
+= − log 
+
+eλ/τ + e˜vk+1  
+
+> i
+
+e( ˜f ki −f ki )/τ ∑
+
+> j:( i,j )̸∈E
+
+e[f k +gkj −Cij ]/τ νj
+
+
+
+for some 
+
+min  
+
+> j:( i,j )∈E
+
+(gkj − ˜gkj ) ≤ λ ≤ max  
+
+> j:( i,j )∈E
+
+(gkj − ˜gkj ),
+
+where in the last line we used that ˜vk+1  
+
+> i
+
+= − log ∑ 
+
+> j:( i,j )∈E
+
+e[ ˜f ki +˜ gkj −Cij ]/τ νj as noted in (2.5). So 
+
+(f k+1  
+
+> i
+
+− ˜f k+1 
+
+> i
+
+) /τ ≤ − log( eλ/τ + 0) = −λ/τ ≤ ∥∥˜gk − gk∥∥∞ /τ 
+
+and in the other direction, 
+
+− (f k+1  
+
+> i
+
+− ˜f k+1 
+
+> i
+
+) /τ ≤ log 
+
+(
+
+eλ/τ + e˜vk+1  
+
+> i
+
+e( ˜f ki −f ki )/τ e−M k )
+
+≤ log 
+
+(
+
+e∥gk −˜gk ∥∞/τ + e(max i′ ˜vk+1  
+
+> i′)
+
+e−M k
+
+· e∥ ˜f k −f k ∥∞/τ )
+
+≤ (∥ ∥f k − ˜f k∥∥∞ ∨ ∥∥gk − ˜gk∥∥∞
+
+)/τ + log 
+
+(
+
+1 + e(max i′ ˜vk+1  
+
+> i′)
+
+e−M k )
+
+≤ (∥ ∥f k − ˜f k∥∥∞ ∨ ∥∥gk − ˜gk∥∥∞
+
+)/τ + e(max i′ ˜vk+1  
+
+> i′)
+
+e−M k
+
+.
+
+Thus, by the analogous computation for k odd, denoting ∆k = ∥∥f k − ˜f k∥∥∞ ∨ ∥∥gk − ˜gk∥∥∞,
+
+∀k ≥ 0 even , ∆k+1 ≤ ∆k + τ e (max ˜ vk+1 )e−M k
+
+∀k ≥ 0 odd , ∆k+1 ≤ ∆k + τ e (max ˜ wk+1 )e−M k
+
+.
+
+Now by Lem. 2.5, for all k ≥ 3, max ˜ vk+1 , max ˜ wk+1 ≤ − log( μmin ∧ νmin ). Hence, as announced, 
+
+∀k ≥ 2, ∆k ≤ ∆0 + τ
+
+[
+
+e(max ˜ v1)−M 0
+
++ e(max ˜ w2)−M 1
+
++ ( μmin ∧ νmin )−1
+
+> k−1
+
+∑
+
+> l=3
+
+e−M l
+
+]
+
+.
+
+To get the more explicit bound in the second inequality of the lemma, use that under the stated assumption on ˜f 0, ˜g0, by Lem. 2.5, max i ˜v1 
+
+> i
+
+≤ − log νmin + δ and max j ˜w2 
+
+> j
+
+≤ − log μmin + 2 δ.
+
+## 2.4 Quantitative convergence bounds for Sinkhorn with infinite costs 
+
+As a final preliminary, we now state two quantitative versions of the convergence in Thm. 2.2: a polynomial convergence bound in ˜O(1 /k ) in the general case, and an exponential convergence bound under an additional scalability assumption. The proofs are delayed to App. B. Our result for the general case is as follows. Its proof makes crucial use of several insights from [BV24]—notably the reduction to the asymptotically scalable case implicit in their Proposition 5.3 (see Lem. B.2, Lem. B.3)—but also of a recent result by the author in [Wan26] to get the k−1 log k
+
+convergence rate. Let us mention that the arguments used in the proof of [BV24, Theorem 3.2] only allow to show a rate of k−1/2 (see Lem. B.1), which would be insufficient for our later purposes. 11 Proposition 2.8. Let μ, ν, C, E be as in Thm. 2.2. Let δ ≥ 0 and consider any initialization 
+
+U 0 = ((f 0 
+
+> i
+
++ g0 
+
+> j
+
+− Cij )/τ ) 
+
+> ij
+
+∈ (R ∪ {−∞} )m×n of the Sinkhorn algorithm such that 
+
+∀(i, j ) ∈ E , −δ ≤ U 0 
+
+> ij
+
+≤ δ and ∀(i, j )̸ ∈ E , U 0 
+
+> ij
+
+= −∞ .
+
+Then the rescaled one-iteration increments vk, w k satisfy 
+
+∀k ≥ K0(1 + δ), ∥∥vk − v∗(E)∥∥∞ , ∥∥wk − w∗(E)∥∥∞ ≤ B 1 + δ + log kk
+
+for some constants K0, B dependent only on μ, ν , and E.
+
+Before stating our second result, let us first show an equivalence between equality of the sets S, S
+
+appearing in Thm. 2.3 and certain exact scalability conditions. These equivalences follow essentially immediately from the definitions, but we find it useful to record them for future reference. 
+
+Lemma 2.9. Let μ, ν, C, E be as in Thm. 2.2 and S, S be as in Thm. 2.3. Let μ∗ = μ∗(E) = μ∗(S) = 
+
+μ∗(S), ν∗ = ν∗(E) = ν∗(S) = ν∗(S) by Lem. 2.4. Let A ∈ Rm×n 
+
+> +
+
+be any nonnegative matrix such that {(i, j ); Aij > 0} = S. Then A is asymptotically (μ∗, ν )-scalable and asymptotically (μ, ν ∗)-scalable in the sense of [Ide16, Theorem 4.2]. Moreover, the following statements are equivalent: (i) S = S.(ii) The matrix A is exactly (μ∗, ν )-scalable in the sense of [Ide16, Theorem 4.1]. (iii) The matrix A is exactly (μ, ν ∗)-scalable. Proof. By definition [Ide16], a matrix A′ with pattern {(i, j ); A′ 
+
+> ij
+
+> 0} = S′ is exactly (μ′, ν ′)-scalable if and only if there exists Q ∈ ∆S′ such that X♯Q = μ′, Y♯Q = ν′, and Qij > 0 for all 
+
+(i, j ) ∈ S ′. Asymptotic scalability is defined in the same way except the condition on the positivity of entries in S′ is removed. The first part of the lemma, on asymptotic (μ∗, ν )- and (μ, ν ∗)-scalability of A, then follows directly from the definition of μ∗(S) and ν∗(S).For the second part of the lemma, note that by [BV24, Eq. (3.2)], we have (i0, j 0) ∈ S ⇐⇒ ∃Q ∈ ∆E ; X♯Q = μ∗, Y ♯Q = ν, and Qi0j0 > 0, and likewise with (μ, ν ∗) instead of (μ∗, ν ). The claimed equivalences follow immediately. Our second result is that the convergence (vk, w k) → (v∗(E), w ∗(E)) is actually exponential if 
+
+S = S. At a high level, this is in line with the intuition that the Sinkhorn algorithm converges linearly when, and only when, the underlying problem is exactly scalable [Sou91; Ach93]. 
+
+Proposition 2.10. In the same setting as Prop. 2.8, additionally suppose S = S, where S, S are the sets defined in Thm. 2.3. Then 
+
+∀k ≥ K0(1 + δ), ∥∥vk − v∗(E)∥∥∞ , ∥∥wk − w∗(E)∥∥∞ ≤ B(1 + δ)
+
+(
+
+1 − e−R(1+ δ))k
+
+for some constants K0, B, R dependent only on μ, ν , and E.
+
+# 3 The cold Sinkhorn dynamics 
+
+In this section, we introduce the cold Sinkhorn dynamics, which is the limiting dynamics of the Sinkhorn algorithm in the regime of small regularization τ . We start by deriving it informally from the Sinkhorn algorithm in Sec. 3.1. Then we give its formal definition in Sec. 3.2, and we analyze its properties in Sec. 3.3. 
+
+## 3.1 Informal derivation 
+
+In this section, we use o(·), O (·), Ω( ·), Θ( ·) to indicate scalings in the regime τ → 0.12 The first and second iterations. By a well-known property of the log-sum-exp function, we have fτ [g] = f0[g] + o(1) for any g, and likewise for gτ [·]. So it is tempting to consider the sequence f0[g0[... [f0[g0]] ... ]] as an approximation of the Sinkhorn iterates f k = fτ [gτ [... [fτ [g0]] ... ]] ,and likewise for gk. However, it is classical that the former sequence is stationary after only two steps: indeed one can show that (f , g ) = ( f0[g0], g 0[f0[g0]]) ∈ ∂F, the Pareto frontier of the dual OT problem’s feasible set, and so f0[g] = f , g 0[f ] = g by Lem. 2.1 [PC19, Section 3.2]. So this approximation is insufficient to capture the small-τ behavior of the Sinkhorn algorithm. To derive a more precise approximation, let us consider the first few iterations of the algorithm. At the first two steps, approximating fτ [·], g τ [·] by f0[·], g 0[·] is meaningful: effectively, the first two iterations project (f 0, g 0) onto some point (f 2, g 2) that is o(1) -close to ∂F. Thereafter, the iterates evolve according to 
+
+∀k ≥ 3, f k − f k−2 = τ v k and gk − gk−2 = τ w k
+
+by definition, and we know by Lem. 2.5 that vk, w k = O(1) uniformly for all k ≥ 3—consistent with the intuition that the algorithm is non-stationary only thanks to the presence of entropy regularization. (To be exact, wk = O(1) for k ≥ 4, but g3 = g2 by definition anyway.) 
+
+The first Θ(1) iterations. Since vk, w k = O(1) , the matrix τ U kij = f ki + gkj − Cij stays approximately constant for Θ(1) iterations. That is, for ease of reference, for all 2 ≤ k ≤ K = Θ(1) , τ U kij = f ki + gkj − Cij = f 2 
+
+> i
+
++ g2 
+
+> j
+
+− Cij + O(τ ).
+
+Let us describe in detail the behavior of the algorithm for k ∈ { 2, ..., K }. Denote 
+
+f = f0[g0], g = g0[f ], U ij = f i + gj − Cij , and E = {(i, j ); U ij = 0 } .
+
+Then by Lem. 2.1, U ij ≤ 0 for all (i, j ) and the bipartite graph ({1 . . . m } ⊔ { 1 . . . n }, E) has no isolated vertex. Now we have (f 2, g 2) = ( f , g ) + o(1) , and more precisely one can show that 
+
+(f 2, g 2) = ( f , g ) + O(τ ) (Lem. 4.3 below). Thus, τ U kij = U ij + O(τ ) for all k ≤ K, and so 
+
+∀(i, j ) ∈ E , U kij = O(1) and ∀(i, j )̸ ∈ E , U kij = U ij 
+
+︸︷︷︸ 
+
+> <0
+
+/τ + O(1) = −Θ(1 /τ ) τ →0
+
+−−−→ −∞ .
+
+Consequently, for all k ∈ { 2, ..., K }, the summation ∑ 
+
+> j
+
+in the definition of v[U k]i = − log ∑ 
+
+> j
+
+eU kij νj
+
+can be approximately replaced by ∑ 
+
+> j:( i,j )∈E
+
+, and likewise for the w[U k]j . In other words, the Sinkhorn algorithm behaves approximately as in the case where the cost matrix has infinite entries at the (i, j )̸ ∈ E . In particular, by Thm. 2.2, (vk, w k) converges to some (v, w ) determined only by 
+
+μ, ν , and E.Let us make an Ansatz that the speed of this convergence is independent of τ and that we attain (vK′
+
+, w K′
+
+) = ( v, w ) + O(τ ) in a number of iterations K′ < K . Then the Sinkhorn iterates evolve linearly with (f k − f k−2, g k − gk−2) = ( τ v, τ w ) + O(τ 2) over k ∈ { K′, ..., K }.
+
+The first Θ(1 /τ ) iterations (the first “phase”). Reflecting on the derivation so far, notice that our reasoning is valid not just until some K = Θ(1) , but also until the maximal K such that for all 2 ≤ k ≤ K, ∀(i, j )̸ ∈ E , U kij ≤ − Ω(1 /τ ).
+
+Indeed, this is the condition that makes the algorithm behave approximately as in the infinite cost case, and so (vk, w k) = ( v, w ) + O(τ ) for all k ∈ { K′, ..., K }. (In particular, whether or not the 
+
+U kij for (i, j ) ∈ E remain bounded does not matter.) Now since U k+1  
+
+> ij
+
+− U kij = O(1) and, initially, 
+
+∀(i, j )̸ ∈ E , U 2 
+
+> ij
+
+= U ij /τ + O(1) = −Θ(1 /τ ), the above condition stays satisfied for at least Θ(1 /τ )
+
+iterations. The iterations {2, ..., K } correspond to what we will call the first phase, and {2, ..., K ′} can be thought of as the first phase transition. 13 End of the first phase, start of the second phase. The first phase stops when the condition above is violated, i.e., when one of the U ki0j0 for (i0, j 0)̸ ∈ E reaches o(1 /τ ) in magnitude. Now during the first phase, since (vk, w k) = ( v, w )+ O(τ ), the U kij evolve according to U kij −U k−2 
+
+> ij
+
+= vi +wj +O(τ ).So there are two cases to distinguish: 
+
+• If for all (i0, j 0)̸ ∈ E , vi0 + wj0 ≤ 0, then the first phase never ends. In this rare case, the first phase coincides with the final phase, which is detailed in the next paragraph. 
+
+• If there exists (i0, j 0)̸ ∈ E such that vi0 + wj0 > 0, then there exists K1 > K ′ such that 
+
+U K′ 
+
+> i0j0
+
++ ( K1 − K′)( vi0 + wj0 ) > 0. Consider the smallest such integer K1. While it would be difficult to finely describe the behavior of the Sinkhorn algorithm at iterations k ≈ K1, it turns out that for small τ , everything happens roughly as though U K1 itself satisfies U K1 
+
+> i0j0
+
+= O(1) .That is, considering E′ =
+
+{
+
+(i, j ); U K1 
+
+> ij
+
+= O(1) 
+
+}
+
+, we again have that for k ≈ K1,
+
+∀(i, j ) ∈ E ′, U kij = O(1) and ∀(i, j )̸ ∈ E ′, U kij = −Θ(1 /τ ) τ →0
+
+−−−→ −∞ .
+
+Thereafter, the reasoning from the previous paragraphs again applies: the Sinkhorn iterates go through a second phase transition where (vk, w k) converge to some (v′, w ′), and then there occurs a second phase where U kij − U k−2 
+
+> ij
+
+= v′ 
+
+> i
+
++ w′ 
+
+> j
+
++ O(τ ), for Θ(1 /τ ) iterations. 
+
+The final phase. The behavior described above repeats for a certain number of phases: at each phase ℓ, one has U kij − U k−2 
+
+> ij
+
+= vℓi + wℓj + O(τ ), where (vℓ, w ℓ) is determined by a certain edge set 
+
+Eℓ corresponding to the “effective finite-cost pattern” seen by the algorithm. This repeats until there comes a phase L where, for all (i0, j 0)̸ ∈ E L, vLi0 + wLj0 ≤ 0. One can show that this necessarily occurs eventually (Lem. 3.4) and that (vL, w L) = (0 , 0) (Lem. 3.5). The iterates f k, g k then evolve at a much slower rate: (f k − f k−2, g k − gk−2) = O(τ 2) instead of Θ( τ ) at the previous phases. So at time-scales k ≍ τ −1, the Sinkhorn iterates effectively become stationary, and phase L acts as the final phase of the dynamics. One can also show that in the limit τ → 0,the final value taken by (f, g ) is an optimal solution of the dual OT problem. 
+
+## 3.2 Formal definition 
+
+We can now give the formal definition of the cold Sinkhorn dynamics. 
+
+Definition 3.1. For any initial pair (f 0, g 0) ∈ ∂F, the cold Sinkhorn dynamics is the continuous-time curve (f (t), g (t)) given by f (0) = f 0, g (0) = g0, and 
+
+∀ℓ ≤ L, ∀t ∈ [tℓ, t ℓ+1 ), ddt f (t) = vℓ, ddt g(t) = wℓ
+
+for a sequence (tℓ, v ℓ, w ℓ, Eℓ)ℓ≤L defined recursively as follows. 
+
+• For ℓ = 0 : t0 = 0 and v0 = v∗(E0), w 0 = w∗(E0) where E0 =
+
+{
+
+(i, j ); f 0 
+
+> i
+
++ g0 
+
+> j
+
+− Cij = 0 
+
+}
+
+.
+
+• For any ℓ ≥ 0,
+
+tℓ+1 = inf 
+
+{
+
+t ≥ tℓ; max 
+
+> (i,j )̸∈E ℓ
+
+fi(tℓ) + gj (tℓ) + ( t − tℓ) (vℓi + wℓj
+
+) − Cij ≥ 0
+
+}
+
+.
+
+If tℓ+1 < ∞, then vℓ+1 = v∗(Eℓ+1 ), w ℓ+1 = w∗(Eℓ+1 ) where 
+
+Eℓ+1 = {(i, j ); fi(tℓ) + gj (tℓ) + ( tℓ+1 − tℓ) (vℓi + wℓj
+
+) − Cij = 0 } .
+
+If tℓ+1 = ∞, then L = ℓ and the sequence terminates. vℓ+1 , w ℓ+1 , and Eℓ+1 are not defined. Further set tL+1 = ∞. We refer to each interval [tℓ, t ℓ+1 ) as a phase of the dynamics. 
+
+Remark 3.1 . Recall that v∗ 
+
+> i
+
+(Eℓ) + w∗ 
+
+> j
+
+(Eℓ) ≤ 0 for all (i, j ) ∈ E ℓ, by Thm. 2.2. So by construction, 
+
+fi(t) + gj (t) − Cij ≤ 0 for all (i, j ), for all t.14 (a) Evolution of fi(t) + gj (t) − Cij along the cold Sinkhorn dynamics. (In reality, this figure was obtained by running the Sinkhorn algorithm with τ = 0 .005 : the x-axis shows τ k/ 2 and the y-axis shows f ki + gkj − Cij .) 
+
+(b) Phase ℓ = 0 , t ∈ [0 , 1.4) . (c) Phase ℓ = 1 , t ∈ [1 .4, 2) . (d) Phase ℓ = L = 2 , t ∈ [2 , ∞).
+
+Figure 2: Behavior of the cold Sinkhorn dynamics on (1.1) for m = 2 , n = 3 , non-uniform target marginals, and a generic cost matrix. Bottom row: the bipartite graph with edge set Eℓ for 
+
+0 ≤ ℓ ≤ L = 2 . New edges (i, j ) ∈ E ℓ \ E ℓ−1 are represented in red. Edges (i, j ) ∈ E ℓ \ S ℓ, where 
+
+Sℓ = {(i, j ) ∈ E ℓ; vℓi + wℓj = 0 }, are represented as dashed lines. As a support for intuition, we display in Fig. 2 the behavior of the cold Sinkhorn dynamics on a simple example with m = 2 and n = 3 . As Fig. 2a illustrates, the matrix U ij (t) = 
+
+fi(t) + gj (t) − Cij evolves linearly during each phase t ∈ [tℓ, t ℓ+1 ), and a new phase begins whenever a component U i0j0 (t) which was previously negative reaches 0. The new direction  
+
+> ddt
+
+U ij (t+
+
+> ℓ+1
+
+) = vℓ+1  
+
+> i
+
++ wℓ+1  
+
+> j
+
+then gets computed according to vℓ+1 = v∗(Eℓ+1 ), w ℓ+1 = w∗(Eℓ+1 ),where Eℓ+1 = {(i, j ); U ij (tℓ+1 ) = 0 }. This may cause some previously zero components U i1j1 (t)
+
+to immediately become negative, but this is not reflected in the definition of Eℓ+1 : these are the edges (i1, j 1) ∈ E ℓ+1 \ S ℓ+1 where Sℓ+1 = {(i, j ) ∈ E ℓ+1 ; vℓ+1  
+
+> i
+
++ wℓ+1  
+
+> j
+
+= 0 }.This process repeats until there comes a phase where the direction ddt U ij (t+ 
+
+> L
+
+) = vLi + wLj is non-positive for all components i ≤ m, j ≤ n. In fact, it then necessarily holds vLi = wLj = 0 for all 
+
+i, j , as shown in Lem. 3.5 below. We note that, although it does not occur for the simple example presented in Fig. 2, it is possible for a component U ij (t) to be successively 0, decreasing, increasing, and 0 again along successive phases of the dynamics. 
+
+## 3.3 Properties of the dynamics 
+
+In this section, we analyze the cold Sinkhorn dynamics. In all of the following lemmas, we consider 
+
+(f (t), g (t)) , (tℓ, v ℓ, w ℓ, Eℓ)ℓ≤L, and tL+1 defined as in Def. 3.1. 
+
+Lemma 3.1. For any t, (f (t), g (t)) ∈ ∂F.Proof. Let us show by induction that for any ℓ ≤ L, we have ∀t ∈ [tℓ, t ℓ+1 ), (f (t), g (t)) ∈ ∂F.15 For ℓ = 0 , by definition (f (0) , g (0)) = ( f 0, g 0) ∈ ∂F. By definition of t1, for all t ∈ [t0, t 1),
+
+fi(t)+ gj (t)−Cij ≤ 0, i.e., (f (t), g (t)) ∈ F. To prove that it lies on the Pareto frontier, denote S(t) = 
+
+{(i, j ); fi(t) + gj (t) − Cij = 0 } and S0 = {(i, j ) ∈ E 0; v0 
+
+> i
+
++ w0 
+
+> j
+
+= 0 }. By Thm. 2.2, ({1 . . . m } ⊔ {1 . . . n }, S0) has no isolated vertex. Now for any t ∈ [t0, t 1), by definition, S(t) ⊃ S 0. Thus 
+
+({1 . . . m } ⊔ { 1 . . . n }, S(t)) has no isolated vertex, and so by Lem. 2.1, (f (t), g (t)) ∈ ∂F.For any ℓ ≥ 1, by induction hypothesis and continuity, (f (tℓ), g (tℓ)) ∈ ∂F. A similar reasoning as in the case ℓ = 0 shows that at subsequent times t ∈ [tℓ, t ℓ+1 ), we also have (f (t), g (t)) ∈ ∂F.
+
+Lemma 3.2. The dual OT objective t 7 → Ψ0(f (t), g (t)) is non-increasing and 
+
+∀ℓ ≤ L, ∀t ∈ [tℓ, t ℓ+1 ), ddt Ψ0(f (t), g (t)) = −H (μ∥∥μ∗(Eℓ)) − H (ν∥∥ν∗(Eℓ))
+
+= −H (μ∗(Eℓ)∥∥μ) − H (ν∗(Eℓ)∥∥ν) .
+
+Proof. Let ℓ ≤ L and t ∈ [tℓ, t ℓ+1 ). By definition of Ψ0(f, g ) = −f ⊤μ − g⊤ν and of vℓi = v∗ 
+
+> i
+
+(Eℓ) = log (μi/μ ∗ 
+
+> i
+
+(Eℓ)) and wℓj ,
+
+ddt Ψ0(f (t), g (t)) = −
+
+> m
+
+∑
+
+> i=1
+
+μi
+
+ddt fi(t) −
+
+> n
+
+∑
+
+> j=1
+
+νj
+
+ddt gj (t) = −
+
+> m
+
+∑
+
+> i=1
+
+μi v∗ 
+
+> i
+
+(Eℓ) −
+
+> n
+
+∑
+
+> j=1
+
+νj w∗ 
+
+> j
+
+(Eℓ)= −
+
+> m
+
+∑
+
+> i=1
+
+μi log (μi/μ ∗ 
+
+> i
+
+(Eℓ)) −
+
+> n
+
+∑
+
+> j=1
+
+νj log (νj /ν ∗ 
+
+> j
+
+(Eℓ)) = −H (μ∥∥μ∗(Eℓ)) − H (ν∥∥ν∗(Eℓ)) .
+
+This proves the first equality of the lemma, and the second equality follows from the fact that 
+
+H (μ∥∥μ∗(Eℓ)) = H (ν∗(Eℓ)∥∥ν) and vice-versa, as proved in [BV24, Remark 3.4]. 
+
+Lemma 3.3. The sequences (H (μ∗(Eℓ)∥∥μ))  
+
+> ℓ≤L
+
+and (H (ν∗(Eℓ)∥∥ν))  
+
+> ℓ≤L
+
+are non-increasing, and 
+
+(H (μ∗(Eℓ)∥∥μ) + H (ν∗(Eℓ)∥∥ν))  
+
+> ℓ≤L
+
+is strictly decreasing. Proof. Fix ℓ < L . Let us first show that H (μ∗(Eℓ+1 )∥∥μ) ≤ H (μ∗(Eℓ)∥∥μ), and the corresponding statement for the ν’s will follow similarly. Let Sℓ = {(i, j ) ∈ E ℓ; vℓi + wℓj = 0 }. By definition of the algorithm, Eℓ+1 ⊃ S ℓ. So by definition of μ∗(E) = argmin μ H (μ∥μ) subject to ∃Q ∈ ∆E ; X♯Q = μ
+
+and Y♯Q = ν, we have H (μ∗(Eℓ+1 )∥∥μ) ≤ H
+
+(
+
+μ∗(Sℓ)
+
+∥∥∥μ
+
+)
+
+. Now we showed in Lem. 2.4 that 
+
+μ∗(Sℓ) = μ∗(Eℓ), hence the announced inequality. This shows that H (μ∗(Eℓ+1 )∥∥μ) ≤ H (μ∗(Eℓ)∥∥μ) and H (ν∗(Eℓ+1 )∥∥ν) ≤ H (ν∗(Eℓ)∥∥ν). Now let us show that at least one of these inequalities is strict. Suppose by contradiction that they are both equalities. Since Sℓ ⊂ E ℓ+1 , then μ∗(Eℓ) = μ∗(Sℓ) is feasible for the optimization problem defining μ∗(Eℓ+1 ), and it is also optimal by the contradiction hypothesis, so μ∗(Eℓ) = μ∗(Eℓ+1 ).Likewise, ν∗(Eℓ) = ν∗(Eℓ+1 ). Consequently, vℓ = vℓ+1 and wℓ = wℓ+1 . But on the other hand, for (i0, j 0) ∈ E ℓ+1 \ S ℓ—which exists by definition of the algorithm since ℓ < L —we necessarily have vℓi0 + wℓj0 > 0 and vℓ+1  
+
+> i0
+
++ wℓ+1  
+
+> j0
+
+≤ 0. Thus, H (μ∗(Eℓ+1 )∥∥μ) < H (μ∗(Eℓ)∥∥μ)
+
+or H (ν∗(Eℓ+1 )∥∥ν) < H (ν∗(Eℓ)∥∥ν), and so the sequence (H (μ∗(Eℓ)∥∥μ) + H (ν∗(Eℓ)∥∥ν))  
+
+> ℓ≤L
+
+is decreasing. 
+
+Remark 3.2 . Lem. 3.2 and Lem. 3.3 can be viewed as the τ → 0 limits of [ANR17, Lemma 2] and [Nut21, Proposition 6.10], respectively. 
+
+Lemma 3.4. The dynamics has a finite number of phases: L + 1 ≤ 2mn .Proof. By the previous lemma, the sets (Eℓ)0≤ℓ≤L are pair-wise distinct. Now Eℓ ⊂ { 1 . . . m } × {1 . . . n } for each ℓ, so there can be at most 2mn such sets. So L + 1 ≤ 2mn < ∞.16 Lemma 3.5. At the final phase, (vL, w L) = (0 , 0) , and the final point (f (tL), g (tL)) is an optimal solution of the dual OT problem. Proof. Denote by Ψ∗ 
+
+> 0
+
+∈ R the optimal value of the dual OT problem: Ψ∗ 
+
+> 0
+
+= min (f,g )∈F Ψ0(f, g ).Since Ψ0(f (t), g (t)) is piecewise-linear, non-increasing, and lower-bounded by Ψ∗
+
+> 0
+
+, its time-derivative during the final phase t ∈ [tL, ∞) must be zero. So by Lem. 3.2, H (μ∗(EL)∥∥μ) = H (ν∗(EL)∥∥ν) = 0 ,or equivalently, v∗(EL) = vL = 0 and w∗(EL) = wL = 0 .Denote for concision f ∞ = f (tL) and g∞ = g(tL) and let us show that (f ∞, g ∞) is an optimal solution of the dual OT problem. By duality, it suffices to show that there exists π ∈ ∆m×n
+
+which is feasible for the primal OT problem and satisfies the complementary slackness condition 
+
+∀i, j, π ij (f ∞ 
+
+> i
+
++ g∞ 
+
+> j
+
+− Cij ) = 0 . Now by definition of μ∗(·), the fact that μ∗(EL) = μ implies the existence of some Q ∈ ∆EL such that X♯Q = μ and Y♯Q = ν. By setting πij = Qij if (i, j ) ∈ E L
+
+and 0 otherwise, we indeed have that π is feasible for the primal OT problem and that for any i, j ,either (i, j ) ∈ E L and then f ∞ 
+
+> i
+
++ g∞ 
+
+> j
+
+− Cij = 0 , or (i, j )̸ ∈ E L and then πij = 0 .
+
+Lemma 3.6. There exists a constant T dependent only on μ, ν , and C such that tL ≤ T .Proof. Let us first show that sup (f,g )∈∂F Ψ0(f, g ) < ∞. Indeed, for any (f, g ) ∈ ∂F,
+
+∀j, j ′, g j − gj′ = g0[f ]j − g0[f ]j′ =
+
+(
+
+min  
+
+> i
+
+Cij − fi
+
+)
+
+−
+
+(
+
+min  
+
+> i′
+
+Ci′j′ − fi′
+
+)
+
+= min  
+
+> i
+
+max  
+
+> i′
+
+Cij − fi − Ci′j′ + fi′ ≥ min  
+
+> i
+
+Cij − Cij ′
+
+and so 
+
+∀i, j, fi + gj = f0[g]i + gj = min  
+
+> j′
+
+Cij ′ − gj′ + gj ≥ min  
+
+> i′,j ′
+
+Cij ′ + Ci′j − Ci′j′
+
+and so Ψ0(f, g ) = −f ⊤μ − g⊤ν = − ∑ 
+
+> i,j
+
+(fi + gj )μiνj ≤ − (min i,j,i ′,j ′ Cij ′ + Ci′j − Ci′j′ ).By Lem. 3.2, for any t < t L, ddt Ψ0(f (t), g (t)) ≤ − min [H (μ∥μ∗(E′)) + H (ν∥ν∗(E′)) ] < 0
+
+where E′ ranges over all subsets of {1 . . . m } × { 1 . . . n } such that (μ∗(E), ν ∗(E)) ̸ = ( μ, ν ). On the other hand, Ψ0(f (0) , g (0)) ≤ sup (f,g )∈∂F Ψ0(f, g ) < ∞ and Ψ0(f (tL), g (tL)) = min F Ψ0 > −∞ . So 
+
+tL · min [H (μ∥μ∗(E′)) + H (ν∥ν∗(E′)) ] ≤ − 
+
+∫ tL
+
+> 0
+
+ddt Ψ0(f (t), g (t)) d t
+
+= Ψ 0(f (0) , g (0)) − Ψ0(f (tL), g (tL)) 
+
+≤ sup 
+
+> (f,g )∈∂F
+
+Ψ0(f, g ) − min  
+
+> F
+
+Ψ0
+
+and so tL ≤ sup (f,g )∈∂F Ψ0(f,g )−min F Ψ0
+
+> min
+
+[H(μ∥μ∗(E′))+ H(ν∥ν∗(E′)) 
+
+] , which is indeed only dependent on μ, ν , and C.Together, these lemmas show that the cold Sinkhorn dynamics is a continuous-time optimization algorithm for the dual unregularized OT problem (2.1) , that walks piecewise-linearly along the Pareto frontier ∂F of the feasibility polytope and converges after a finite number of phases L and a finite time tL. As such, it can be thought of as a simplex-type algorithm for dual OT problems. 
+
+Remark 3.3 . In principle, the cold Sinkhorn dynamics Def. 3.1 can be implemented directly, instead of viewing it as a limit of Sinkhorn, and this provides an algorithm for exact unregularized OT computation (Alg. 1). The only costly steps are to compute the drifts v∗(Eℓ), w ∗(Eℓ) at each phase, but these computations can be amortized: for a fixed pair of marginals μ, ν , one can pre-compute all of the v∗(E), w ∗(E) for E ⊂ { 1 . . . m } × { 1 . . . n }, and simply look up the values of v∗(Eℓ), w ∗(Eℓ)
+
+when actually running the dynamics. Because the v∗(E), w ∗(E) do not depend on the cost matrix 
+
+C, these pre-computed values can be reused for an arbitrary number of OT problems, provided that they share the same target marginals μ, ν .However, even with the pre-computed values of v∗(E), w ∗(E), the iteration complexity of one run of the cold Sinkhorn dynamics that we can guarantee is O(L) ≤ O(2 mn ), with a per-iteration cost of O(mn ); moreover, the number of values to pre-compute is O(2 mn ). So such an approach would be rather impractical, and much slower than classical exact linear solvers a priori. 17 Algorithm 1: Direct implementation of the cold Sinkhorn dynamics 
+
+Input: μ ∈ ∆m, ν ∈ ∆n, C ∈ Rm×n, f 0 ∈ Rm, g 0 ∈ Rn 
+
+> 1
+
+t0 = 0  
+
+> 2
+
+f (0) = f0[g0], g (0) = g0[f (0)]  
+
+> 3
+
+for ℓ = 0 , ..., 2mn do  
+
+> 4
+
+U ij = fi(tℓ) + gj (tℓ) − Cij (≤ 0 for all i, j by construction)  
+
+> 5
+
+Eℓ = {(i, j ); U ij = 0 } 
+
+> 6
+
+vℓ = v∗(Eℓ), w ℓ = w∗(Eℓ) 
+
+> 7
+
+if ∀i, j, v ℓi + wℓj ≤ 0 then  
+
+> 8
+
+L = ℓ 
+
+> 9
+
+return f (tL), g (tL), an optimal solution of the dual OT problem (2.1)  
+
+> 10
+
+∀(i, j )̸ ∈ E ℓ, ∆ij = −U ij /(vℓi + wℓj ) if vℓi + wℓj > 0 and +∞ otherwise  
+
+> 11
+
+tℓ+1 = tℓ + min ij ∆ij  
+
+> 12
+
+f (tℓ+1 ) = f (tℓ) + ( tℓ+1 − tℓ)vℓ, g (tℓ+1 ) = g(tℓ) + ( tℓ+1 − tℓ)wℓ
+
+# 4 Convergence of Sinkhorn to cold Sinkhorn 
+
+## 4.1 Main result 
+
+In this section, we state and prove the main result of this paper: the Sinkhorn iterates converge uniformly to the cold Sinkhorn dynamics as τ → 0. We do not track the constants appearing in the convergence bound explicitly here, so we do not quantify how small τ must be for the bound to be meaningful; this aspect is left for future work. Our main result is as follows. 
+
+Theorem 4.1. Let (f k, g k)k denote the iterates of the Sinkhorn algorithm applied to (1.2) initialized at some (f 0, g 0). Let (f (t), g (t)) denote the cold Sinkhorn dynamics applied to (1.1) initialized at 
+
+(f (0) , g (0)) = ( f0[g0], g 0[f0[g0]]) ∈ ∂F. Then for any τ ≤ τ0,
+
+sup 
+
+> 0≤t≤tL
+
+∥∥∥f ⌊2t/τ ⌋+2 − f (t)
+
+∥∥∥∞
+
++
+
+∥∥∥g⌊2t/τ ⌋+2 − g(t)
+
+∥∥∥∞
+
+≤ B τ (log 1 /τ )2L+1 ,
+
+for some constants τ0, B dependent only on μ, ν , and C. Here we recall that L ≤ 2mn − 1 is the number of phases of the cold Sinkhorn dynamics (excluding the stationary final phase [tL, ∞)). 
+
+Moreover, uniform convergence also holds over an arbitrarily large portion of the final phase, albeit with constants that may depend on the initialization. 
+
+Theorem 4.2. In the setting of the previous theorem, for any τ ≤ τ ′
+
+> 0
+
+,
+
+sup  
+
+> 0≤t≤tL+τ−1
+
+∥∥∥f ⌊2t/τ ⌋+2 − f (t)
+
+∥∥∥∞
+
++
+
+∥∥∥g⌊2t/τ ⌋+2 − g(t)
+
+∥∥∥∞
+
+≤ B′ τ (log 1 /τ )2L+2 
+
+for some constants τ ′
+
+> 0
+
+, B ′ dependent on μ, ν, C , and the initialization (f 0, g 0).Remark 4.1 (Uniform convergence of the derivatives within phases) . The theorems presented above show that the Sinkhorn iterates (f k, g k) converge uniformly to the cold Sinkhorn dynamics. One may also ask for uniform convergence of the derivatives, i.e., one may ask whether the rescaled one-iteration increments vk, w k defined in (2.3) converge to the vℓ, w ℓ appearing in Def. 3.1. This is indeed the case uniformly away from the phase transitions: by inspecting step (4.3) of the proof of Thm. 4.1, one can show that for any τ ≤ τ0,
+
+∀ℓ ≤ L − 1, sup     
+
+> tℓ+τlog( 1/τ)2L+1 ≤t≤tℓ+1 −τlog( 1/τ)2L+1
+
+∥∥∥v⌊2t/τ ⌋ − vℓ
+
+∥∥∥ +
+
+∥∥∥w⌊2t/τ ⌋ − wℓ
+
+∥∥∥ ≤ B τ 
+
+for some constants τ0, B dependent only on μ, ν , and C.18 Remark 4.2 (Impossibility of uniform convergence over all time) . This remark shows that the conclusion of Thm. 4.2 cannot hold if the sup is taken over all t ≥ 0, in general. Note that Ψτ and Ψ0 only depend on their arguments f, g via the matrix U = ( fi + gj − Cij )ij .Specifically, Ψτ (f, g ) = ∑
+
+> ij
+
+[
+
+τ (eU ij /τ − 1) − U ij − Cij 
+
+]
+
+μiνj , and likewise for Ψ0 without the term in τ . Note that Ψτ is strictly convex in U for any τ > 0, so that {(f ∗ 
+
+> i
+
++ g∗ 
+
+> j
+
+− Cij )ij , (f ∗, g ∗) ∈
+
+argmin Ψ τ
+
+} = {U ∗ 
+
+> τ
+
+} is a singleton. For Ψ0, the corresponding set rewrites 
+
+U := {(f ∗ 
+
+> i
+
++ g∗ 
+
+> j
+
+− Cij )ij , (f ∗, g ∗) ∈ argmin F Ψ0
+
+}
+
+= argmax 
+
+> U
+
+∑
+
+> ij
+
+U ij μiνj subject to ∀i, j, U ij ≤ 0 and ∃f, g ; U + C = f · 1⊤ 
+
+> n
+
++ 1m · g⊤,
+
+a polytope which is not a singleton in general, if C is not in general position w.r.t μ and ν. When this polytope U is not a singleton, it was shown by [CM94, Section 3] that it has a distinguished element U ∗ such that U ∗ 
+
+> τ
+
+→ U ∗ as τ → 0.Now consider μ, ν, C such that U is not a singleton, and consider any (f 0, g 0) such that 
+
+U 0 = ( f 0 
+
+> i
+
++ g0 
+
+> j
+
+− Cij )ij ∈ U \ { U ∗}. Then the cold Sinkhorn dynamics initialized at (f 0, g 0) is constant since U 0 is already optimal, while the Sinkhorn algorithm initialized at (f 0, g 0) for any 
+
+τ > 0 converges to U ∗ 
+
+> τ
+
+. Hence 
+
+lim   
+
+> τ→0
+
+lim  
+
+> t→∞
+
+max 
+
+> ij
+
+∣∣∣f ⌊2t/τ ⌋+2  
+
+> i
+
+− fi(t) + g⌊2t/τ ⌋+2  
+
+> j
+
+− gj (t)
+
+∣∣∣ = lim  
+
+> τ→0
+
+∥∥∥U ∗ 
+
+> τ
+
+− U 0∥∥∥∞
+
+=
+
+∥∥∥U ∗ − U 0∥∥∥∞
+
+> 0,
+
+implying that sup t≥0
+
+∥∥f ⌊2t/τ ⌋+2 − f (t)∥∥∞ + ∥∥g⌊2t/τ ⌋+2 − g(t)∥∥∞ is not oτ (1) in general. The remainder of this section is dedicated to the proofs of Thm. 4.1, Thm. 4.2. We start by a simple lemma quantifying the rate of convergence of fτ [·] to f0[·] as τ → 0.
+
+Lemma 4.3. For any φ ∈ RN and p ∈ ∆N ,
+
+log pmin ≤ log ∑ 
+
+> I
+
+eφI pI − max I φI ≤ 0.
+
+In particular, the mappings fτ [·] and gτ [·] defined in Sec. 2.1 satisfy 
+
+∀g ∈ Rn, ∥fτ [g] − f0[g]∥∞ ≤ − τ log νmin , ∀f ∈ Rm, ∥gτ [f ] − g0[f ]∥∞ ≤ − τ log μmin .
+
+Proof. Let φ ∈ RN , p ∈ ∆N and denote m = max I φI , S = argmax I φI , p(S) = ∑ 
+
+> I∈S
+
+pI . We have 
+
+log ∑ 
+
+> I
+
+eφI pI − m = log ∑ 
+
+> I
+
+eφI −mpI = log 
+
+( ∑
+
+> I∈S
+
+pI + ∑ 
+
+> I̸∈S
+
+eφI −mpI
+
+)
+
+= log p(S) + log 
+
+(
+
+1 + 
+
+∑  
+
+> I̸∈S
+
+eφI −mpI
+
+p(S)
+
+)
+
+≥ log p(S) ≥ log pmin 
+
+and in the other direction, log ∑ 
+
+> I
+
+eφI pI − m = log ∑ 
+
+> I
+
+eφI −mpI ≤ 0. The uniform bound on 
+
+fτ [·] − f0[·] follows by definition of fτ [g]i = −τ log ∑ 
+
+> j
+
+e[−Cij +gj ]/τ νj , and likewise for gτ [·].We can now proceed to the proof of Thm. 4.1. 
+
+Proof of Thm. 4.1. Throughout this proof, we use O(·), Ω( ·), Θ( ·) to hide constants that depend only on μ, ν , and C. Note that t1 ≤ ... ≤ tL = O(1) by Lem. 3.6. Moreover, we will say “for τ
+
+small enough” to mean that a statement holds provided τ ≤ τ0, for some constant τ0 = Θ(1) .Let us first check that for t = t0 = 0 , we have the pointwise estimate (f 2, g 2) = ( f (0) , g (0))+ O(τ ).Since f 2 = f 1 = fτ [g0] and g2 = gτ [f 1] by definition, this indeed follows from Lem. 4.3 and from the 1-Lipschitzness of g0[·]. For ease of notation, let us re-index the Sinkhorn iterates by shifting 19 back the index k by 2. That is, we consider henceforth the sequence (f k, g k)k≥− 2 initialized at some arbitrary (f −2, g −2), and we have (f 0, g 0) → (f (0) , g (0)) = ( f0[g−2], g 0[f0[g−2]]) as τ → 0.To prove the theorem, it suffices to show that for any 0 ≤ ℓ ≤ L − 1, for τ small enough, 
+
+sup 
+
+> t∈[tℓ,t ℓ+1 ]
+
+∣∣∣f ⌊2t/τ ⌋ − f (t)
+
+∣∣∣ +
+
+∣∣∣g⌊2t/τ ⌋ − g(t)
+
+∣∣∣ ≤ O (τ (log 1 /τ )2ℓ+3 ) .
+
+Since t 7 → (f (t), g (t)) is O(1) -Lipschitz by definition and t 7 → (f ⌊2t/τ ⌋, g ⌊2t/τ ⌋) is O(1) -Lipschitz by Lem. 2.5, then equivalently it suffices to show, for any 0 ≤ ℓ ≤ L − 1 and τ small enough, 
+
+sup   
+
+> ⌊2tℓ/τ ⌋≤ k≤⌊ 2tℓ+1 /τ ⌋
+
+∣∣f k − f (τ k/ 2) ∣∣ + ∣∣gk − g(τ k/ 2) ∣∣ ≤ O (τ (log 1 /τ )2ℓ+3 ) . (4.1) We show this by induction. For ℓ = 0 : Denote by ( ˜f k, ˜gk)k the iterates of the Sinkhorn algorithm applied to the EOT problem with the same target marginals μ, ν but with the cost matrix ˜Cij =
+
+{
+
+Cij if (i, j ) ∈ E 0
+
+∞ otherwise ,initialized at ( ˜f 0, ˜g0) = ( f 0, g 0). Also let ˜vk, ˜wk and ˜U k denote the associated variables as defined in (2.3), (2.4). Since ( ˜f 0, ˜g0) = ( f (0) , g (0)) + O(τ ) and (f (0) , g (0)) ∈ ∂F, then 
+
+∀(i, j ) ∈ E 0, τ ˜U 0 
+
+> ij
+
+= ˜f 0 
+
+> j
+
++ ˜ g0 
+
+> j
+
+− Cij = O(τ ).
+
+So we can apply Lem. 2.5 and Prop. 2.8 with δ = O(1) , and we get the following—where we still keep track of the dependency on δ explicitly for ease of presentation later on, and where we assume 
+
+δ ≥ Ω(1) without loss of generality: 
+
+∀k ≥ K0 = Θ( δ), ∥∥(˜ vk, ˜wk) − (v0, w 0)∥∥∞ = ∥∥(˜ vk, ˜wk) − (v∗(E0), w ∗(E0)) ∥∥∞ ≤ O(1) δ + log kk
+
+and ∀1 ≤ k ≤ 3, ∥∥˜vk∥∥∞ , ∥∥ ˜wk∥∥∞ ≤ O(δ)
+
+∀k ≥ 4, ∥∥˜vk∥∥∞ , ∥∥ ˜wk∥∥∞ ≤ O(1) .
+
+As a consequence, since ˜f k = ˜f k−2 + τ ˜vk and f (τ k/ 2) = f (τ (k − 2) /2) + τ v 0 for all k,
+
+• For all k ≤ K0 = Θ( δ),
+
+∥∥ ˜f k − f (τ k/ 2) ∥∥∞ ≤ ∥∥ ˜f k − ˜f 4∥∥∞+∥∥ ˜f 4 − ˜f 0∥∥∞+∥f (τ k/ 2) − f (0) ∥∞ ≤ O(τ k +δ) = O(τ δ ).
+
+• For all K0 ≤ k ≤ ⌊ 2t1/τ ⌋,
+
+∥∥ ˜f k − f (τ k/ 2) ∥∥∞ =
+
+∥∥∥∥∥∥∥
+
+˜f K0 − f (τ K 0/2) + 
+
+> k
+
+∑ 
+
+> l=K0
+> leven
+
+(τ ˜vl − τ v 0)∥∥∥∥∥∥∥∞
+
+≤ O(τ δ )+ 
+
+> k
+
+∑ 
+
+> l=K0
+> leven
+
+τ O (1) δ + log ll
+
+and so since ∑kl=1 l−1 log l ≍ 12 (log k)2,
+
+∥∥ ˜f k − f (τ k/ 2) ∥∥∞ ≤ O(τ (log k)( δ + log k)) ≤ O(τ (log 1 /τ )( δ + log 1 /τ )).
+
+We have likewise the analogous bound for the ˜gk.Next, let us show that (f k, g k) remains close to ( ˜f k, ˜gk) throughout the phase [t0, t 1), or to be exact, throughout some [t0, t 1 − oτ (1)) . Since ∀(i, j ) ∈ E 0, ˜U 0 
+
+> ij
+
+= O(1) as noted above, we can apply Lem. 2.7 with E = E0 and δ = O(1) , yielding—still keeping track of the dependency on δ explicitly for ease of later presentation: 
+
+∀k ≥ 0, ∥∥f k − ˜f k∥∥∞, ∥∥gk − ˜gk∥∥∞ ≤ τ O (1) e2δk−1∑
+
+> l=0
+
+e−M l
+
+where −M k = max 
+
+> (i,j )̸∈E 0
+
+[f ki +gkj −Cij ]/τ. 
+
+20 Denote likewise 
+
+− ˜M k = max 
+
+> (i,j )̸∈E 0
+
+[ ˜f ki + ˜ gkj − Cij ]/τ and − M (t) = max  
+
+> (i,j )̸∈E 0
+
+fi(t) + gj (t) − Cij .
+
+Fix K′ 
+
+> 0
+
+= ⌊2t1/τ ⌋ − (log 1 /τ )N for some large integer N to be chosen later. Then for any k ≤ K′
+
+> 0
+
+,
+
+∣∣M k − τ −1M (τ k/ 2) ∣∣ ≤
+
+∣∣∣M k − ˜M k
+
+∣∣∣ +
+
+∣∣∣ ˜M k − τ −1M (τ k/ 2) 
+
+∣∣∣
+
+≤ τ −1 ∥∥(f k, g k) − ( ˜f k, ˜gk)∥∥∞ + τ −1 ∥∥( ˜f k, ˜gk) − (f (τ k/ 2) , g (τ k/ 2)) ∥∥∞
+
+≤ O(1) e2δk−1∑
+
+> l=0
+
+e−M l
+
++ O((log 1 /τ )( δ + log 1 /τ )) 
+
+≤ O(1) e2δk−1∑
+
+> l=0
+
+e−τ −1M (τ l/ 2) e|M l−τ −1M (τ l/ 2) | + O((log 1 /τ )( δ + log 1 /τ )) .
+
+That is, denoting uk = ∣∣M k − τ −1M (τ k/ 2) ∣∣, bk = Θ(1) e2δ e−τ −1M (τ k/ 2) , and c = Θ(( log 1/τ )( δ +log 1 /τ )) ,
+
+∀0 ≤ k ≤ K′
+
+> 0
+
+, u k ≤ c +
+
+> k−1
+
+∑
+
+> l=0
+
+bl eul .
+
+So by the discrete Bihari-LaSalle inequality [Pac01, Theorem 2.3.1], 
+
+uk ≤ − log 
+
+(
+
+e−c −
+
+> k−1
+
+∑
+
+> l=0
+
+bl
+
+)
+
+euk = e|M k −τ −1M (τ k/ 2) | ≤
+
+(
+
+e−Θ((log 1 /τ )( δ+log 1 /τ )) − Θ(1) e2δk−1∑
+
+> l=0
+
+e−τ −1M (τ l/ 2) 
+
+)−1
+
+.
+
+Moreover, by definition of K′ 
+
+> 0
+
+= ⌊2t1/τ ⌋ − (log 1 /τ )N and of t1, for all k ≤ K′
+
+> 0
+
+,
+
+−M (τ k/ 2) ≤ −M (t1)
+
+︸ ︷︷ ︸
+
+> 0
+
+−Θ ( t1 − τ k/ 2) ≤ − Θ (τ (log 1 /τ )N ) (4.2) where the first Θ( ·) hides the constant min {v0 
+
+> i
+
++ w0 
+
+> j
+
+; ( i, j )̸ ∈ E 0 and v0 
+
+> i
+
++ w0 
+
+> j
+
+> 0}, which is indeed only dependent on μ and ν upon taking an infimum over all possible sets E0, since by definition 
+
+v0 = v∗(E0), w 0 = w∗(E0). Hence, 
+
+e|M k −τ −1M (τ k/ 2) | ≤
+
+(
+
+e−Θ((log 1 /τ )( δ+log 1 /τ )) − Θ(1) e2δ · ⌊ 2t1/τ ⌋e−Θ((log 1 /τ )N ))−1
+
+=
+
+(
+
+e−Θ((log 1 /τ )( δ+log 1 /τ )) − Θ(1) e2δ+log(1 /τ )−Θ((log 1 /τ )N ))−1
+
+= O
+
+(
+
+eΘ((log 1 /τ )( δ+log 1 /τ )) )
+
+for τ small enough, provided that δ + log 1 /τ = o((log 1 /τ )N −1). Thus, for all k ≤ K′
+
+> 0
+
+,
+
+∥∥f k − ˜f k∥∥∞ ≤ τ O (1) e2δk−1∑
+
+> l=0
+
+e−M l
+
+≤ τ O (1) e2δ · ⌊ 2t1/τ ⌋ max  
+
+> l≤k−1
+
+e−M l
+
+≤ O(1) e2δ max  
+
+> l≤k−1
+
+e−τ −1M (τ l/ 2) e|M l−τ −1M (τ l/ 2) |≤ O(1) e2δ e−Θ((log 1 /τ )N ) eΘ((log 1 /τ )( δ+log 1 /τ )) = O(1) e−Θ((log 1 /τ )N ) ≤ O(τ ), (4.3) again for τ small enough and provided that δ + log 1 /τ = o((log 1 /τ )N −1). In summary, we have 
+
+∀0 ≤ k ≤ K′
+
+> 0
+
+, ∥∥f k − f (τ k/ 2) ∥∥∞ ≤ ∥∥f k − ˜f k∥∥∞ + ∥∥ ˜f k − f (τ k/ 2) ∥∥
+
+≤ O(τ ) + O(τ (log 1 /τ )( δ + log 1 /τ ))
+
+for τ small enough and provided that δ + log 1 /τ = o((log 1 /τ )N −1), and likewise for the gk.21 It only remains to treat the K′ 
+
+> 0
+
+≤ k ≤ ⌊ 2t1/τ ⌋ where K′ 
+
+> 0
+
+= ⌊2t1/τ ⌋ − (log 1 /τ )N . In this case, 
+
+∥∥f k − f (τ k/ 2) ∥∥∞ ≤
+
+∥∥∥f K′ 
+
+> 0
+
+− f (τ K ′
+
+> 0
+
+/2) 
+
+∥∥∥∞
+
+︸ ︷︷ ︸    
+
+> ≤O(τ(log 1 /τ )( δ+log 1 /τ ))
+
++
+
+∥∥∥f k − f K′
+
+> 0
+
+∥∥∥∞
+
++ ∥f (τ k/ 2) − f (τ K ′
+
+> 0
+
+/2) ∥∞
+
+︸ ︷︷ ︸      
+
+> ≤O(τ)( k−K′
+> 0) = O(τ(log 1 /τ )N)
+
+since ∥∥vl∥∥∞ = O(1) for all l ≥ 3 by Lem. 2.5, and likewise for the gk.Since δ = O(1) , then by choosing N = 3 , we indeed have δ + log 1/τ = o(( log 1/τ )N −1)) , and so we obtain the claimed inequality (4.1) at rank ℓ = 0 .For 1 ≤ ℓ ≤ L − 1: Suppose the induction hypothesis (4.1) holds at rank ℓ − 1. In particular, 
+
+(f ⌊2tℓ/τ ⌋, g ⌊2tℓ/τ ⌋) = ( f (tℓ), g (tℓ)) + O (τ (log 1 /τ )2ℓ+1 ) and (f (tℓ), g (tℓ)) ∈ ∂F. So we can apply the same reasoning as described in detail for ℓ = 0 above, but this time with δ = ( log 1/τ )2ℓ+1 , and choosing N = (2 ℓ + 1) + 2 so that δ + log 1 /τ = o((log 1 /τ )N −1) is satisfied. Next, we prove Thm. 4.2, showing uniform convergence over an arbitrarily large portion of the final phase, with constants that may additionally depend on the initialization. 
+
+Proof of Thm. 4.2. The uniform bound over 0 ≤ t ≤ tL was shown in Thm. 4.1, so it suffices to show the bound over tL ≤ t ≤ tL + τ −1. For clarity, to more easily keep track of which coefficients come from what, we will show a slightly stronger version of the statement: we show a uniform bound over all tL ≤ t ≤ tL + τ −α for an arbitrary fixed α ≥ 1.Similar to the previous proof, throughout this proof we use O(·), Ω( ·), Θ( ·) to hide constants that depend only on μ, ν, C, (f 0, g 0), and α, and we will say “for τ small enough” to mean that a statement holds provided τ ≤ τ ′ 
+
+> 0
+
+for some constant τ ′ 
+
+> 0
+
+= Θ(1) . We also re-index the Sinkhorn iterates by shifting back the index k by 2. Recall that the cold Sinkhorn dynamics is stationary: 
+
+∀t ≥ tL, (f (t), g (t)) = ( f (tL), g (tL)) , as shown in Lem. 3.5. Introduce ( ˜f k, ˜gk)k the iterates of the Sinkhorn algorithm for the EOT problem with target marginals μ, ν and cost matrix ˜Cij =
+
+{
+
+Cij if (i, j ) ∈ E L
+
+∞ otherwise , initialized at ( ˜f ⌊2tL/τ ⌋, ˜g⌊2tL/τ ⌋) = (f ⌊2tL/τ ⌋, g ⌊2tL/τ ⌋). By Thm. 4.1, we have (f ⌊2tL/τ ⌋, g ⌊2tL/τ ⌋) = ( f (tL), g (tL)) + O (τ (log 1 /τ )2L+1 ),and by definition (f (tL), g (tL)) ∈ ∂F.Denote for concision 
+
+kL = ⌊2tL/τ ⌋, kL+1 = ⌊2( tL + τ −α)/τ ⌋ = kL + Θ( τ −α−1).
+
+By the same reasoning as in the proof of Thm. 4.1 up until (4.2) excluded, we find that 
+
+∀kL + Θ( δ) ≤ k ≤ kL+1 , ∥∥ ˜f k − f (τ k/ 2) ∥∥∞ ≤ O(τ log( k − kL)( δ + log( k − kL)) )
+
+≤ O(τ (log 1 /τ )( δ + log 1 /τ ))
+
+where δ = O ((log 1 /τ )2L+1 ), for τ small enough, and likewise for the ˜gk. Still by the same reasoning, 
+
+∀kL ≤ k ≤ kL+1 , ∥∥f k − ˜f k∥∥∞ ≤ τ O (1) e2δ · O(τ −α−1) max  
+
+> kL≤l≤k−1
+
+e−τ −1M (τ l/ 2) e|M l−τ −1M (τ l/ 2) |
+
+and likewise for the gk, and 
+
+∀kL ≤ k ≤ kL+1 , e|M k −τ −1M (τ k/ 2) | ≤
+
+(
+
+e−Θ((log 1 /τ )( δ+log 1 /τ )) − Θ(1) e2δk−1∑
+
+> l=kL
+
+e−τ −1M (τ l/ 2) 
+
+)−1
+
+where − M k = max 
+
+> (i,j )̸∈E L
+
+[f ki + gkj − Cij ]/τ and − M (t) = max 
+
+> (i,j )̸∈E L
+
+fi(t) + gj (t) − Cij .
+
+However, we do not have an analog of the estimate on −M (τ k/ 2) from (4.2) anymore. Instead, 
+
+∀t ≥ tL, −M (t) = −M (tL) = −Θ(1) 
+
+by stationarity of the cold Sinkhorn dynamics. Here the right-hand side is strictly negative and independent of t and τ , but it may depend on the initialization (f (0) , g (0)) of the dynamics—and so on the initialization (f 0, g 0) of the Sinkhorn algorithm—a priori. 22 By continuing to follow the same reasoning as in the proof of Thm. 4.1, albeit with constants that may depend on (f 0, g 0) instead of only on μ, ν, C , we similarly obtain 
+
+∀kL ≤ k ≤ kL+1 , e|M k −τ −1M (τ k/ 2) | ≤
+
+(
+
+e−Θ((log 1 /τ )( δ+log 1 /τ )) − Θ(1) e2δ · O(τ −α−1)e−Θ( τ −1))−1
+
+=
+
+(
+
+e−Θ((log 1 /τ )( δ+log 1 /τ )) − Θ(1) e2δ+O(log(1 /τ )) −Θ( τ −1))−1
+
+≤ O
+
+(
+
+eΘ((log 1 /τ )( δ+log 1 /τ )) )
+
+and ∥∥f k − ˜f k∥∥∞ ≤ O(τ −α) e2δ e−Θ( τ −1) O
+
+(
+
+eΘ((log 1 /τ )( δ+log 1 /τ )) )
+
+≤ O(τ )
+
+(4.4) and ∥∥f k − f (τ k/ 2) ∥∥∞ ≤ ∥∥f k − ˜f k∥∥∞ + ∥∥ ˜f k − f (τ k/ 2) ∥∥
+
+≤ O(τ ) + O(τ (log 1 /τ )( δ + log 1 /τ ))
+
+for τ small enough, and likewise for the gk, where we recall that δ = O ((log 1 /τ )2L+1 ).
+
+## 4.2 An improved convergence guarantee for the Sinkhorn algorithm 
+
+In this section, we formalize the following reasoning. We have shown in Sec. 3.3 that the cold Sinkhorn dynamics (f (t), g (t)) converges in finite time tL, and in Sec. 4.1 that the Sinkhorn iterates (f k, g k)
+
+stay ˜O(τ )-close to (f (τ k/ 2) , g (τ k/ 2)) until tL. Since moreover the dual objectives Ψ0 and Ψτ differ essentially by O(τ ) and are Lipschitz-continuous, this implies that at iteration k = ⌊2tL/τ ⌋ = Θ(1 /τ ),the Sinkhorn algorithm reaches dual suboptimality Ψτ (f k, g k) − min Ψ τ ≤ ˜O(τ ).This convergence guarantee is new: previous works analyzing Sinkhorn show either exponential convergence but with a poor dependency on τ , or polynomial convergence bounds in Ψτ (f k, g k) −
+
+min Ψτ ≤ O(1 /(τ k )) [DGK18]. So according to previous works, dual suboptimality ≤ ˜O(τ ) can be ensured by using k = O(1 /τ 2) iterations, while our result shows that actually k = Θ(1 /τ ) is sufficient. Furthermore, our argument based on the cold Sinkhorn dynamics also implies that 
+
+k = Θ(1 /τ ) is sharp. 
+
+Theorem 4.4. Denote by (f k, g k)k the iterates of the Sinkhorn algorithm applied to (1.2) . Then there exist constants T, B dependent only on μ, ν , and C such that 
+
+∀k ≥ T /τ, Ψτ (f k, g k) − min Ψ τ ≤ B τ (log 1 /τ )2L+1 .
+
+Moreover, there exist constants T ′, B ′, B ′′ > 0 dependent only on μ, ν, C , and (f 0, g 0) such that either (f0[g0], g 0[f0[g0]]) ∈ argmin F Ψ0 or 
+
+∀k ≤ T ′/τ, Ψτ (f k, g k) − min Ψ τ ≥ B′ − B′′ τ (log 1 /τ )2L+1 .
+
+Proof. Denote by (f (t), g (t)) the cold Sinkhorn dynamics applied to (1.1) initialized at (f (0) , g (0)) = (f0[g0], g 0[f0[g0]]) . By Thm. 4.1, for kL = ⌊2tL/τ ⌋ + 2 , we have 
+
+∥∥f kL − f (tL)∥∥∞ + ∥∥gkL − g(tL)∥∥∞ ≤ B τ (log 1 /τ )2L+1 
+
+for some B dependent only on μ, ν , and C. Recall that for any k ≥ 1, Zτ (f k, g k) = 1 and so 
+
+Ψτ (f k, g k) = −μ⊤f k − ν⊤gk = Ψ 0(f k, g k). Hence, by 1-Lipschitz-continuity of Ψ0,
+
+Ψτ (f kL , g kL ) = Ψ 0(f kL , g kL ) ≤ Ψ0(f (tL), g (tL)) + ∥∥f kL − f (tL)∥∥∞ + ∥∥gkL − g(tL)∥∥∞
+
+≤ min Ψ 0 + B τ (log 1 /τ )2L+1 
+
+since Ψ0(f (tL), g (tL)) = min Ψ0 by Lem. 3.5. Now |min Ψ 0 − min Ψ τ | is equal to the difference between the optimal values of the primal OT/EOT problems (1.1) and (1.2) , so |min Ψ 0 − min Ψ τ | ≤ 
+
+τ max π∈∆m×n H (π∥μ ⊗ ν) = −τ log( μmin νmin ). Thus, 
+
+Ψτ (f kL , g kL ) − min Ψ τ ≤ − τ log( μmin νmin ) + B τ (log 1 /τ )2L+1 ,
+
+23 and the same holds for all k ≥ kL since (Ψ τ (f k, g k)) k is non-increasing along the Sinkhorn algorithm by definition. In particular, recall from Lem. 3.6 that tL is upper-bounded by a constant 
+
+T dependent only on μ, ν , and C (and independent of (f (0) , g (0)) ); then the above bound holds for all k ≥ ⌊ 2T /τ ⌋ + 2 . This proves the first part of the lemma. For the second part, i.e., the lower bound, suppose that (f0[g0], g 0[f0[g0]]) ̸ ∈ argmin F Ψ0. Then note that tL > 0 and Ψ0(f (tL/2) , g (tL/2)) −min Ψ0 > 0, and that these two quantities are dependent only on μ, ν, C , and (f 0, g 0). So for k′ 
+
+> L
+
+= ⌊tL/τ ⌋ + 2 ,
+
+Ψτ (f k′ 
+
+> L
+
+, g k′ 
+
+> L
+
+) − min Ψ τ ≥ Ψ0(f k′ 
+
+> L
+
+, g k′ 
+
+> L
+
+) − min Ψ 0 + τ log( μmin νmin )
+
+≥ Ψ0(f (tL/2) , g (tL/2)) − min Ψ 0 −
+
+∥∥∥f k′ 
+
+> L
+
+− f (tL/2) 
+
+∥∥∥∞
+
+−
+
+∥∥∥gk′ 
+
+> L
+
+− g(tL/2) 
+
+∥∥∥∞
+
++ τ log( μmin νmin )
+
+≥ Ψ0(f (tL/2) , g (tL/2)) − min Ψ 0 − B τ (log 1 /τ )2L+1 + τ log( μmin νmin ).
+
+Finally, the same lower bound holds for all k ≤ k′ 
+
+> L
+
+since (Ψ τ (f k, g k)) k is non-increasing along the Sinkhorn algorithm. We can also deduce a corresponding convergence bound in terms of the alternative suboptimality metric Ek = ∥∥X♯πk − μ∥∥1 + ∥∥Y♯πk − ν∥∥1, where πk = πτ [f k, g k] are the primal Sinkhorn iterates. Our new result guarantees that Ek ≤ ˜O(√τ ) as soon as k = Θ(1 /τ ), instead of k = O(τ −3/2) as previous works would suggest since the best applicable bound is Ek ≤ O(1 /(τ k )) [DGK18]. 
+
+Corollary 4.5. Denote by (πk)k the primal iterates of the Sinkhorn algorithm applied to (1.2) .Then there exist constants T, B dependent only on μ, ν , and C such that 
+
+∀k ≥ T /τ, ∥∥X♯πk − μ∥∥1 + ∥∥Y♯πk − ν∥∥1 ≤ B √τ (log 1 /τ )L+1/2 .
+
+Proof. By [Wan26, proof of Lemma 2.5], for any k ≥ 2,
+
+E2 
+
+> k
+
+≤ 8
+
+τ k 
+
+(
+
+Ψτ (f ⌈k/ 2⌉, g ⌈k/ 2⌉) − min Ψ τ
+
+)
+
+.
+
+So by Thm. 4.4, there exist T, B dependent only on μ, ν , and C such that for all k ≥ 2T /τ ,
+
+E2 
+
+> k
+
+≤ 8
+
+τ k · B τ (log 1 /τ )2L+1 ≤ 82T · B τ (log 1 /τ )2L+1 = B′ τ (log 1 /τ )2L+1 
+
+with B′ dependent only on μ, ν , and C, as announced. 
+
+## 4.3 The case with exactly scalable sub-problems 
+
+The proof of the convergence of Sinkhorn to cold Sinkhorn presented in Sec. 4 is fully general, but it is relatively intricate. In this section, we show an alternative proof under the following additional assumption. In words, in view of Lem. 2.9, our assumption is that the sub-problems encountered by the dynamics are exactly scalable. 
+
+Assumption 1. Consider a run of the cold Sinkhorn dynamics as defined in Def. 3.1. For each 
+
+ℓ ≤ L, consider the sets Sℓ, Sℓ associated to μ, ν , and Eℓ as defined by Thm. 2.3. We assume that 
+
+∀0 ≤ ℓ ≤ L, Sℓ = Sℓ.
+
+In our numerical experiments, this assumption appeared to hold generically, so the analysis presented in this section may be closer to typical practical behavior. Under this assumption, the convergence of (vk, w k) to (vℓ, w ℓ) at each “phase transition” is exponentially fast, thanks to Prop. 2.10. This leads to the following variant of Thm. 4.1 without log factors in the upper bound. Similar to Thm. 4.2, one could also show that uniform convergence holds over an arbitrarily large portion of the final phase without log factors, but we do not develop this here. 24 Theorem 4.6. Let (f k, g k)k denote the iterates of the Sinkhorn algorithm applied to (1.2) initialized at some (f 0, g 0). Let (f (t), g (t)) denote the cold Sinkhorn dynamics applied to (1.1) initialized at 
+
+(f (0) , g (0)) = ( f0[g0], g 0[f0[g0]]) ∈ ∂F. Suppose that Assum. 1 holds. Then for any τ ≤ τ0,
+
+sup 
+
+> 0≤t≤tL
+
+∥∥∥f ⌊2t/τ ⌋+2 − f (t)
+
+∥∥∥∞
+
++
+
+∥∥∥g⌊2t/τ ⌋+2 − g(t)
+
+∥∥∥∞
+
+≤ B τ, 
+
+for some constants τ0, B dependent only on μ, ν , and C.Proof. We use the same conventions for O(·), Ω( ·), Θ( ·) as in the proof of Thm. 4.1, that is, they hide constants that depend only on μ, ν , and C. We also perform the same re-indexing of the Sinkhorn iterates by shifting back the index k by 2, so that (f 0, g 0) = ( f (0) , g (0)) + O(τ ) by Lem. 4.3. It suffices to show by induction that for any 0 ≤ ℓ ≤ L − 1, for τ small enough, 
+
+sup   
+
+> ⌊2tℓ/τ ⌋≤ k≤⌊ 2tℓ+1 /τ ⌋
+
+∣∣f k − f (τ k/ 2) ∣∣ + ∣∣gk − g(τ k/ 2) ∣∣ ≤ O(τ ). (4.5) For ℓ = 0 : As in the proof of Thm. 4.1, denote by ( ˜f k, ˜gk)k the iterates of the Sinkhorn algorithm applied to the EOT problem with target marginals μ, ν and cost matrix ˜Cij =
+
+{
+
+Cij if (i, j ) ∈ E 0
+
+∞ otherwise ,initialized at ( ˜f 0, ˜g0) = ( f 0, g 0). Denote by ˜vk, ˜wk and ˜U k the associated variables as in (2.3) , (2.4) .Since ( ˜f 0, ˜g0) = ( f (0) , g (0)) + O(τ ) by Lem. 4.3 and (f (0) , g (0)) ∈ ∂F, then 
+
+∀(i, j ) ∈ E 0, τ ˜U 0 
+
+> ij
+
+= ˜f 0 
+
+> j
+
++ ˜ g0 
+
+> j
+
+− Cij = O(τ ).
+
+So by Lem. 2.5 and Prop. 2.10 with δ = Θ(1) ,
+
+∀k ≥ K0 = Θ(1) , ∥∥(˜ vk, ˜wk) − (v0, w 0)∥∥∞ = ∥∥(˜ vk, ˜wk) − (v∗(E0), w ∗(E0)) ∥∥∞ ≤ O(1) 
+
+(
+
+1 − e−Θ(1) )k
+
+and ∀k ≥ 1, ∥∥˜vk∥∥∞ , ∥∥ ˜wk∥∥∞ ≤ O(1) .
+
+As a consequence, since ˜f k = ˜f k−2 + τ ˜vk and f (τ k/ 2) = f (τ (k − 2) /2) + τ v 0 for all k,
+
+• For all k ≤ K0 = Θ(1) , ∥∥ ˜f k − f (τ k/ 2) ∥∥∞ ≤ O(τ k ) = O(τ ),
+
+• For all K0 ≤ k ≤ ⌊ 2t1/τ ⌋,
+
+∥∥ ˜f k − f (τ k/ 2) ∥∥∞ ≤ O(τ ) + 
+
+> k
+
+∑ 
+
+> l=K0
+> leven
+
+τ O (1) 
+
+(
+
+1 − e−Θ(1) )l
+
+≤ O(τ )
+
+> ∞
+
+∑
+
+> l=0
+
+(
+
+1 − e−Θ(1) )l
+
+= O(τ ),
+
+and likewise for the ˜gk.Next, still following the proof of Thm. 4.1, let us show that (f k, g k) remains close to ( ˜f k, ˜gk)
+
+essentially throughout the phase. By Lem. 2.7 with E = E0 and δ = O(1) , we have 
+
+∀k ≥ 0, ∥∥f k − ˜f k∥∥∞, ∥∥gk − ˜gk∥∥∞ ≤ τ O (1) 
+
+> k−1
+
+∑
+
+> l=0
+
+e−M l
+
+where −M k = max 
+
+> (i,j )̸∈E 0
+
+[f ki +gkj −Cij ]/τ. 
+
+Denote likewise 
+
+− ˜M k = max 
+
+> (i,j )̸∈E 0
+
+[ ˜f ki + ˜ gkj − Cij ]/τ and − M (t) = max  
+
+> (i,j )̸∈E 0
+
+fi(t) + gj (t) − Cij .
+
+Fix K′ 
+
+> 0
+
+= ⌊2t1/τ ⌋ − ∆ for some large ∆ > 0 to be chosen later. Then for any k ≤ K′
+
+> 0
+
+,
+
+∣∣M k − τ −1M (τ k/ 2) ∣∣ ≤
+
+∣∣∣M k − ˜M k
+
+∣∣∣ +
+
+∣∣∣ ˜M k − τ −1M (τ k/ 2) 
+
+∣∣∣
+
+≤ τ −1 ∥∥(f k, g k) − ( ˜f k, ˜gk)∥∥∞ + τ −1 ∥∥( ˜f k, ˜gk) − (f (τ k/ 2) , g (τ k/ 2)) ∥∥∞
+
+≤ O(1) 
+
+> k−1
+
+∑
+
+> l=0
+
+e−τ −1M (τ l/ 2) e|M l−τ −1M (τ l/ 2) | + O(1) .
+
+25 So by the discrete Bihari-LaSalle inequality [Pac01, Theorem 2.3.1], 
+
+e|M k −τ −1M (τ k/ 2) | ≤
+
+(
+
+e−Θ(1) − Θ(1) 
+
+> k−1
+
+∑
+
+> l=0
+
+e−τ −1M (τ l/ 2) 
+
+)−1
+
+.
+
+Moreover, by definition of K′ 
+
+> 0
+
+= ⌊2t1/τ ⌋ − ∆ and of t1, for all k ≤ K′
+
+> 0
+
+,
+
+−M (τ k/ 2) ≤ −M (t1)
+
+︸ ︷︷ ︸
+
+> 0
+
+−ξ (t1 − τ k/ 2) 
+
+where ξ = min {v0 
+
+> i
+
++ w0 
+
+> j
+
+; ( i, j )̸ ∈ E 0 and v0 
+
+> i
+
++ w0 
+
+> j
+
+> 0} = Θ(1) . Hence, for all k ≤ K′
+
+> 0
+
+,
+
+> k−1
+
+∑
+
+> l=0
+
+e−τ −1M (τ l/ 2) ≤
+
+> K′
+> 0
+
+∑
+
+> l=0
+
+e−τ −1ξ(t1−τ l/ 2) = 
+
+> ⌊2t1/τ ⌋− ∆
+
+∑
+
+> l=0
+
+e−(ξ/ 2)(2 t1/τ −l) ≤
+
+> ∞
+
+∑
+
+> l=∆
+
+e−(ξ/ 2) l ≤ O(e−ξ∆/2)
+
+and so, 
+
+e|M k −τ −1M (τ k/ 2) | ≤
+
+(
+
+e−Θ(1) − O(e−ξ∆/2)
+
+)−1
+
+≤
+
+( 12 e−Θ(1) 
+
+)−1
+
+= O(1) 
+
+for ∆ = Θ(1) large enough. Thus, for all k ≤ K′
+
+> 0
+
+, e−M k
+
+≤ e−τ −1M (τ k/ 2) · O(1) and 
+
+∥∥f k − ˜f k∥∥∞ , ∥∥gk − ˜gk∥∥∞ ≤ τ O (1) 
+
+> k−1
+
+∑
+
+> l=0
+
+e−M l
+
+≤ τ O (1) 
+
+> k−1
+
+∑
+
+> l=0
+
+e−τ −1M (τ l/ 2) ≤ τ O (1) .
+
+It only remains to treat the iterates K′ 
+
+> 0
+
+= ⌊2t1/τ ⌋ − ∆ ≤ k ≤ ⌊ 2t1/τ ⌋. In this case, 
+
+∥∥f k − f (τ k/ 2) ∥∥∞ ≤
+
+∥∥∥f K′ 
+
+> 0
+
+− f (τ K ′
+
+> 0
+
+/2) 
+
+∥∥∥∞
+
+︸ ︷︷ ︸ 
+
+> ≤O(τ)
+
++
+
+∥∥∥f k − f K′
+
+> 0
+
+∥∥∥∞
+
++ ∥f (τ k/ 2) − f (τ K ′
+
+> 0
+
+/2) ∥∞
+
+︸ ︷︷ ︸  
+
+> ≤O(τ∆)= O(τ)
+
+since ∥∥vl∥∥∞ = O(1) for all l ≥ 3 by Lem. 2.5, and likewise for the gk.For 1 ≤ ℓ ≤ L − 1: Suppose the induction hypothesis (4.5) holds at rank ℓ − 1. In particular, 
+
+(f ⌊2tℓ/τ ⌋, g ⌊2tℓ/τ ⌋) = ( f (tℓ), g (tℓ)) + O(τ ) and (f (tℓ), g (tℓ)) ∈ ∂F. So we can apply the exact same reasoning as described in detail for ℓ = 0 above. 
+
+Remark 4.3 . Neither the proof of Thm. 4.1 nor that of Thm. 4.6 really follow the intuitive picture given in Sec. 3.1: there is no notion of “phase transition period” appearing in the proofs. In the case with exactly scalable sub-problems, it would indeed be possible to formalize the intuitive picture, with the caveat that the phase transitions last for K′ = Θ( log 1/τ ) iterations (instead of Θ(1) as stated in the Ansatz from Sec. 3.1). But this approach would yield a bound with logarithmic factors, which Thm. 4.6 shows are avoidable in this case. 
+
+# 5 Saddle-to-saddle behavior of the primal variable 
+
+The previous sections provided a complete description of the small-τ behavior of the Sinkhorn algorithm in terms of the dual variables (f k, g k). In this section, we show that an explicit description is also available for the primal variables πk, which we recall are defined by πkij = e[−Cij +f ki +gkj ]/τ μiνj
+
+for all k ≥ 1.To state our result more easily, let us first introduce some notation. 26 Lemma 5.1. For any μ ∈ ∆m, ν ∈ ∆n, C ∈ Rm×n, for any E ⊂ { 1 . . . m } × { 1 . . . n } such that the bipartite graph with edge set E has no isolated vertex, for any τ > 0, denote 
+
+Q∗ 
+
+> τ
+
+(μ, ν, E, C ) = argmin 
+
+> Q∈∆E
+
+∑
+
+> (i,j )∈E
+
+Cij Qij + τ H (Q∥μ ⊗ ν) subject to X♯Q = μ∗(E), Y♯Q = ν, P ∗ 
+
+> τ
+
+(μ, ν, E, C ) = argmin  
+
+> P∈∆E
+
+∑
+
+> (i,j )∈E
+
+Cij Pij + τ H (P ∥μ ⊗ ν) subject to X♯P = μ, Y♯P = ν∗(E).
+
+Then, 
+
+• For πk the primal iterates of the Sinkhorn algorithm applied to the EOT problem with target marginals μ, ν and cost matrix ˜Cij =
+
+{
+
+Cij if (i, j ) ∈ E ∞ otherwise , we have π2k → Q∗ 
+
+> τ
+
+(μ, ν, E, C ) and 
+
+π2k+1 → P ∗ 
+
+> τ
+
+(μ, ν, E, C ) as k → ∞ .
+
+• The following limits exist: 
+
+Q∗
+
+> 0
+
+(μ, ν, E, C ) := lim   
+
+> τ→0
+
+Q∗ 
+
+> τ
+
+(μ, ν, E, C ), P ∗ 
+
+> 0
+
+(μ, ν, E, C ) := lim   
+
+> τ→0
+
+P ∗ 
+
+> τ
+
+(μ, ν, E, C ).
+
+Proof. The first item is precisely the content of [BV24, Theorem 3.2]. The second item is a consequence of [CM94, Proposition 4.1]. Our result is as follows. Contrary to Sec. 4, here we only show a qualitative pointwise convergence without a rate, for simplicity. 
+
+Theorem 5.2. Let (πk)k denote the primal iterates of the Sinkhorn algorithm applied to (1.2) 
+
+initialized at some (f 0, g 0). Consider the phase transition times t0 = 0 < t 1 < ... < t L < t L+1 = ∞
+
+and the sets (Eℓ)0≤ℓ≤L appearing in the cold Sinkhorn dynamics initialized at (f0[g0], g 0[f0[g0]]) , as defined in Def. 3.1. Then for any 0 ≤ ℓ ≤ L,
+
+∀tℓ < t < t ℓ+1 ,
+
+(
+
+π2⌊t/τ ⌋+2 , π 2⌊t/τ ⌋+3 )
+
+→ (πℓ
+
+> even
+
+, π ℓ
+
+> odd
+
+)
+
+where for each ℓ,
+
+πℓ 
+
+> even
+
+= Q∗
+
+> 0
+
+(μ, ν, Eℓ, C ), πℓ 
+
+> odd
+
+= P ∗ 
+
+> 0
+
+(μ, ν, Eℓ, C ).
+
+Remark 5.1 . This description of the cold Sinkhorn dynamics is not self-contained, as it does not specify how the sets Eℓ are defined. One could hope to formulate a recursive relation that jointly determines the sequence (πℓ
+
+> even
+
+, π ℓ
+
+> odd
+
+, Eℓ)
+
+> ℓ
+
+, but we expect that such a formulation is actually impossible. Indeed, at any phase ℓ ≤ L−1, the next set Eℓ+1 depends on the value of fi(tℓ)+ gj (tℓ)−
+
+Cij for some index (i, j )̸ ∈ E ℓ, while the knowledge of πℓ
+
+> even
+
+, π ℓ
+
+> odd
+
+, and Eℓ does not contain any information on the Cij for (i, j )̸ ∈ E ℓ since supp (πℓ
+
+> even
+
+) = supp (πℓ
+
+> odd
+
+) ⊂ E ℓ by definition. Instead, it could be interesting to try and characterize Eℓ via some auxiliary parametric minimization problem, similar to what was achieved in [Ber23] in a related context. A fortiori, interpreting the cold Sinkhorn dynamics as a mirror flow by adapting the framework of [Lég21] is impossible, contrary to the parabolic Monge-Ampère equation [DKPS23]. Indeed, this framework prescribes to track the variable μ(t) = lim τ →0 X♯π2⌊t/τ ⌋ along the limiting dynamics. But the theorem above shows that μ(t) is piecewise constant with ∀tℓ < t < t ℓ+1 , μ (t) = μ∗(Eℓ), so its evolution over t ∈ R+ cannot be described by an autonomous ODE. In a sense, the behavior of the Sinkhorn algorithm with small τ is really driven by the evolution of the logits [−Cij + f ki + gkj ]/τ at all indices (i, j ), even the ones for which πkij = e−Θ(1 /τ ) ≪ 1—which a perspective centered only on the primal variables πk is likely to miss. 
+
+Proof. Denote by (f k, g k) the dual Sinkhorn iterates, so that πkij = e[−Cij +fi+gj ]/τ μiνj for all k ≥ 1.For convenience, let us re-index all the iterates by shifting back the index k by 2. Throughout this proof, we use O(·), Ω( ·), Θ( ·) to hide constants dependent on μ, ν, C , and (f 0, g 0), and we use ˜O(·)
+
+to additionally hide poly-logarithmic factors in 1/τ .27 Fix 0 ≤ ℓ ≤ L, let kℓ = ⌊2tℓ/τ ⌋, and denote by ( ˜f k, ˜gk)k≥kℓ the iterates of the Sinkhorn algorithm applied to the EOT problem with target marginals μ, ν and cost matrix ˜Cij =
+
+{
+
+Cij if (i, j ) ∈ E ℓ
+
+∞ otherwise ,initialized at ( ˜f kℓ , ˜gkℓ ) = ( f kℓ , g kℓ ). Further denote ˜πk =
+
+(
+
+e[− ˜Cij + ˜f ki +˜ gkj ]/τ μiνj
+
+) 
+
+> ij
+
+∈ ∆Eℓ for all 
+
+k ≥ kℓ + 1 .Note that for all k,
+
+H (˜πk∥∥πk) = ∑
+
+> (i,j )∈E ℓ
+
+˜πkij log ˜πkij 
+
+πkij 
+
+= ∑
+
+> (i,j )∈E ℓ
+
+˜πkij 
+
+˜f ki − f ki + ˜ gkj − gkj
+
+τ ≤ 1
+
+τ
+
+(∥ ∥ ˜f k − f k∥∥∞ + ∥∥˜gk − gk∥∥∞
+
+) .
+
+Now as we showed at step (4.3) of the proof of Thm. 4.1, we have for all 0 ≤ ℓ ≤ L − 1
+
+∀tℓ + ˜O(τ ) ≤ t ≤ tℓ+1 − ˜O(τ ),
+
+∥∥∥f ⌊2t/τ ⌋ − ˜f ⌊2t/τ ⌋
+
+∥∥∥∞
+
+≤ e−Θ((log 1 /τ )2L+1 ) ≤ O(τ 2),
+
+and so H
+
+(
+
+˜π⌊2t/τ ⌋
+
+∥∥∥π⌊2t/τ ⌋)
+
+≤ O(τ ) = oτ (1) .
+
+Likewise, for ℓ = L, as we showed at step (4.4) of the proof of Thm. 4.2, 
+
+∀tL + ˜O(τ ) ≤ t ≤ tL + Θ(1 /τ ),
+
+∥∥∥f ⌊2t/τ ⌋ − ˜f ⌊2t/τ ⌋
+
+∥∥∥∞
+
+≤ e−Θ( τ −1) ≤ O(τ 2),
+
+and so H
+
+(
+
+˜π⌊2t/τ ⌋
+
+∥∥∥π⌊2t/τ ⌋)
+
+≤ O(τ ) = oτ (1) .
+
+Next, let ˜π∞ 
+
+> even
+
+= Q∗ 
+
+> τ
+
+(μ, ν, Eℓ, C ) and ˜π∞ 
+
+> odd
+
+= P ∗ 
+
+> τ
+
+(μ, ν, Eℓ, C ). Then by the first item of Lem. 5.1, 
+
+˜π2k → ˜π∞ 
+
+> even
+
+and ˜π2k+1 → ˜π∞ 
+
+> odd
+
+as k → ∞ . Moreover, one can show by adapting the proof of Prop. 2.8 that the convergence occurs at a time-scale governed by δ = max (i,j )∈E ℓ
+
+∣∣∣Cij − ˜f kℓ 
+
+> i
+
+− ˜gkℓ
+
+> j
+
+∣∣∣,and more precisely, 
+
+∀k ≥ kℓ/2 + Θ(1 ∨ δ), H (˜π∞
+
+> even
+
+∥∥˜π2k) , H (˜π∞
+
+> odd
+
+∥∥˜π2k+1 ) ≤ O
+
+( (δ + log k)2
+
+k
+
+)
+
+.
+
+Now as remarked in the proof of Thm. 4.1, δ = O((log 1 /τ )N ) where N = 2 L + 1 , so 
+
+∀k ≥ kℓ/2 + Θ((log 1 /τ )2N +1 ), H (˜π∞
+
+> even
+
+∥∥˜π2k) , H (˜π∞
+
+> odd
+
+∥∥˜π2k+1 ) ≤ O
+
+( 1log(1 /τ )
+
+)
+
+= oτ (1) .
+
+The theorem statement now follows by triangle inequality and Pinsker’s inequality. Indeed for all t ∈ ⋃
+
+> 0≤ℓ≤L−1
+
+[tℓ + ˜O(τ ), t ℓ+1 − ˜O(τ )] ∪ [tL + ˜O(τ ), t L + Θ(1 /τ )] , we get 
+
+∥∥∥π2⌊t/τ ⌋ − πℓ
+
+> even
+
+∥∥∥1
+
+≤
+
+∥∥∥π2⌊t/τ ⌋ − ˜π2⌊t/τ ⌋
+
+∥∥∥1
+
++
+
+∥∥∥˜π2⌊t/τ ⌋ − ˜π∞
+
+> even
+
+∥∥∥1
+
++ ∥∥˜π∞ 
+
+> even
+
+− πℓ
+
+> even
+
+∥∥1
+
+≤
+
+√
+
+2H (π2⌊t/τ ⌋∥∥˜π2⌊t/τ ⌋) +
+
+√
+
+2H (˜π∞
+
+> even
+
+∥∥˜π2⌊t/τ ⌋) + ∥∥Q∗ 
+
+> τ
+
+(μ, ν, Eℓ, C ) − Q∗
+
+> 0
+
+(μ, ν, Eℓ, C )∥∥1
+
+= oτ (1) ,
+
+and likewise for the odd iterations. 
+
+# 6 Conclusion 
+
+In this paper, we analyzed the behavior of the Sinkhorn algorithm for discrete EOT computation in the regime of low regularization parameter τ . We showed that in this regime, Sinkhorn effectively implements a certain simplex-type algorithm for unregularized OT computation, termed the cold Sinkhorn dynamics. More precisely, the sequence of dual Sinkhorn iterates (f k, g k)k converges to a 28 continuous curve (f (t), g (t)) which moves piecewise-linearly along the boundary of the dual OT problem’s feasibility polytope, and converges to an optimal dual solution after a finite number L
+
+of phases. Leveraging this fact, we also deduced a novel convergence guarantee for the Sinkhorn algorithm itself. 
+
+From a technical perspective, our work leaves open a number of natural questions. Firstly, we were rather loose with the constants appearing in our analysis, so it is unclear how small τ must be for our bounds to be meaningful. In particular, numerical experiments suggest that even for large 
+
+m, n , the cold Sinkhorn dynamics regime can kick in at relatively large values of τ , and it would be interesting to determine whether τ = o( 1log( mn ) )—the regime advocated by [ANR17]—suffices. Secondly, the dual iterates (f k, g k) appear to trace out a smooth curve even when τ is small but not infinitesimal (cf Fig. 1), which would be interesting to characterize. In other words, the question is to describe more finely the behavior of the Sinkhorn iterates at the phase transitions. Thirdly, we observe numerically that the phase transition times tend to be more and more spread out towards the end of the cold Sinkhorn dynamics (cf Fig. 3, Fig. 4). It could be interesting to explain and to try to leverage this phenomenon algorithmically. 
+
+From a broader perspective, our work uncovers intriguing directions for future research in several areas. From the point of view of optimal transport, our work deepens our understanding of the relation between discrete EOT and OT in a previously unexplored direction. Indeed the convergence of EOT to OT at the level of variational problems, including convergence of the optimal solutions, has been studied extensively [CM94; Wee18], and the convergence of the gradient flow on the semi-dual of EOT to that of OT is also well understood [GCPB16; CP18]. Our work reveals that a similar connection exists between the Sinkhorn algorithm—the standard method for EOT computation—and a newly discovered simplex-type algorithm for OT computation, the cold Sinkhorn dynamics. From the point of view of matrix scaling, our finding is perhaps especially surprising: it shows that in the limit τ → 0, the canonical method for scaling a matrix A = ( e−Cij /τ )ij to prescribed row- and column-sums reduces to an algorithm for linear programming. It would be interesting to generalize our analysis to other related settings, such as the multi-marginal setting, the unbalanced setting, or matrix balancing [Ide16; CAD26]. 
+
+# Acknowledgments 
+
+I would like to thank Christopher Criscitiello for insightful discussions around matrix scaling and for suggesting what became Thm. 5.2, as well as Jonathan Niles-Weed for discussions that inspired Rem. 4.2. 
+
+# References 
+
+[AG18] Brahim Khalil Abid and Robert Gower. “Stochastic algorithms for entropy-regularized optimal transport problems”. In: International conference on artificial intelligence and statistics . PMLR. 2018, pp. 1505–1512. [Ach93] Eva Achilles. “Implications of convergence rates in Sinkhorn balancing”. In: Linear algebra and its applications 187 (1993), pp. 109–112. [ALOW17] Zeyuan Allen-Zhu, Yuanzhi Li, Rafael Oliveira, and Avi Wigderson. “Much faster algorithms for matrix scaling”. In: 2017 IEEE 58th Annual Symposium on Foundations of Computer Science (FOCS) . IEEE. 2017, pp. 890–901. [ABRN19] Jason Altschuler, Francis Bach, Alessandro Rudi, and Jonathan Niles-Weed. “Mas-sively scalable Sinkhorn distances via the Nyström method”. In: Advances in neural information processing systems 32 (2019). 29 [ANR17] Jason Altschuler, Jonathan Niles-Weed, and Philippe Rigollet. “Near-linear time approximation algorithms for optimal transport via Sinkhorn iteration”. In: Advances in neural information processing systems 30 (2017). [AKL22] Pierre-Cyril Aubin-Frankowski, Anna Korba, and Flavien Léger. “Mirror descent with relative smoothness in measure spaces, with application to Sinkhorn and EM”. In: Advances in Neural Information Processing Systems 35 (2022), pp. 17263–17275. [BV24] Aymeric Baradat and Elias Ventre. “Convergence of the Sinkhorn algorithm when the Schrödinger problem has no solution”. en. In: Annales de la Faculté des sciences de Toulouse : Mathématiques Ser. 6, 33.5 (2024), pp. 1297–1371. [BCCNP15] Jean-David Benamou, Guillaume Carlier, Marco Cuturi, Luca Nenna, and Gabriel Peyré. “Iterative Bregman projections for regularized transportation problems”. In: 
+
+SIAM Journal on Scientific Computing 37.2 (2015), A1111–A1138. [Ber20] Robert J Berman. “The Sinkhorn algorithm, parabolic optimal transport and geomet-ric Monge–Ampère equations”. In: Numerische Mathematik 145.4 (2020), pp. 771– 836. [Ber23] Raphaël Berthier. “Incremental learning in diagonal linear networks”. In: Journal of Machine Learning Research 24.171 (2023), pp. 1–26. [Ber25] Raphaël Berthier. “Diagonal Linear Networks and the Lasso Regularization Path”. In: arXiv preprint arXiv:2509.18766 (2025). [BP26] Raphaël Berthier and Loucas Pillaud-Vivien. “Incremental Learning in Mirror Flows”. In: arXiv preprint arXiv:2606.23198 (2026). [Bra+20] Jan van den Brand, Yin-Tat Lee, Danupon Nanongkai, Richard Peng, Thatchaphol Saranurak, Aaron Sidford, Zhao Song, and Di Wang. “Bipartite matching in nearly-linear time on moderately dense graphs”. In: 2020 IEEE 61st Annual Symposium on Foundations of Computer Science (FOCS) . IEEE. 2020, pp. 919–930. [CAD26] Xufeng Cai, Jason Altschuler, and Jelena Diakonikolas. “Near-Linear Runtime for a Classical Matrix Preconditioning Algorithm”. In: Journal of the ACM 73.1 (2026), pp. 1–25. [Car22] Guillaume Carlier. “On the linear convergence of the multimarginal Sinkhorn algo-rithm”. In: SIAM Journal on Optimization 32.2 (2022), pp. 786–794. [CNR25] Sinho Chewi, Jonathan Niles-Weed, and Philippe Rigollet. Statistical optimal transport .Springer, 2025. [CCGT24] Alberto Chiarini, Giovanni Conforti, Giacomo Greco, and Luca Tamanini. “A semi-concavity approach to stability of entropic plans and exponential convergence of Sinkhorn’s algorithm”. In: arXiv preprint arXiv:2412.09235 (2024). [Chi24] Lénaïc Chizat. “Annealed sinkhorn for optimal transport: convergence, regularization path and debiasing”. In: arXiv preprint arXiv:2408.11620 (2024). [CDV26] Lénaïc Chizat, Alex Delalande, and Tomas Vaškevičius. “Sharper exponential con-vergence rates for Sinkhorn’s algorithm in continuous settings”. In: Mathematical Programming 215.1 (2026), pp. 809–858. [CPSV16] Lénaïc Chizat, Gabriel Peyré, Bernhard Schmitzer, and François-Xavier Vialard. “Scal-ing algorithms for unbalanced transport problems”. In: arXiv preprint arXiv:1607.05816 
+
+(2016). [CZHS22] Lénaïc Chizat, Stephen Zhang, Matthieu Heitz, and Geoffrey Schiebinger. “Trajectory inference via mean-field langevin in path space”. In: Advances in Neural Information Processing Systems 35 (2022), pp. 16731–16742. [CM94] Roberto Cominetti and J San Martín. “Asymptotic analysis of the exponential penalty trajectory in linear programming”. In: Mathematical Programming 67.1 (1994), pp. 169–187. 30 [CDG23] Giovanni Conforti, Alain Durmus, and Giacomo Greco. “Quantitative contraction rates for Sinkhorn algorithm: beyond bounded costs and compact marginals”. In: 
+
+arXiv preprint arXiv:2304.04451 (2023). [Cut13] Marco Cuturi. “Sinkhorn distances: Lightspeed computation of optimal transport”. In: Advances in neural information processing systems 26 (2013). [Cut+22] Marco Cuturi, Laetitia Meng-Papaxanthos, Yingtao Tian, Charlotte Bunne, Geoff Davis, and Olivier Teboul. “Optimal Transport Tools (OTT): A JAX toolbox for all things Wasserstein”. In: arXiv preprint arXiv:2201.12324 (2022). [CP18] Marco Cuturi and Gabriel Peyré. “Semidual regularized optimal transport”. In: SIAM Review 60.4 (2018), pp. 941–965. [DTHD21] Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet. “Diffusion schrödinger bridge with applications to score-based generative modeling”. In: Advances in neural information processing systems 34 (2021), pp. 17695–17709. [DKPS23] Nabarun Deb, Young-Heon Kim, Soumik Pal, and Geoffrey Schiebinger. “Wasserstein mirror gradient flow as the limit of the Sinkhorn algorithm”. In: arXiv preprint arXiv:2307.16421 (2023). [DGK18] Pavel Dvurechensky, Alexander Gasnikov, and Alexey Kroshnin. “Computational optimal transport: Complexity by accelerated gradient descent is better than by Sinkhorn’s algorithm”. In: International conference on machine learning . PMLR. 2018, pp. 1367–1376. [Fey+19] Jean Feydy, Thibault Séjourné, François-Xavier Vialard, Shun-ichi Amari, Alain Trouvé, and Gabriel Peyré. “Interpolating between optimal transport and MMD using Sinkhorn divergences”. In: The 22nd International Conference on Artificial Intelligence and Statistics . 2019, pp. 2681–2690. [Fla+21] Rémi Flamary, Nicolas Courty, Alexandre Gramfort, Mokhtar Z. Alaya, Aurélie Boisbunon, Stanislas Chambon, Laetitia Chapel, Adrien Corenflos, Kilian Fatras, Nemo Fournier, Léo Gautheron, Nathalie T.H. Gayraud, Hicham Janati, Alain Rakotomamonjy, Ievgen Redko, Antoine Rolet, Antony Schutz, Vivien Seguy, Danica J. Sutherland, Romain Tavenard, Alexander Tong, and Titouan Vayer. “POT: Python Optimal Transport”. In: Journal of Machine Learning Research 22.78 (2021), pp. 1–8. [FL89] Joel Franklin and Jens Lorenz. “On the scaling of multidimensional matrices”. In: 
+
+Linear Algebra and its applications 114 (1989), pp. 717–735. [Gal16] Alfred Galichon. Optimal transport methods in economics . Princeton University Press, 2016. [GGVW26] Ferdinand Genans, Antoine Godichon-Baggioni, François-Xavier Vialard, and Olivier Wintenberger. “Decreasing entropic regularization averaged gradient for semi-discrete optimal transport”. In: Advances in Neural Information Processing Systems 38 (2026), pp. 146913–146949. [GCPB16] Aude Genevay, Marco Cuturi, Gabriel Peyré, and Francis Bach. “Stochastic optimiza-tion for large-scale optimal transport”. In: Advances in neural information processing systems 29 (2016). [GN25] Promit Ghosal and Marcel Nutz. “On the convergence rate of Sinkhorn’s algorithm”. In: Mathematics of Operations Research (2025). [Ide16] Martin Idel. “A review of matrix scaling and Sinkhorn’s normal form for matrices and positive maps”. In: arXiv preprint arXiv:1609.06349 (2016). [JGŞHG21] Arthur Jacot, François Ged, Berfin Şimşek, Clément Hongler, and Franck Gabriel. “Saddle-to-saddle dynamics in deep linear networks: Small initialization training, symmetry, and sparsity”. In: arXiv preprint arXiv:2106.15933 (2021). 31 [KLRS08] Bahman Kalantari, Isabella Lari, Federica Ricca, and Bruno Simeone. “On the complexity of general matrix scaling and entropy minimization via the RAS algorithm”. In: Mathematical Programming 112.2 (2008), pp. 371–401. [KHK24] Mohammad Reza Karimi, Ya-Ping Hsieh, and Andreas Krause. “Sinkhorn flow as mirror flow: A continuous-time framework for generalizing the sinkhorn algorithm”. In: International Conference on Artificial Intelligence and Statistics . PMLR. 2024, pp. 4186–4194. [Kni08] Philip A Knight. “The Sinkhorn–Knopp algorithm: convergence and applications”. In: SIAM Journal on Matrix Analysis and Applications 30.1 (2008), pp. 261–275. [KY94] Jeffrey J Kosowsky and Alan L Yuille. “The invisible hand algorithm: Solving the assignment problem with statistical physics”. In: Neural networks 7.3 (1994), pp. 477– 490. [KSP22] Vladimir R Kostic, Saverio Salzo, and Massimiliano Pontil. “Batch Greenkhorn algorithm for entropic-regularized multimarginal optimal transport: Linear rate of convergence and iteration complexity”. In: International Conference on Machine Learning . PMLR. 2022, pp. 11529–11558. [LZKS21] Hugo Lavenant, Stephen Zhang, Young-Heon Kim, and Geoffrey Schiebinger. “To-wards a mathematical theory of trajectory inference”. In: arXiv preprint arXiv:2102.09204 
+
+(2021). [Lég21] Flavien Léger. “A gradient descent perspective on Sinkhorn”. In: Applied Mathematics & Optimization 84.2 (2021), pp. 1843–1855. [LVSU22] Tobias Lehmann, Max-K Von Renesse, Alexander Sambale, and André Uschmajew. “A note on overrelaxation in the Sinkhorn algorithm”. In: Optimization Letters 16.8 (2022), pp. 2209–2220. [Léo13] Christian Léonard. “A survey of the Schrödinger problem and some of its connections with optimal transport”. In: Discrete and Continuous Dynamical Systems 34.4 (2013), pp. 1533–1574. [Li+25] Gen Li, Yanxi Chen, Yu Huang, Yuejie Chi, H Vincent Poor, and Yuxin Chen. “Fast computation of optimal transport via entropy-regularized extragradient methods”. In: SIAM Journal on Optimization 35.2 (2025), pp. 1330–1363. [LHJ22] Tianyi Lin, Nhat Ho, and Michael I Jordan. “On the efficiency of entropic regularized algorithms for optimal transport”. In: Journal of Machine Learning Research 23.137 (2022), pp. 1–42. [LXH23] Yiling Luo, Yiling Xie, and Xiaoming Huo. “Improved rate of first order algorithms for entropic optimal transport”. In: International Conference on Artificial Intelligence and Statistics . PMLR. 2023, pp. 2723–2750. [MP20] Arthur Mensch and Gabriel Peyré. “Online Sinkhorn: Optimal transport distances from sample streams”. In: Advances in Neural Information Processing Systems 33 (2020), pp. 1657–1667. [MZKC25] Alireza Mousavi-Hosseini, Stephen Y Zhang, Michal Klein, and Marco Cuturi. “Flow matching with semidiscrete couplings”. In: arXiv preprint arXiv:2509.25519 (2025). [Nut21] Marcel Nutz. “Introduction to entropic optimal transport”. In: Lecture notes, Columbia University 306.19 (2021), p. 307. [Pac01] Baburao G Pachpatte. Inequalities for finite difference equations . CRC Press, 2001. [PF23] Scott Pesme and Nicolas Flammarion. “Saddle-to-saddle dynamics in diagonal lin-ear networks”. In: Advances in Neural Information Processing Systems 36 (2023), pp. 7475–7505. 32 [PC19] Gabriel Peyré and Marco Cuturi. “Computational optimal transport with applications to data sciences”. In: Foundations and Trends ® in Machine Learning 11.5-6 (2019), pp. 355–607. [PN25] Aram-Alexandre Pooladian and Jonathan Niles-Weed. “Plug-in estimation of schrödinger bridges”. In: SIAM Journal on Mathematics of Data Science 7.3 (2025), pp. 1315– 1336. [QGGU25] Zhaonan Qu, Alfred Galichon, Wenzhi Gao, and Johan Ugander. “On Sinkhorn’s algorithm and choice modeling”. In: Operations Research (2025). [RTG00] Yossi Rubner, Carlo Tomasi, and Leonidas J Guibas. “The earth mover’s distance as a metric for image retrieval”. In: International journal of computer vision 40.2 (2000), pp. 99–121. [SC20] Meyer Scetbon and Marco Cuturi. “Linear time Sinkhorn divergences using positive features”. In: Advances in neural information processing systems 33 (2020), pp. 13468– 13480. [SCP21] Meyer Scetbon, Marco Cuturi, and Gabriel Peyré. “Low-rank Sinkhorn factorization”. In: International Conference on Machine Learning . PMLR. 2021, pp. 9344–9354. [Sch+19] Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh Solomon, Joshua Gould, Siyan Liu, Stacie Lin, Peter Berube, et al. “Optimal-transport analysis of single-cell gene expression identifies developmental trajectories in reprogramming”. In: Cell 176.4 (2019), pp. 928–943. [SVP22] Thibault Séjourné, François-Xavier Vialard, and Gabriel Peyré. “Faster Unbalanced Optimal Transport: Translation invariant Sinkhorn and 1-D Frank-Wolfe”. In: Pro-ceedings of The 25th International Conference on Artificial Intelligence and Statistics .Vol. 151. 2022, pp. 4995–5021. [Sin67] Richard Sinkhorn. “Diagonal equivalence to matrices with prescribed row and column sums”. In: The American Mathematical Monthly 74.4 (1967), pp. 402–405. [SK67] Richard Sinkhorn and Paul Knopp. “Concerning nonnegative matrices and doubly stochastic matrices”. In: Pacific Journal of Mathematics 21.2 (1967), pp. 343–348. [Sou91] George W Soules. “The rate of convergence of Sinkhorn balancing”. In: Linear algebra and its applications 150 (1991), pp. 3–40. [TCDP21] Alexis Thibault, Lénaïc Chizat, Charles Dossal, and Nicolas Papadakis. “Overrelaxed Sinkhorn–Knopp algorithm for regularized optimal transport”. In: Algorithms 14.5 (2021), p. 143. [VC23] Tomas Vaskevicius and Lénaïc Chizat. “Computational guarantees for doubly entropic Wasserstein barycenters via damped Sinkhorn iterations”. In: Advances in Neural Information Processing Systems 36 (2023), pp. 12363–12388. [WPS23] Fengpei Wang, Clarice Poon, and Tony Shardlow. “Compressed online Sinkhorn”. In: 
+
+arXiv preprint arXiv:2310.05019 (2023). [Wan26] Guillaume Wang. “Almost-sharp O(k−1 log k) convergence rate for the Sinkhorn algorithm in the asymptotically scalable case”. In: arXiv preprint arXiv:2604.26265 
+
+(2026). [Wee18] Jonathan Weed. “An explicit analysis of the entropic penalty in linear programming”. In: Conference On Learning Theory . PMLR. 2018, pp. 1841–1855. [XLH22] Yiling Xie, Yiling Luo, and Xiaoming Huo. “An accelerated stochastic algorithm for solving the optimal transport problem”. In: arXiv preprint arXiv:2203.00813 (2022). 33 A Additional illustrative experiments 
+
+In this appendix, we present two additional numerical experiments to qualitatively illustrate the phenomena studied in this paper, as a complement to Fig. 1. The setup is identical for both experiments: we drew μ, ν from the uniform distribution on the simplices ∆m, ∆n respectively, we drew the entries of C i.i.d. from the standard normal distribution, and we set τ = 0 .001 . The only difference is in the choice of m and n: we took m = n = 50 for Fig. 3 and m = n = 400 for Fig. 4. We display the evolution of the dual iterates (f k, g k)k≥2 of the Sinkhorn algorithm initialized at (f 0, g 0) = (0 , 0) , as well as the suboptimality measured by relative entropy of the marginals: 
+
+H (μ∥∥X♯πk) , H (ν∥∥Y♯πk). For readability, for each experiment, we display separately the evolution at a short horizon (until k = ⌊2/τ ⌋, top subfigures) and at a long horizon (until approximate convergence, bottom subfigures). 
+
+Figure 3: One run of the Sinkhorn algorithm with m = n = 50 and τ = 0 .001 
+
+Figure 4: One run of the Sinkhorn algorithm with m = n = 400 and τ = 0 .001 
+
+34 B Proofs for Sec. 2.4 
+
+In this appendix, we present the proofs of Prop. 2.8 and Prop. 2.10, restated below. 
+
+Proposition (Prop. 2.8, restated) . Let μ, ν, C, E be as in Thm. 2.2. Let δ ≥ 0 and consider any initialization U 0 = ((f 0 
+
+> i
+
++ g0 
+
+> j
+
+− Cij )/τ ) 
+
+> ij
+
+∈ (R ∪ {−∞} )m×n of the Sinkhorn algorithm such that 
+
+∀(i, j ) ∈ E , −δ ≤ U 0 
+
+> ij
+
+≤ δ and ∀(i, j )̸ ∈ E , U 0 
+
+> ij
+
+= −∞ .
+
+Then the rescaled one-iteration increments vk, w k satisfy 
+
+∀k ≥ K0(1 + δ), ∥∥vk − v∗(E)∥∥∞ , ∥∥wk − w∗(E)∥∥∞ ≤ B 1 + δ + log kk
+
+for some constants K0, B dependent only on μ, ν , and E.
+
+Proposition (Prop. 2.10, restated) . In the same setting as Prop. 2.8, additionally suppose S = S,where S, S are the sets defined in Thm. 2.3. Then 
+
+∀k ≥ K0(1 + δ), ∥∥vk − v∗(E)∥∥∞ , ∥∥wk − w∗(E)∥∥∞ ≤ B(1 + δ)
+
+(
+
+1 − e−R(1+ δ))k
+
+for some constants K0, B, R dependent only on μ, ν , and E.
+
+Throughout this appendix, μ, ν, C are fixed, S ⊂ S ⊂ E are as defined in Thm. 2.2, Thm. 2.3, and we abbreviate v∗(E), w ∗(E), μ ∗(E), ν ∗(E) to v∗, w ∗, μ ∗, ν ∗ respectively. Moreover, throughout, 
+
+vk, w k, U k denote the iterates of the Sinkhorn algorithm in the formulation (2.5) and it is assumed that at initialization, ∀(i, j ) ∈ E , −δ ≤ U 0 
+
+> ij
+
+≤ δ.
+
+## B.1 Preparatory lemmas 
+
+We start by showing a slow O(1 /√k) convergence rate, as it will be needed to bootstrap the analysis. To show the slow rate, it is sufficient to follow the same steps as [BV24, proof of Theorem 3.2], keeping track of constants slightly more explicitly. 
+
+Lemma B.1. We have 
+
+∀k ≥ 4, ∥∥vk − v∗∥∥∞ , ∥∥wk − w∗∥∥∞ ≤
+
+√ B1(1 + δ)
+
+k
+
+for some constant B1 dependent only on μmin and νmin .Proof. Recall that the primal variables are given by πkij = eU kij μiνj /Z k, Zk = ∑ 
+
+> i′j′
+
+eU ki′j′ μi′ νj′
+
+for all k ≥ 0 and that Zk = 1 for all k ≥ 1. Also recall from (2.6) that for any k ≥ 0 even, 
+
+vk+1  
+
+> i
+
+= log (μi/(X♯πk)i
+
+) − log Zk, and likewise for the wk.Following [BV24, Eq. (3.11)], first note that for any Q ∈ ∆E such that X♯Q = μ∗ and Y♯Q = ν,
+
+∀k ≥ 0 even, H (Q∥∥πk) − H (Q∥∥πk+2 ) = ∑
+
+> (i,j )∈E
+
+Qij log (πk+2  
+
+> ij
+
+/π kij 
+
+)
+
+= ∑
+
+> (i,j )∈E
+
+Qij 
+
+(U k+2  
+
+> ij
+
+− U kij 
+
+) − log Zk+2 + log Zk
+
+= ∑
+
+> (i,j )∈E
+
+Qij 
+
+(vk+1  
+
+> i
+
++ wk+2 
+
+> j
+
+) − log Zk+2 + log Zk
+
+= ∑
+
+> i
+
+(X♯Q)i vk+1  
+
+> i
+
++ ∑
+
+> j
+
+(Y♯Q)j wk+2  
+
+> j
+
+− log Zk+2 + log Zk
+
+= ∑
+
+> i
+
+μ∗ 
+
+> i
+
+log (μi/(X♯πk)i
+
+) − log Zk + ∑
+
+> j
+
+νj log (νj /(Y♯πk+1 )j
+
+) − log Zk+1 − log Zk+2 + log Zk
+
+35 = H (μ∗∥∥X♯πk) − H (μ∗∥μ) + H (ν∥∥Y♯πk+1 )
+
+since log Zk = 0 for all k > 0. So by a telescopic sum, for any K ≥ 2 even, 
+
+H (Q∥∥π0) ≥ H (Q∥∥π0) − H (Q∥∥πK ) =
+
+> K−2
+
+∑ 
+
+> k=0
+> keven
+
+H (μ∗∥∥X♯πk) + [H (ν∥∥Y♯πk+1 ) − H (μ∗∥μ)] .
+
+Now by [Nut21, Proposition 6.10]—or rather, a straightforward adaptation thereof to the case with infinite costs— H (ν∥∥Y♯πk+1 ) ≥ H (X♯πk+2 ∥∥μ) and the sequence (H (X♯πk∥∥μ))  
+
+> k∈2N
+
+is non-increasing. Moreover, by definition of 
+
+μ∗ = argmin 
+
+> μ
+
+H (μ∥μ) subject to ∃Q ∈ ∆E ;
+
+{
+
+X♯Q = μY♯Q = ν, 
+
+since X♯πk is feasible for this optimization problem by definition, then H (X♯πk∥∥μ) − H (μ∗∥μ) ≥ 0
+
+for all k even. Thus 
+
+H (Q∥∥π0) ≥
+
+> K−2
+
+∑ 
+
+> k=0
+> keven
+
+H (μ∗∥∥X♯πk)︸ ︷︷ ︸
+
+> ≥0
+
++ [H (X♯πk+2 ∥∥μ) − H (μ∗∥μ)]
+
+and so H (X♯πK ∥∥μ) − H (μ∗∥μ) ≤ 1
+
+K/ 2
+
+> K−2
+
+∑ 
+
+> k=0
+> keven
+
+[H (X♯πk+2 ∥∥μ) − H (μ∗∥μ)] ≤ 1
+
+K/ 2 H (Q∥∥π0) .
+
+Furthermore, 
+
+H (Q∥∥π0) = ∑
+
+> (i′,j ′)∈E
+
+Qi′j′
+
+(
+
+log Qi′j′
+
+μi′ νj′
+
+− U 0
+
+> i′j′
+
+)
+
++ log ∑
+
+> i′,j ′
+
+eU 0 
+
+> i′j′
+
+μi′ νj′
+
+≤ max 
+
+> π∈∆m×n
+
+H (π∥μ ⊗ ν) + max 
+
+> (i′,j ′)∈E
+
+(−U 0 
+
+> i′j′
+
+) + max  
+
+> i′,j ′
+
+U 0 
+
+> i′j′
+
+≤ − log( μmin νmin ) + 2 δ. 
+
+It remains to relate H (X♯πK ∥∥μ) − H (μ∗∥μ) to ∥∥vK+1 − v∗∥∥∞, where we recall that vK+1  
+
+> i
+
+=log (μi/(X♯πK )i
+
+) and v∗ 
+
+> i
+
+= log ( μi/μ ∗ 
+
+> i
+
+). First note that, since the feasible set of the optimization problem defining μ∗ is convex and X♯πK − μ∗ belongs to its tangent cone at the minimizer μ∗, then 
+
+(X♯πK − μ∗)⊤ ∇μH (μ∥μ)|μ∗ = ( X♯πK − μ∗)⊤(log μ∗ − log μ) ≥ 0
+
+with log applied pointwise. On the other hand, by Bregman three-point identity, 
+
+H (X♯πK ∥∥μ) = H (X♯πK ∥∥μ∗) + H (μ∗∥μ) − (X♯πK − μ∗)⊤(log μ − log μ∗)
+
+so H (X♯πK ∥∥μ) − H (μ∗∥μ) ≥ H (X♯πK ∥∥μ∗) .
+
+Thus by Pinsker’s inequality, 
+
+∀K ≥ 2 even , 12
+
+∥∥X♯πk − μ∗∥∥21 ≤ H (X♯πK ∥∥μ∗) ≤ 1
+
+K/ 2 H (Q∥∥π0) ≤ − log( μmin νmin ) + 2 δK/ 2
+
+∥∥X♯πk − μ∗∥∥1 ≤ 2
+
+√ − log( μmin νmin ) + 2 δK .
+
+Now by Lem. 2.5 and Coroll. 2.6, ∀i, (X♯πK )i = μie−vK+1  
+
+> i
+
+≥ μiνmin and μ∗ 
+
+> i
+
+≥ μmin νmin . So by 
+
+a−1-Lipschitz-continuity of log over [a, +∞) applied with a = μmin νmin ,
+
+∀K ≥ 2 even , ∀i, ∣∣vK+1  
+
+> i
+
+− v∗
+
+> i
+
+∣∣ = ∣∣log (μ∗ 
+
+> i
+
+/(X♯πK )i
+
+)∣ ∣ ≤ 1
+
+μmin νmin 
+
+∣∣μ∗ 
+
+> i
+
+− (X♯πk)i
+
+∣∣∥∥vK+1 − v∗∥∥∞ ≤ 1
+
+μmin νmin 
+
+∥∥μ∗ − X♯πk∥∥∞ ≤ 2√− log( μmin νmin ) + 2 δμmin νmin 
+
+· 1
+
+√K .
+
+This shows the claimed convergence bound on the vk. The bound for the wk follows similarly. 36 In preparation for the second lemma, let us show the following auxiliary claims. 
+
+Claim B.1. For any k ≥ 3, ∀i, max j eU kij ≥ νmin and ∀j, max i eU kij ≥ μmin .Proof. As noted in the proof of Lem. 2.5, by definition of the update (2.5), 
+
+∀k ≥ 0 even , ∀i, ∑ 
+
+> j
+
+eU k+1  
+
+> ij
+
+νj = 1 so ∃j; eU k+1  
+
+> ij
+
+≥ 1 and eU k+2  
+
+> ij
+
+= eU k+1  
+
+> ij
+
+ewk+2  
+
+> j
+
+≥ νmin 
+
+∀k ≥ 1 odd , ∀j, ∑ 
+
+> i
+
+eU k+1  
+
+> ij
+
+μi = 1 so ∃i; eU k+1  
+
+> ij
+
+≥ 1 and eU k+2  
+
+> ij
+
+= eU k+1  
+
+> ij
+
+evk+2  
+
+> i
+
+≥ μmin 
+
+where the last inequality on each line follows from the lower bounds of Lem. 2.5. 
+
+Claim B.2. For any c > 0 and U, U ′ ∈ (R ∪ {−∞} )m×n such that ∀i, max j eUij , max j eU ′ 
+
+> ij
+
+≥ c
+
+and ∀j, max i eUij , max i eU ′ 
+
+> ij
+
+≥ c, we have 
+
+∥v[U ] − v[U ′]∥∞ , ∥w[U ] − w[U ′]∥∞ ≤ c−1(μmin ∧ νmin )−1 max 
+
+> ij
+
+∣∣∣eUij − eU ′
+
+> ij
+
+∣∣∣ .
+
+Proof. For any i, by definition, |v[U ]i − v[U ′]i| =
+
+∣∣∣log ∑ 
+
+> j
+
+eUij νj − log ∑ 
+
+> j
+
+eU ′ 
+
+> ij
+
+νj
+
+∣∣∣. Now by the assumption, ∑ 
+
+> j
+
+eUij νj ≥ c ν min and likewise for U ′. So by a−1-Lipschitz-continuity of log over 
+
+[a, +∞),
+
+|v[U ]i − v[U ′]i| ≤ c−1ν−1min 
+
+∣∣∣∑ 
+
+> j
+
+(eUij − eU ′ 
+
+> ij
+
+)νj
+
+∣∣∣ ≤ c−1ν−1min max j
+
+∣∣∣eUij − eU ′
+
+> ij
+
+∣∣∣ .
+
+Hence the bound on ∥v[U ] − v[U ′]∥∞, and the bound on ∥w[U ] − w[U ′]∥∞ follows similarly. 
+
+Claim B.3. For any k ≥ 1, max ij eU kij ≤ (μmin ∧ νmin )−1.Proof. As noted in the proof of Lem. 2.5, by definition of the update (2.5) , for any k ≥ 1 odd, for any i, j , eU kij νmin ≤ ∑ 
+
+> j′
+
+eU kij ′ νj′ = 1 so eU kij ≤ ν−1min . Likewise, for any k ≥ 1 even, eU kij ≤ μ−1min .The second lemma quantifies the deviation between the true Sinkhorn iterates and the iterates of the algorithm artificially restricted to S starting from some iteration k0.
+
+Lemma B.2. For any k0 even, let v(k0)k, w (k0)k, U (k0)k denote the iterates of the Sinkhorn algorithm in the formulation (2.5) , applied to the EOT problem with target marginals μ, ν and cost matrix 
+
+Cij =
+
+{
+
+Cij if (i, j ) ∈ S ∞ otherwise and initialized at U (k0)k0 
+
+> ij
+
+=
+
+{
+
+U k0 
+
+> ij
+
+if (i, j ) ∈ S −∞ otherwise . There exist constants 
+
+K2, B 2, γ dependent only on μ, ν , and E such that for any ∆ > 0, if k0 = K2(1 + δ) + ∆ ,
+
+∀k ≥ k0, max 
+
+> (i,j )∈S
+
+∣∣∣U (k0)kij − U kij 
+
+∣∣∣ ,
+
+∥∥∥vk − v(k0)k
+
+∥∥∥∞
+
+,
+
+∥∥∥wk − w(k0)k
+
+∥∥∥∞
+
+≤ B2 e−∆γ/ 4.
+
+Proof. Recall that S = {(i, j ) ∈ E ; v∗ 
+
+> i
+
++ w∗ 
+
+> j
+
+= 0 }. If S = E, there is nothing to prove, so suppose henceforth the inclusion S ⊂ E is strict. Let 
+
+−γ = max 
+
+> (i,j )∈E\S
+
+v∗ 
+
+> i
+
++ w∗ 
+
+> j
+
+< 0
+
+(and note that γ depends only on μ, ν, E). Let B1 be as in Lem. B.1 and k1 = 4 ∨ ⌈ 16 B1 
+
+> γ2
+
+(1 + δ)⌉.Then 
+
+∀k ≥ k1, max 
+
+> (i,j )∈E\S
+
+vki + wkj ≤ − γ + ∥∥vk − v∗∥∥∞ + ∥∥wk − w∗∥∥∞ ≤ − γ + 2 
+
+√ B1(1 + δ)
+
+k ≤ − 12 γ. 
+
+37 Note that by Lem. 2.5, 
+
+∀i, j, U k1 
+
+> ij
+
+= U 0 
+
+> ij
+
++ v1 
+
+> i
+
++ w2 
+
+> j
+
++
+
+> k1−1
+
+∑ 
+
+> l=2
+> leven
+
+vl+1  
+
+> i
+
++
+
+> k1−1
+
+∑ 
+
+> l=3
+> lodd
+
+wl+1 
+
+> i
+
+≤ δ − log( μmin νmin ) + 3 δ + ( k1 − 2) [ − log( μmin ∧ νmin )] ≤ 4δ − k1 log( μmin ∧ νmin ).
+
+Consequently, 
+
+∀(i, j ) ∈ E \ S , ∀l ≥ 0 even , U k1+lij ≤ U k1 
+
+> ij
+
+− (l/ 2) γ
+
+2 ≤ 4δ − k1 log( μmin ∧ νmin ) − l γ/ 4
+
+∀l ≥ 0 odd , U k1+lij ≤ U k1+l−1 
+
+> ij
+
+− log( μmin ∧ νmin )
+
+where for the odd case we used Lem. 2.5 again. Thus, recalling the definition of k1 = 4 ∨⌈ 16 B1 
+
+> γ2
+
+(1+ δ)⌉,
+
+∀(i, j )̸ ∈ S , ∀k ≥ k1, U kij ≤ B′
+
+> 2
+
+(1 + δ) − (k − k1) γ/ 4
+
+for a constant B′ 
+
+> 2
+
+dependent only on μ, ν , and E.Now set k2 = k1 + (4 /γ ) [ B′
+
+> 2
+
+(1 + δ) − 2 log( μmin ∧ νmin )] . Then 
+
+∀(i, j )̸ ∈ S , ∀k ≥ k2, U kij ≤ 2 log( μmin ∧ νmin )
+
+eU kij ≤ (μmin ∧ νmin )2 < μ min ∧ νmin .
+
+So we can refine the result of Claim B.1 by affirming that for any i, the j for which eU kij ≥ νmin 
+
+must be such that (i, j ) ∈ S , and likewise for the other estimate; formally, 
+
+∀k ≥ k2, ∀i, ∃j; ( i, j ) ∈ S and eU kij ≥ νmin 
+
+∀j, ∃i; ( i, j ) ∈ S and eU kij ≥ μmin .
+
+Note that we can write k2 = K2(1 + δ) with K2 dependent only on μ, ν , and E.Fix ∆ > 0 and k0 = k2 + ∆ even and consider v(k0)k, w (k0)k, U (k0)k as in the lemma statement, abbreviated in the rest of this proof as vk, w k, U k. Let us bound max i vk0+1  
+
+> i
+
+and max j wk0+2  
+
+> j
+
+.The previous paragraph and the fact that ∀(i, j ) ∈ S , U k0 
+
+> ij
+
+= U k0 
+
+> ij
+
+by definition imply that the assumptions of Claim B.2 are verified for U = U k0 , U ′ = U k0
+
+, and c = μmin ∧ νmin , so 
+
+∥∥vk0+1 − vk0+1 ∥∥∞ ≤ (μmin ∧ νmin )−2 max 
+
+> ij
+
+∣∣∣eU k0 
+
+> ij
+
+− eU k0
+
+> ij
+
+∣∣∣ = ( μmin ∧ νmin )−2 max 
+
+> (i,j )∈E\S
+
+eU k0 
+
+> ij
+
+≤ 1
+
+where in the middle equality we used that for (i, j ) ∈ S , U k0 
+
+> ij
+
+= U k0 
+
+> ij
+
+and for (i, j )̸ ∈ S , eU k0 
+
+> ij
+
+= 0 ,and in the last inequality we used the previous paragraph again. In particular by Lem. 2.5, 
+
+max  
+
+> i
+
+vk0+1  
+
+> i
+
+≤ max  
+
+> i
+
+vk0+1  
+
+> i
+
++ 1 ≤ − log νmin + 1 .
+
+To bound max j wk0+2  
+
+> j
+
+, let us apply Claim B.2 to U = U k0+1 , U ′ = U k0+1 , and c = e−1(μmin ∧ νmin ).Indeed, the assumption on U ′ is verified as 
+
+∀(i, j ) ∈ S , U k0+1  
+
+> ij
+
+= U k0 
+
+> ij
+
++ vk0+1  
+
+> i
+
+= U k0+1  
+
+> ij
+
+− vk0+1  
+
+> i
+
++ vk0+1 
+
+> i
+
+eU k0+1  
+
+> ij
+
+≥ eU k0+1  
+
+> ij
+
+e−1.
+
+Applying the claim yields 
+
+max  
+
+> j
+
+wk0+2  
+
+> j
+
+≤ max  
+
+> j
+
+wk0+2  
+
+> j
+
++ e (μmin ∧ νmin )−2 max 
+
+> ij
+
+∣∣∣eU k0+1  
+
+> ij
+
+− eU k0+1 
+
+> ij
+
+∣∣∣ .
+
+38 The first term is upper-bounded by − log μmin by Lem. 2.5. In the second term, the max ij 
+
+decomposes into a max over S and a max over E \ S . The latter one is equal to max (i,j )∈E\S eU k0+1 
+
+> ij
+
+and is upper-bounded by (μmin ∧ νmin )2 by the previous paragraph. As for the max over S, we have 
+
+∀i, j, 
+
+∣∣∣eU k0+1  
+
+> ij
+
+− eU k0+1 
+
+> ij
+
+∣∣∣ = eU k0+1 
+
+> ij
+
+∣∣∣1 − eU k0+1   
+
+> ij −Uk0+1
+> ij
+
+∣∣∣ = eU k0+1 
+
+> ij
+
+∣∣∣1 − evk0+1  
+
+> i−vk0+1
+> i
+
+∣∣∣ ≤ eU k0+1  
+
+> ij
+
+(1 + e)max 
+
+> (i,j )∈S
+
+∣∣∣eU k0+1  
+
+> ij
+
+− eU k0+1 
+
+> ij
+
+∣∣∣ ≤ (1 + e) max 
+
+> (i,j )∈S
+
+eU k0+1  
+
+> ij
+
+≤ (1 + e)( μmin ∧ νmin )−1
+
+by Claim B.3. In summary, we have shown that 
+
+max i vk0+1  
+
+> i
+
+≤ − log νmin + 1 and max j wk0+2  
+
+> j
+
+≤ − log μmin + e (1 + e)( μmin ∧ νmin )−3.
+
+Denote by (f k, g k)k≥0 and (f k, g k)k≥k0 the dual iterates corresponding to vk, w k, U k resp. 
+
+vk, w k, U k in the original formulation of the Sinkhorn algorithm. That is, vk = ( f k − f k−2)/τ ,
+
+wk = ( gk − gk−2)/τ , U kij = ( f ki + gkj − Cij )/τ for all k ≥ 2, and likewise for the f k, g k for k ≥ k0.In particular (f k0
+
+, g k0 ) = ( f k0 , g k0 ). Moreover, set −M k = B′
+
+> 2
+
+(1 + δ) − (k − k1) γ/ 4 and recall from the first paragraph of this proof that ∀(i, j )̸ ∈ S , ∀k ≥ k0, U kij ≤ − M k. Furthermore, note that 
+
+∀k ≥ k0 = k2 + ∆ , −M k = −M k2 − (k − k2) γ
+
+4 = 2 log( μmin ∧ νmin ) − (k − k0 + ∆) γ
+
+4 .
+
+Then by Lem. 2.7, for all k ≥ k0 + 2 ,
+
+∥∥∥f k − f k∥∥∥∞
+
+, ∥∥gk − gk∥∥∞ ≤ τ
+
+[
+
+e(max vk0+1 )−M k0
+
++ e(max wk0+2 )−M k0+1 
+
++ ( μmin ∧νmin )−1
+
+> k−1
+
+∑
+
+> l=k0+3
+
+e−M l
+
+]
+
+≤ τ
+
+[
+
+e(max vk0+1 ) ∨ e(max wk0+2 ) ∨ (μmin ∧νmin )−1] ∞∑
+
+> l=k0
+
+e−M l
+
+≤ τ B ′′  
+
+> 2
+
+e−∆γ/ 4
+
+for a constant B′′  
+
+> 2
+
+dependent only on μ, ν, E. In particular, for all k ≥ k0 + 2 ,
+
+∀(i, j ) ∈ S ,
+
+∣∣∣U kij − U kij 
+
+∣∣∣ =
+
+∣∣∣(f ki + gkj )/τ − (f ki + gkj )/τ 
+
+∣∣∣ ≤ 2B′′  
+
+> 2
+
+e−∆γ/ 4
+
+and for all k ≥ k0 + 4 ,
+
+∥∥vk − vk∥∥∞ =
+
+∥∥∥(f k − f k−2)/τ − (f k − f k−2)/τ 
+
+∥∥∥∞
+
+≤ 2B′′  
+
+> 2
+
+e−∆γ/ 4
+
+and likewise for the wk − wk.The following lemma is an adaptation of [BV24, proof of Proposition 5.3]. It shows that to analyze the algorithm artificially restricted to S, it is equivalent to analyze the convergence of the Sinkhorn algorithm in the asymptotically scalable case. 
+
+Lemma B.3. Consider any k0 even and let v(k0)k, w (k0)k, U (k0)k be as in Lem. B.2, so that {
+
+(i, j ); U (k0)kij > −∞ 
+
+}
+
+= S. Let ˜vk, ˜wk, ˜U k denote the iterates of the Sinkhorn algorithm, in the formulation (2.5) , applied to the EOT problem with target marginals μ∗, ν and initialized at 
+
+˜U k0 
+
+> ij
+
+= U (k0)k0 
+
+> ij
+
++ v∗ 
+
+> i
+
+. Then 
+
+∀k ≥ k0 even , ∀i, j, ˜U kij = U (k0)kij + v∗ 
+
+> i
+
+.
+
+Symmetrically, if ˜v′k, ˜w′k, ˜U ′k denote the iterates of the Sinkhorn algorithm applied to the EOT problem with target marginals μ, ν ∗ and initialized at ˜U ′k0+1  
+
+> ij
+
+= U (k0)k0+1  
+
+> ij
+
++ w∗ 
+
+> j
+
+, then 
+
+∀k ≥ k0 odd , ∀i, j, ˜U ′kij = U (k0)kij + w∗ 
+
+> j
+
+.
+
+39 Proof. Abbreviate v(k0)k, w (k0)k, U (k0)k as vk, w k, U k. Let us prove the first part of the lemma, and the second part will follow by the symmetric arguments. First note that the desired equality is trivial for the (i, j )̸ ∈ S as both sides equal −∞ , so it suffices to show it for the (i, j ) ∈ S .We proceed by induction. The claimed equality is true by definition at k = k0. Let any k ≥ k0
+
+even and suppose that the equality holds at k. To show that it holds also at k + 2 , it suffices to show that ∀(i, j ) ∈ S , ˜vk+1  
+
+> i
+
++ ˜ wk+2  
+
+> j
+
+= vk+1  
+
+> i
+
++ wk+2  
+
+> j
+
+. Now by definition, 
+
+∀i, ˜vk+1  
+
+> i
+
+= − log ∑ 
+
+> j
+
+e˜U kij νj ∀j, ˜wk+2  
+
+> j
+
+= − log ∑ 
+
+> i
+
+e˜U k+1  
+
+> ij
+
+μ∗ 
+
+> i
+
+= − log ∑ 
+
+> i
+
+e˜U kij +˜ vk+1  
+
+> i
+
+μ∗
+
+> i
+
+and ∀i, v k+1  
+
+> i
+
+= − log ∑ 
+
+> j
+
+eU kij νj ∀j, w k+2  
+
+> j
+
+= − log ∑ 
+
+> i
+
+eU k+1  
+
+> ij
+
+μi = − log ∑ 
+
+> i
+
+eU kij +vk+1  
+
+> i
+
+μi.
+
+So by the induction hypothesis, for any i,
+
+˜vk+1  
+
+> i
+
+= − log ∑ 
+
+> j
+
+e˜U kij νj = − log ∑ 
+
+> j
+
+eU kij +v∗ 
+
+> i
+
+νj = vk+1  
+
+> i
+
+− v∗
+
+> i
+
+and for any j,
+
+˜wk+2  
+
+> j
+
+= − log ∑ 
+
+> i
+
+e˜U kij · e˜vk+1  
+
+> i
+
+· μ∗
+
+> i
+
+= − log ∑ 
+
+> i
+
+eU kij +v∗ 
+
+> i
+
+· evk+1   
+
+> i−v∗
+> i
+
+· e−v∗ 
+
+> i
+
+μi
+
+= − log ∑
+
+> i:( i,j )∈S
+
+eU kij +vk+1  
+
+> i
+
+μi · e−v∗
+
+> i
+
+︸︷︷︸ 
+
+> ew∗
+> j
+
+= wk+2  
+
+> j
+
+− w∗
+
+> j
+
+since v∗ 
+
+> i
+
+= −w∗ 
+
+> j
+
+for all (i, j ) ∈ S . Thus for any (i, j ) ∈ S ,
+
+˜vk+1  
+
+> i
+
++ ˜ wk+2  
+
+> j
+
+= vk+1  
+
+> i
+
++ wk+2  
+
+> j
+
+− v∗ 
+
+> i
+
+− w∗ 
+
+> j
+
+= vk+1  
+
+> i
+
++ wk+2  
+
+> j
+
+,
+
+which concludes the proof by induction. 
+
+## B.2 Proof of Prop. 2.8 
+
+The next lemma shows a convergence bound for the algorithm artificially restricted to S starting from iteration k0, with special care given to the dependency of the bound on k0.
+
+Lemma B.4. Consider any k0 ≥ 4 even and let v(k0)k, w (k0)k, U (k0)k be as in Lem. B.2. Then 
+
+∀k ≥ k0 + K4,
+
+∥∥∥v(k0)k − v∗
+
+∥∥∥∞
+
+,
+
+∥∥∥w(k0)k − w∗
+
+∥∥∥∞
+
+≤ B4
+
+1 + δ + k0 + log( k − k0)
+
+k − k0
+
+for some constants K4, B 4 dependent only on μ, ν , and E.Proof. Abbreviate v(k0)k, w (k0)k, U (k0)k as vk, w k, U k. Let ˜vk, ˜wk, ˜U k be defined as in Lem. B.3 and further pose ˜πk = ( e˜U kij μ∗ 
+
+> i
+
+νj )ij ∈ ∆S for all k ≥ 1. It suffices to show that for some K4, B 4 to be determined, 
+
+∀k ≥ k0 + K4 even , ∥∥˜vk+1 ∥∥∞ ≤ B4
+
+1 + δ + k0 + log( k − k0)
+
+k − k0
+
+.
+
+Indeed since ˜vk+1  
+
+> i
+
+= v[ ˜U k]i = v[U k]i − v∗ 
+
+> i
+
+= vk+1  
+
+> i
+
+− v∗ 
+
+> i
+
+for all k even by Lem. B.3, this will show the announced bound on ∥∥vk − v∗∥∥∞, and the bound on ∥∥wk − w∗∥∥∞ will follow similarly. To show the above convergence bound on the ˜vk, note that they are defined as the increments of the Sinkhorn algorithm applied to an EOT problem with marginals μ∗, ν and finite-cost pattern S,and this problem admits a feasible primal solution by definition of μ∗ = μ∗(S). In other words, the 40 corresponding matrix scaling problem is asymptotically scalable. So by the main result of [Wan26], there exist ˜K4 and ˜B4 dependent only on μ∗, ν , and S—and hence only on μ, ν , and E—such that 
+
+∀k ≥ k0 + ˜K4, ∥∥X♯ ˜πk − μ∗∥∥1 ≤ ˜B4
+
+k − k0
+
+(
+
+1 − min 
+
+> (i,j )∈S
+
+˜U k0 
+
+> ij
+
++ max 
+
+> ij
+
+˜U k0 
+
+> ij
+
++ log( k − k0)
+
+)
+
+.
+
+Moreover, note that for any k ≥ k0 + 1 even, ˜vk+1  
+
+> i
+
+= log (μ∗ 
+
+> i
+
+/(X♯ ˜πk)i) by (2.6) , and by Lem. 2.5, 
+
+∀i, (X♯ ˜πk)i = μ∗ 
+
+> i
+
+e−˜vk+1  
+
+> i
+
+≥ μ∗ 
+
+> i
+
+νmin ≥ μmin ν2min . So by local Lipschitz-continuity of log ,
+
+∥∥˜vk+1 ∥∥∞ ≤ 1
+
+μmin ν2min 
+
+∥∥X♯ ˜πk − μ∗∥∥∞ ≤ 1
+
+μmin ν2min 
+
+∥∥X♯ ˜πk − μ∗∥∥1 .
+
+Thus it only remains to bound max ij ˜U k0 
+
+> ij
+
+−min (i,j )∈S ˜U k0 
+
+> ij
+
+. For this, recall that ˜U k0 
+
+> ij
+
+= U (k0)k0 
+
+> ij
+
++v∗ 
+
+> i
+
+=
+
+U k0 
+
+> ij
+
++ v∗ 
+
+> i
+
+for all (i, j ) ∈ S by definition and note that by Lem. 2.5, 
+
+∀(i, j ) ∈ S , U k0 
+
+> ij
+
+= U 0 
+
+> ij
+
++ v1 
+
+> i
+
++ w2 
+
+> j
+
++
+
+> k0−1
+
+∑ 
+
+> l=2
+> leven
+
+vl+1  
+
+> i
+
++
+
+> k0−1
+
+∑ 
+
+> l=3
+> lodd
+
+wl+1 
+
+> i
+
+∣∣∣U k0
+
+> ij
+
+∣∣∣ ≤ δ − 2 log( μmin ∧ νmin ) + 3 δ + ( k0 − 2) [ − log( μmin ∧ νmin )] ≤ 4δ − k0 log( μmin ∧ νmin ).
+
+Hence max ij ˜U k0 
+
+> ij
+
+− min (i,j )∈S ˜U k0 
+
+> ij
+
+≤ 8δ − 2k0 log (μmin ∧ νmin ). Substituting into the inequalities above yields the announced convergence bound on the ˜vk, and the lemma follows. We can now present the proof of Prop. 2.8. 
+
+Proof of Prop. 2.8. Let K2, B 2, γ be as in Lem. B.2 and let K4, B 4 be as in Lem. B.4. Fix any 
+
+k ≥ 2 [K2(1 + δ) + K4] + K5, where K5 is a constant dependent only on μ, ν, E which will be specified later. Consider any ∆ > 0 such that k0 = K2(1 + δ) + ∆ is even and k0 + K4 ≤ k, and let 
+
+(v(k0)l, w (k0)l, U (k0)l)l≥k0 be defined as in Lem. B.2. Then by Lem. B.2 for the first term and by Lem. B.4 for the second term, 
+
+∥∥vk − v∗∥∥∞ ≤
+
+∥∥∥vk − v(k0)k
+
+∥∥∥∞
+
++
+
+∥∥∥v(k0)k − v∗
+
+∥∥∥∞
+
+≤ B2e−∆γ/ 4 + B4
+
+1 + δ + k0 + log( k − k0)
+
+k − k0
+
+= B2e−∆γ/ 4 + B4
+
+(1 + K2)(1 + δ) + ∆ + log( k − k0)
+
+k − K2(1 + δ) − ∆ .
+
+Take ∆ = 4 
+
+> γ
+
+log [ k − K2(1 + δ) − K4]−r, where 0 ≤ r ≤ 2 serves to ensure that k0 = K2(1+ δ)+∆ 
+
+is an even integer. Let us check that this choice also satisfies the condition k0 + K4 ≤ k, i.e., that 
+
+K4 + K2(1 + δ) + 4
+
+γ log [ k − K2(1 + δ) − K4] − r ≤ k
+
+⇐= 4
+
+γ log [ k − K2(1 + δ) − K4] ≤ k − K2(1 + δ) − K4.
+
+Since log x/x → 0 as x → ∞ , this can indeed be ensured by choosing K5 larger than a constant dependent only on γ, and hence only on μ, ν, E. For concreteness and to prepare the sequel, let us take K5 such that ∀x ≥ K5, 4  
+
+> γ
+> log xx
+
+≤ 12 , so that 
+
+4
+
+γ log [ k − K2(1 + δ) − K4] ≤ 12
+
+(k − K2(1 + δ) − K4
+
+).
+
+41 Plugging this choice of ∆ into the bound on ∥∥vk − v∗∥∥∞ above, we obtain 
+
+∥∥vk − v∗∥∥∞ ≤ B2 erγ/ 4
+
+k − K2(1 + δ) − K4
+
++ B4
+
+(1 + K2)(1 + δ) + 4 
+
+> γ
+
+log [ k − K2(1 + δ) − K4] + r + log kk − K2(1 + δ) − 4 
+
+> γ
+
+log [ k − K2(1 + δ) − K4] + r .
+
+Now by assumption on k, the denominators are lower-bounded as 
+
+k − K2(1 + δ) − K4 ≥ k/ 2 + [ K2(1 + δ) + K4] + K5/2 − K2(1 + δ) − K4 ≥ k/ 2
+
+and 
+
+k − K2(1 + δ) − 4
+
+γ log [ k − K2(1 + δ) − K4] + r
+
+≥ k − K2(1 + δ) − K4 − 4
+
+γ log [ k − K2(1 + δ) − K4] ≥ 12
+
+(k − K2(1 + δ) − K4
+
+) ≥ k/ 2
+
+by our choice of K5. Hence, 
+
+∥∥vk − v∗∥∥∞ ≤ B2 e2γ/ 4
+
+k/ 2 + B4
+
+(1 + K2)(1 + δ) + ( 4 
+
+> γ
+
++ 1) log k + 2 
+
+k/ 2 ≤ B 1 + δ + log kk
+
+for a constant B dependent only on μ, ν, E. This proves the announced bound for the vk, and the bound for the wk follows similarly. 
+
+## B.3 Interlude: explicit exponential rate for the exactly scalable case 
+
+In this section, as a preparation for the proof of Prop. 2.10, we recall the following result from [QGGU25] and we deduce a corollary which is more directly applicable for our purpose. 
+
+Proposition B.5 ([QGGU25, Theorem 3]) . Consider μ ∈ ∆m, ν ∈ ∆n and A ∈ Rm×n 
+
+> +
+
+. Let 
+
+E = {(i, j ); Aij > 0} and let S, S be defined from μ, ν, E as in Thm. 2.3. Suppose that A is exactly 
+
+(μ, ν )-scalable, or equivalently by Lem. 2.9, S = S = E, and that the bipartite graph with edge set 
+
+E is connected. Let C ∈ (R ∪ {∞} )m×n such that Aij = e−Cij μiνj and denote by (f k, g k)k≥0 the iterates of the Sinkhorn algorithm applied to the EOT problem with marginals μ, ν , cost matrix C,and temperature τ = 1 . Further denote Ψ( f, g ) = ∑ 
+
+> ij
+
+Aij efi+gj − μ⊤f − ν⊤g. Then 
+
+∀k ≥ 0, Ψ( f k+1 , g k+1 ) − min Ψ ≤
+
+(
+
+1 − e−2B λ2(L[A]) 
+
+( max i
+
+∑ 
+
+> j
+
+Aij 
+
+) ∧ ( max j
+
+∑ 
+
+> i
+
+Aij 
+
+))
+
+(Ψ( f k, g k) − min Ψ) 
+
+where 6 B = sup k≥0 max ij 
+
+∣∣f ki + gkj
+
+∣∣ and λ2(L[A]) is the second smallest eigenvalue of the matrix 
+
+L[A] = 
+
+[diag( A1n) −A
+
+−A⊤ diag( A⊤1m).
+
+]
+
+.
+
+Let us also recall the following result, corresponding to the first half of [QGGU25, step II of proof of Theorem 3]. It is intuitively consistent with the interpretation of L[A] as the Laplacian of the bipartite graph with edge weights Aij , as put forward by [QGGU25]. Indeed in this perspective, 
+
+λ2(L[A]) quantifies the connectedness of the bipartite graph, and increasing the weight of an edge (its transition rate in the associated Markov jump process) only increases connectedness. 
+
+Lemma B.6. For any A, A ′ ∈ Rm×n 
+
+> +
+
+such that Aij ≥ A′ 
+
+> ij
+
+for all i, j , λ2(L[A]) ≥ λ2(L[A′]) . More-over for any c ≥ 0, λ2(L[c A ]) = c λ 2(L[A]) . In particular, λ2(L[A]) ≥ [ min (i,j )∈E Aij ] λ2(L[1E ]) ,where E = {(i, j ); Aij > 0} and (1E )ij = 1 if (i, j ) ∈ E and 0 otherwise.   
+
+> 6Compared to the original statement of [QGGU25, Theorem 3], the constant “ B” in our statement is slightly smaller. One can check by inspecting step II of their proof that our Bis indeed all they need.
+
+42 Proof. First note that for any A′′ ∈ Rm×n 
+
+> +
+
+, L[A′′ ] is diagonally dominant and so positive-semi-definite, and its smallest eigenvalue is λ1(L[A′′ ]) = 0 with eigenvector 1m+n. Introduce the orthogonal projector Π = Im+n − 1m+n1⊤
+
+> m+n
+
+/(m + n). Let ∆ = L[A] − L [A′] = L[A − A′].Since A − A′ has all non-negative entries, then ∆ is positive-semi-definite and λ1(∆) = 0 with eigenvector 1m+n. So Π∆ is also positive-semi-definite and ΠL[A] ⪰ ΠL[A′], and in particular 
+
+λ2(L[A]) ≥ λ2(L[A′]) . The second part of the lemma follows immediately from the linearity of L[·]
+
+and the non-negativity of the spectrum of L[A]. The third part follows from applying successively the first part with A′ = [min (i,j )∈E Aij ] 1E , and the second part with c = min (i,j )∈E Aij .
+
+Corollary B.7. Consider μ ∈ ∆m, ν ∈ ∆n, and E ⊂ { 1 . . . m } × { 1 . . . n } such that the bipartite graph with edge set E has no isolated vertex. Let S, S be defined from μ, ν, E as in Thm. 2.3, and suppose that S = S = E. Denote by vk, w k, U k the iterates of the Sinkhorn algorithm in the formulation (2.5) (and as explained in Sec. 2.1, the corresponding cost matrix and temperature are subsumed by the initialization U 0). Suppose that ∀(i, j ) ∈ E , −δ ≤ U 0 
+
+> ij
+
+≤ δ for some δ ≥ 0. Then 
+
+∀k ≥ 0, max 
+
+> (i,j )∈E
+
+∣∣U kij 
+
+∣∣ ≤ B7 (1 + δ)
+
+and ∀k ≥ 4, ∥∥vk∥∥∞ , ∥∥wk∥∥∞ ≤ B7 (1 + δ)
+
+(
+
+1 − e−R7(1+ δ))k
+
+for some constants B7, R 7 > 0 dependent only on μ, ν , and E.Proof. As explained, e.g., in [Wan26, Remark 1.6], we may assume without loss of generality that 
+
+E is connected. Pose Aij = eU 0 
+
+> ij
+
+μiνj and let Ψ( f, g ) = ∑ 
+
+> ij
+
+Aij efi+gj − 1 − μ⊤f − ν⊤g. Consider 
+
+(f k, g k)k≥0 the iterates of the Sinkhorn algorithm in its original formulation with cost matrix 
+
+C = −U 0, temperature τ = 1 , and initialized at (f 0, g 0) = (0 , 0) , so that U kij = ( f ki + gkj − Cij )/τ 
+
+and vk = f k − f k−2, wk = gk − gk−2 for all k ≥ 2. Denote by πkij = eU kij μiνj for k ≥ 1 the corresponding primal variables. In this proof, we will use B, B ′, B ′′ ... and R, R ′, R ′′ ... to denote constants dependent only on μ, ν , and E without introducing them each time. Let us estimate the quantities appearing in the bound of Prop. B.5. 
+
+• Note that max i
+
+∑ 
+
+> j
+
+Aij = max i
+
+∑ 
+
+> j
+
+eU 0 
+
+> ij
+
+μiνj ≤ eδ , max j
+
+∑ 
+
+> i
+
+Aij ≤ eδ , and min (i,j )∈E Aij =min (i,j )∈E eU 0 
+
+> ij
+
+μiνj ≥ μmin νmin e−δ . Thus by Lem. B.6, 
+
+λ2(L[A]) 
+
+(
+
+max i
+
+∑ 
+
+> j
+
+Aij 
+
+)
+
+∧ (max j
+
+∑ 
+
+> i
+
+Aij )
+
+≥ μmin νmin e−2δ λ2(L[1E ]) ≥ e−R(1+ δ).
+
+• By [Wan26, Proposition 2.7], there exists (f ∗, g ∗) ∈ argmin Ψ such that 
+
+∥f ∗∥∞ , ∥g∗∥∞ ≤ R′
+
+[
+
+− min  
+
+> (i,j )∈E
+
+U 0 
+
+> ij
+
+− log( μmin ∨ νmin ) + max  
+
+> ij
+
+U 0
+
+> ij
+
+]
+
+≤ R′′ (1 + δ),
+
+and by (a slight variation on the proof of) [Wan26, Lemma 1.7], the sequence ( ∥ ∥f k − f ∗∥∥∞ ∨∥∥gk − g∗∥∥∞
+
+) 
+
+> k≥0
+
+is non-increasing. So, since (f 0, g 0) = (0 , 0) ,
+
+sup 
+
+> k≥0
+
+max 
+
+> ij
+
+∣∣f ki + gkj
+
+∣∣ ≤ sup 
+
+> k≥0
+
+∥∥(f k, g k)∥∥∞ ≤ ∥ (f ∗, g ∗)∥∞ +∥∥(f 0 − f ∗, g 0 − g∗)∥∥∞ ≤ 4R′′ (1+ δ).
+
+This already shows the first inequality of the Corollary, as for all k ≥ 0 and (i, j ) ∈ E ,
+
+∣∣U kij 
+
+∣∣ = ∣∣(f ki + gkj − Cij )/τ ∣∣ = ∣∣f ki + gkj + U 0
+
+> ij
+
+∣∣ ≤ 4R′′ (1 + δ) + δ. 
+
+• Let Φ( f, g ) = log 
+
+(∑ 
+
+> ij
+
+Aij efi+gj
+
+)
+
+− μ⊤f − ν⊤g. Then min Φ = min Ψ and Ψ( f 1, g 1) = Φ( f 1, g 1) since ∑ 
+
+> ij
+
+πkij = 1 for all k ≥ 1. One can also check that ∀g, argmin Ψ( ·, g ) ⊂
+
+argmin Φ( ·, g ) and so Φ( f 1, g 1) ≤ Φ( f 0, g 0) = Φ(0 , 0) . Thus 
+
+Ψ( f 1, g 1) ≤ Φ(0 , 0) = log ∑
+
+> ij
+
+Aij = log ∑
+
+> ij
+
+eU 0 
+
+> ij
+
+μiνj ≤ max  
+
+> ij
+
+U 0 
+
+> ij
+
+≤ δ. 
+
+43 • By duality, since the primal EOT problem has a feasible solution by the asymptotic scalability assumption S = E,
+
+− min Ψ = max( −Ψ) = min 
+
+> π∈∆E
+
+∑
+
+> ij
+
+Cij πij + H (π∥μ ⊗ ν) subject to X♯π = μ, Y ♯π = ν
+
+≤ max  
+
+> (i,j )∈E
+
+Cij + max 
+
+> π∈∆m×n
+
+H (π∥μ ⊗ ν) ≤ δ − log( μmin νmin ).
+
+Thus by Prop. B.5, 
+
+Ψ( f k, g k)−min Ψ ≤
+
+(
+
+1 − e−R(1+ δ)e−8R′′ (1+ δ))k−1
+
+(2 δ−log( μmin νmin )) ≤ B(1+ δ)
+
+(
+
+1 − e−R′′′ (1+ δ))k
+
+.
+
+So, since Ψ( f k, g k)−Ψ( f k+1 , g k+1 ) = H (μ∥∥X♯πk)+H (ν∥∥Y♯πk) for all k ≥ 1 by [ANR17, Lemma 2], 
+
+H (μ∥∥X♯πk) ≤ ∣∣Ψ( f k, g k) − min Ψ ∣∣ + ∣∣Ψ( f k+1 , g k+1 ) − min Ψ ∣∣ ≤ 2B(1 + δ)
+
+(
+
+1 − e−R′′′ (1+ δ))k
+
+.
+
+Further, for any k ≥ 1 even, vk+1  
+
+> i
+
+= log (μi/(X♯πk)i) and (X♯πk)i = μie−vk+1  
+
+> i
+
+≥ μiνmin ≥ μmin νmin 
+
+by Lem. 2.5, so by local Lipschitz-continuity of log and by Pinsker’s inequality, 
+
+∥∥vk+1 ∥∥∞ ≤ 1
+
+μmin νmin 
+
+∥∥μ − X♯πk∥∥1 ≤ 1
+
+μmin νmin 
+
+√
+
+4B(1 + δ) (1 − e−R′′′ (1+ δ))k
+
+≤ B′ (1 + δ)
+
+(
+
+1 − e−R′′′′ (1+ δ))k
+
+.
+
+Hence the bound on the vk, and the bound on the wk follows similarly. 
+
+## B.4 Proof of Prop. 2.10 
+
+Lemma B.8. Suppose that S = S. For any k0 ≥ K2(1 + δ) even, let v(k0)k, w (k0)k, U (k0)k be as in Lem. B.2 (where K2 is defined as in Lem. B.2). Then 
+
+∀k ≥ k0 + 4 ,
+
+∥∥∥v(k0)k − v∗
+
+∥∥∥∞
+
+,
+
+∥∥∥w(k0)k − w∗
+
+∥∥∥∞
+
+≤ B8(1 + δ)
+
+(
+
+1 − e−R8(1+ δ))k−k0
+
+for some constants B8, R 8 > 0 dependent only on μ, ν , and E.Proof. In this proof, we write B2, K 2 for the constants introduced in Lem. B.2 and B7, R 7 for the ones introduced in Coroll. B.7, and we use B, B ′, B ′′ , ... to denote constants dependent only on 
+
+μ, ν, E without introducing them each time. Let us show that max (i,j )∈S 
+
+∣∣∣U k0
+
+> ij
+
+∣∣∣ is bounded by a constant independent of k0. For this, let 
+
+k2 = ⌈K2(1 + δ)⌉ ≤ k0 and consider the iterates v(k2)k, w (k2)k, U (k2)k defined as in Lem. B.2. Then 
+
+max 
+
+> (i,j )∈S
+
+∣∣∣U (k2)k0 
+
+> ij
+
+− U k0
+
+> ij
+
+∣∣∣ ≤ B2
+
+by Lem. B.2. Now we claim that max (i,j )∈S 
+
+∣∣∣U (k2)kij 
+
+∣∣∣ is bounded uniformly over all k ≥ k2. Indeed, at its initialization, 
+
+∀(i, j ) ∈ S ,
+
+∣∣∣U (k2)k2)
+
+> ij
+
+∣∣∣ =
+
+∣∣∣U k2
+
+> ij
+
+∣∣∣ =
+
+∣∣∣∣∣∣∣
+
+U 0 
+
+> ij
+
++ v1 
+
+> i
+
++ w2 
+
+> j
+
++
+
+> k2−1
+
+∑ 
+
+> l=2
+> leven
+
+vl+1  
+
+> i
+
++
+
+> k2−1
+
+∑ 
+
+> l=3
+> lodd
+
+wl+1 
+
+> i
+
+∣∣∣∣∣∣∣
+
+≤ 4δ + k2 [− log( μmin ∧ νmin )] ≤ B(1 + δ),
+
+44 and so by the first part of Coroll. B.7 applied with μ∗, ν, S, U (k2)k2
+
+in place of “ μ, ν, E, U 0”, we have 
+
+∀k ≥ k2, max (i,j )∈S 
+
+∣∣∣U (k2)kij 
+
+∣∣∣ ≤ B7 (1 + B(1 + δ)) . This shows that, as we claimed, 
+
+∀k ≥ k2, max 
+
+> (i,j )∈S
+
+∣∣∣U (k2)kij 
+
+∣∣∣ ≤ B′(1 + δ),
+
+and in particular this estimate holds for k = k0. Stringing together the above inequalities, we get as announced 
+
+max 
+
+> (i,j )∈S
+
+∣∣∣U k0
+
+> ij
+
+∣∣∣ ≤ B2 + max 
+
+> (i,j )∈S
+
+∣∣∣U (k2)k0
+
+> ij
+
+∣∣∣ ≤ B2 + B′(1 + δ) = B′′ (1 + δ)
+
+uniformly in k0.Thus we have 
+
+∀(i, j ) ∈ S , −B′′ (1 + δ) ≤ U (k0)k0 
+
+> ij
+
+= U k0 
+
+> ij
+
+≤ B′′ (1 + δ).
+
+The announced bound then follows by reasoning as in the proof of Lem. B.4, applying Coroll. B.7 with μ∗, ν, S, ˜U k0 in place of “ μ, ν, E, U 0” in the corollary statement to quantify the convergence of the ˜vk (for ˜vk, ˜wk, ˜U k being defined as in Lem. B.3). Finally, we can now present the proof of Prop. 2.10. 
+
+Proof of Prop. 2.10. Let K2, B 2, γ be as in Lem. B.2 and let B8, R 8 be as in Lem. B.4. Fix any 
+
+k ≥ 2K2(1 + δ) + 8 . Consider any ∆ > 0 such that k0 = K2(1 + δ) + ∆ is even and k0 + 4 ≤ k, and let (v(k0)l, w (k0)l, U (k0)l)l≥k0 be defined as in Lem. B.2. Then by Lem. B.2 for the first term and by Lem. B.8 for the second term, 
+
+∥∥vk − v∗∥∥∞ ≤
+
+∥∥∥vk − v(k0)k
+
+∥∥∥∞ +
+
+∥∥∥v(k0)k − v∗
+
+∥∥∥∞ ≤ B2e−∆γ/ 4 + B8(1 + δ)
+
+(
+
+1 − e−R8(1+ δ))k−k0
+
+.
+
+Take ∆ = k/ 2 − r, where 0 ≤ r ≤ 2 serves to ensure that k0 = K2(1 + δ) + ∆ is an even integer. Let us check that this choice also satisfies the condition k0 + 4 ≤ k, i.e., 
+
+K2(1 + δ) + ∆ + 4 = K2(1 + δ) + k/ 2 − r + 4 ≤ k. 
+
+This is indeed true by our assumption that k ≥ 2K2(1 + δ) + 8 .Plugging this choice of ∆ into the bound on ∥∥vk − v∗∥∥∞ above, we obtain 
+
+∥∥vk − v∗∥∥∞ ≤ B2e−kγ/ 8erγ/ 4 + B8(1 + δ)
+
+(
+
+1 − e−R8(1+ δ))k/ 2+ r (
+
+1 − e−R8(1+ δ))−K2(1+ δ)
+
+≤ B(1 + δ)
+
+(
+
+1 − e−R(1+ δ))k
+
+for some constants B, R dependent only on μ, ν , and E, since sup δ> 0
+
+(1 − e−R8(1+ δ))−K2(1+ δ) is finite and dependent only on R8, K 2. This proves the announced bound for the vk, and the bound for the wk follows similarly. 45

@@ -1,0 +1,3216 @@
+Title: Introduction to Stochastic Differential Equations for Generative Machine Learning: A Variational Perspective
+
+URL Source: https://arxiv.org/pdf/2606.31576v1
+
+Published Time: Wed, 01 Jul 2026 01:05:15 GMT
+
+Number of Pages: 32
+
+Markdown Content:
+# Introduction to Stochastic Differential Equations for Gener-ative Machine Learning: A Variational Perspective 
+
+Ole Winther ole.winther@bio.ku.dk Department of Biology, University of Copenhagen, 2200, Copenhagen, Denmark Department of Applied Mathematics and Computer Science, Technical University of Denmark, Kgs. Lyngby, Denmark 
+
+Paul Jeha pauje@dtu.dk Department of Applied Mathematics and Computer Science, Technical University of Denmark, Kgs. Lyngby, Denmark 
+
+Sander Dieleman sedielem@deepmind.com Google DeepMind, London, UK 
+
+Andriy Mnih andriy@deepmind.com Google DeepMind, London, UK 
+
+Manfred Opper manfred.opper@tu-berlin.de Technical University of Berlin (TU Berlin), Berlin, Germany 
+
+Andrea Dittadi andrea.dittadi@gmail.com Technical University of Munich, Germany 
+
+## Abstract 
+
+The use of ordinary and stochastic differential equations has led to substantial progress in generative machine learning with applications to, for example, image, video and biomolecule generation. This paper provides a self-contained and informal introduction to the differen-tial equations, the probabilistic framework for using them in generative modeling and the Fokker–Planck equation that governs the temporal evolution of the marginal distribution of the stochastic variables of the differential equations. The variational lower bound on the log-likelihood (the evidence lower bound, ELBO) is derived and used as a general start-ing point for a discussion of diffusion models, score matching, and flow matching. All of these approaches may be viewed as specific parameterizations of the most general varia-tional approach. A one-dimensional density modeling problem is used as a simple example to compare different parameterizations. 
+
+## 1 Introduction 
+
+In recent years, stochastic processes have played a fundamental role in generative machine learning, as exemplified by neural ordinary differential equations (Neural ODEs) (Chen et al., 2018), score matching (Song & Ermon, 2019; Song et al., 2020a;b; 2021; 2023), diffusion models (Sohl-Dickstein et al., 2015; Ho et al., 2020; Kingma et al., 2021), flow matching (Lipman et al., 2022; Liu et al., 2022; Tong et al., 2023b) and stochastic interpolants (Albergo et al., 2023). These methodologies have led to applied breakthroughs in, for example, image and video generation and bio-molecule structure prediction and design (Ho et al., 2020; 2022; Hoogeboom et al., 2022). It is noteworthy that older work, such as Archambeau et al. (2007); Opper & Sanguinetti (2007), developed a similar methodology with applications in the time series setting rather than in generative modeling. Most publications assume a relatively advanced level understanding of stochastic processes and probabilistic methods. The exposition typically starts from a statement of the generative model as a stochastic pro-cess written in terms of an ordinary or stochastic differential equation (ODE or SDE) with fundamental 1
+
+> arXiv:2606.31576v1 [cs.LG] 30 Jun 2026
+
+concepts, such as the Fokker-Planck equation, being applied without being formally derived. In addition, recent advances often present different perspectives on similar concepts, making it challenging to understand connections between them without a strong background in the basic methodology. On the other end of the spectrum, many good primers have appeared online that have strong intuitive explanations starting from simulations and heuristic objective functions, but lack connection to the probabilistic foundation. This has motivated us to provide a self-contained introduction to the fundamentals of these methods and present methods from the machine learning literature in a unified way. In some instances, our variational perspective may differ slightly from the prevailing paradigm, with the goal of offering a fresh view on popular methods. The approach we take here is to focus on how to derive the results appearing in the machine learning literature with less focus on formality and mathematical rigor. Specifically, the master Fokker–Planck equation that governs the temporal evolution of the marginals distribution of the stochastic variables and the reverse-time SDE are often presented as fundamental results. The exposition is sought to be self-contained with minimal need for specialized background knowledge for example neither Itô calculus nor the Girsanov theorem will be used directly. Rather we will appeal to using Taylor expansions or start from finite differences equation and show without proving that the continuous formulation follows from taking the infinitesimal limit. The necessary assumptions (such as existence of derivatives to different orders or integrands vanishing at integration limits) will be introduced where they occur in the derivation rather than upfront, to avoid overloading the reader. This paper is not intended as a review. Our aim is to provide a key to unlock the literature at the intersection of machine learning and stochastic processes. As a result, many recent methodological developments, such as more computationally efficient sampling techniques and constraints applied to stochastic processes to endow models with specific properties, are not covered. It is assumed that the reader has good understanding of calculus and probability and thus the paper will not be the ideal starting point for all readers. The main contributions of this paper are: 
+
+• A self-contained presentation of probabilistic methodologies, including the derivation of the Fokker– Planck equation starting from the definition of the ordinary and stochastic differential equations (ODEs and SDEs), consolidating this content in one place rather than being scattered across text-books, stochastic process literature, and appendices in machine learning papers. The next three sections are dedicated to this: ODEs and SDEs (Section 2), generative models (Section 3) and the Fokker-Planck equation (Section 4). 
+
+• A unified derivation of objectives used in generative modeling with ODEs and SDEs, including diffusion, score and flow matching, all presented within a general variational framework. Three sections are dedicated to this: training objective (Section 5), parameterization of the SDE objective (Section 6) and diffusion, score and flow matching (Section 7). 
+
+• A methodology for constructing analytically tractable processes that extend beyond those with Gaussian marginals. The motivation for pushing these limits is inspire researchers to go beyond how these methods are used today described in Section 6. Sections 8 and 9 contain a simple one-dimensional density modeling example comparison and the discussion. 
+
+## 2 Ordinary and stochastic differential equations (ODEs and SDEs) 
+
+We begin by introducing the fundamentals of differential equations. We will consider a stochastic variable 
+
+xt ∈ Rd indexed by a continuous time parameter t ∈ [0 , 1] . The evolution of xt is described in terms of infinitesimal changes, expressed using the differential notation dxt, which can be seen as the limit of 
+
+∆xt = xt+∆ t − xt for ∆t → 0. This limit is not formally defined on its own, but serves as an intuitive and compact representation of local dynamics. A rigorous understanding can be achieved using an integral formulation. 2In this work, we will focus on Markov processes, where the system’s infinitesimal evolution dxt depends on the current time t and the past through the current state xt only. As a starting point, we consider the deterministic case, where the system evolves according to an ordinary differential equation (ODE):  
+
+> dxt
+> dt
+
+= f (xt, t ), where the drift f : Rd × [0 , 1] → Rd specifies the instantaneous rate of change of the state. We will write the ODE as 
+
+dxt = f (xt, t )d t . (ODE) (1) This is an informal notation, not rigorously defined in the infinitesimal limit, but it allows us to treat the deterministic and stochastic versions in a unified way. To model systems influenced by random fluctuations, we extend this formulation to stochastic differential equations (SDEs), which include an additional stochastic term: 
+
+dxt = f (xt, t )d t + σ(xt, t )d Wt (SDE) (2) Here, the diffusion coefficient σ : Rd × [0 , 1] → Rd×m determines how noise enters and influences each component of the state, and dWt denotes the infinitesimal stochastic increment of an m-dimensional Wiener process (or Brownian motion). There are no restrictions on the choice of σ other than in one specific case (Section 5.2), we will require that σσ T is full rank. A Wiener process Wt is a continuous-time stochastic process such that (1) W0 = 0 almost surely (i.e., with probability 1); (2) its increments are distributed as Wt+∆ t − Wt ∼ N (0, ∆t I) for ∆t > 0 and (3) is independent of past values {Ws : s < t }; (4) its sample paths are almost surely continuous in t. The term dWt is thus a symbolic representation of an increment of the Wiener process over an infinitesimal time interval. It introduces a source of noise that is independent of the current system state. This independence can be defined as pt(xt, dWt) = pt(xt)p(d Wt), where pt(xt) is the marginal distribution of xt at time t.This leads to the so-called Itô SDE that we study in this paper. The alternative but equivalent Stratonovich formulation with dependent noise is sometimes more convenient (Gardiner, 2009; Øksendal, 2013). In practice, solutions to both ODEs and SDEs are often approximated using time discretization methods. Typically, time is discretized by partitioning the interval [0 , 1] into T subintervals of length ∆t = 1/T . For stochastic systems, the most basic and widely used approach is the Euler–Maruyama scheme, a stochastic analogue of the classical Euler method. The evolution of the process is approximated by 
+
+xt+∆ t ≈ xt + f (xt, t ) ∆ t + σ(xt, t ) ∆ Wt , (3) where ∆Wt ∼ N (0 , ∆t I). This method provides a foundation for both numerical simulations and theoretical analysis of stochastic dynamics. As T → ∞ , the discrete approximation converges to the marginal distri-bution and under some conditions to the full distribution of the continuous-time Wiener process (Platen, 1999), and ∆t, ∆Wt are replaced by the differentials dt, dWt.
+
+## 3 Generative differential equations 
+
+In this paper we will only consider differential equations for generative modeling. We assume an observed (continuous or discrete) random variable y with an unknown true distribution q(y), and our goal is to learn a model distribution p(y) that approximates q(y). Here we follow the convention from the infinite data limit derivation of the score and flow matching methods to use q(y) for the data distribution, see Section F. Additionally, we aim to efficiently generate new samples y ∼ p(y). The model specification consists of (i) a latent process {xt}t∈[0 ,1] in Rd, described by the ODE (1) or the SDE (2), which starts from (ii) a simple prior distribution p0(x0) at t = 0 , and (iii) a distribution p(y|x1) conditioned on x1, typically called likelihood function .Using a latent process to model p(y) is a powerful construction for flexible modeling. The latent process in general will provide a smooth non-linear transformation of the latent variable and thus is more expressive 3than the one-shot variational autoencoder approach of using a likelihood function p(y|x) with a simple prior distribution p(x). To learn the generative model, we will assume access to a training set of n independent and identically distributed (iid) samples {y(1) , . . . , y(n)} from the data distribution q(y).Formally, the prior and the latent process induce a distribution p(X) over the continuous-time paths X =
+
+{xt}t∈[0 ,1] . We note that the joint distribution p(X) = p(xt0 , xt1 , . . . , xtT ) only exists for discretizations of the process with a finite number of steps 0 = t0 < . . . < t T = 1 , and is not well-defined in the T → ∞ limit. Nevertheless, we will adopt this informal perspective as it makes the derivations more manageable and helps build an intuitive understanding. The likelihood (the probability of the data point y under the model) can now formally be written as a marginalization over the latent paths: 
+
+p(y) = 
+
+∫
+
+p(y|x1)p(X)d X =
+
+∫
+
+p(y|x1)p1(x1)d x1 , (4) which shows that we can compute the (marginal) likelihood if we have access to the marginal distribution at t = 1 .Computing the likelihood is in general analytically intractable, and (bridge, nested and tempered) Monte Carlo estimation is computationally expensive. The variational approach presented in Section 5 provides a computationally efficient stochastic estimate of a lower bound to the log-likelihood, making it attractive for large-scale machine learning. The log-likelihood lower bound is commonly referred to as the evidence lower bound (ELBO). Both the exact (Eq. (4)) and approximate (Section 5) computation of the log-likelihood require integration over path distributions (path integrals). The path integral derivation is given in Section E.1. Alternatively, the marginal p1(x1) in (4) can be obtained as the solution of a differential equation for the marginal pt(xt),involving the time derivative dpt(xt)dt . Integrating this equation, we will then express p1(x1) in terms of an initial density and a standard integral over time. We give this derivation in Section 5. It uses the fundamental and central Fokker–Planck equation, which governs the partial time derivative of the marginal distribution:  
+
+> ∂p t(xt)
+> ∂t
+
+. It is discussed in Section 4 and derived in Section A. 
+
+## 4 The Fokker–Planck equation 
+
+The Fokker–Planck equation (FPE) is a partial differential equation (PDE) that describes the temporal evolution of the probability density pt(x) of a state x in a stochastic or deterministic dynamical system. A key feature of the FPE is that it provides a unified description of how these densities evolve, regardless of the specific ODE or SDE. Notably, different types of dynamics—SDEs, ODEs, and reverse-time SDEs—can all give rise to the same set of marginal distributions pt(x), t ∈ [0 , 1] . This equivalence underlies several modern generative modeling techniques. For example, diffusion models are typically formulated as learning to reverse an SDE that adds noise to data. Similarly, turning an SDE into an ODE and vice versa without changing the marginals pt(x) enables deterministic sampling from a diffusion model and stochastic sampling from a deterministic flow model. In this section, we introduce the Fokker–Planck equations for the differential equations in Section 2 and use it to define different processes with the same marginal densities pt. The FPE for the SDE (2) is: 
+
+∂p t(x)
+
+∂t = − ∑
+
+> i
+
+∂∂x i
+
+[fi(x, t )pt(x)] + 12
+
+∑
+
+> i,j
+
+∂2
+
+∂x i∂x j
+
+[[σ(x, t )σT(x, t )] 
+
+> ij
+
+pt(x)
+
+]
+
+(5) 
+
+= −∇ · [f (x, t )pt(x)] + 12 ∇ · (∇ · [D(x, t )pt(x)]) , (6) where in the last line we defined the positive semi-definite diffusion matrix D(x, t ) := σ(x, t )σ(x, t )T and used standard notation for divergences of vector and matrix fields. 1 Notice that the drift f (x, t ) of the        
+
+> 1Vector and matrix fields simply means vectors and matrices that are functions of x. The divergence of a vector field vis defined as ∇ · v:=
+
+∑               
+
+> i∂v i
+> ∂x i. For a matrix field A, we denote by ∇ · Athe vector field whose i-th element is the divergence of the i-th row of A, i.e., (∇ · A)i:= ∇ · Ai=
+
+∑  
+
+> j∂∂x jAij .
+
+4SDE corresponds to a first-order derivative, and the diffusion σ(x, t ) to a second-order derivative. For a deterministic ODE, the FPE reduces to the Liouville or continuity equation, as the diffusion term vanishes: 
+
+∂p t(x)
+
+∂t = −∇ · [f (x, t )pt(x)] . (7) In the ODE setting, the drift is often referred to as the flow field, as it determines how probability mass is transported through state space. We derive the Fokker–Planck equation using the Kramers–Moyal expansion in Section A. The derivation starts from the definition of the partial derivative and writes it as a Taylor expansion in the (jump) moments of the transition kernel pt+∆ t(x′, x). For the Wiener process, it turns out that only the two first jump moments will contribute, leading to the drift and diffusion coefficient terms in the Fokker–Planck equation. An alternative equivalent derivation based upon Itô’s lemma is also possible (Risken, 1996). 
+
+4.1 ODEs and SDEs with the same time-marginals 
+
+Consider the ODE (1) with initial condition x0 ∼ p0, and let pt denote the marginal density of xt, satisfying the continuity equation (7). Here we will show that we can rewrite Eq. (7) in a form that is similar to the Fokker–Planck equation (6), which corresponds to an SDE. That will allow us to define an SDE with an arbitrary diffusion coefficient that, starting from p0, induces the same time-marginals pt as the ODE. 
+
+From ODE to SDE. We can rewrite the diffusion term in the Fokker–Planck equation (6) as a drift term: 
+
+∇ · (∇ · [D(x, t )pt(x)]) = ∇ · 
+
+[
+
+pt(x) 1
+
+pt(x) ∇ · [D(x, t )pt(x)] 
+
+︸ ︷︷ ︸
+
+> (∗)
+
+]
+
+(8) where (∗) plays the role of a drift. For any sufficiently regular σ, we can add and subtract the same term to the r.h.s. of the continuity equation (7) to obtain a Fokker–Planck equation for an SDE: 
+
+∂p t(x)
+
+∂t = −∇ · [f (x, t ) pt(x)] (9) 
+
+= −∇ · 
+
+[ (
+
+f (x, t ) + 12 pt(x) ∇ · [D(x, t )pt(x)] 
+
+)
+
+pt(x)
+
+]
+
++ 12 ∇ · (∇ · [D(x, t )pt(x)]) . (10) The two equivalent equations (9,10) correspond to the following ODE and SDE, respectively: 
+
+dxt = f (xt, t ) d t (ODE) (11) 
+
+dxt =
+
+(
+
+f (x, t ) + 12 pt(x) ∇ · [D(x, t )pt(x)] 
+
+)
+
+dt + σ(xt, t ) d Wt (SDE) (12) Since these two equations are derived from the same Fokker–Planck equation, they will have the same pt
+
+solution. The effect of the introduced diffusion σ is exactly canceled by the additional term in the drift. So we can conclude that, given an initial distribution x0 ∼ p0 and an ODE (11) , we can define an SDE (12) 
+
+with arbitrary diffusion coefficient σ(xt, t ) that has the same time-marginals pt as the ODE . In Section C, we further discuss the relationship between the ODE and SDE as continuity equations for probability. 
+
+Reverse-time SDEs. In diffusion models, we will use a diffusion process that is initialized to a data point 
+
+x1 ≈ y at t = 1 and runs backwards in time, gradually adding more noise. We will therefore need to extend the above analysis to the reverse-time case. We have just shown how to manipulate the Fokker–Planck equation to turn an ODE into an SDE with arbitrary stochasticity without changing the solution for the time-marginals pt(x). The ODE can be solved forward and backward in time so we can use the results above to define a reverse-time SDE for the reverse-time solution to the ODE. Writing the reverse-time ODE in terms of the reverse clock τ that goes from 0 5to 1 when t goes from 1 to 0, τ := 1 − t, we can introduce an SDE for clock τ that has the same marginals as the ODE. To formalize this, we write the original ODE dxt 
+
+> dt
+
+= f (xt, t ) in terms of clock τ renaming 
+
+xt to x′ 
+
+> τ
+
+:= x1−τ = xt, which yields dx′ 
+
+> τ
+> dτ
+
+= f ′(x′ 
+
+> τ
+
+, τ ). Since dxt 
+
+> dτ
+
+= − dxt 
+
+> dt
+
+, the τ clock ODE has drift 
+
+f ′(x, τ ) = −f (x, 1 − τ ). We can now trivially write down the reverse-time SDE for the clock τ that has the same marginals as the ODE: 
+
+dx′ 
+
+> τ
+
+= f ′(x′ 
+
+> τ
+
+, τ ) d τ (RT ODE, τ clock) (13) 
+
+dx′ 
+
+> τ
+
+=
+
+(
+
+f ′(x′ 
+
+> τ
+
+, τ ) + 12 pt(x′ 
+
+> τ
+
+) ∇ · [D′(x′ 
+
+> τ
+
+, τ ) pt(x′ 
+
+> τ
+
+)] 
+
+)
+
+dτ + σ′(x′ 
+
+> τ
+
+, τ ) d W′ 
+
+> τ
+
+(RT SDE, τ clock) (14) with σ′(x, τ ) = σ(x, 1 − τ ) and for simplicity we have kept t in the marginal as a shorthand for pt(x) = 
+
+p1−τ (x).While this SDE is properly defined as running forward in the τ clock, it is common in the literature to re-express it in terms of the original time variable t, effectively describing the process backward in time. Here we provide a derivation sketch, while a detailed derivation is given in Section B. The Wiener process W′ 
+
+> τ
+
+introduced above starts from W′ 
+
+> 0
+
+= 0 and has independent increments according to the τ clock. This is a standard Wiener process running backward in time according to the t clock, and can be defined in terms of the standard (forward) Wiener process as W′ 
+
+> τ
+
+:= W1−τ − W1. We now change the variables in the reverse-time SDE above back to the t clock and write 
+
+dxt =
+
+(
+
+f (xt, t ) − 12 pt(xt) ∇ · [D(x, t ) pt(xt)] 
+
+)
+
+dt + σ(xt, t ) ←−
+
+d Wt (RT SDE, t clock) (15) where we used the substitutions x′ 
+
+> τ
+
+→ xt, dτ → − dt, f ′(x′ 
+
+> τ
+
+, τ ) → − f (xt, t ) and σ′(x′ 
+
+> τ
+
+, τ ) → σ(xt, t ). The left arrow on the stochastic differential denotes a so-called backward Itô integral; see Section B for further details. We have now written the reverse-time SDE with marginals pt(x) in terms of the standard t clock. Its structure mirrors the standard SDE with the reverse-time Wiener process replacing the standard Wiener process and a changed sign in the drift correcting the diffusion term. That is, when running the SDE in reverse we need to reverse the contribution to the drift countering the diffusion. An even stronger result, due to Anderson (1982), says that when the forward and backward SDEs have the same time marginals and the same exact diffusion coefficient σ(x, t ), the path distributions —not just the marginals— in both directions are also identical .
+
+Summary. We have shown that, for any σ : Rd × [0 , 1] → Rd such that the SDEs have solutions, the ODE (11) , SDE (12) , and reverse-time SDE (15) have the same time-marginals pt(x). In the diffusion models literature, the ODE (11) is typically called the probability flow ODE (PF ODE) for the SDE (12). In the remainder of the paper when we discuss more than one of these three models, we will denote ODE drift by f (xt, t ) and the forward and reverse time with arrows: 
+
+−→
+
+f (xt, t ) = f (x, t ) + 12 pt(x) ∇ · [D(x, t )pt(x)] (16) 
+
+←−
+
+f (xt, t ) = f (x, t ) − 12 pt(x) ∇ · [D(x, t )pt(x)] = −→
+
+f (xt, t ) − 1
+
+pt(x) ∇ · [D(x, t )pt(x)] . (17) The divergence term is typically rewritten as follows: 
+
+1
+
+pt(x) ∇ · [D(x, t )pt(x)] = ∇ · D(x, t ) + D(x, t ) ∇ log pt(x) (18) to highlight the Stein score ∇ log pt(x), which plays a central role in the score matching framework discussed in Section 7.2. In the literature, diffusion matrices are typically scaled identity matrices, i.e., σ(x, t ) = σ(x, t ) I. In addition, 
+
+σ(x, t ) is typically chosen to be constant in space and is denoted as σt. With these two assumptions, the 6drifts of the SDE and reverse SDE can be simplified as follows: 
+
+f (x, t ) ± 12 pt(x) ∇ · [D(x, t )pt(x)] = f (x, t ) ± 12
+
+(∇σ2(x, t ) + σ2(x, t )∇ log pt(x)) (19) 
+
+= f (x, t ) ± 12 σ2 
+
+> t
+
+∇ log pt(x) for σ(x, t ) = σt . (20) 
+
+## 5 Maximum likelihood training with ODEs and SDEs 
+
+In the machine learning approach, the ODE/SDE and the likelihood function introduced in Section 3 are written in terms of a parameter vector θ. We can use neural networks to parameterize the drift fθ and diffusion coefficient σθ that govern the latent process {xt}t∈[0 ,1] in Rd described by the ODE (1) or SDE (2). The likelihood function pθ (y|x1), mapping the terminal latent x1 to the observed variable y, may also have parameter dependencies. The objective is to perform maximum likelihood optimization of the model using a training set {y(m)}nm=1 .We want to use a gradient ascent method to maximize the log-likelihood ∑nm=1 log pθ (y(m)), where 
+
+pθ (y) = ∫ pθ (y|x1)p1,θ (x1)d x1 is obtained from Eq. (4) by adding the parameter dependencies. This marginal likelihood pθ (y) is typically intractable, i.e., it is not available in closed form and difficult to esti-mate using numerical methods. Furthermore, even if we could obtain samples from the posterior p1,θ (x1|y),computing the log-likelihood gradient would still require that we can compute gradients of log p1,θ (x1):
+
+∇θ log pθ (y) = Ep1,θ (x1|y)
+
+[∇θ log pθ (y|x1) + ∇θ log p1,θ (x1)] . (21) In the following, we will describe how to make gradient computations tractable. We omit the parameter dependence to keep the notation as simple as possible. Specifically, we introduce a variational posterior 
+
+q1(x1|y) (with parameters ϕ) that approximates the true posterior p1(x1|y) ∝ p(y|x1)p1(x1). Note that the prior distribution for x1, p1(x1), typically will be a complicated distribution. In contrast, the posterior 
+
+p1(x1|y) is a much narrower distribution because conditioning on a data point will limit the support to only the part of latent space associated with the data point and its slight variations. We can therefore hope that choosing q1(x1|y) as a simple distribution with support on the relevant part of latent space will be a good approximation to the true posterior. Furthermore, as discussed in the following, if q1(x1|y) can be evaluated in closed form and efficiently sampled from, then we get a tractable lower bound on the log-likelihood. We discuss how to construct good variational distributions in Section 6 and the variational distribution used in diffusion, score and flow matching in Section 7. A standard lower bound on the log-likelihood, the Evidence Lower BOund (ELBO) is obtained from the following rewrite of the marginal log-likelihood: 
+
+log p(y) = Eq1(x1|y) [log p(y)] = Eq1(x1|y)
+
+log p(y|x1)p1(x1)
+
+p1(x1|y)
+
+︸ ︷︷ ︸ 
+
+> log p(y)
+
++ log q1(x1|y)
+
+q1(x1|y)
+
+︸ ︷︷ ︸
+
+> =0
+
+
+
+= Eq1(x1|y) [log p(y|x1)] − Eq1(x1|y)
+
+[
+
+log q1(x1|y)
+
+p1(x1)
+
+]
+
++ Eq1(x1|y)
+
+[
+
+log q1(x1|y)
+
+p(x1|y)
+
+]
+
+= Eq1(x1|y) [log p(y|x1)] − DKL (q1(x1|y)∥p1(x1)) 
+
+︸ ︷︷ ︸
+
+> LODE ELBO (y)
+
++ DKL (q1(x1|y)∥p1(x1|y)) 
+
+︸ ︷︷ ︸ 
+
+> ELBO gap ( ≥0)
+
+, (22) where DKL (q(x)∥p(x)) := Eq(x)
+
+[
+
+log q(x)
+
+> p(x)
+
+]
+
+is the Kullback–Leibler (KL) divergence , which is non-negative. We denote the ELBO as LODE ELBO for reasons that will become clearer in Section 5.1. The non-negative ELBO gap is a measure of the mismatch between the true and approximate posterior distributions: it is zero if and only if q1(x1|y) = p1(x1|y), and in that case the ELBO coincides with the log-likelihood. 7The first term in the ELBO is often referred to as the reconstruction term since it involves “encoding” y into a latent variable x1 and then “reconstructing” y with a probabilistic model. Assuming that q1(x1|y) is easy to sample from and that log p(y|x1) can be evaluated, the reconstruction term can be easily estimated by Monte Carlo sampling. For the second term, DKL (q1(x1|y)∥p1(x1)) = Eq1(x1|y) [log q1(x1|y) − log p1(x1)] ,we can choose q1(x1|y) such that it is easy to evaluate and sample from. However, log p1(x1) is not available except in trivial cases. This is typically the main obstacle to estimating the ELBO, and the following sections develop two strategies that overcome this obstacle. 
+
+Roadmap. In Sections 5.1 and 5.2, we consider two approaches to address the issue of estimating the second term in the ELBO, DKL (q1(x1|y)∥p1(x1)) . This depends on how we define the latent process: (1) If the latent process is governed by an ODE, log p1(x1) can be computed exactly by a change-of-variable formula, but this requires solving an ODE. Plugging this expression into the ELBO produces a simulation-based 
+
+training objective. (2) For a latent process described by an SDE, directly evaluating log p1(x1) is not feasible in general. Instead, we will derive a bound on the second term in the ELBO that can be estimated without solving any differential equations, thus enabling efficient simulation-free training. Finally, in Section 5.3, we discuss the role of the likelihood function p(y|x1) and the variational distribution q1(x1|y), which define the link between the observable data y and the final-time latent variable x1.
+
+5.1 Latent ODE 
+
+If the latent process {xt}t∈[0 ,1] satisfies an ODE, log p1(x1) can be computed exactly, as we show next. For the ODE dx 
+
+> dt
+
+= f (x, t ), the total time-derivative of the density (i.e., along a path) is: 
+
+ddt pt(x) = ∂p t(x)
+
+∂t + ∂p t(x)
+
+∂x · dx
+
+dt
+
+> (7)
+
+= −∇ · [f (x, t )pt(x)] + ∂p t(x)
+
+∂x · dx
+
+dt
+
+= −pt(x) ∇ · f (x, t ) − f (x, t ) · ∂p t(x)
+
+∂x + ∂p t(x)
+
+∂x · dx
+
+dt
+
+= −pt(x) ∇ · f (x, t ) + ∂p t(x)
+
+∂x ·
+
+( dx
+
+dt − f (x, t )
+
+)︸ ︷︷ ︸
+
+> =0 (ODE)
+
+= −pt(x) ∇ · f (x, t ) ,
+
+which can be rearranged into ddt log pt(x) = −∇ · f (x, t ). This equation can be combined with the state equation (1) into an ODE in d + 1 variables: 
+
+ddt
+
+[ x
+
+log pt(x)
+
+]
+
+=
+
+[ f (x, t )
+
+−∇ · f (x, t )
+
+]
+
+(23) Let ϕts denote the flow map , defined such that ddt ϕts(xs) = f (ϕts(xs), t ) and ϕtt(x) = x. Intuitively, this maps 
+
+xs to xt along the ODE solution initialized at xs at time s. Integrating Eq. (23) on [s, t ], we obtain the following change of variable formula: 
+
+log pt(ϕts(xs)) = log ps(xs) −
+
+∫ ts
+
+∇ · f (ϕτs (xs), τ )d τ , (24) where ∇ · f (x′, t ) is shorthand for (∇x · f ) ( x′, t ), i.e., the spatial divergence evaluated at x′. In Section C, we give an interpretation of this result. To compute log p1(x1) for a given terminal value x1, we integrate the system of ODEs in Eq. (23) backwards from t = 1 to t = 0 , obtaining x0 = ϕ01(x1) and log p0(x0), and computing ∫ 10 ∇ · f (ϕt
+
+> 1
+
+(x1), t ) d t in the process. Substituting these quantities into Eq. (24) gives log p1(x1). The ELBO (22) then takes the form: 
+
+log p(y) ≥ L ODE ELBO (y) := Eq1(x1|y) [log p(y|x1)] − DKL (q1(x1|y)∥p1(x1)) (25) 
+
+= Eq1(x1|y)
+
+[
+
+log p(y|x1) − log q1(x1|y) + log p0(ϕ01(x1)) −
+
+∫ 10
+
+∇ · f (ϕt
+
+> 1
+
+(x1), t ) d t
+
+]
+
+.
+
+8This objective serves as the basis for training. Because its evaluation requires solving the augmented ODE in Eq. (23), it is often referred to as a simulation-based objective in the generative modeling literature. In certain cases, this objective coincides with the exact log-likelihood: for example, as we discuss in Section 5.3, when the observation y is continuous and y = x1, the bound becomes tight. Generation also requires simulation, where samples are obtained by integrating the forward dynamics in Eq. (1) from prior to data (Grathwohl et al., 2018; Chen et al., 2018). At this stage, both training and inference depend on numerical ODE solvers, but in Section 5.2 we will discuss simulation-free training. To make the procedure concrete, we provide pseudo-code in Algorithm 1. For simplicity, we illustrate the algorithm using Euler discretization for integration, but higher-order methods such as Runge–Kutta are generally required for numerical stability, and gradients can be computed efficiently using the adjoint method (Chen et al., 2018; Kidger et al., 2021). For a broader discussion of numerical solvers in this setting, see Kidger et al. (2021); Karras et al. (2022). 
+
+Algorithm 1: ODE pseudo-code for ELBO computation and sampling. 
+
+Input: T (number of discretization steps), f (drift function), p0 (prior), p (likelihood function), q
+
+(variational distribution), y (data)  
+
+> 1
+
+Def ODESolver( xinit , tinit , ∆t): 
+
+> 2
+
+x, t, logP = xinit , t init , 0 
+
+> 3
+
+for i=1,. . . ,T do  
+
+> 4
+
+x = x + f (x, t )∆ t 
+
+> 5
+
+logP = logP − ∇ · f (x, t )∆ t 
+
+> 6
+
+t = t + ∆ t 
+
+> 7
+
+return x, logP  
+
+> 8
+
+Def ODEELBO( y): 
+
+> 9
+
+x1 ∼ q1(x1|y) 
+
+> 10
+
+x0, ELBO = ODESolver (xinit = x1, tinit = 1 , ∆t = −1/T ) 
+
+> 11
+
+ELBO = ELBO + log p0(x0) + log p(y|x1) − log q1(x1|y) 
+
+> 12
+
+return ELBO  
+
+> 13
+
+Def Sample() : 
+
+> 14
+
+x0 ∼ p0(x0) 
+
+> 15
+
+x1, _ = ODESolver (xinit = x0, tinit = 0 , ∆t = 1 /T ) 
+
+> 16
+
+ysample ∼ p(ysample |x1) 
+
+> 17
+
+return ysample 
+
+5.2 Latent SDE 
+
+If the latent process follows an SDE, p1(x1) = ∫ p(x1|x0)p(x0)d x0 cannot be computed directly via a change of variables, and is therefore intractable in most cases. As a result, the KL divergence 
+
+DKL (q1(x1|y)∥p1(x1)) in the ELBO (22) is also intractable. We will address this by deriving an upper bound to DKL (q1(x1|y)∥p1(x1)) which consists in a time-averaged mean-squared error that can be efficiently estimated, as seen in diffusion models and flow matching (see Section 7). This will result in a tractable, though generally looser, log-likelihood bound LSDE ELBO (y) ≤ L ODE ELBO (y) ≤ log p(y). Consequently, unlike the ODE approach in Section 5.1, the SDE formulation enables training without explicitly solving differential equations. We assume the latent process is governed by the SDE 
+
+dx = −→
+
+f (x, t )d t + σ(x, t )d W (26) and has marginals pt(x). We define a variational latent process: 
+
+dx = −→g (x, y, t )d t + σ(x, t )d W (27) 9that is conditional on a data point y and has marginals qt(x|y). We then rewrite the KL divergence as: 
+
+DKL (q1(x1|y) ∥ p1(x1)) = DKL (q0(x0|y) ∥ p0(x0)) + 
+
+∫ 10
+
+ddt DKL (qt(x|y) ∥ pt(x)) d t . (28) The KL derivative can be written in terms of the partial derivatives of the two densities (see Section D.1): 
+
+ddt DKL (qt(x|y) ∥ pt(x)) = 
+
+∫ ∂q t(x|y)
+
+∂t log qt(x|y)
+
+pt(x) dx −
+
+∫ qt(x|y)
+
+pt(x)
+
+∂p t(x)
+
+∂t dx . (29) Although pt(x) and qt(x|y) come from SDEs, we will now work with their associated probability-flow ODE vector fields f and g since they satisfy simple continuity equations. These ODEs have the same time-marginals 
+
+pt, q t as the SDEs, and the relationship between their drifts is discussed in Section 4.1 (in particular, see Eq. (16)). Plugging in these continuity equations, we obtain the following expression (proof in Section D.1): 
+
+ddt DKL (qt(x|y) ∥ pt(x)) = Eqt(x|y)
+
+[(g(x, y, t ) − f (x, t )) · (∇ log qt(x|y) − ∇ log pt(x)) ] . (30) Using Eq. (17), we can also define a reverse-time SDE with drift ←−
+
+f and same diffusion σ(x, t ) as the generative SDE above, that has the same time-marginals pt. Similarly, we define ←−g from g, using again the same diffusion σ. In Section D.2, we integrate (30) to show that 
+
+∫ 10
+
+ddt DKL 
+
+(qt(x|y) ∥ pt(x)) dt = D(−→
+
+f , −→g , y) − D (←−
+
+f , ←−g , y) , (31) where we assumed that D(x, t ) = σ(x, t )σT(x, t ) is invertible, and we defined 
+
+D(f , g, y) := 12
+
+∫ 10
+
+Eqt(x|y)
+
+[
+
+(f (x, t ) − g(x, y, t )) T D(x, t )−1 (f (x, t ) − g(x, y, t )) 
+
+]
+
+dt (32) 
+
+= 12
+
+∫ 10
+
+Eqt(x|y)
+
+[
+
+∥f (x, t ) − g(x, y, t )∥2
+
+σ2(x, t )
+
+]
+
+dt . (33) The last step follows from assuming an isotropic diffusion coefficient, i.e., D(x, t ) = σ2(x, t ) I, and it results in the usual MSE loss we find in diffusion models and flow matching. Using the decomposition derived above, the KL divergence at t = 1 admits the exact representation: 
+
+DKL (q1(x1|y)∥p1(x1)) = DKL (q0(x0|y)∥p0(x0)) + D(−→
+
+f , −→g , y) − D (←−
+
+f , ←−g , y) . (34) Substituting this into (22) yields a full decomposition of the marginal log-likelihood: 
+
+log p(y) = Eq1(x1|y) [log p(y|x1)] − DKL (q0(x0|y)∥p0(x0)) − D (−→
+
+f , −→g , y) (35) 
+
++ D(←−
+
+f , ←−g , y) + DKL (q1(x1|y)∥p1(x1|y)) .
+
+The first four terms on the r.h.s. correspond to the ELBO associated with the probability-flow ODE formu-lation (the ODE ELBO), while the final term is the usual variational gap (see Eq. (22)). The reverse-time discrepancy D(←−
+
+f , ←−g , y) is generally not available in closed form, since the reverse-time drifts depend on the (typically unknown) score of the generative model, ∇ log pt. However, D(←−
+
+f , ←−g , y) is always nonnegative because the quadratic form is weighted by D(x, t )−1, which is positive definite. Conse-quently, discarding the reverse discrepancy yields a valid (possibly looser) lower bound that remains tractable. We therefore define the SDE-based ELBO as 
+
+LSDE ELBO (y) := Eq1(x1|y) [log p(y|x1)] 
+
+︸ ︷︷ ︸
+
+> Reconstruction
+
+− DKL (q0(x0|y)∥p0(x0)) 
+
+︸ ︷︷ ︸
+
+> Prior
+
+− D (−→
+
+f , −→g , y)
+
+︸ ︷︷ ︸
+
+> Diffusion
+
+. (36) With this notation, the decomposition (35) can be written compactly as 
+
+log p(y) = LSDE ELBO (y) + D(←−
+
+f , ←−g , y)
+
+︸ ︷︷ ︸
+
+> LODE ELBO (y)
+
++DKL (q1(x1|y)∥p1(x1|y)) , (37) which makes explicit that LSDE ELBO (y) ≤ L ODE ELBO (y) ≤ log p(y).10 Interpretation of the D functionals as path-space KL divergences. Above, we decomposed the KL divergence DKL 
+
+(q1(x|y) ∥ p1(x)) into three tractable terms using only the continuity/Fokker–Planck equa-tions and algebraic manipulations. An equivalent, more classical derivation starts from standard identities for KL divergences between path measures (that is, the laws on continuous trajectories induced by the gen-erative and variational SDEs). This yields two path-space KL terms, corresponding to forward and reverse processes. Evaluating these terms with Girsanov’s theorem gives precisely the functionals D(−→
+
+f , −→g , y) and 
+
+D(←−
+
+f , ←−g , y) obtained above, and hence exactly the decomposition in Eq. (35). This enriches the interpreta-tion of our objective: the terms obtained by integrating the KL derivative are in fact information-theoretic quantities measuring discrepancies between trajectory laws. We present the more direct derivation in the main text because it uses only the Fokker–Planck equation and requires less background. In Section E, we give the standard path-space derivation in detail, including an informal derivation of Girsanov’s theorem. 
+
+Simulation-free ELBO estimation. An important property of the diffusion term is that it requires an expectation over qt(x|y). For a general choice of variational drift function g(x, y, t ), samples from the time-marginal qt(x|y) can only be obtained by sampling an entire path from q(X|y) which requires simulating 
+
+an SDE. However, as discussed below and in Section 6, we can choose qt(x|y) to be a specific distribution (e.g., a Gaussian, or the transformation of a simple distribution through a normalizing flow) and derive the drift function corresponding to that choice of marginal. With this direct access to marginal samples, we can estimate the diffusion term by Monte Carlo sampling, drawing t from the uniform distribution over [0 , 1] ,denoted U[0 , 1] , since ∫ 10 . . . dt = Et∈U [0 ,1] [. . . ]. This means that we now have a simulation-free objective to learn the model. Generation, on the other hand, of course still requires simulation of the SDE e.g. with the Euler–Maruyama discretization. Algorithm 2 presents the pseudo-code. 
+
+Algorithm 2: SDE pseudo-code with Euler-Maruyama discretization in SDESample .
+
+Input: T (number of discretization steps), f (drift function), g (variational drift function), σ (diffusion function), p0 (prior), p (likelihood function), q (variational distribution), y (data)  
+
+> 1
+
+Def SDESample( xinit , tinit , ∆t): 
+
+> 2
+
+x, t = xinit , t init  
+
+> 3
+
+for i=1,. . . ,T do  
+
+> 4
+
+∆W ∼ N (0 , ∆tI) 
+
+> 5
+
+x = x + f (x, t )∆ t + σ(x, t )∆ W 
+
+> 6
+
+t = t + ∆ t 
+
+> 7
+
+return x 
+
+> 8
+
+Def SDEELBO( y): 
+
+> 9
+
+t ∼ U [0 , 1]  
+
+> 10
+
+x0, xt, x1 ∼ q0(x0|y), q t(xt|y), q 1(x1|y) 
+
+> 11
+
+Dt = 12 (f (xt, t ) − g(xt, y, t )) T D(xt, t )−1 (f (xt, t ) − g(xt, y, t ))  
+
+> 12
+
+ELBO = log p(y|x1) + log p0(x0) − log q0(x0|y) − D t 
+
+> 13
+
+return ELBO  
+
+> 14
+
+Def Sample() : 
+
+> 15
+
+x0 ∼ p0(x0) 
+
+> 16
+
+x1 = SDESample (xinit = x0, tinit = 0 , ∆t = 1 /T ) 
+
+> 17
+
+ysample ∼ p(ysample |x1) 
+
+> 18
+
+return ysample 
+
+5.3 Mapping between latents and observables 
+
+In Sections 5.1 and 5.2, we have established two approaches for estimating the ELBO—evaluating log p1(x1)
+
+exactly via the ODE change-of-variables, or bounding the marginal KL by a tractable path KL, which results in a looser bound. In this section, we turn to a complementary issue: how the latent process interfaces with data through the likelihood function p(y|x1) and the variational posterior q1(x1|y). While the design of 11 these distributions is in principle orthogonal to whether the latent dynamics follow an ODE or an SDE, there are subtle dependencies. In the ODE case, we require q1(x1|y) to be easy to evaluate and sample from. In the SDE case, this requirement extends to all intermediate marginals qt(xt|y), and these marginals must be compatible with the variational SDE (108) with drift g(x, y, t ).The variational posterior q1(x1|y) should be chosen with two properties in mind: tractability of sampling and density evaluation, and, ideally, closeness to the true posterior. If one were able to set q1(x1|y) = p1(x1|y) ∝
+
+p1(y|x1)p1(x1), then the ELBO gap in Eq. (22) would vanish and the ELBO would coincide with the log-likelihood. 2 In the deterministic case, p(y|x1) = δ(y − x1), this condition is automatically satisfied: the true posterior p1(x1|y) ∝ δ(y − x1)p1(x1) is concentrated at x1 = y, and the variational posterior can be defined as the same Dirac distribution: q1(x1|y) := p1(x1|y) = δ(y − x1).3 For latent ODE models this implies that the marginal log-likelihood log p(y) is in fact computable exactly. This construction underlies continuous normalizing flows (Chen et al., 2018), where the ODE dynamics transform a simple prior at t = 0 into the observed data at t = 1 . In the SDE setting, the situation is more delicate: even if the final-time posterior is matched, there typically remains a gap due to mismatch between the true and variational posterior path distributions ( q(X|y)̸ = p(X|y)). 
+
+## 6 Parameterization of the SDE model 
+
+In this section, we discuss how to parameterize the SDE model in a way that ensures maximum flexibility while at the same time keeping the objective simulation-free, that is, being able to draw samples from the variational marginal distribution qt(x|y) at any time t without simulating the variational SDE. We explore marginals defined as normalizing flows and mixtures of normalizing flows and derive their corresponding ODEs and SDEs. We discuss likelihood functions for continuous and ordinal data and how the variational distribution can be chosen to match the likelihood function. In Section 7, we connect the results of this section to the diffusion literature. We present a numerical example in Section 8. 
+
+Generative drift and the diffusion coefficient. The SDE generative model is defined by the drift 
+
+−→
+
+f (x, t ) and the diffusion coefficient σ(x, t ), both of which can be directly parameterized by neural networks. 
+
+Variational drift. In the following, we will work with ODE and forward-/reverse-time SDE variational drifts and denote these by g(x, y, t ), −→g (x, y, t ) and ←−g (x, y, t ), respectively. The definition of the variational drift −→g (x, y, t ) requires more care because we need to define it such that the marginal distribution qt(x|y)
+
+(that is the solution to the associated Fokker–Planck equation) admits computationally efficient sampling so that we get the benefit from the simulation-free ELBO as outlined in Algorithm 2. We will describe two routes to achieving this: start with the desired parameterization of the marginal and then derive the corresponding drift (this section), or use a Gaussian Markov chain that has Gaussian probability paths (Ho et al., 2020; Kingma et al., 2021; Nielsen et al., 2023; Song et al., 2020b) (Section 7). Below we will consider the marginal qt(xt|y) being defined as a normalizing flow and a mixture of normalizing flows, and derive the corresponding explicit expression for the variational ODE drift g(x, y, t ). Once we have expressions for both the marginal and the ODE drift, we can use the result in Eq. (12) to write the SDE drift as 
+
+−→g (x, y, t ) = g(x, y, t ) + 12 qt(x|y) ∇ · [D(x, t )qt(x|y)] . (38) 
+
+Drift from marginal defined as normalizing flow. We consider the marginal distribution pt(xt) in-duced by a flow Ft : Rd × [0 , 1] → Rd that is continuously differentiable in both variables (Bartosh et al., 2024). Specifically, we will use this to construct the variational qt(xt|y) from a flow Gt(x; y).     
+
+> 2In the SDE approach, the corresponding statement holds at the path level: if q(X|y) = p(X|y), then the SDE ELBO coincides with the ODE ELBO.
+> 3To show this more rigorously, we integrate the true posterior against a suitable test function ϕand apply Bayes’ theorem:
+
+∫ 
+
+> ϕ(x1)p1(x1|y)d x1=
+
+∫ ϕ(x1)p(y|x1)p1(x1)d x1
+
+∫ p(y|x′         
+
+> 1)p1(x′
+> 1)d x′
+> 1
+> =ϕ(y)p1(y)
+> p1(y)=ϕ(y)
+> which holds for all ϕand therefore implies p1(x1|y) = δ(y−x1).
+
+12 Given a random variable ϵ with density p(ϵ), we let xt := Ft(ϵ) and assume Ft is invertible for all t, such that xt = Ft(F−1 
+
+> t
+
+(xt)) . Here, ϵ can be thought of as a Lagrangian label in fluid dynamics, i.e., a unique identifier assigned to a particle to track its movement over time. The explicit expression for the marginal is given by the change-of-variable formula: 
+
+pt(x) = 
+
+∣∣∣∣det ∂F−1 
+
+> t
+
+(x)
+
+∂x
+
+∣∣∣∣ p (F−1 
+
+> t
+
+(x)) . (39) The derivation will be valid for general flows and base measures p(ϵ). A concrete example that is relevant for practical applications is a linear flow with independent components: xt = Ft(ϵ) = α(t) + β(t)ϵ, with 
+
+p(ϵ) a standard Gaussian. The inverse is ϵ = F−1 
+
+> t
+
+(x) = ( x − α(t)) /β (t). Below we generalize the derivation to a mixture of normalizing flows: pt(xt) = ∑ 
+
+> k
+
+πkpk,t (xt) with fixed mixture coefficients πk.Now we define the velocity given by the flow Ft:
+
+f (x, t ) := ddt Ft(ϵ) with ϵ = F−1 
+
+> t
+
+(x) . (40) Then, for each label ϵ, using the definition xt := Ft(ϵ) we have ddt xt = ddt Ft(ϵ) = f (x, t ), i.e., xt solves the ODE with velocity f and initial condition x0 = F0(ϵ). This shows that, given a base density p(ϵ)
+
+and a flow Ft that transports it to the desired marginals pt (Eq. (39)), we can derive the velocity of the associated ODE with Eq. (40). For the linear transformation: Ft(ϵ) = α(t) + β(t)ϵ, the ODE drift becomes 
+
+f (xt, t ) = ∂α(t) 
+
+> ∂t
+
++ ∂β (t) 
+
+> ∂t
+> xt−α(t)
+> β(t)
+
+.
+
+Drift from marginal defined as a mixture. For the mixture model pt(x) = ∑ 
+
+> k
+
+πkpk,t (x), each marginal 
+
+pk,t (x) is defined by a normalizing flow Fk,t (x) with corresponding drift fk(x, t ) obtained from (40): fk(x, t ) = 
+
+> dFk,t (ϵ)dt
+
+∣∣∣ϵ=F−1
+
+> k,t (x)
+
+. To derive the drift for the mixture we use the continuity equation for the mixture and for each component: 
+
+∂∂t pt(x) = ∑ 
+
+> k
+
+πk
+
+∂∂t pk,t (xt) = − ∑ 
+
+> k
+
+πk∇ · [fk(x, t )pk,t (x)] = −∇ · 
+
+[ ∑ 
+
+> k
+
+πkfk(x, t )pk,t (x)
+
+︸ ︷︷ ︸  
+
+> f(x,t )pt(x)
+
+]
+
+. (41) This leads to 
+
+f (x, t ) = ∑ 
+
+> k
+
+rk(x, t )fk(x, t ) (42) with the “responsibility” for component k given input x:
+
+rk(x, t ) = πkpk,t (xt)
+
+∑ 
+
+> k′
+
+πk′ pk′,t (xt) . (43) This result can also be generalized to time-dependent mixture coefficients and the SDE setting (Brigo, 2002; Peluchetti, 2021; Skreta et al., 2025). 
+
+Variational drift example. We will now use the methodology developed above to the standard choice of the variational distribution, a Gaussian: qt(xt|y) = N (xt|α(y, t ), β 2(y, t )I). The ODE drift becomes 
+
+g(xt, y, t ) = ∂α(y,t ) 
+
+> ∂t
+
++ ∂β (y,t ) 
+
+> ∂t
+> xt−α(y,t )
+> β(y,t )
+
+and the score ∇ log qt(xt|y) = − xt−α(y,t ) 
+
+> β2(y,t )
+
+. From (38), setting D(x, t ) = 
+
+σ2 
+
+> t
+
+I, we get 
+
+−→g (x, y, t ) = g(x, y, t ) + σ2
+
+> t
+
+2 ∇ log qt(x|y) = ∂α(y, t )
+
+∂t +
+
+( ∂β (y, t )
+
+∂t − σ2
+
+> t
+
+2β(y, t )
+
+) x − α(y, t )
+
+β(y, t ) . (44) We will investigate this drift function for a simple numerical example in Section 8. The extension to the mixture with marginals qk,t (xt|y) = N (xt|αk(y, t ), β k(y, t )I) leads to the ODE drift (42) and a simple responsibility-weighted score function: ∇ log qt(x|y) = ∑ 
+
+> k
+
+rk(x, y, t )∇ log qk,t (x|y) and thus the same form for the SDE drift: −→g (x, y, t ) = ∑ 
+
+> k
+
+rk(x, y, t )−→g k(x, y, t ).13 Likelihood function examples. We will consider likelihood functions for continuous and ordinal data. For continuous data, it is common to use a Gaussian with a simple covariance: 
+
+p(y|x) = N (y|x, δ 2I) . (45) For ordinal data, e.g., 8-bit pixels y ∈ [0 , 1, . . . , 255] d, we can take independent dimensions and build a discrete normalized distribution by the following construction (Kingma et al., 2021): 
+
+p(y|x) = 
+
+> d
+
+∏
+
+> i=1
+
+N (yi|xi, δ 2)
+
+∑ 
+
+> y′
+
+N (y′|xi, δ 2) . (46) With the choice qt(xt|y) = N (xt|α(y, t ), β 2(t)I), we can easily calculate the prior and reconstruction terms in the SDE ELBO (36). We will often match the variational distribution at t = 1 with the likelihood function, setting α(y, 1) = y
+
+and β(1) = δ (Kingma et al., 2021), where δ is set to a small fixed value or is a learned parameter. We will consider an explicit example in the context of flow matching in Section 7.3. 
+
+## 7 Diffusion, score and flow matching 
+
+Diffusion (Sohl-Dickstein et al., 2015; Ho et al., 2020; Kingma et al., 2021), score (Vincent, 2011; Song et al., 2020b) and flow matching (Lipman et al., 2022; Liu et al., 2022) are a set of closely related and extremely popular latent process generative models that can be well-understood in terms of the variational framework described in this paper. One may even say that your favorite score and flow matching objectives are secretly ELBOs. In this section, we will introduce each method and show how each method’s learning objective can be identified as a special case of the SDE ELBO (36). 
+
+7.1 Diffusion models 
+
+The denoising diffusion probabilistic model (DDPM, Ho et al. (2020)) derives its name from being defined in terms of two processes: the diffusion, a reverse-time process initialized in the data that gradually adds noise so that at t = 0 most of the information about the data is removed, and the denoising, a forward-time process that starting from pure noise gradually transforms the latent such that at t = 1 one ideally gets samples from the training set distribution. The diffusion and denoising processes are readily identified with the variational and generative processes described above. The original diffusion formulation is defined in terms of a finite number of stochastic layers, that is, ∆t is finite, but it has a well-defined SDE limit (Kingma et al., 2021; Song et al., 2021). We will give a brief derivation of this using the variational diffusion models (VDM) framework (Kingma et al., 2021), which is mathematically equivalent to the DDPM. 
+
+Variational diffusion model (VDM) In the VDM, the variational marginal is selected to be Gaussian: 
+
+qt(xt|y) = N (xt|aty, b tI) . (47) that is a special case of the more general Gaussian setting from the previous section with α(y, t ) = aty
+
+and β(y, t ) = bt. Furthermore, a finite step size reverse-time Markov process q(xs|xt), s < t is selected 
+
+that preserves the form of the marginal, that is, the marginal qs(xs|y) = ∫ q(xs|xt)qt(xt|y)dxt is given by 
+
+N (xs|asy, b 2
+
+> s
+
+I). The explicit form of the Markov process is 
+
+q(xs|xt) = N (xs|as|txt, b 2
+
+> s|t
+
+I) , as|t = as
+
+at
+
+and b2 
+
+> s|t
+
+= b2 
+
+> s
+
+− a2
+
+> s|t
+
+b2 
+
+> t
+
+. (48) This reverse-time Markov process is only defined when the signal-to-noise ratio SNR( t) := a2
+
+> t
+> b2
+> t
+
+is a strictly increasing function with t. This can be achieved with a learned (monotonic) function or a fixed function such as linear in log SNR( t) = t log SNR(1) + (1 − t) log SNR(0) . As a further restriction, a so-called variance-preserving process is often used, such that a2 
+
+> t
+
++ b2 
+
+> t
+
+= 1 . Song et al. (2020b) discusses various alternatives in the same class. We discuss the choice of denoising process after taking the SDE limit of the variational process. 14 SDE limit. We can convert the finite step process to a difference equation and then take the ∆t → 0
+
+limit like we did in the ELBO derivation in Section E.1. We write q(xs|xt) as a reverse-time finite step size process: 
+
+∆xt = xs − xt = as|txt + bs|tϵ − xt = as|t − 1∆t xt
+
+︸ ︷︷ ︸ 
+
+> ←−g(x,t )
+
+∆t + bs|t
+
+√|∆t|
+
+︸ ︷︷ ︸ 
+
+> σt
+
+←−
+
+∆W′ 
+
+> t
+
+(49) with ∆t = s − t, ϵ ∼ N (ϵ|0, I) and ←−
+
+∆W′ 
+
+> t
+
+being the finite step reverse-time Wiener process with variance 
+
+∆t. We can derive the drift and diffusion coefficient in the limit: 
+
+←−g (x, t ) = as|t − 1∆t xt = as − at
+
+∆t
+
+xt
+
+at
+
+→ ∂ log at
+
+∂t xt (50) 
+
+σ2 
+
+> t
+
+= b2
+
+> s|t
+
+|∆t| = SNR( t) − SNR( s)
+
+|∆t|
+
+b2
+
+> s
+
+SNR( t) → b2
+
+> t
+
+∂ log SNR( t)
+
+∂t . (51) We can use the result from Section 4.1: −→g (x, y, t ) = ←−g (x, y, t ) + σ2 
+
+> t
+
+∇ log qt(x|y) to derive the forward SDE drift 
+
+−→g (x, y, t ) = ∂ log at
+
+∂t xt + σ2 
+
+> t
+
+∇ log qt(x|y) = ∂ log at
+
+∂t xt − σ2
+
+> t
+
+x − aty
+
+b2
+
+> t
+
+. (52) This can be compared to the more general result using the linear normalizing flow (44). 
+
+Parameterizing generative drift as a signal prediction network. Finally, it is preferred to param-eterize the generative drift function −→
+
+f (x, t ) in terms of a signal or noise prediction neural network. For example, one may define the drift as −→
+
+f (x, t ) := −→g (x,̂ y(x, t ), t ) with ̂ y(x, t ) being the signal prediction neural network and −→g (x, y, t ) being the variational drift function. For the Gaussian variational used in the VDM this leads to a simplified expressions for the diffusion term in the SDE ELBO (36) with a signal from latent objective: 
+
+D(−→
+
+f , −→g , y) = 12
+
+∫ 10
+
+∂ SNR( t)
+
+∂t Eqt(x|y)
+
+[|| y −̂ y(x, t )|| 2] dt (53) 
+
+= 12
+
+∫ SNR(1) SNR(0) 
+
+Eqt(x|y)
+
+[|| y −̂ y(x, t || 2]∣ ∣t=t(SNR) d SNR ,
+
+where in the second equality we have made a change of integration variable to SNR and t(SNR) is the inverse function of SNR( t).
+
+7.2 Score matching 
+
+Score matching (Vincent, 2011; Song et al., 2020b) derives its name from the objective of fitting s(x, t ), an approximation to the unconditional score function ∇ log pt(x), to the conditional score function ∇ log qt(x|y).In this section, we will show that the score matching objective can be obtained from the diffusion term in the SDE ELBO for a specific choice of parameterization of the generative and variational processes. The reconstruction and prior terms in the ELBO can be ignored as these only depend upon the variational process which is fixed in the score matching framework. The score matching framework is thus optimizing the ELBO with respect to the generative process for a given variational distribution. This relationship between the SDE ELBO and the score matching has been pointed out in the literature before, e.g. by Song et al. (2021). The original derivation of score matching takes a different route based upon an infinite dataset argument. It is presented in Section F. Score matching uses the same reverse-time variational SDE as used in the diffusion model and again we can use Section 4.1 to reverse the direction of time: 
+
+−→g (x, y, t ) = ←−g (x, t ) + ∇σ2(x, t ) + σ2(x, t )∇ log qt(x|y) . (54) 15 Likewise, we can write the generative drift as: −→
+
+f (x, t ) = ←−
+
+f (x, t ) + ∇σ2(x, t ) + σ2(x, t )∇ log pt(x). In order to get to a tractable score matching objective, we select ←−
+
+f (x, t ) = ←−g (x, t ) and replace the unknown score function with a learnable score function s(x, t ):
+
+−→
+
+f score (x, t ) = ←−g (x, t ) + ∇σ2(x, t ) + σ2(x, t )s(x, t ) . (55) Since the score function only approximates the true drift, the transformation between the different drifts are only approximate as well. Inserting the score matching parameterization for the generative and variational SDE drifts equations (55) and (54) into the SDE ELBO diffusion term leads to the score matching objective: 
+
+DScore = 12
+
+∫ 10
+
+Eqt(x|y)
+
+[
+
+σ2(x, t ) ∥s(x, t ) − ∇ log qt(x|y)∥2]
+
+dt . (56) This is exactly the score-matching loss used in the diffusion models literature (Song et al., 2020b), which is a weighted average of denoising score matching objectives (Vincent, 2011) over different noise levels. In score matching, the variational distribution is chosen in the same way as in diffusion models. It can be shown, see Appendix F, that in the infinite-data limit the optimal s(x, t ) is the score function of the unconditional marginal distribution: s∗(x, t ) = ∇ log qt(x), where qt(x) = Eq(y)[qt(x|y)] . Since the data distribution q(y) is not available, it is replaced by an average over the training set in the objective. The name score matching thus is derived from the objective of matching the data conditional score function 
+
+∇ log qt(x|y) to a function that approximates the unconditional score function s(x, t ) ≈ ∇ log qt(x).
+
+7.3 Flow matching 
+
+In flow matching (Lipman et al., 2022; Liu et al., 2022) we use the same setup as in score matching, but instead of introducing the score as our objective we will use the flow (or velocity) which is another name for the ODE drift g(x, y, t ). From Section 4.1, we can formally write g(x, y, t ) = ( −→g (x, y, t ) + ←−g (x, y, t )) /2. If we restrict the reverse-time drift to be data-independent we can rewrite the relationship between the drift terms as: −→g (x, y, t ) = 2 g(x, y, t ) − ←−g (x, t ) . (57) Similarly, we may choose to define the generative SDE drift in terms of a flow function v(x, t ):
+
+−→
+
+f flow (x, t ) = 2 v(x, t ) − ←−g (x, t ) . (58) Inserting these parameterizations into the diffusion term leads to the flow matching objective: 
+
+DFlow = 2 
+
+∫ 10
+
+Eqt(x|y)
+
+[
+
+∥v(x, t ) − g(x, y, t )∥2
+
+σ2(x, t )
+
+]
+
+dt . (59) In flow matching, samples of xt are often obtained as xt = ty + (1 − t)ϵ with ϵ ∼ N (ϵ|0, I) or equivalently 
+
+qt(x|y) = N (x|ty, (1 − t)2I). This type of interpolation can be generalized to other settings, see for example Albergo et al. (2023); Tong et al. (2023a). We can get further insight about the flow matching objective, by using the result from Section 6 to write the variational drift in a particular simple form: 
+
+g(xt, y, t ) = y − xt
+
+1 − t = y − ty − (1 − t)ϵ
+
+1 − t = y − ϵ . (60) We can conclude from this that the flow matching objective’s target for the drift v(xt, t ) = v(ty + (1 − t)ϵ, t )
+
+is y − ϵ with ϵ ∼ N (x0|0, I).The diffusion loss derived above is all we need as an objective because the prior and reconstruction terms have no tunable parameters when we use the stochastic interpolation variational. Nonetheless, it is still instructive to write the prior and reconstruction terms to get the full ELBO picture. We will generalize the interpolation slightly to xt = ty + βtϵ with βt = (1 − t)β0 + tβ 1. The prior term is DKL (q0(x0|y)∥p0(x0)) = − d 
+
+> 2
+
+(log β20 + 1 −
+
+β20 ) for a standard Gaussian prior. The reconstruction term is Eq1(x1|y) [log p(y|x1)] = − d 
+
+> 2
+
+(log 2 πδ 2 + β21 
+
+> δ2
+
+) for 16 the Gaussian likelihood N (y|x1, δ 2I). We observe that reconstruction term diverges in the δ → 0 (noise-free) limit. The ELBO is thus ill-defined in that case. Optimizing β0 and β1 might lead to a higher ELBO than the flow matching defaults (Zheng et al., 2023). Optimizing the flow matching objective with respect to the diffusion coefficient σ(x, t ) will lead to the trivial σ(x, t ) → ∞ solution. This is directly connected to the ELBO gap diverging in this limit (results not shown). As shown in Appendix F, analogous to the score matching result, in the infinite data limit, the optimal flow corresponds to a marginalized drift: v∗(x, t ) = Eqt(y|x)[g(x, y, t )] with qt(y|x) = qt(x|y)q(y)/q t(x).Flow matching may, like score matching be used either as a generative ODE using the learned flow function 
+
+f (x, t ) = v(x, t ) or as an SDE with drift −→
+
+f (x, t ) = 2 v(x, t ) − ←−g (x, t ).To sum up, score and flow matching may be viewed as slightly restricted versions of the general variational SDE approach because the variational is defined as a “from data to noise” diffusion (reverse-time SDE). The score and flow matching approaches have the advantage that learned generative model can be used both in an ODE and SDE formulation. This result is approximate because it hinges on a derivation of the objective which is only strictly valid in the infinite-data limit. 
+
+## 8 Experiments 
+
+We consider a toy example of learning a one-dimensional density defined as a mixture of k = 5 Laplace distributions that has locations at −2( k − 1) , . . . , 2( k − 1) and scale equals to one for all components. We can draw data from the distribution to get a precise estimate of the expected log-likelihood ∫ p(y) log p(y)dy .This gives −2.9862 for a sample of nval = 8 000 validation point. This is the reference value to compare with for the different trained models. All models are trained on the same data set of n = 1 000 data points. Jupyter notebooks to reproduce the results are available at github.com/olewinther/generative-ode-sde We consider the ODE with a Dirac delta likelihood function. The prior distribution is set to p0(x) = 
+
+N (x|0, 1) . The ODE drift f (x, t ) is chosen to be a 2-64-64-1 feed-forward neural network with tanh activation functions for the hidden units and linear output unit. The Adam optimizer is run for 200 epochs with a learning rate of 10 −2 and batch size of 125. The ODE uses T = 100 discretization steps and a second-order midpoint Runge-Kutta integrator. The results for the ODE are shown in Figure 1 left. We run standard flow matching (Section 7.3) with σ(x, t ) = 1 (equal weighting of all times), learning rate of 10 −3, batch size of 125 and increase the number of epochs to 10 000 due to cheaper and higher variance stochastic evaluation. The results for the flow matching are shown in Figure 1 right. As can be visually inspected, the two methods produce very similar solutions. Evaluating the ELBO for flow matching is possible, but will not give a value that can be compared to the other methods because we have not optimized the parameters of the likelihood and diffusion coefficient is not identifiable for the flow matching objective. For the SDE we also use the Gaussian prior. The likelihood function is p(y|x1) = N (y|x1, δ 2) with δ being a non-negative learned parameter. The generative drift for the SDE f (x, t ) is the same architecture as used for the ODE. The diffusion network σ(x, t ) is a 2-64-64-1 feed-forward neural network with tanh activation functions for the hidden units and softplus on the output unit. The variational is chosen to be Gaussian: 
+
+qt(x|y) = N (α(y, t ), β 2(y, t )) . We consider two different parameterizations of the variational distribution. The first is the variational diffusion model (VDM, Section 7.1), with a linear scale for the log SNR and learned end-points. The likelihood and t = 1 variational widths are matched: δ = b1. The signal prediction network is a 2-64-64-1 feed-forward network with tanh activation functions and linear output. In the second parameterisation we learn the variational freely apart from matching at t = 1 : α(y, t ) = yt +(1 −t)̂α(y, t ) and 
+
+β(y, t ) = δt + (1 − t)̂β(y, t ) with ̂α(y, t ) being a 2-64-64-1 feed-forward neural network with tanh activation functions for the hidden units and linear output unit and ̂ β(y, t ) being a 2-64-64-1 feed-forward neural network with tanh activation functions for the hidden units and softplus output unit.The Adam optimizer is run for 2 000 epochs with a learning rate of 10 −3 and batch size of 125. For sampling from the trained model T = 100 discretizations steps were used. The results for these two setups are shown in Figure 2. We observe that both approaches learn similar densities, but with the VDM converging slower with higher variance, with a lower validation ELBO and quite different learned α(y, t ), β(y, t ) and σ(x, t ).17 Figure 1: Latent ODE (left) and flow matching (right). The ODE training results has log-likelihoods -3.025 (valida-tion) and -2.990 (training). The blue densities are for the training data and yellow generated from the trained model. The red paths are for solving the ODE for some data point backwards in time and purple are generated data paths. 
+
+## 9 Discussion 
+
+This paper has provided a self-contained and informal methodological introduction to generative models based on ordinary and stochastic differential equations. The differential equations and the Fokker–Planck equation governing the temporal evolution of the marginal distribution of the latent variables have been presented and derived. The variational approach has been used to derive lower bounds on the log likelihood for the different models. This ELBO (evidence lower bound) serves as a tractable objective function for learning the parameters of the generative differential equation specified in terms of the drift and diffusion coefficient. Recently proposed popular machine learning methods for generative modeling with differential equations (neural ordinary differential equations, diffusion, score and flow matching models) have been presented in the context of the general variational approach. The purpose of this paper is to present the relevant methodology in one place. Various practical considera-tions necessary for practical use, such as neural architectures for efficient inference and good performance, will have to be found in the recent more application-focused literature. The application of generative modeling in machine learning has reached a very mature stage in a relatively short time with very impressive results in diverse areas ranging from image and video to molecules. Inter-estingly, the setting used in machine learning is most often that of a simple (conditional) prior followed by a latent path and then generation. The typical setting in statistics, where the differential equation describes a latent process for a time series , is rarely considered in the machine learning setting. This stems from the fact that construction of a suitable variational latent process is much more difficult than in the “one observation” case. Going beyond the one observation scenario is thus a largely unexplored research topic that could have implications for further use of variational techniques for modeling time series (Bartosh et al., 2025). 18 Figure 2: SDE result with variational diffusion model (VDM) left and general parameterisation (right). For VDM, the smoothed ELBO values are -3.256 (validation) and -3.259 (training) and for the general parameterisation -3.052 (validation) and -2.975 (training). The lower plots show the learned functions. For the VDM, the backward varitional ODE paths are shown. 
+
+19 References 
+
+Michael S Albergo, Nicholas M Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A unifying frame-work for flows and diffusions. arXiv preprint arXiv:2303.08797 , 2023. Brian DO Anderson. Reverse-time diffusion equation models. Stochastic Processes and their Applications ,12(3):313–326, 1982. Cedric Archambeau, Dan Cornford, Manfred Opper, and John Shawe-Taylor. Gaussian process approxima-tions of stochastic differential equations. In Gaussian Processes in Practice , pp. 1–16. PMLR, 2007. Grigory Bartosh, Dmitry Vetrov, and Christian A Naesseth. Neural flow diffusion models: Learnable forward process for improved diffusion modelling. arXiv preprint arXiv:2404.12940 , 2024. Grigory Bartosh, Dmitry Vetrov, and Christian A Naesseth. Sde matching: Scalable and simulation-free training of latent stochastic differential equations. arXiv preprint arXiv:2502.02472 , 2025. Damiano Brigo. The general mixture-diffusion SDE and its relationship with an uncertain-volatility option model with volatility-asset decorrelation. arXiv preprint arXiv:0812.4052 , 2002. Ricky TQ Chen, Yulia Rubanova, Jesse Bettencourt, and David K Duvenaud. Neural ordinary differential equations. Advances in neural information processing systems , 31, 2018. Crispin Gardiner. Stochastic Methods: A Handbook for the Natural and Social Sciences , volume 4. Springer Berlin, 2009. Will Grathwohl, Ricky TQ Chen, Jesse Bettencourt, Ilya Sutskever, and David Duvenaud. Ffjord: Free-form continuous dynamics for scalable reversible generative models. arXiv preprint arXiv:1810.01367 , 2018. Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. arXiv preprint arXiv:2006.11239 , 2020. Jonathan Ho, Tim Salimans, Alexey Gritsenko, William Chan, Mohammad Norouzi, and David J Fleet. Video diffusion models. arXiv:2204.03458 , 2022. Emiel Hoogeboom, Victor Garcia Satorras, Clément Vignac, and Max Welling. Equivariant diffusion for molecule generation in 3d, 2022. URL https://arxiv.org/abs/2203.17003 .Chin-Wei Huang, Jae Hyun Lim, and Aaron Courville. A variational perspective on diffusion-based generative models and score matching, 2021. Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusion-based generative models. Advances in Neural Information Processing Systems , 35:26565–26577, 2022. Patrick Kidger, Ricky TQ Chen, and Terry J Lyons. “Hey, that’s not an ODE”: Faster ODE adjoints via seminorms. In ICML , pp. 5443–5452, 2021. Diederik P Kingma, Tim Salimans, Ben Poole, and Jonathan Ho. Variational diffusion models. arXiv preprint arXiv:2107.00630 , 2, 2021. Hiroshi Kunita. Stochastic Flows and Jump-Diffusions , volume 92. Springer, 2019. Christian Léonard. Some properties of path measures. Séminaire de Probabilités XLVI , pp. 207–230, 2014. Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching for generative modeling. arXiv preprint arXiv:2210.02747 , 2022. Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and transfer data with rectified flow. arXiv preprint arXiv:2209.03003 , 2022. Beatrix MG Nielsen, Anders Christensen, Andrea Dittadi, and Ole Winther. Diffenc: Variational diffusion with a learned encoder. arXiv preprint arXiv:2310.19789 , 2023. 20 Bernt Øksendal. Stochastic differential equations: an introduction with applications . Springer Science & Business Media, 2013. Manfred Opper and Guido Sanguinetti. Variational inference for markov jump processes. Advances in neural information processing systems , 20, 2007. RF Pawula. Approximation of the linear boltzmann equation by the fokker-planck equation. Physical review ,162(1):186, 1967. Stefano Peluchetti. Non-denoising forward-time diffusions. arXiv preprint arXiv:2312.14589 , 2021. Eckhard Platen. An introduction to numerical methods for stochastic differential equations. Acta numerica ,8:197–246, 1999. Hannes Risken. Fokker-Planck Equation , pp. 63–95. Springer Berlin Heidelberg, Berlin, Heidelberg, 1996. ISBN 978-3-642-61544-3. doi: 10.1007/978-3-642-61544-3_4. URL https://doi.org/10.1007/ 978-3-642-61544-3_4 .Simo Särkkä and Arno Solin. Applied stochastic differential equations , volume 10. Cambridge University Press, 2019. Marta Skreta, Lazar Atanackovic, Joey Bose, Alexander Tong, and Kirill Neklyudov. The superposition of diffusion models using the itô density estimator. In The Thirteenth International Conference on Learning Representations , 2025. Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised learning using nonequilibrium thermodynamics. In International Conference on Machine Learning , pp. 2256–2265. PMLR, 2015. Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. arXiv preprint arXiv:2010.02502 , 2020a. Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribution. arXiv preprint arXiv:1907.05600 , 2019. Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. arXiv preprint arXiv:2011.13456 , 2020b. Yang Song, Conor Durkan, Iain Murray, and Stefano Ermon. Maximum likelihood training of score-based diffusion models. Advances in Neural Information Processing Systems , 34:1415–1428, 2021. Yang Song, Prafulla Dhariwal, Mark Chen, and Ilya Sutskever. Consistency models. arXiv preprint arXiv:2303.01469 , 2023. Alexander Tong, Nikolay Malkin, Kilian Fatras, Lazar Atanackovic, Yanlei Zhang, Guillaume Huguet, Guy Wolf, and Yoshua Bengio. Simulation-free Schrödinger bridges via score and flow matching. arXiv preprint arXiv:2307.03672 , 2023a. Alexander Tong, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid Rector-Brooks, Kilian Fatras, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based generative models with minibatch optimal transport. In ICML Workshop on New Frontiers in Learning, Control, and Dynamical Systems ,2023b. Cédric Villani et al. Optimal transport: old and new , volume 338. Springer, 2009. Pascal Vincent. A connection between score matching and denoising autoencoders. Neural computation , 23 (7):1661–1674, 2011. Kaiwen Zheng, Cheng Lu, Jianfei Chen, and Jun Zhu. Improved techniques for maximum likelihood esti-mation for diffusion odes. In International Conference on Machine Learning , pp. 42363–42389. PMLR, 2023. 21 A The Kramers–Moyal expansion and the Fokker–Planck equation 
+
+In this appendix we show (i) a general Taylor series expansion expression for the partial time derivative of the marginal density that (ii) for the SDE will only consist of the first and second order term. The Fokker– Planck equation holds for any continuous-time stochastic process as long as there are no jumps, i.e., discrete changes of the stochastic variables (Risken, 1996; Øksendal, 2013; Gardiner, 2009). Markov jump processes (Gardiner, 2009) provide a tool to deal with jumps in the process, but this is beyond the scope of this paper. 
+
+A.1 Kramers–Moyal 
+
+The Fokker–Planck equation is a special case of a more general equation, the Kramers–Moyal expansion, that describes the evolution of the density pt(x) over time in any stochastic process. In this section, we will derive the Kramers–Moyal expansion, and in Section A.2 we will show that for Wiener (Brownian) stochastic processes it has only two terms and reduces to the Fokker–Planck equation. The derivation of the Kramers–Moyal expansion starts from the definition of the partial derivative: 
+
+∂p t(x)
+
+∂t = lim 
+
+> ∆t→0
+
+1∆t (pt+∆ t(x) − pt(x)) , (61) where we denote the finite time difference by ∆t and take its limit to zero. The time-shifted distribution 
+
+pt+∆ t(x) can be expressed as a marginalization over the distribution of x at time t:
+
+pt+∆ t(x) = 
+
+∫
+
+pt+∆ t(x|x′)pt(x′)d x′ , (62) where we will leave the “transition kernel” pt+∆ t(x|x′) unspecified for now. In Section A.2 we consider stochastic differential equations that can be discretized to give a Gaussian transition kernel. Now, for any smooth analytic function h(x) such that h(x) ∂p t(x) 
+
+> ∂t
+
+is integrable, we can use Eqs. (61) and (62) to get: 
+
+∫
+
+h(x) ∂p t(x)
+
+∂t dx (61) 
+
+=
+
+∫
+
+> x
+
+h(x)
+
+[
+
+lim 
+
+> ∆t→0
+
+1∆t (pt+∆ t(x) − pt(x)) 
+
+]
+
+dx (63) 
+
+> (62)
+
+= lim 
+
+> ∆t→0
+
+1∆t
+
+(∫ 
+
+> x
+
+h(x)
+
+∫
+
+> x′
+
+pt+∆ t(x|x′)pt(x′)d x′dx −
+
+∫
+
+> x′
+
+h(x′)pt(x′)d x′
+
+)
+
+= lim 
+
+> ∆t→0
+
+1∆t
+
+( ∫ 
+
+> x
+
+h(x)
+
+∫
+
+> x′
+
+pt+∆ t(x|x′)pt(x′)d x′dx
+
+−
+
+∫
+
+> x′
+
+h(x′)pt(x′)
+
+∫
+
+> x
+
+pt+∆ t(x|x′)d x
+
+︸ ︷︷ ︸
+
+> =1
+
+dx′
+
+)
+
+= lim 
+
+> ∆t→0
+
+1∆t
+
+∫
+
+> x
+
+∫
+
+> x′
+
+pt+∆ t(x′|x)pt(x)( h(x′) − h(x))d x′dx ,
+
+where in the last step we have swapped names of the integration variables x and x′. Applying a Taylor expansion of h(x′) around x, we can rewrite Eq. (63) as follows: 
+
+∫
+
+h(x) ∂p t(x)
+
+∂t dx = lim 
+
+> ∆t→0
+
+1∆t
+
+∫
+
+> x
+
+∫
+
+> x′
+
+pt+∆ t(x′|x)pt(x)( h(x′) − h(x))d x′dx (64) 
+
+= lim 
+
+> ∆t→0
+
+1∆t
+
+∫
+
+> x
+
+∫
+
+> x′
+
+pt+∆ t(x′|x)pt(x)
+
+> ∞
+
+∑
+
+> n=1
+> d
+
+∑
+
+> i1,...,i n=1
+
+(x′ 
+
+> i1
+
+− xi1 ) · · · (x′ 
+
+> in
+
+− xin )
+
+n!
+
+× ∂nh(x)
+
+∂x i1 · · · ∂x in
+
+︸ ︷︷ ︸ 
+
+> =h(n)
+> i1,...,in (x)
+
+dx′dx
+
+=
+
+∫
+
+pt(x)
+
+> ∞
+
+∑
+
+> n=1
+> d
+
+∑
+
+> i1,...,i n=1
+
+D(n) 
+
+> i1,...,i n
+
+(x, t ) h(n) 
+
+> i1,...,i n
+
+(x)d x ,
+
+22 where we defined the Kramers–Moyal coefficients D(n) 
+
+> i1,...,i n
+
+(x, t ) for n ∈ N+ (also called jump moments) as: 
+
+D(n) 
+
+> i1,...,i n
+
+(x, t ) ≡ 1
+
+n! lim 
+
+> ∆t→0
+
+1∆t
+
+∫
+
+(x′ 
+
+> i1
+
+− xi1 ) · · · (x′ 
+
+> in
+
+− xin )pt+∆ t(x′|x)d x′ (65) 
+
+= 1
+
+n! lim 
+
+> ∆t→0
+
+1∆t E[∆ xt,i 1 · · · ∆xt,i n |xt] , (66) where the conditional expectation of the increment ∆xt = xt+∆ t − xt is over the distribution pt(∆ xt|xt).With integration by parts, we shift the derivatives from h(x) to pt(x)D(n) 
+
+> i1,...,i n
+
+(x, t ). To show how this works consider the first order term: 
+
+> d
+
+∑
+
+> i=1
+
+∫
+
+pt(x)D(1)  
+
+> i
+
+(x, t ) ∂h (x)
+
+∂x i
+
+dx =
+
+> d
+
+∑
+
+> i=1
+
+[
+
+pt(x)D(1)  
+
+> i
+
+(x, t )h(x)
+
+]+∞−∞ 
+
+︸ ︷︷ ︸
+
+> =0 by assumption
+
+−
+
+∫
+
+h(x)
+
+> d
+
+∑
+
+> i=1
+
+∂∂x i
+
+[
+
+D(1)  
+
+> i
+
+(x, t )pt(x)
+
+]
+
+dx (67) The assumption of the first term being zero is based upon the following argument: the density pt(x) must necessarily vanish at ±∞ because it integrates to 1 and the jump moment D(1)  
+
+> i
+
+(x, t ) and h(x) (that we choose) are both well-behaved so that they together will not grow faster than pt(x) goes to zero. For the 
+
+n-th order term we apply this n times to arrive at: 
+
+∫
+
+h(x) ∂p t(x)
+
+∂t dx =
+
+∫
+
+h(x)
+
+> ∞
+
+∑
+
+> n=1
+
+(−1) n ∑
+
+> i1,...,i n
+
+∂n
+
+∂x i1 · · · ∂x in
+
+[
+
+D(n) 
+
+> i1,...,i n
+
+(x, t )pt(x)
+
+]
+
+dx . (68) Since this has to hold for any h, we get the Kramers–Moyal expansion: 
+
+∂p t(x)
+
+∂t =
+
+> ∞
+
+∑
+
+> n=1
+
+(−1) n ∑
+
+> i1,...,i n
+
+∂n
+
+∂x i1 · · · ∂x in
+
+[
+
+D(n) 
+
+> i1,...,i n
+
+(x, t )pt(x)
+
+]
+
+, (69) which is an infinite sum that either truncates at n = 2 or has infinitely many nonzero terms (Pawula’s theorem; Pawula, 1967; Risken, 1996). Comparing this equation with the Fokker–Planck equation (6) we see that only including the two first orders gives the Fokker–Planck equation and we identify the drift coefficient fi(x, t ) = D(1)  
+
+> i
+
+(x, t ) and the diffusion coefficient ∑ 
+
+> k
+
+σik (x, t )σjk (x, t )/2 = D(2)  
+
+> ij
+
+(x, t ) with the two first drift moments. In the next section we will show how SDEs are connected to the Fokker–Planck equation. 
+
+A.2 Derivation of Fokker–Planck for the SDE 
+
+We can derive the Fokker–Planck equation for the SDE starting from the Kramers–Moyal expansion Equation (69) and show that only the two first jump moments will be non-zero in the infinitesimal limit. We can calculate the jump moments Equation (66) for the SDE by noting that the conditional for the increment p(d x|xt, t ) used in the definition of the jump moment is Gaussian for the SDE because we use the Wiener process: 
+
+pt(d x | x) = N (d x | f (x, t )d t, σ(x, t )σT(x, t )d t) . (70) Using the definition can immediately write down the two first jump moments: D(1)  
+
+> i
+
+(x, t ) = fi(x, t ) and 
+
+D(2)  
+
+> ij
+
+(x, t ) = ∑ 
+
+> k
+
+σik (x, t )σjk (x, t )/2. To show that the higher moments disappear we will calculate 
+
+E[dx t,i 1 · · · dx t,i n | xt] which is just a non-central moment of a Gaussian with mean mi = fi(x, t )d t and covariance vij = ∑ 
+
+> k
+
+σik (x, t )σjk (x, t )d t. Since we are only interested in the scaling property in the infinites-imal limit, we can simplify to counting powers of mean m and variance v components. The non-central moment is a sum where in our case only one term dominates as dt → 0:
+
+n odd : E[d xt,i 1 · · · dxt,i n | xt] = mv n−12 + o(mv n−12 ) = O(d t · (d t) n−12 ) = O((d t) n+1 2 ) (71) 
+
+n even : E[d xt,i 1 · · · dxt,i n | xt] = v n 
+
+> 2
+
++ o(v n 
+
+> 2
+
+) = O((d t) n 
+
+> 2
+
+)
+
+23 or in a single expression using the ceiling function: 
+
+E[d xt,i 1 · · · dxt,i n |xt] = O((d t)⌈ n 
+
+> 2⌉
+
+) . (72) Now when taking the limit in the definition of the jump moment we divide by dt, so any term with n > 2
+
+will vanish, since it will be O((d t)⌈ n 
+
+> 2⌉− 1
+
+) where the exponent is ≥ 1. So the SDE recovers the Fokker–Planck Equation (6) with D(1)  
+
+> i
+
+(x, t ) = fi(x, t ) and D(2)  
+
+> ij
+
+(x, t ) = ∑ 
+
+> k
+
+σik (x, t )σjk (x, t )/2.
+
+## B Reverse-time SDEs 
+
+Here we give the derivation of the reverse-time SDE using the forward clock t stated in Section 4.1 While this can be made rigorous (see, e.g., Kunita (2019)), we will present here a heuristic derivation by leveraging the view of SDEs as limits of discrete-time processes. We start by introducing the reverse-time Wiener process W′ 
+
+> t
+
+:= W1−t − W1. Because this construction simply reverses the original trajectory and shifts it so that it starts at 0, this is a standard Wiener process when viewed backward in time. We also need to define σ(x, t ) := σ′(x, 1 − t) and 
+
+←−
+
+f (x, t ) := −−→
+
+f ′ (x, 1 − t) (73) 
+
+= −f ′(x, 1 − t) − 12 p′
+
+> 1−t
+
+(x) ∇ · [D′(x, 1 − t) p′
+
+> 1−t
+
+(x)] (74) 
+
+= f (x, t ) − 12 pt(x) ∇ · [D(x, t ) pt(x)] . (75) Now, note that the precise meaning of Eq. (14) is given by the integral equation: 
+
+x′ 
+
+> τ
+
+= x′ 
+
+> 0
+
++
+
+∫ τ
+
+> 0
+
+−→
+
+f ′ (x′
+
+> s
+
+, s ) ds +
+
+∫ τ
+
+> 0
+
+σ′(x′
+
+> s
+
+, s ) d Ws . (76) Consider its discretization with steps {i/T }T 
+
+> i=0
+
+and rewrite it in reverse-time by reindexing with j = T − i:
+
+x kT
+
+= x′ 
+
+> 1−kT
+
+= x′ 
+
+> 0
+
++ 1
+
+T 
+
+> T−k−1
+
+∑
+
+> i=0
+
+−→
+
+f ′ (x′iT
+
+, i/T ) +  
+
+> T−k−1
+
+∑
+
+> i=0
+
+σ′(x′iT
+
+, i/T ) ( W i+1 
+
+> T
+
+− W iT ) (77) 
+
+= x1 − 1
+
+T 
+
+> T−k−1
+
+∑
+
+> i=0
+
+←−
+
+f (x1− iT , 1 − i/T ) +  
+
+> T−k−1
+
+∑
+
+> i=0
+
+σ(x1− iT , 1 − i/T ) ( W′ 
+
+> 1−i+1
+> T
+
+− W′ 
+
+> 1−iT
+
+) (78) 
+
+= x1 − 1
+
+T
+
+> T
+
+∑
+
+> j=k+1
+
+←−
+
+f (x jT
+
+, j/T ) −
+
+> T
+
+∑
+
+> j=k+1
+
+σ(x jT
+
+, j/T ) ( W′jT
+
+− W′j−1
+
+> T
+
+) . (79) Crucially, the terms in the two sums use the value on the right of each interval, unlike in the usual forward SDE with the reverse-time clock τ (Eq. (14)). While for the deterministic term this is equivalent in the limit, in the stochastic term it is not. In the limit, we get the integral equation: 
+
+xt = x1 −
+
+∫ 1
+
+> t
+
+←−
+
+f (xs, s ) d s −
+
+∫ 1
+
+> t
+
+σ(xs, s ) ←−
+
+d W′ 
+
+> s
+
+(80) where ←−
+
+d indicates a backward Itô integral , in the sense explained above. The reverse-time SDE is typically written in the literature in its differential form 
+
+dxt = ←−
+
+f (xt, t ) d t + σ(xt, t ) ←−
+
+d W′ 
+
+> t
+
+(RT SDE F-clock) (81) Anderson (1982) showed the stronger result that, when the forward and backward SDEs have the same time marginals and the same exact diffusion coefficient σ(x, t ), the path distributions —not just the marginals— in both directions are also identical .24 B.1 Negative semi-definite diffusion matrices 
+
+When rewriting the FPE for Eq. (14)—which is originally in the reverse-time clock τ —in terms of the forward 
+
+time variable t, we obtain a diffusion term with a negative sign or, equivalently, a standard diffusion term with a negative semi-definite matrix ( −D): 
+
+∂p t(x)
+
+∂t = − ∂p ′ 
+
+> τ
+
+(x)
+
+∂τ = −
+
+(
+
+−∇ · 
+
+[−→
+
+f ′ (x, τ ) p′ 
+
+> τ
+
+(x)
+
+]
+
++ 12 ∇ · (∇ · [D′(x, τ )p′ 
+
+> τ
+
+(x)]) 
+
+)
+
+(82) 
+
+= −∇ · 
+
+[←−
+
+f (x, t ) pt(x)
+
+]
+
+− 12 ∇ · (∇ · [D(x, t )pt(x)]) . (83) This reveals a fundamental symmetry between forward- and reverse-time SDEs. Starting from the continuity equation of an ODE, adding a positive semi-definite diffusion term and adjusting the drift to preserve marginals pt results in a valid FPE corresponding to a forward-time SDE. In contrast, introducing a negative 
+
+semi-definite diffusion term and similarly adjusting the drift leads to a PDE that is not a forward-time FPE. However, under time reversal, this PDE becomes the FPE associated with a reverse-time diffusion process. 
+
+## C The ODE and SDE are continuity equations preserving probability mass 
+
+Interpretation of the log density derivative. The integral in Eq. (24) accounts for the change of log density along a solution of the ODE. Intuitively, the divergence of f measures the instantaneous rate of volume change under the flow , or in other words, it describes how space contracts or dilates over time along the flow, 4 as we briefly show next. Consider a small volume V(t) ⊆ Rd evolved by the velocity field f , let 
+
+∂V(t) be its boundary and n(x, t ) the outward-pointing unit normal vector to the boundary. Using (a) the Leibniz integral rule and (b) the divergence theorem gives: 
+
+ddt |V (t)| = ddt
+
+∫
+
+> V(t)
+
+dx (a)
+
+=
+
+∫
+
+> ∂V(t)
+
+f (x, t ) · n(x, t ) d S(x) (b)
+
+=
+
+∫
+
+> V(t)
+
+∇ · f (x, t )d x . (84) If the volume is small enough that ∇ · f (x, t ) is approximately constant, then ∫ 
+
+> V(t)
+
+∇ · f (x, t )d x ≈ |V (t)| ∇ · 
+
+f (x, t ), and we have our result relating the divergence to local volume expansion: 
+
+ddt log |V (t)| ≈ ∇ · f (x, t ) . (85) In addition, combining this with Eq. (23), we obtain ddt log |V (t)| ≈ − ddt log pt(x), suggesting that local volume and probability density are inversely proportional along the ODE flow. This is formalized below, where we show that the probability mass within a region transformed by the flow remains constant. 
+
+Probability conservation in the ODE. Given a volume V(t∗) ⊆ Rd at some time t∗ and an ODE  
+
+> dx
+> dt
+
+= f (x, t ), we can define the time-dependent volume V(t) as the set of all points xt obtained at time t
+
+by evolving each point in V(t∗) under the flow of the ODE (i.e., the image of V(t∗) under the flow map ϕtt∗
+
+from t∗ to t). Then, the probability associated with this evolving volume remains constant over time, i.e.,  
+
+> ddt
+
+P (x ∈ V (t), t ) = 0 .To show this, we start from the ODE continuity equation: 
+
+∂p t(x)
+
+∂t = − ∑
+
+> i
+
+∂∂x i
+
+[fi(x, t )p(x, t )] = −∇ · [f (x, t )pt(x)] . (86) The total derivative of the probability is expressed through the Leibniz integral rule: 
+
+ddt
+
+∫
+
+> V(t)
+
+pt(x)d x =
+
+∫
+
+> V(t)
+
+∂p t(x)
+
+∂t dx +
+
+∫
+
+> ∂V(t)
+
+pt(x) dx
+
+dt · n(x, t )d S(x) , (87)   
+
+> 4Note that fcould still expand the volume along some directions and contract it along others. For example, if the divergence is positive, not all paths will necessarily move away from each other. Divergence merely describes the net effect.
+
+25 where ∂V(t) is the boundary of V(t), n(x, t ) is the outward-pointing unit normal vector to the boundary and dx 
+
+> dt
+
+· n(x, t ) is the normal component of the velocity field on the boundary, describing how the boundary itself is moving. We can now use the divergence theorem ∫ 
+
+> V
+
+∇ · F(x)d x = ∫ 
+
+> ∂V
+
+F(x) · n(x)d S(x) to rewrite the surface term in the expression above as a volume integral: 
+
+ddt
+
+∫
+
+> V(t)
+
+pt(x)d x =
+
+∫
+
+> V(t)
+
+( ∂p t(x)
+
+∂t + ∇ · 
+
+[ dx
+
+dt pt(x)
+
+]) 
+
+dx (88) 
+
+=
+
+∫
+
+> V(t)
+
+( ∂p t(x)
+
+∂t + ∇ · [f (x, t )pt(x)] 
+
+)︸ ︷︷ ︸
+
+> =0 (Liouville)
+
+dx = 0 .
+
+This fundamental result is a consequence of the Liouville equation being a continuity equation for a conserved quantity, the probability, see for example Villani et al. (2009). Over time the probability density can change but the continuity equation ensures that the total probability is conserved. The Fokker–Planck equation generalizes probability conservation to the stochastic setting. 
+
+Probability conservation in the SDE. We cannot apply the same analysis as for the ODE because 
+
+V(t) is not defined in the stochastic case. Instead, we will answer the methodological question: Is there an effective deterministic velocity field v(x, t ) such that a volume evolving under this field conserves the probability mass of the SDE marginal pt(x).To answer this question, we apply the Leibniz integral rule (87) to a volume V(t) moving with an unknown velocity field v(x, t ) while requiring total probability conservation: 
+
+ddt
+
+∫
+
+> V(t)
+
+pt(x)d x =
+
+∫
+
+> V(t)
+
+∂p t
+
+∂t dx +
+
+∫
+
+> ∂V(t)
+
+ptv · ndS = 0 . (89) Using the Fokker-Planck equation and the divergence theorem, we have 
+
+ddt
+
+∫
+
+> V(t)
+
+pt(x)d x =
+
+∫
+
+> ∂V(t)
+
+(
+
+−−→
+
+f (x, t )pt(x) + 12 ∇ · [D(x, t )pt(x)] + v(x, t )pt(x)
+
+)
+
+· ndS . (90) For this to be zero for any volume, the integrand must be zero. Solving for v(x, t ), we recover the drift of an ODE with the same marginals as the SDE: 
+
+v(x, t ) = − 1
+
+pt(x)
+
+∂p t(x)
+
+∂t = −→
+
+f (x, t ) − 12pt(x) ∇ · [D(x, t )pt(x)] = f (x, t ) . (91) This result shows that the Fokker–Planck is a continuity equation for the probability in the same sense as the Liouville equation. This should not surprise us because we already know that we can define both ODEs and SDEs with the same temporal evolution of the marginal. 
+
+## D Derivations for latent SDE 
+
+D.1 Derivative of KL divergence 
+
+We will use the following shorthand and general notation in the following: ft = f (x, t ), gt = g(x, t ), pt = pt(x)
+
+and qt = qt(x|y). Let pt, q t be time-varying densities that solve the continuity equation with the vector fields 
+
+ft, gt, respectively, i.e.: 
+
+∂p t
+
+∂t = −∇ · (pt ft)
+
+∂q t
+
+∂t = −∇ · (qt gt)
+
+26 and rewrite the KL derivative in terms of the partial time derivatives of the two densities: 
+
+ddt DKL (qt∥pt) = ddt
+
+∫
+
+qt log qt
+
+pt
+
+dx
+
+=
+
+∫ ∂∂t 
+
+[
+
+qt log qt
+
+pt
+
+]
+
+dx
+
+=
+
+∫ ∂q t
+
+∂t log qt
+
+pt
+
+dx +
+
+∫
+
+qt
+
+∂∂t log qtdx −
+
+∫
+
+qt
+
+∂∂t log ptdx
+
+=
+
+∫ ∂q t
+
+∂t log qt
+
+pt
+
+dx + 
+
+∫ ∂q t
+
+∂t dx −
+
+∫ qt
+
+pt
+
+∂p t
+
+∂t dx .
+
+Now we can plug in the continuity equations to obtain: 
+
+ddt DKL (qt∥pt) = −
+
+∫
+
+∇ · (qtgt) log qt
+
+pt
+
+dx +
+
+∫ qt
+
+pt
+
+∇ · (ptft)d x .
+
+Integrating the first term by parts and using the divergence theorem: 
+
+∫
+
+∇ · (qtgt) log qt
+
+pt
+
+dx =
+
+   ∮
+
+> ∂Ω
+
+log qt
+
+pt
+
+(qt gt · n) d S −
+
+∫
+
+qt gt · ∇ log qt
+
+pt
+
+dx ,
+
+where the boundary term can be understood as a flux for Ω defined as a ball with radius that tends to ∞,and under standard assumptions (e.g., densities decaying fast enough) it vanishes. Analogously for the second term (once again with vanishing boundary term since the densities decay fast enough), we have: 
+
+∫ qt
+
+pt
+
+∇ · (pt ft)d x = −
+
+∫
+
+pt ft · ∇ qt
+
+pt
+
+dx = −
+
+∫
+
+qt ft · ∇ log qt
+
+pt
+
+dx (92) and we conclude: 
+
+ddt DKL (qt∥pt) = 
+
+∫
+
+qt gt · ∇ log qt
+
+pt
+
+dx −
+
+∫
+
+qt ft · ∇ log qt
+
+pt
+
+dx
+
+= Eqt
+
+[(gt − ft) · ∇ log qt
+
+pt
+
+] . (93) Going back to our case, the result above is: 
+
+ddt DKL (qt∥pt) = Eqt(x|y)
+
+[(g(x, y, t ) − ft(x, t )) · ∇ log qt(x|y)
+
+pt(x)
+
+] . (94) 
+
+D.2 Derivative of KL divergence as forward and reverse diffusion losses 
+
+As shown in Section 4.1, we can introduce a diffusion matrix D(x, t ) and define a forward SDE with drift 
+
+−→
+
+f (x, t ) and a reverse SDE with drift ←−
+
+f (x, t ), both with same diffusion, such that they have the same time-marginals as the ODE. Using Eqs. (16) to (18), we can write the difference between these drifts as: 
+
+−→
+
+f (x, t ) − ←−
+
+f (x, t ) = ∇ · D(x, t ) + D(x, t ) ∇ log pt(x) (95) and similarly for g(x, y, t ). In the following we again apply the shorthand from the previous section. The score difference can thus be written in terms of forward and reverse drifts: 
+
+Dt ∇ log qt
+
+pt
+
+= (−→gt − ←−gt
+
+) − (−→
+
+ft − ←−
+
+ft
+
+) (96) and assuming that the diffusion matrix Dt = σT 
+
+> t
+
+σt is invertible: 
+
+∇ log qt
+
+pt
+
+= D−1
+
+> t
+
+[(−→gt − ←−gt
+
+) − (−→
+
+ft − ←−
+
+ft
+
+)]
+
+. (97) 27 From the results in Section 4.1 we note that: 
+
+ft = 12 (−→
+
+ft + ←−
+
+ft ) (98) 
+
+gt = 12 (−→gt + ←−gt ) . (99) Using the facts above, we can rewrite Eq. (94) as follows: 
+
+ddt DKL 
+
+(qt ∥ pt
+
+) = Eqt
+
+[(gt − ft
+
+)T∇ log qt
+
+pt
+
+]
+
+(100) 
+
+= Eqt
+
+[(gt − ft
+
+)TD−1
+
+> t
+
+(
+
+(−→gt − ←−gt ) − (−→
+
+ft − ←−
+
+ft )
+
+)] 
+
+(101) 
+
+= Eqt
+
+[( 12 (−→gt + ←−gt ) − 12 (−→
+
+ft + ←−
+
+ft )
+
+)T
+
+D−1
+
+> t
+
+(
+
+(−→gt − ←−gt ) − (−→
+
+ft − ←−
+
+ft )
+
+)]
+
+(102) 
+
+= 12 Eqt
+
+[((−→gt − −→
+
+ft ) + ( ←−gt − ←−
+
+ft ))TD−1
+
+> t
+
+((−→gt − −→
+
+ft ) − (←−gt − ←−
+
+ft ))]
+
+(103) 
+
+= 12 Eqt
+
+[
+
+(−→gt − −→
+
+ft )TD−1 
+
+> t
+
+(−→gt − −→
+
+ft ) − (←−gt − ←−
+
+ft )TD−1 
+
+> t
+
+(←−gt − ←−
+
+ft ) ,
+
+]
+
+(104) where the last step follows by expanding the product and using the fact that D−1 is symmetric. Defining: 
+
+D(f , g, y) := 12
+
+∫ 10
+
+Eqt(x|y)
+
+[
+
+(f (x, t ) − g(x, y, t )) T D(x, t )−1 (f (x, t ) − g(x, y, t )) 
+
+]
+
+dt (105) we can rewrite that as 
+
+∫ 10
+
+ddt DKL 
+
+(qt ∥ pt
+
+) dt = D(−→
+
+f , −→g , y) − D (←−
+
+f , ←−g , y) . (106) 
+
+## E SDE ELBO via KL divergence between path measures 
+
+Here we provide an alternative derivation of the SDE ELBO, i.e., the ELBO arising from having a latent process that follows an SDE. As discussed, in this case p1(x1) = ∫ p(x1|x0)p(x0)d x0 cannot be computed directly via a change of variables and is intractable in most cases. The KL divergence 
+
+DKL (q1(x1|y)∥p1(x1)) in the ELBO (22) is therefore intractable. In Section 5.2 we addressed this by upper-bounding DKL (q1(x1|y)∥p1(x1)) with a tractable expression, to obtain a looser log-likelihood bound 
+
+LSDE ELBO (y) ≤ L ODE ELBO (y) ≤ log p(y). Here, we will derive exactly the same bound by using properties of KL divergences over path measures. 
+
+Path distributions for generative and variational models. We start by specifying the path distribu-tion p(X) of the generative model over latent paths X = {xt}t∈[0 ,1] rather than over the final-time variable 
+
+x1 only. The path distribution is defined through the SDE (2) (where the right arrow is omitted in the following for simplicity): 
+
+dxt = f (xt, t )d t + σ(xt, t )d Wt , x0 ∼ p0(x0) . (107) Similarly, the variational distribution q(X|y) is defined through a second SDE: 
+
+dxt = g(xt, y, t )d t + σ(xt, t )d Wt , x0 ∼ q0(x0|y) (108) that has a data-dependent drift g(xt, y, t ) and shares the diffusion coefficient with the generative SDE. The latter is a necessary condition to get a finite KL divergence in Eq. (110) (Archambeau et al., 2007; Nielsen et al., 2023; Särkkä & Solin, 2019). As discussed in Section 3, while there is no standard definition of densities over paths in the usual sense, we will still informally use them to keep notation simple and more similar to standard probabilistic modeling. All the results presented here can be made rigorous by using path measures—for example, q(X|y) corresponds to a path measure Q(Ω |y) which assigns a probability to a set of paths Ω ⊆ C([0 , 1] , Rd) conditional on y.28 SDE ELBO. First we show that the path KL divergence DKL (q(X|y)|| p(X)) is an upper bound to marginal KL divergence DKL (q1(x1|y)|| p1(x1)) . Denoting by X<1 the path excluding t = 1 , by the chain rule of the KL divergence we have: 5
+
+DKL (q(X|y)|| p(X)) = DKL (q1(x1|y)|| p1(x1)) + Eq1(x1|y)[DKL (q(X<1|x1, y)|| p(X<1|x1)
+
+︸ ︷︷ ︸
+
+> ≥0
+
+] . (109) Using this relationship, we can now define the SDE ELBO by bounding the ODE ELBO (25): 
+
+LODE ELBO (y) = Eq1(x1|y) [log p(y|x1)] − DKL (q1(x1|y)∥p1(x1)) 
+
+≥ Eq1(x1|y) [log p(y|x1)] − DKL (q(X|y)|| p(X)) =: LSDE ELBO (y) . (110) In Section E.1 we make an informal derivation of the path KL divergence that we can insert in (110) to arrive at: 
+
+LSDE ELBO (y) = Eq1(x1|y) [log p(y|x1)] 
+
+︸ ︷︷ ︸
+
+> Reconstruction
+
+− DKL (q0(x0|y)∥p0(x0)) 
+
+︸ ︷︷ ︸
+
+> Prior
+
+− D (f , g, y)
+
+︸ ︷︷ ︸
+
+> Diffusion
+
+(111) 
+
+D(f , g, y) = 12
+
+∫ 10
+
+Eqt(x|y)
+
+[
+
+(f (x, t ) − g(x, y, t )) T D(x, t )−1 (f (x, t ) − g(x, y, t )) 
+
+]
+
+dt . (112) The diffusion coefficient is often chosen to be a scalar function σ(x, t ) = σ(x, t )I. Then, D(x, t ) =
+
+σ(x, t )σT(x, t ) = σ2(x, t )I and the diffusion term simplifies to: 
+
+D(f , g, y) = 12
+
+∫ 10
+
+Eqt(x|y)
+
+[
+
+∥f (x, t ) − g(x, y, t )∥2
+
+σ2(x, t )
+
+]
+
+dt . (113) 
+
+E.1 Informal derivation of the path KL divergence 
+
+The KL divergence between path measures in (110), necessary to compute the ELBO for the SDE, can be directly derived in continuous time using the Girsanov theorem (Huang et al., 2021; Song et al., 2021; Särkkä & Solin, 2019). Here we will instead derive it using the Euler–Maruyama discretization of the SDE starting from finite ∆t and taking the infinitesimal limit, as also done, e.g., by Archambeau et al. (2007) and Bartosh et al. (2024). 6 This discretization approach is close in spirit to an informal derivation of the Girsanov theorem (Särkkä & Solin, 2019). We consider the two discrete-time processes with T steps and T + 1 t-values: corresponding to the generative model p and the inference model q:
+
+p : ∆xl = xtl+1 − xtl = fl∆t + σl∆Wl (114) 
+
+q : ∆xl = xtl+1 − xtl = gl∆t + σl∆W′ 
+
+> l
+
+, (115) where ∆Wl and ∆W′ 
+
+> l
+
+are zero-mean Gaussians with variance ∆t = 1/T , and we use the shorthand fl =
+
+f (xtl , t l) and similarly for gl, σl and Dl = σlσT 
+
+> l
+
+. Assuming tl = l ∆t, these two processes can be seen as discrete-time analogues of the inference and generative SDEs considered earlier. The joint distributions over 
+
+X = xt0 , . . . , xtT are: 
+
+p(X) = p0(x0) 
+
+> T−1
+
+∏
+
+> l=0
+
+ptl (xtl+1 |xtl ) = p0(x0) 
+
+> T−1
+
+∏
+
+> l=0
+
+N (xtl+1 |xtl + fl∆t, σlσT 
+
+> l
+
+∆t) (116) 
+
+q(X|y) = q0(x0|y) 
+
+> T−1
+
+∏
+
+> l=0
+
+qtl (xtl+1 |xtl , y) = q0(x0|y) 
+
+> T−1
+
+∏
+
+> l=0
+
+N (xtl+1 |xtl + gl∆t, σlσT 
+
+> l
+
+∆t) , (117) 
+
+> 5See Léonard (2014, Theorem 2.4) for a rigorous result on path measures.
+> 6Other works (e.g., Ho et al., 2020; Kingma et al., 2021; Nielsen et al., 2023) employ a different discretization that has the same continuous-time limit—see, for example, Song et al. (2020b, Appendix E) for a discussion.
+
+29 where we have left the prior distributions unspecified for now. We plug in these distributions into the ELBO Equation (110). The KL divergence is the expectation with respect to q(X|y) of the following log-likelihood ratio: 
+
+log p(X)
+
+q(X|y) = log p0(x0)
+
+q0(x0|y) − 12∆ t 
+
+> T−1
+
+∑
+
+> l=0
+
+{(∆ xl − fl∆t)TD−1 
+
+> l
+
+(∆ xl − fl∆t)− (118) 
+
+(∆ xl − gl∆t)TD−1 
+
+> l
+
+(∆ xl − gl∆t)} .
+
+We can rewrite the summation term in a form that makes it more suitable for taking expectation and for the T → ∞ limit: 
+
+− ∆t
+
+2 
+
+> T−1
+
+∑
+
+> l=0
+
+(fl − gl)TD−1 
+
+> l
+
+(fl − gl)
+
+︸ ︷︷ ︸
+
+> (i)
+
++ 
+
+> T−1
+
+∑
+
+> l=0
+
+(fl − gl)TD−1 
+
+> l
+
+(∆ xl − gl∆t)
+
+︸ ︷︷ ︸
+
+> (ii)
+
+. (119) The expectation of (ii) with respect to q(X|y) is zero: 
+
+Eq(X|y)
+
+[T −1∑
+
+> l=0
+
+(fl − gl)TD−1 
+
+> l
+
+(∆ xl − gl∆t)
+
+]
+
+= 
+
+> T−1
+
+∑
+
+> l=0
+
+Eql
+
+[
+
+(fl − gl)TD−1 
+
+> l
+
+Eql+1 |l [xl+1 − xl − gl∆t]
+
+︸ ︷︷ ︸
+
+> =0
+
+]
+
+, (120) where we used the shorthand ql = qtl (xtl |y) and ql+1 |l = qtl+1 (xtl+1 |xtl , y). We can then take the limit for 
+
+T → ∞ of the expectation of (i): 
+
+Eq(X|y)
+
+[
+
+− ∆t
+
+2 
+
+> T−1
+
+∑
+
+> l=0
+
+(fl − gl)TD−1 
+
+> l
+
+(fl − gl)
+
+]
+
+= − 12 
+
+> T−1
+
+∑
+
+> l=0
+
+Eql
+
+[(fl − gl)TD−1 
+
+> l
+
+(fl − gl)] ∆t (121)  
+
+> T→∞
+
+−−−−→ − 12
+
+∫ 10
+
+Eqt(x|y)
+
+[(f (x, t ) − g(x, y, t )) TD−1 
+
+> l
+
+(f (x, t ) − g(x, y, t )) ] dt 
+
+︸ ︷︷ ︸
+
+> Diffusion
+
+.
+
+We have now calculated the diffusion term in the ELBO (110). The remaining term appearing in the log-likelihood ratio (118) is the prior term: 
+
+Eq(X|y)
+
+[
+
+log p0(x0)
+
+q0(x0|y)
+
+]
+
+= Eq0(x|y)
+
+[
+
+log p0(x)
+
+q0(x|y)
+
+]
+
+= −DKL (q0(x|y), p 0(x)) 
+
+︸ ︷︷ ︸
+
+> Prior
+
+. (122) We can now write the ELBO for the SDE (110) in the continuous limit as stated in Eq. (36). 
+
+## F Connection to standard derivations of score and flow matching 
+
+In this appendix, we elaborate on the derivation of the score and flow matching objectives presented in Section 7.2 and draw connections to alternative derivations of the same objectives found in the literature. 
+
+F.1 Score matching 
+
+Here we will show that the optimal score function is indeed the marginal score, i.e., 
+
+s∗(x, t ) = argmin 
+
+> s
+
+Eq(y) [DScore ] = ∇ log qt(x) , (123) where q(y) denotes the (unknown) data distribution. To derive this result, we average Equation Eq. (56) over q(y):
+
+Eq(y) [DScore ] = 12
+
+∫ 10
+
+Eqt(x|y)q(y)
+
+[σ2(x, t ) (|| s(x, t )|| 2 − 2sT(x, t )∇ log qt(x|y) + ||∇ log qt(x|y)|| 2)] dt . 
+
+(124) 30 We consider each term in turn. The first term does not depend on y, thus: 
+
+Eqt(x|y)q(y)
+
+[σ2(x, t )|| s(x, t )|| 2] = Eqt(x)
+
+[σ2(x, t )|| s(x, t )|| 2] .
+
+The second term can be rewritten as follows: 
+
+Eqt(x|y)q(y)
+
+[σ2(x, t )sT(x, t )∇ log qt(x|y)] = Eqt(x)
+
+[σ2(x, t )sT(x, t ) Eqt(y|x) [∇ log qt(x|y)] ]
+
+= Eqt(x)
+
+[σ2(x, t )sT(x, t ) ∇ log qt(x)] ,
+
+where we used Bayes qt(y|x) = qt(x|y)q(x) 
+
+> q(y)
+
+and 
+
+Eqt(y|x) [∇ log qt(x|y)] = Eqt(y|x) [∇ log qt(y|x)] + ∇ log qt(x)=
+
+∫
+
+∇qt(y|x)dy + ∇ log qt(x)= ∇
+
+∫
+
+qt(y|x)dy
+
+︸ ︷︷ ︸
+
+> =1
+
++∇ log qt(x)
+
+to write the expression in terms of the marginal score ∇ log qt(x). Eq. (124) can therefore be rewritten as: 
+
+Eq(y) [DScore ] = 12
+
+∫ 10
+
+Eqt(x)
+
+[σ2(x, t ) (|| s(x, t )|| 2 − 2sT(x, t )∇ log qt(x))] dt
+
++ 12
+
+∫ 10
+
+Eqt(x|y)q(y)
+
+[σ2(x, t )||∇ log qt(x|y)|| 2] dt
+
+= 12
+
+∫ 10
+
+Eqt(x)
+
+[
+
+σ2(x, t )
+
+(
+
+∥s(x, t ) − ∇ log qt(x)∥2 − ||∇ log qt(x)|| 2)] 
+
+dt
+
++ 12
+
+∫ 10
+
+Eqt(x|y)q(y)
+
+[σ2(x, t )||∇ log qt(x|y)|| 2] dt
+
+= 12
+
+∫ 10
+
+Eqt(x)
+
+[
+
+σ2(x, t )
+
+(
+
+∥s(x, t ) − ∇ log qt(x)∥2)] 
+
+dt + const . , 
+
+where we completed the square in the first integral and in the last expression arrived at the sought objective with the constant collecting terms independent of s(x, t ).This shows that the expectation of the diffusion loss Eq. (56) over the data distribution defines a least squares objective with optimum s∗(x, t ) = ∇ log qt(x). So in the asymptotic limit of infinite data, the optimization of the diffusion term leads to learning of the score ∇ log qt(x).In the diffusion models literature (see, e.g., Song et al. (2020b)), it is common to derive the score-matching formulation by proceeding in the reverse order. Typically, one starts from a marginal score matching objective like the following: 
+
+12
+
+∫ 10
+
+Eqt(x)
+
+[
+
+λ(x, t ) ∥s(x, t ) − ∇ log qt(x)∥2]
+
+dt , 
+
+which is a weighted average over time, with (almost) arbitrary weights λ(x, t ). While this objective is in-tractable, as it requires access to the true marginal score, it has the same optimum s∗(x, t ) as the expectation of Eq. (56), which can be optimized in practice. However, unless λ(x, t ) is exactly σ2(x, t ), as we found above, this is not linked with maximum likelihood (this connection was discussed, e.g., by Song et al. (2021), Huang et al. (2021), and Kingma et al. (2021)). 31 F.2 Flow matching 
+
+To connect to the flow matching literature (Lipman et al., 2022; Liu et al., 2022), we calculate the expectation of the expression above in the same way as done for the score objective: 
+
+Eq(y) [DFlow ] =2 
+
+∫ 10
+
+Eqt(x)
+
+[
+
+∥v(x, t ) − g(x, t )∥2 − || g(x, t )|| 2
+
+σ2(x, t )
+
+]
+
+dt + (125) 
+
+2
+
+∫ 10
+
+Eqt(x|y)q(y)
+
+[ || g(x, y, t )|| 2
+
+σ2(x, t )
+
+]
+
+dt , (126) where we have introduced the “marginalized” drift: 
+
+g(x, t ) = 1
+
+qt(x)
+
+∫
+
+g(x, y, t )qt(x|y)q(y)dy . (127) So in the limit of infinite data, we get a least squares objective with optimum v∗(x, t ) = g(x, t ).
+
+Connection between conditional and marginal Liouville equations. We can get further insight about this drift by relating the conditional Liouville equation: ∂q t(x|y) 
+
+> ∂t
+
+= −∇ · [g(x, y, t )qt(x|y)] to the Liouville equation for the marginal ∂q t(x) 
+
+> ∂t
+
+= −∇ · [˜ g(x, t )qt(x)] :
+
+∂∂t qt(x) = ∂∂t 
+
+∫
+
+qt(x|y)q(y)dy =
+
+∫ ∂q t(x|y)
+
+∂t q(y)dy = −
+
+∫
+
+∇ · [g(x, y, t )qt(x|y)] q(y)dy (128) 
+
+= −∇ · 
+
+∫
+
+g(x, y, t )qt(x|y)q(y)dy
+
+︸ ︷︷ ︸
+
+> ˜g(x,t )qt(x)
+
+.
+
+This indeed confirms that the drift g(x, t ) Equation (127) is the drift ˜g(x, t ) in the Liouville equation for the marginal qt(x).32
