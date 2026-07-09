@@ -6,34 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-08
-- 运行时间：2026-07-08 20:33:15 UTC
+- 最新运行日期：2026-07-09
+- 运行时间：2026-07-09 21:25:35 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：2
-- 速读区：2
+- 本次总论文数：1
+- 精读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-1) 今日精读两篇高分论文：时间变化分数噪声的Onsager-Machlup泛函，以及带偏差提议的SMC非渐近误差界及其在条件扩散采样中的应用。  
-2) 最值得关注精读论文的随机动力系统理论创新，以及条件扩散采样的实用误差控制方法。  
-3) 普通读者可优先精读这两篇9分论文，速读文章分数较低，仅在需要流形学习或多视图聚类时参考。
-- 详情：[/202607/08/README](/202607/08/README)
+今日精读一篇满分论文，提出异质性自适应扩散薛定谔桥实现PET引导的全身MRI翻译。  
+核心结论：该方法通过自适应处理数据异质性，显著提升多模态医学图像翻译质量。  
+建议关注扩散模型在医学影像融合中的前沿应用，尤其是针对异质性数据的自适应策略。
+- 详情：[/202607/09/README](/202607/09/README)
 
 ### 精读区论文标签
-1. [Onsager--Machlup Functionals for Generalized Newtonian Equations of Motion with Time-Varying Fractional Noise](/202607/08/2607.04193v1-onsager--machlup-functionals-for-generalized-newtonian-equations-of-motion-with-time-varying-fractional-noise)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：推导了带分数噪声的SDE的Onsager-Machlup泛函，即路径积分形式
-2. [Non-Asymptotic Error Bounds for SMC with Biased Proposals: Application to Conditional Diffusion Sampling](/202607/08/2607.04780v1-non-asymptotic-error-bounds-for-smc-with-biased-proposals-application-to-conditional-diffusion-sampling)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：应用SMC进行条件扩散采样，实现扩散桥的构建
+1. [Heterogeneity-Adaptive Diffusion Schrodinger Bridge for PET-Guided Whole-Body MRI Translation](/202607/09/2607.07401v1-heterogeneity-adaptive-diffusion-schrodinger-bridge-for-pet-guided-whole-body-mri-translation)  
+   标签：评分：10.0/10、query:diff-bridge
+   evidence：用于医学图像翻译的扩散薛定谔桥
 
 ### 速读区论文标签
-1. [Straight-Path Flow Matching for Incomplete Multi-View Clustering](/202607/08/2607.06281v1-straight-path-flow-matching-for-incomplete-multi-view-clustering)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：使用流匹配在观测与缺失视图间构建概率路径，类似随机桥过程
-2. [EntroPath: Maximum Entropy Path Ensemble Embedding for Manifold Learning](/202607/08/2607.06497v1-entropath-maximum-entropy-path-ensemble-embedding-for-manifold-learning)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：使用最大熵随机游走和路径集成，与扩散过程的路径积分相关
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
