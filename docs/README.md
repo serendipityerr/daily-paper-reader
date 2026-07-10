@@ -6,26 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-09
-- 运行时间：2026-07-09 21:25:35 UTC
+- 最新运行日期：2026-07-10
+- 运行时间：2026-07-10 20:19:05 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：1
-- 速读区：0
+- 本次总论文数：2
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读一篇满分论文，提出异质性自适应扩散薛定谔桥实现PET引导的全身MRI翻译。  
-核心结论：该方法通过自适应处理数据异质性，显著提升多模态医学图像翻译质量。  
-建议关注扩散模型在医学影像融合中的前沿应用，尤其是针对异质性数据的自适应策略。
-- 详情：[/202607/09/README](/202607/09/README)
+今日速读两篇论文，分别聚焦图信号扩散生成模型与低秩张量评分采样。最值得关注的方向是图信号扩散模型与基于低秩结构的张量扩散方法。建议进一步探索扩散模型在图信号增广和高维数据生成中的实际效果。
+- 详情：[/202607/10/README](/202607/10/README)
 
 ### 精读区论文标签
-1. [Heterogeneity-Adaptive Diffusion Schrodinger Bridge for PET-Guided Whole-Body MRI Translation](/202607/09/2607.07401v1-heterogeneity-adaptive-diffusion-schrodinger-bridge-for-pet-guided-whole-body-mri-translation)  
-   标签：评分：10.0/10、query:diff-bridge
-   evidence：用于医学图像翻译的扩散薛定谔桥
+- 本次无精读推荐。
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [Generative Diffusion Models of Stochastic Graph Signals](/202607/10/2607.06833v1-generative-diffusion-models-of-stochastic-graph-signals)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：图信号生成扩散模型，与随机桥过程相关
+2. [Tensor Train Diffusion: Leveraging Low-Rank Structures for High-Dimensional Score-Based Sampling](/202607/10/2607.06841v1-tensor-train-diffusion-leveraging-low-rank-structures-for-high-dimensional-score-based-sampling)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：基于分数的扩散模型与HJB求解器
 
 
 <div class="dpr-home-promo-card">
