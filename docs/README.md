@@ -6,28 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-12
-- 运行时间：2026-07-12 20:20:41 UTC
+- 最新运行日期：2026-07-13
+- 运行时间：2026-07-13 20:56:01 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：1
 - 精读区：1
-- 速读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日精读多尺度图像表示无配对联合分布建模研究，速读扩散与流匹配采样后验分析。  
-值得关注无配对分布建模中的多尺度表示方法，以及扩散模型的渐近保持后验分析。  
-建议深入阅读精读文章，掌握多尺度图像表示在联合分布建模中的核心思路。
-- 详情：[/202607/12/README](/202607/12/README)
+今日精读一篇高分论文《Convex Relaxations for the Optimization of Markov Processes》，获评9.0/10。  
+该研究为马可夫过程的优化提供了有效的凸松弛方法，值得关注其理论突破与应用潜力。  
+建议对优化理论或随机过程感兴趣的读者优先阅读这篇论文，以掌握前沿技术。
+- 详情：[/202607/13/README](/202607/13/README)
 
 ### 精读区论文标签
-1. [Unpaired Joint Distribution Modeling via Multi-Scale Image Representations](/202607/12/2607.08198v1-unpaired-joint-distribution-modeling-via-multi-scale-image-representations)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：通过辅助表示进行无配对联合分布建模，与最优传输和耦合相关
+1. [Convex Relaxations for the Optimization of Markov Processes](/202607/13/2607.09423v1-convex-relaxations-for-the-optimization-of-markov-processes)  
+   标签：评分：9.0/10、query:diff-bridge
+   evidence：优化插值两个指定概率分布的马尔可夫过程，涉及动态最优传输
 
 ### 速读区论文标签
-1. [Asymptotic-Preserving A Posteriori Analysis of Diffusion and Flow-Matching Samplers](/202607/12/2607.04113v1-asymptotic-preserving-a-posteriori-analysis-of-diffusion-and-flow-matching-samplers)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：流匹配采样器与随机桥构造相关
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
