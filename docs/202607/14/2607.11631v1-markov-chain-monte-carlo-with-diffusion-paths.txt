@@ -1,0 +1,3860 @@
+Title: Markov Chain Monte Carlo with Diffusion Paths
+
+URL Source: https://arxiv.org/pdf/2607.11631v1
+
+Published Time: Tue, 14 Jul 2026 02:26:24 GMT
+
+Number of Pages: 52
+
+Markdown Content:
+# Markov Chain Monte Carlo with Diffusion Paths 
+
+## Han Chen 1, Sifan Liu 1, and Jun Yang 21Department of Statistical Science, Duke University 
+
+2Department of Mathematical Sciences, University of Copenhagen July 2026 
+
+Abstract 
+
+Sampling from multimodal distributions is a longstanding challenge for classical local Markov chain Monte Carlo (MCMC) methods. A popular remedy is to introduce a sequence of intermediate distributions that interpolate between the target and a simpler reference. The classical choice, tempering, raises the density to a power, but distorts the relative weights of asymmetric modes and can lead to poor mixing. We instead propose interpolating along the diffusion path, the marginals of a noising diffusion process that carries the target toward a Gaussian. This path preserves the relative weights of the modes and enjoys favorable mixing properties, which we make precise through a spectral-gap analysis of the corresponding ideal transition kernel. Sampling along the path requires its intermediate scores, which can be estimated from the unnormalized target through variational approaches, yielding only an approximate sampler. To remove the resulting bias, we introduce the Metropolis-adjusted diffusion path (MAD-Path) sampler, which corrects the diffusion-path proposal in an augmented path space and leaves the target invariant regardless of the accuracy of the learned score or the discretization error. We further quantify how these two errors affect the acceptance probability, providing guidance for practical tuning. Experiments on a range of Bayesian posteriors show that MAD-Path improves global exploration and mode-weight estimation relative to tempering-based MCMC methods and unadjusted diffusion samplers. 
+
+# Contents 
+
+1 Introduction 22 Diffusion paths as global transitions 5
+
+2.1 Forward–backward diffusion path as an ideal transition kernel . . . . . . . . . . . . . 52.2 Spectral gap of the diffusion-path transition kernel . . . . . . . . . . . . . . . . . . . 72.2.1 Spectral gap under a Poincar´ e inequality . . . . . . . . . . . . . . . . . . . . . 72.2.2 Spectral gap for a mixture of Poincar´ e components . . . . . . . . . . . . . . . 8
+
+3 Metropolis adjustment for approximate diffusion paths 10 4 Analysis of acceptance probability and tuning guidelines 13 
+
+4.1 Effects of discretization error . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13 4.2 Effects of score-estimation error . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15 1arXiv:2607.11631v1 [stat.CO] 13 Jul 2026 5 Score estimation and practical considerations 16 6 Numerical experiments 18 
+
+6.1 Mixture of Gaussians with unequal variances . . . . . . . . . . . . . . . . . . . . . . 19 6.2 Mixture of skew normals . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 6.3 Bayesian Gaussian mixture model . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 6.4 Effects of diffusion horizon and discretization steps . . . . . . . . . . . . . . . . . . . 22 6.5 Sensor network localization . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 6.6 Seemingly unrelated regression . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 
+
+7 Discussion 26 A Proofs for Section 2 27 
+
+A.1 Proof of Lemma 2.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27 A.2 Proof of Theorem 2.3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27 A.3 Proof of Proposition 2.4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29 A.4 Proof of Theorem 2.5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30 A.5 Proof of Corollary 2.6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32 
+
+B Proofs for Section 4 33 
+
+B.1 Proof of Theorem 4.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33 B.2 Proof of Theorem 4.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 41 
+
+C Experiment supplements 44 
+
+C.1 Learning the score . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 44 C.2 Further details of examples . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 45 
+
+# 1 Introduction 
+
+Markov chain Monte Carlo (MCMC) is the standard framework for sampling from a density known only up to its normalizing constant, and it serves as the computational engine of Bayesian statistics and many scientific applications. The most widely used algorithms—random-walk Metropolis [RWM; 45 ], Metropolis-adjusted Langevin algorithm [MALA; 60 ], and Hamiltonian Monte Carlo [HMC; 23 , 49 ]—generate proposals through local moves, and consequently mix poorly when the target has several well-separated modes, as the chain only rarely crosses the low-probability barriers between them. Such multimodal targets arise routinely in Bayesian posteriors, through label switching in mixture models [ 37 ], parameter constraints [ 65 ], and nonidentifiability [ 22 ], as well as throughout the sciences; see Latuszy´ nski et al. [40] for a recent survey. A general strategy for sampling from multimodal distributions is to introduce a path of intermediate distributions that connects the target p to a flatter distribution on which the separated modes are easier to traverse. The classical construction is tempering: for a decreasing sequence of inverse temperatures 1 = β0 > β 1 > · · · > β n > 0, one considers intermediate densities proportional to pβk . As βk decreases, differences in log-density are compressed, reducing the energy barriers between modes and allowing local Markov transitions to move more freely across regions that are nearly disconnected under the original target. This idea underlies simulated tempering [ 43 , 26 ], parallel tempering [ 66 , 25 ], and tempered transitions [ 47 ], among other methods. Closely related 2annealing paths also form the basis of annealed importance sampling [ 48 ] and sequential Monte Carlo samplers [20]. Tempering can, however, fail when the local modes exhibit asymmetry. For instance, when the modes differ in scale, raising the density to a power distorts their relative weights. Consider an equal-weight mixture of two well-separated Gaussians with different scales. Under the tempered density pβ with β < 1, the narrower mode has a weight that is exponentially small in the dimension. This weight distortion is known to cause torpid mixing of simulated and parallel tempering for asymmetric mixtures, with spectral gaps that vanish exponentially in dimension regardless of the temperature schedule [ 74 ]. A related phenomenon has been described in the learning-based sampling literature as “teleportation of mass”: when the tempering interpolation is viewed as a curve in Wasserstein probability space, probability mass is transported nonlocally along the path, leading to an irregular velocity field [ 44 , 15 ]. Weight-preserving variants of tempering [ 68 , 69 ] target this issue directly, but they require knowing the location and scale of every mode and therefore do not resolve it in general. This shortcoming of tempering motivates the search for a better interpolating path. Crucially, most of the algorithms above—simulated and parallel tempering, tempered transitions, and their relatives—do not depend on the tempering path in particular; they require only a sequence of intermediate distributions whose unnormalized densities can be evaluated, and any such sequence may be substituted. A particularly attractive alternative is to interpolate at the level of the samples rather than by powering the density. Let X ∼ p and Z ∼ N (0 , I d) be independent, and consider 
+
+Xt = e−t/ 2X + √1 − e−tZ for t ≥ 0. As t runs from 0 to ∞, the law of Xt moves from the target 
+
+p toward the standard Gaussian N (0 , I d). Unlike tempering, this path preserves mixture weights exactly: if the target is a mixture distribution, the law of Xt is again a mixture with the same weights, whatever the relative scales of the components. The marginal laws are precisely the time marginals of the Ornstein–Uhlenbeck (OU) diffusion dXt = − 12 Xt dt + d Bt, X0 ∼ p, t ≥ 0,
+
+which is the overdamped Langevin dynamics converging exponentially fast to its stationary distribution N (0 , I d). Writing pt for the density of Xt, the family ( pt)t≥0 solves the Fokker–Planck equation 
+
+∂tpt + ∇ · (pt vt) = 0 , vt(x) = − 12
+
+ x + ∇ log pt(x).
+
+Hence, ( pt)t≥0 is an absolutely continuous curve in the Wasserstein space ( P2(Rd), W 2) driven by the velocity field vt [ 3]. In contrast to tempering, mass is then transported along ( pt)t≥0 by a smooth velocity field rather than teleported non-locally, making the diffusion path a more regular curve in probability space. The difficulty in sampling with the diffusion path is that the intermediate distributions are intractable. To transport a Gaussian sample to the target p, one must run the noising diffusion backward in time, with a drift that involves the score ∇ log pt at every intermediate time [ 4]. This reverse-time construction is the basis of score-based generative modeling [ 61 , 62 , 32 ], where the scores are estimated from data by denoising score matching. In generative modeling, diffusion models have become a leading class of flexible samplers. Their success is due not only to the expressiveness of neural networks for estimating the score, but also to the structure of the diffusion path itself: the forward process gradually transforms a complex data distribution into noise, so that generation can be formulated as a sequence of simpler denoising problems rather than a single global transport problem. This is closely analogous to the role of annealing paths in tempering-based MCMC [61]. 3In the sampling setting, however, one has no samples from p and only access to its unnormalized density. Recent work therefore estimates the intermediate-time scores through stochastic optimal control or path-space variational formulations [ 77 , 57 , 71 ]. The resulting diffusion sampler is only approximate: its output distribution is affected by score-estimation error, finite-time truncation of the diffusion path, and numerical discretization [ 16 ]. Moreover, recent empirical studies suggest that successful applications to multimodal targets often require incorporating the target score ∇ log p
+
+directly into the score parametrization; without this information, the learned sampler can suffer from severe mode collapse [ 10 , 31 ]. This is costly, however, since the target score must then be evaluated at every discretization step. Mode collapse can be alleviated further by encoding the target’s mode structure into the reference distribution, for instance, by locating the modes from preliminary samples [ 50 ]. But even then, the sampler can remain inaccurate when the target has a strongly nonlinear score that is hard to approximate. We return to these practical aspects of score learning in Section 5. Unlike other approximate samplers, such as normalizing flows, diffusion-based samplers do not provide a simple bias-correction mechanism. A normalizing flow is a deterministic invertible map from a tractable reference distribution, so the change-of-variables formula gives the exact density of each generated sample. This density can then be used to debias the sampler by importance weighting or a Metropolis–Hastings correction. This convenience, however, comes at a price. First, requiring an invertible map with a tractable Jacobian determinant greatly constrains the expressiveness of normalizing flows [ 53 ]. Second, in dimension two or higher, infinitely many diffeomorphisms carry one density to the other, and it is unclear which one a normalizing flow should learn. Diffusion-based samplers, in contrast, place no invertibility constraint on the parametrization, and because they prescribe the entire marginal path, the object to be learned is uniquely determined. The tradeoff is that samples are generated through a stochastic path, and the marginal density of the endpoint is generally intractable. Although it can be evaluated through the associated probability-flow ODE [ 62 ], this requires solving an additional ODE and, in practice, introduces numerical discretization error. Thus, diffusion-based samplers do not come with exact density evaluation, making their sampling bias difficult to remove by standard correction methods. To address this difficulty, we propose an MCMC algorithm that uses diffusion paths as proposals and corrects the resulting bias with a Metropolis–Hastings step. In each transition, the current state is first evolved forward along the noising diffusion path, then back along an approximate reverse path. This forward-then-backward construction mirrors the heating-then-cooling structure of Neal’s tempered transitions [ 47 ], with the diffusion path in place of the tempering path. Near the noisy end, the target’s modes are smoothed together, so the chain can move between them freely; the reverse path then transports the state back toward p. Because the proposal is a stochastic trajectory, the Metropolis–Hastings correction is applied to the entire path in an augmented space. This augmented-space correction ensures that the marginal chain has p as its exact stationary distribution, regardless of the accuracy of the learned score or the size of the discretization error. The main contributions and the outline of the paper are as follows. 
+
+• In Section 2 we describe the ideal transition kernel induced by the diffusion path and study its mixing, first when the target satisfies a Poincar´ e inequality and then when it is a mixture of such distributions. This ideal kernel coincides, up to a rescaling, with the proximal sampler [ 41 , 17 ]. Our analysis takes a new perspective, interpreting the proximal sampler as a data-augmentation Gibbs sampler. This lets us bound its spectral gap without appealing to isoperimetric inequalities and, for mixture targets, decompose the gap into a between-mode and a within-mode contribution, making precise the advantage of the diffusion path as an 4interpolation. 
+
+• In practice, the diffusion-path transition can only be run with approximate scores and a finite-time discretization. In Section 3, we introduce the Metropolis–Hastings algorithm that removes the resulting score-approximation and discretization bias. Because the proposal is constructed by a stochastic trajectory, the correction is carried out in an augmented path space. This contrasts with existing Metropolis adjustments for deterministic normalizing flows, where the flow is used either to generate independent proposals [ 24 ] or to reparametrize the target before applying local MCMC [33]. 
+
+• Section 4 quantifies how the Metropolis acceptance probability depends on discretization and score approximation. With the exact score, we isolate the discretization error and show that the rejection probability is of order O(h1/2) for step size h. We then derive the corresponding high-dimensional scaling rule and the associated optimal tuning guideline. With an approximate score, we show that the rejection probability is governed by the symmetrized Kullback–Leibler divergence between the approximate and exact reverse diffusion, or equivalently, an integrated squared score error. 
+
+• In Section 5, we describe how the intermediate-time scores can be learned through path-space variational inference and discuss related work along this line. We also give practical guidelines for choosing the reference distribution, which we find crucial for mitigating mode collapse. 
+
+• Finally, in Section 6, we evaluate the method on a range of Bayesian posteriors, study how diffusion time and step size affect sampling efficiency, and compare against tempering-based MCMC. Moreover, we show that scores learned by existing variational approaches can misrepresent the relative weights of isolated modes, or be inaccurate when the target’s score is highly nonlinear. In both cases, the Metropolis–Hastings correction is crucial for removing the resulting bias. Section 7 concludes with a discussion of future directions. 
+
+# 2 Diffusion paths as global transitions 
+
+Bridging the target with a tractable reference through a sequence of intermediate distributions is a common strategy for constructing MCMC transitions that can move globally across separated modes. Here, we take the diffusion path as this bridge and argue that it is preferable to classical tempering. 
+
+## 2.1 Forward–backward diffusion path as an ideal transition kernel 
+
+Let p be the target distribution supported on Rd with continuously differentiable density. Recall the Ornstein–Uhlenbeck (OU) process dXt = − 12 Xtdt + d Bt, X0 ∼ p, t ∈ [0 , T ], (1) where Bt is a standard d-dimensional Brownian motion, now run over a finite horizon [0 , T ]. Writing 
+
+pt for the law of Xt, the family ( pt)t∈[0 ,T ] interpolates between the target p0 = p and pT ; for large 
+
+T the endpoint pT is close to the equilibrium distribution N (0 , I d), but need not equal it. The 5transition kernel constructed below is reversible with respect to p for every finite T , and T governs only the mixing speed. The time-reversal of the OU process (1) is given by dYt =
+
+
+
+− 12 Yt − ∇ log pt(Yt)
+
+
+
+dt + d ¯Bt, YT ∼ pT , t ∈ [T, 0] , (2) where dt denotes an infinitesimal negative time increment and ¯Bt is a standard Brownian motion running backward in time [ 4]. By construction, the forward path ( Xt)t∈[0 ,T ] and the backward path (Yt)t∈[0 ,T ] are equal in distribution. This suggests a natural Markov transition kernel: from the current state X0, sample the forward path and set YT = XT ; then sample the backward path from 
+
+YT and return its endpoint Y0 as the next state. 
+
+Proposition 2.1 (Reversibility of the diffusion-path transition kernel) . Let P (x0, dy0) be the transition kernel that draws y0 by first sampling the forward path (Xt)t∈[0 ,T ] from the OU process (1) 
+
+started at X0 = x0, and then the backward path (Ys)s∈[T, 0] from (2) started at YT = XT . Then P is reversible with respect to p, and hence admits p as its invariant distribution. Proof of Proposition 2.1. Write ⃗ P (x0, dxT ) for the forward transition from x0 to xT induced by (1) ,and ⃗ P (xT , dy0) for the backward transition from xT to y0 induced by (2), so that 
+
+P (x0, dy0) = 
+
+Z⃗P (x0, dxT )⃗ P (xT , dy0).
+
+By construction, the forward and backward processes satisfy the reversal identity p0(x0)⃗ P (x0, dxT ) = 
+
+pT (xT )⃗ P (xT , dx0). Hence 
+
+p0(x0) P (x0, dy0) = 
+
+Z
+
+p0(x0)⃗ P (x0, dxT )⃗ P (xT , dy0)=
+
+Z
+
+pT (xT )⃗ P (xT , dx0)⃗ P (xT , dy0)=
+
+Z
+
+p0(y0)⃗ P (y0, dxT )⃗ P (xT , dx0)= p0(y0) P (y0, dx0).
+
+This is detailed balance, so P is reversible with respect to p0 = p.The argument does not rely on the specific form of the forward and backward processes (1) – (2) .The key property is that the forward and backward processes are constructed to be time-reversals of each other, which ensures the detailed balance condition. However, the ideal kernel P is not directly implementable, as it requires simulating the continuous-time diffusions and evaluating the score ∇ log pt at every intermediate time. In Section 3, we introduce a Metropolis–Hastings algorithm that remains reversible with respect to the target even when the diffusion paths are only approximately simulated. Before that, we analyze the spectral gap of the ideal kernel to quantify the benefit of interpolating along the diffusion path. 62.2 Spectral gap of the diffusion-path transition kernel 
+
+We start from a classical characterization of the spectral gap of P in terms of maximal correlation. The transition kernel P is the marginal chain on X0 of a two-block data-augmentation Gibbs sampler on ( X0, X T ), in which XT | X0 ∼⃗ P and X0 | XT ∼⃗ P . For such a sampler, the spectral gap can be read off from the maximal correlation between X0 and XT , taken under their joint law 
+
+p0(d x0)⃗ P (x0, dxT ), defined by 
+
+ρmax (X0, X T )2 = sup    
+
+> f∈L2(p0), g ∈L2(pT)
+> f, g non-constant
+
+Corr  f (X0), g (XT )2.
+
+Writing ( P f )( x0) := R f (y0) P (x0, dy0) for the action of P on L2(p0), the spectral gap of P is Gap( P ) = 1 − sup     
+
+> f∈L2(p0)
+> Ep0[f]=0 , f ̸=0
+
+⟨f, P f ⟩L2(p0)
+
+∥f ∥2
+
+> L2(p0)
+
+.
+
+Lemma 2.2 (Spectral gap via maximal correlation) . The spectral gap of the transition kernel P
+
+satisfies 
+
+Gap( P ) = 1 − ρmax (X0, X T )2.
+
+The proof is given in Appendix A.1. The link between the spectral gap of a two-block Gibbs sampler and maximal correlation is classical in the analysis of data-augmentation algorithms. Liu et al. [42] use it to study the covariance structure of Gibbs samplers and to compare the efficiency of different data-augmentation schemes, and the same quantity appears in the mixing theory of stationary processes and Markov chains as the ρ-mixing coefficient [ 12 ]. In the remainder of this section, we use Lemma 2.2 to bound Gap (P ) under increasingly general assumptions on the target: first when p satisfies a Poincar´ e inequality, and then when p is a mixture of such distributions. 
+
+2.2.1 Spectral gap under a Poincar´ e inequality 
+
+Because the forward process ( Xt)t∈[0 ,T ] solves the OU SDE (1), the forward kernel ⃗ P is Gaussian, 
+
+XT | X0 ∼ N  √α X 0, (1 − α)Id
+
+, α := e−T .
+
+Thus XT is a contraction of X0 toward the origin, perturbed by independent Gaussian noise. The parameter α ∈ (0 , 1) decreases as the horizon T grows: it is near 1 for small T , where XT ≈ X0, and near 0 for large T , where XT is almost independent of X0. In this way, α controls the correlation between X0 and XT . When p satisfies a Poincar´ e inequality, this correlation can be bounded from above, and Lemma 2.2 converts the bound into a lower bound on the spectral gap. 
+
+Theorem 2.3 (Spectral gap under a Poincar´ e inequality) . Suppose p satisfies the Poincar´ e inequality 
+
+Var p [f ] ≤ CP
+
+Z
+
+∥∇ f (x)∥2 p(d x) for all smooth f. (3) 
+
+Then 
+
+ρmax (X0, X T )2 ⩽ αC P
+
+1 − α + αC P
+
+, so that Gap( P ) ≥ 1 − α
+
+1 − α + αC P
+
+.
+
+7Both bounds are tight for Gaussian targets: if p = N (μ, Σ) , its Poincar´ e constant is CP = λmax (Σ) ,the largest eigenvalue of Σ, and 
+
+ρmax (X0, X T )2 = αλ max (Σ) 1 − α + αλ max (Σ) , Gap( P ) = 1 − α
+
+1 − α + αλ max (Σ) .
+
+The proof is given in Appendix A.2. The result makes precise the role of the diffusion time T , or equivalently α = e−T , in the convergence of the ideal kernel P . As T → ∞ (α → 0), the correlation between X0 and XT vanishes and the spectral gap tends to 1. Conversely, as T → 0 ( α → 1), the maximal correlation tends to 1 and the gap tends to 0, since the forward step barely perturbs the current state. Quantitatively, the lower bound on Gap (P ) implies that the χ2-divergence contracts by a factor of ( αC P 
+
+> 1−α+αC P
+
+)2 per transition, which provides a mixing time bound for the ideal transition kernel P .
+
+Remark 2.1 (Connection to the proximal sampler) . The ideal transition kernel P coincides, up to rescaling, with the proximal sampler [ 41 , 17 , 73 ]. Under the Poincar´ e inequality, Chen et al. [17 , Theorem 4 ] showed that the χ2-divergence contracts by a factor of 1(1+ η/C P)2 per iteration, where η = 1−αα is the step size. This is exactly the rate obtained from our spectral-gap bound in Theorem 2.3. The analysis in [ 17 ], however, is based on the dissipation of χ2-divergence along the forward and backward heat flows. In contrast, our argument uses the structural relation between the spectral gap and the maximal correlation. This viewpoint allows us to further analyze the spectral gap without global functional inequalities, as discussed below. 
+
+2.2.2 Spectral gap for a mixture of Poincar´ e components 
+
+When the target is multimodal, a global Poincar´ e inequality may fail. We therefore assume a mixture structure 
+
+p = X
+
+> c∈C
+
+wc pc, wc > 0, X
+
+> c∈C
+
+wc = 1 ,
+
+with each component pc a probability distribution on Rd, and analyze the gap of P by lifting to the augmented space Rd × C . The lifted target is ˜p(x, c ) = wcpc(x), and the lifted kernel eP acts as (X0, C ) → XT → (X′
+
+> 0
+
+, C ′): given ( X0, C ) we draw XT ∼ N (√αX 0, (1 − α)Id), then sample ( C′, X ′
+
+> 0
+
+)from the posterior of ( C, X 0) | XT . The X-marginal of the lifted transition eP is exactly P , and we have Gap( P ) ≥ Gap( eP ) = 1 − ˜ρ2max , ˜ρ2max := ρmax 
+
+ (X0, C ), X T
+
+2,
+
+where the maximal correlation ˜ ρmax is under the joint law ˜ p(x0, c ) ·⃗ P (x0, dxT ). The next result bounds ˜ρ2max by a label term ρ2lab := ρmax (C, X T )2 and the within-component terms ρ2 
+
+> c
+
+:= ρmax (X0, X T | C = c)2, the latter computed under the conditional law of ( X0, X T )given C = c.
+
+Proposition 2.4 (Decompose maximal correlation into label and within-component correlations) .
+
+With the notation above, 
+
+˜ρ2max ≤ ρ2lab + max  
+
+> c∈C
+
+ρ2 
+
+> c
+
+.
+
+Consequently, 
+
+Gap( P ) ≥
+
+
+
+1 − ρ2lab − max  
+
+> c∈C
+
+ρ2
+
+> c
+
+
+
+> +
+
+,
+
+where (a)+ := max( a, 0) denotes the positive part of a.
+
+8The proof is given in Appendix A.3. Let Plab denote the C-marginal transition kernel induced by eP . By Lemma 2.2, Gap( Plab ) = 1 − ρ2lab , so Proposition 2.4 gives Gap( P ) ≥
+
+
+
+Gap( Plab ) − max  
+
+> c∈C
+
+ρ2
+
+> c
+
+
+
+> +
+
+.
+
+When each component pc satisfies a Poincar´ e inequality, Theorem 2.3 provides an upper bound on max c∈C ρ2 
+
+> c
+
+. Consequently, the spectral gap of P is bottlenecked by Gap (Plab ), and the overall mixing is limited by how well the chain moves between components. Intuitively, the further apart the components, the harder it is to jump between them. We make this precise in the two-component case, where Gap (Plab ) admits an explicit lower bound in terms of the Wasserstein distance between the two components. 
+
+Theorem 2.5 (Spectral gap for a two-component mixture of Poincar´ e distributions) . Let the target be p = P 
+
+> c∈C
+
+wcpc with C = {+, −} , and suppose each pc satisfies the Poincar´ e inequality (3) with constant CP,c . Then 
+
+Gap( P ) ≥
+
+
+
+exp   − α
+
+4(1 − α) W 22 (p+, p −) − max 
+
+> c∈C
+
+αC P,c 
+
+1 − α + αC P,c 
+
+
+
+> +
+
+,
+
+where W2 denotes the 2-Wasserstein distance with respect to the Euclidean norm on Rd.
+
+The proof is given in Appendix A.4. The bound isolates two factors governing the gap of the ideal kernel P : the separation between the mixture components, through W2(p+, p −), and the conditioning of each component, through its Poincar´ e constant. Notably, it depends on neither the relative weights nor the relative scales of the components, a key advantage over tempering-based methods. 
+
+Mixture of Gaussians with unequal variances We now instantiate the results on a mixture of two Gaussians with unequal variances, the target Woodard et al. [74] use to show that tempering-based methods mix poorly. Specifically, let p+ = N (b1d, σ 2+Id), p− = N (−b1d, σ 2
+
+> −
+
+Id), and w+ =
+
+w− = 12 , with b > 0 and σ2+ > σ 2
+
+> −
+
+.
+
+Corollary 2.6 (Dimension-free ideal gap for α ∼ d−1). Fix constants b, σ +, σ − and set α = κ/d 
+
+for a fixed κ > 0. Then 
+
+lim inf  
+
+> d→∞
+
+Gap( P ) ⩾ e−κb 2
+
+.
+
+See the proof in Appendix A.5. Since α = e−T along the OU process, taking T = Θ( log d) keeps the gap of P bounded away from zero as d → ∞ .By contrast, for this same unequal-variance mixture, Woodard et al. [74] show that simulated and parallel tempering mix torpidly for any number and choice of temperatures, with a spectral gap that decays exponentially in d. The cause is that tempered intermediate distributions pβ (β < 1) distort the relative mode weights, a phenomenon known as “unfaithful” [ 47 ], or “low persistence” [ 74 ], or “teleportation of mass” [ 44 ]. Concretely, at any inverse temperature β < 1, the narrower mode 
+
+N (−b1d, σ 2
+
+> −
+
+Id) carries weight of order ( σ−/σ +)d(1 −β), exponentially small in d, so the probability of crossing from the wider mode to the narrower one is exponentially small at every intermediate level. This contrast highlights the advantage of diffusion-path interpolation, which preserves the mixture weights at all intermediate levels. The resulting gap is governed only by the inter-component distance and the per-component Poincar´ e constants, and is insensitive to the scale disparity across modes that causes tempering to mix torpidly. Section 6.1 provides further numerical demonstration of this example. 93 Metropolis adjustment for approximate diffusion paths 
+
+In practice, the exact forward–backward diffusion processes described in the previous section are often intractable. In particular, the score function ∇ log pt at intermediate time t is typically unknown and needs to be approximated by learning-based methods; see Section 5. Moreover, the SDEs need to be solved numerically, which introduces discretization error. To correct for these errors, we propose a Metropolis–Hastings algorithm that uses the forward–backward simulation as a proposal and ensures the Markov chain has the correct invariant distribution. We consider a general forward diffusion process ( Xt)t∈[0 ,T ] defined by the SDE dXt = ft(Xt)d t + gtdBt, X0 ∼ p, t ∈ [0 , T ], (4) where f : [0 , T ] × Rd → Rd and g : [0 , T ] → R are drift and diffusion coefficients, respectively, and 
+
+Bt is a standard d-dimensional Brownian motion. Denote the marginal distribution of Xt by pt.The time-reversal of the forward process is given by dYt = [ ft(Yt) − g2 
+
+> t
+
+∇ log pt(Yt)]dt + gtdBt, YT ∼ pT , t ∈ [T, 0] , (5) where Bt is a standard Brownian motion when time flows backwards and dt denotes an infinitesimal negative timestep. In practice, ∇ log pt is replaced with a learned score function ˆst and the SDEs are simulated via Euler–Maruyama discretization. Denote the backward drift as −bt(y) = ft(y) − g2 
+
+> t
+
+ˆst(y). Let x0 ∈ Rd
+
+be the current state of the Markov chain. We first discretize the forward SDE via Euler–Maruyama with step size h:
+
+xk+1 = xk + ftk (xk)h + gtk
+
+√hε k, k = 0 , . . . , N − 1,
+
+where tk = kh and εkiid 
+
+∼ N (0 , I d). Then, starting from yN = xN , we discretize the backward SDE as 
+
+yk = yk+1 + btk (yk+1 )h + gtk
+
+√hζ k, k = N − 1, . . . , 0,
+
+where ζkiid 
+
+∼ N (0 , I d). Throughout, let φ(x; μ, Σ) denote the density of a multivariate Gaussian distribution with mean μ and covariance matrix Σ, evaluated at x. We treat y0 as the proposal and accept it with the Metropolis–Hastings acceptance probability 
+
+p(y0)
+
+p(x0) ·
+
+QN −1 
+
+> k=0 ⃗
+
+pk(xk | xk+1 ) · QN −1
+
+> k=0
+
+⃗p k(yk+1 | yk)
+
+QN −1
+
+> k=0
+
+⃗p k(xk+1 | xk) · QN −1 
+
+> k=0 ⃗
+
+pk(yk | yk+1 ) ∧ 1, (6) where ⃗p k(xk+1 | xk) = φ(xk+1 ; xk + ftk (xk)h, g 2 
+
+> tk
+
+hI d),⃗ pk(yk | yk+1 ) = φ(yk; yk+1 + btk (yk+1 )h, g 2 
+
+> tk
+
+hI d).
+
+The resulting algorithm, named Metropolis-adjusted diffusion path (MAD-Path), is summarized in Algorithm 1 and illustrated in Figure 1. MAD-Path conceptually resembles Neal’s tempered transition [ 47 ], which likewise uses a sequence of intermediate distributions to interpolate between the target and an easier-to-sample distribution. 10 Algorithm 1 One Iteration of MAD-Path 
+
+Input: Target density p0, learned score ˆst, drift f , diffusion g, time horizon T , number of steps N ,current state x0
+
+Output: Next state x′ 
+
+> 0
+> 1:
+
+h ← T /N 
+
+Forward pass: run Euler–Maruyama on forward SDE  
+
+> 2:
+
+for k = 0 , . . . , N − 1 do  
+
+> 3:
+
+Sample εk ∼ N (0 , I d) 
+
+> 4:
+
+xk+1 ← xk + ftk (xk) h + gtk
+
+√h ε k ▷ t k = kh  
+
+> 5:
+
+end for 
+
+Backward pass: run Euler–Maruyama on backward SDE  
+
+> 6:
+
+yN ← xN 
+
+> 7:
+
+for k = N − 1, . . . , 0 do  
+
+> 8:
+
+Sample ζk ∼ N (0 , I d) 
+
+> 9:
+
+btk (yk+1 ) ← − ftk (yk+1 ) + g2 
+
+> tk
+
+ˆstk (yk+1 ) 
+
+> 10:
+
+yk ← yk+1 + btk (yk+1 ) h + gtk
+
+√h ζ k 
+
+> 11:
+
+end for 
+
+Metropolis–Hastings adjustment  
+
+> 12:
+
+Set x′ 
+
+> 0
+
+= y0 with probability (6) and x′ 
+
+> 0
+
+= x0 otherwise. forward: dXt = ft(Xt)d t + gtdBt   
+
+> backward: dYs=
+
+[fs(Ys) − g2  
+
+> s∇log ps(Ys)
+
+]¯ds + gsd¯Bs  
+
+> x0
+> y0
+> x1
+> y1
+> x2
+> y2
+> xN=yN
+
+t = 0 t = T
+
+p0 pT
+
+Figure 1: Illustration of MAD-Path (Algorithm 1). From the current state x0 ∼ p0, the forward process (top) generates x1, . . . , xN over N discretization steps, transporting the multimodal target p0
+
+(left) toward the approximately Gaussian marginal pT (right). The backward process (bottom) starts from the shared endpoint yN = xN and generates yN −1, . . . , y0, returning y0 as the proposed state. By smoothing the well-separated modes together near the noisy end ( t = T ), this forward–backward construction enables jumping between modes. 11 Tempered transition first moves the candidate state forward to a “higher temperature,” where the state space is easier to explore, and then moves it backward to the original “lower temperature,” at which the target distribution is recovered. The candidate is accepted with a Metropolis–Hastings acceptance probability that involves all intermediate states. Neal [47] presents tempering as the canonical example of such interpolation, but notes that “it may be appropriate to define a series of interpolating distributions in some other fashion, guided by whatever knowledge we may have of the properties of the distribution of interest.” In this sense, our algorithm can be understood as a tempered transition guided by the forward–backward diffusion processes, which provides a more favorable interpolation than tempering, as discussed in Section 2. MAD-Path can also be interpreted as a transition on the augmented space of z := (x0, . . . , xN , yN −1, . . . , y0), equipped with the joint distribution Π( z) = p(x0) · 
+
+> N−1
+
+Y
+
+> k=0
+
+⃗p k(xk+1 | xk) · 
+
+> N−1
+
+Y
+
+> k=0 ⃗
+
+pk(yk | yk+1 ).
+
+From the current state x0, the forward and backward passes draw the remaining components (x1, . . . , xN , yN −1, . . . , y0) exactly from the conditional Π( · | x0). The sampler then proposes a move by applying the deterministic path-reversal map R : Rd(2 N +1) → Rd(2 N +1) ,
+
+R(x0, . . . , xN , yN −1, . . . , y0) := ( y0, . . . , yN −1, xN , xN −1, . . . , x0),
+
+which swaps the roles of the forward and backward paths. Because R is a volume-preserving involution, i.e. R ◦ R = id and R preserves Lebesgue measure, the Metropolis acceptance probability is simply Π( Rz)Π( z) ∧ 1, recovering Equation (6). The following theorem establishes that MAD-Path (Algorithm 1) is reversible with respect to 
+
+p, and hence admits p as its invariant distribution. Notably, this holds regardless of the score and discretization errors , which affect only the efficiency of the sampler, not its correctness. 
+
+Theorem 3.1 (Reversibility of MAD-Path transition kernel) . The MAD-Path transition kernel is reversible with respect to p.Proof of Theorem 3.1. For two measurable sets A, B ⊂ Rd, the transition probability from A to B
+
+can be written as 
+
+Z
+
+1 {x0 ∈ A, y0 ∈ B}Π( z) ·
+
+ Π( Rz)Π( z) ∧ 1
+
+
+
+dz +
+
+Z
+
+1 {x0 ∈ A ∩ B}Π( z) ·
+
+
+
+1 − Π( Rz)Π( z) ∧ 1
+
+
+
+dz. (7) Writing z0 = x0 and z−1 = y0 for the first and last components of z, the first term equals 
+
+Z
+
+1 {x0 ∈ A, y0 ∈ B}Π( z) ·
+
+ Π( Rz)Π( z) ∧ 1
+
+
+
+dz =
+
+Z
+
+1 {z0 ∈ A, z−1 ∈ B} ·  Π( z) ∧ Π( Rz)dz
+
+=
+
+Z
+
+1 {w−1 ∈ A, w0 ∈ B} ·  Π( Rw) ∧ Π( w)dw
+
+=
+
+Z
+
+1 {w0 ∈ B, w−1 ∈ A} ·  Π( w) ∧ Π( Rw)dw,
+
+where the second equality applies the change of variable w = Rz and uses that R is a volume-preserving involution. Thus, the last display is symmetric in A and B. The second term in (7) is also symmetric in A and B by definition. Hence, the transition kernel is reversible. 12 4 Analysis of acceptance probability and tuning guidelines 
+
+Although MAD-Path (Algorithm 1) is guaranteed to have the correct invariant distribution, the acceptance probability is affected by discretization error and score-estimation error. We now analyze how these errors affect the acceptance probability (6). 
+
+## 4.1 Effects of discretization error 
+
+We first isolate the effect of time discretization by assuming that the exact score 
+
+st(x) := ∇ log pt(x), t ∈ [0 , T ]is available. Denote the log Metropolis–Hastings ratio with step size h by ∆h := log 
+
+"
+
+p(y0)
+
+p(x0) ·
+
+QN −1 
+
+> k=0 ⃗
+
+pk(xk | xk+1 ) · QN −1
+
+> k=0
+
+⃗p k(yk+1 | yk)
+
+QN −1
+
+> k=0
+
+⃗p k(xk+1 | xk) · QN −1 
+
+> k=0 ⃗
+
+pk(yk | yk+1 )
+
+#
+
+. (8) Thus, the acceptance probability is 1 ∧ e∆h .Throughout this section, the forward marginals pt are strictly positive and satisfy the Fokker– Planck equation ∂tpt = −∇ · (ftpt) + 12 ∆( g2 
+
+> t
+
+pt); here ∂t denotes the time derivative, while ∇, ∇· ,∆, and all higher-order operators act on the spatial variable x. We write Lt(x) := log pt(x), so that st = ∇Lt, and let Y denote the exact reverse diffusion initialized at YT = XT and driven, conditionally on XT , by reverse-time Brownian motion independent of the forward path. We assume that the Jacobian ∇ft is symmetric for every t, as holds whenever ft is a gradient field. For integers 
+
+r, s ⩾ 0, let Cr,s denote the space of (scalar- or Rd-valued) functions on [0 , T ] × Rd whose mixed derivatives up to order r in time and order s in space are continuous and grow at most polynomially in x, uniformly in t. We impose the following regularity conditions on the coefficients and the Euler–Maruyama scheme. 
+
+Assumption 4.1 (Regularity of the exact forward–backward diffusion) . There exists h0 > 0 such that the following holds. (i) Coefficients. g ∈ C1([0 , T ]) is bounded away from zero and infinity. (ii) Smoothness and growth. f ∈ C1,3 and L ∈ C2,4.(iii) Well-posedness and moments. The forward and reverse SDEs have unique solutions, and for every q ⩾ 2 the solutions Xt, Y t and the Euler iterates xk, yk have Lq norms bounded uniformly in t, k, and 0 < h ⩽ h0.(iv) Strong error. For every q ⩾ 2, the Euler scheme can be coupled to the exact solution through shared Brownian increments so that 
+
+max  
+
+> 0≤k≤N
+
+(∥xk − Xtk ∥Lq + ∥yk − Ytk ∥Lq ) ≤ Cq h1/2, 0 < h ≤ h0. (9) 
+
+Conditions (iii)–(iv) hold under global Lipschitz and linear-growth assumptions on the forward and reverse drifts together with (i)–(ii); see, for example, [ 38 , Chapter 10]. Some of these conditions may be stronger than necessary; we adopt them to keep the analysis self-contained and to avoid technical digressions. 
+
+13 Define 
+
+D(T ) := 4 
+
+Z T
+
+> 0
+
+E
+
+"
+
+∇ft(Xt) − g2
+
+> t
+
+2 ∇st(Xt)
+
+> 2F
+
+#
+
+dt, (10) where the expectation is taken over ( Xt)t∈[0 ,T ] satisfying the SDE (4) . In the special case of the OU process (1) , where ft(x) = − 12 x and gt = 1, this reduces to D(T ) = R T 
+
+> 0
+
+E ∥∇ st(Xt) + Id∥2F
+
+ dt, the accumulated squared deviation of the log-density Hessian ∇st = ∇2 log pt from −Id, its value at the Gaussian equilibrium N (0 , I d). 
+
+Theorem 4.1 (Effects of discretization error on acceptance probability) . Suppose the exact score st
+
+is available for t ∈ [0 , T ]. Under Assumption 4.1, and under stationarity x0 ∼ p0, as h → 0,
+
+E[∆ h] = − h
+
+2 D(T ) + O(h3/2),
+
+Var(∆ h) = hD(T ) + O(h3/2).
+
+The proof is given in Appendix B.1. In particular, the variance of the log Metropolis–Hastings ratio is linear in h when D(T ) > 0, while its mean is asymptotically minus one-half of that variance. Consequently, the rejection probability satisfies 1 − E e∆h ∧ 1 ≤ E [|∆h|] = O(h1/2).
+
+In the continuous-time limit h ↓ 0, the discretized proposal converges to the ideal diffusion-path kernel defined in Section 2, which has acceptance probability 1. The discretization error therefore induces a rejection probability that is at most O(h1/2) and a trade-off between acceptance and computational cost: smaller h raises the acceptance probability but requires more discretization steps, and hence higher cost per proposal. 
+
+Remark 4.1 (High-dimensional scaling for product i.i.d. targets) . To understand the trade-off between acceptance probability and computational cost, we adopt the high-dimensional optimal-scaling framework for product-form targets [ 58 , 59 ]. We restrict attention to product-form targets for analytical tractability, although analogous arguments can be extended to more general target distributions [ 75 ]. Specifically, following the same setting as in [ 9 ], we assume that the target consists of n independent copies of the d-dimensional component analyzed above, so the total dimension is 
+
+nd . For each n, the log Metropolis–Hastings ratio decomposes as 
+
+∆n =
+
+> n
+
+X
+
+> j=1
+
+∆n,j ,
+
+where each ∆n,j is as defined in Equation (8) , and under stationarity, are i.i.d. for 1 ≤ j ≤ n. By Theorem 4.1, each component has mean and variance of order h. Thus, a non-degenerate limit for 
+
+∆n requires h ≍ n−1. Fix T , and let hn = ℓ/n , Nn = ⌈T n/ℓ ⌉. By Theorem 4.1 and the Lyapunov central limit theorem, as n → ∞ we have 
+
+∆n ⇒ N
+
+
+
+− ℓD(T )2 , ℓ D(T )
+
+
+
+,
+
+and hence the acceptance probability has the limit 
+
+E[1 ∧ e∆n ] → a(ℓ) := 2Φ 
+
+
+
+−
+
+pℓD(T )2
+
+
+
+,
+
+14 where Φ is the standard normal cumulative distribution function. Since the cost of a proposal is proportional to Nn ≍ n/ℓ , the limiting cost-normalized acceptance probability is proportional to 
+
+ℓ Φ( −pℓD(T )/2) . At the maximizer ℓ∗ = arg max ℓ ℓ Φ( −pℓD(T )/2) , the acceptance probability is approximately 0.234 . Figure 2 illustrates this scaling numerically for a 500 -dimensional i.i.d. Gaussian target with exact score, where the empirically optimal acceptance rate is close to 0.234 .The value 0.234 coincides numerically with the classical optimum for random-walk Metropolis [ 58 ]. This coincidence does not, however, imply that the proposed algorithm exhibits random-walk behavior; the fixed-T forward–backward construction remains a global proposal. The scaling hn ≍ n−1 is needed solely to control the accumulation of discretization error across the n independent components, each contributing a perturbation of variance O(h) to the log-ratio. For comparison, in HMC each component contributes a perturbation of variance O(h4), giving the hn ≍ n−1/4 scaling [ 9 ]. The more favorable step-size scaling of HMC arises because it discretizes deterministic Hamiltonian dynamics with the second-order leapfrog integrator, which is more accurate than the Euler–Maruyama scheme used here. 0.0 0.2 0.4 0.6 0.8 
+
+> Acceptance rate
+> 0.000
+> 0.001
+> 0.002
+> 0.003
+> 0.004
+> 0.005
+> 0.006
+> 0.007
+> 0.008
+> Acceptance rate /N
+
+Figure 2: Cost-normalized efficiency versus acceptance rate for the target N (10 · 1d, 32Id) in dimension d = 500, with exact score and horizon T = 2, as the step size h is varied. The x-axis is the empirical acceptance rate; the y-axis is the acceptance rate divided by the number of discretization steps N per proposal. The vertical line marks 0 .234, the acceptance rate that maximizes efficiency in the high-dimensional limit (Remark 4.1). 
+
+## 4.2 Effects of score-estimation error 
+
+We now consider the case where the score function st = ∇ log pt is not known exactly, but is approximated by bst. Let bY denote the continuous-time reverse diffusion driven by the approximate score, d bYt = ft( bYt) − g2 
+
+> t
+
+bst( bYt) dt + gtdBt, bYT ∼ pT , t ∈ [T, 0] , (11) Thus, the backward Euler scheme {yk}Nk=0 is the time discretization of bY . Define the score error 
+
+δt := bst − st.15 Assumption 4.2 (Regularity of the score error and estimated reverse path) . Assume δ ∈ C1,3,and that the approximate reverse diffusion (11) is well-posed, and that its Euler scheme {yk}Nk=0 
+
+satisfies the same uniform Lq moment bounds and strong-error couplings as required of yk in (9) of Assumption 4.1, with Ytk there replaced by bYtk .
+
+Define the integrated score error 
+
+Escore (δ, T ) := 12
+
+Z T
+
+> 0
+
+g2
+
+> t
+
+n
+
+E∥δt(Xt)∥2 + E
+
+h
+
+∥δt( bYt)∥2io 
+
+dt. (12) Let PY denote the path law of the exact reverse diffusion (5) and PbY that of the approximate reverse diffusion (11) , both initialized from pT . Under regularity conditions, the two directed Kullback–Leibler divergences between these path laws are KL( PY ∥ PbY ) = 12
+
+Z T
+
+> 0
+
+g2 
+
+> t
+
+E ∥δt(Yt)∥2 dt, 
+
+KL( PbY ∥ PY ) = 12
+
+Z T
+
+> 0
+
+g2 
+
+> t
+
+E
+
+h
+
+∥δt( bYt)∥2i
+
+dt. 
+
+Therefore, we can write 
+
+Escore (δ, T ) = KL( PY ∥ PbY ) + KL( PbY ∥ PY ),
+
+the symmetrized Kullback–Leibler divergences between the exact and approximate path laws. 
+
+Theorem 4.2 (Effect of score-estimation error) . Under Assumptions 4.1–4.2, and under stationarity 
+
+x0 ∼ p0,
+
+E[∆ h] = −E score (δ, T ) + O(h), h → 0. (13) 
+
+Consequently, the acceptance probability satisfies 
+
+E 1 ∧ e∆h
+
+ ≥ 12 exp   − E score (δ, T ) + O(h).
+
+The proof is given in Appendix B.2. As h → 0, the mean log-ratio converges to −E score (δ, T ), a limit set by the score error. Consequently, once the score error dominates the discretization error, shrinking h barely affects the acceptance probability. Improving acceptance then requires reducing 
+
+Escore (δ, T ) itself, either by shortening the diffusion horizon T or by learning a more accurate score 
+
+bst. We turn to the latter next. 
+
+# 5 Score estimation and practical considerations 
+
+MAD-Path (Algorithm 1) requires an approximate score bst ≈ ∇ log pt, whose accuracy governs the sampler’s efficiency (Theorem 4.2). A range of learning-based methods estimate the score using only the gradient of the unnormalized target density. These methods can be cast as variational inference in path space [ 51 , 8 , 57 ], where the target is lifted to a path measure, and the score is parametrized and optimized to minimize the Kullback–Leibler divergence in the path space. 16 First, suppose we have a tractable reference distribution pref , and let pref  
+
+> t
+
+denote the law of Xt
+
+under the noising process dXt = ft(Xt) d t + gt dBt, X0 ∼ pref , t ∈ [0 , T ]. (14) Suppose further that the reference score sref  
+
+> t
+
+:= ∇ log pref  
+
+> t
+
+is available in closed form, as it is, for instance, when ft is linear and pref is a Gaussian or a mixture of Gaussians. The exact time reversal of (14) is then dYt =  ft(Yt) − g2 
+
+> t
+
+sref  
+
+> t
+
+(Yt) dt + gt dBt, YT ∼ pref  
+
+> T
+
+, t ∈ [T, 0] ,
+
+with the same convention as in (5). Let Pref denote the path measure of this reverse process ( Yt)t∈[0 ,T ]. We define the target path measure P∗ by tilting Pref at time 0, 
+
+P∗(Y ) = p(Y0) Pref (Y | Y0) = Pref (Y ) p(Y0)
+
+pref (Y0) ,
+
+so that its initial marginal is the target, P∗ 
+
+> 0
+
+= p, while the conditional law given Y0 coincides with that of the reference process. Equivalently, P∗ is the exact reversal of (14) , initialized from p rather than pref . To approximate P∗, we take the variational family given by the controlled SDE dY ut =
+
+h
+
+ft(Y ut ) − g2
+
+> t
+
+ sref  
+
+> t
+
+(Y ut ) + ut(Y ut )i
+
+dt + gt dBt, Y uT ∼ pref  
+
+> T
+
+, t ∈ [T, 0] , (15) where u is a control function; equivalently, bst := sref  
+
+> t
+
++ ut is the approximate score used by MAD-Path. Let Qu denote the path measure of ( Y ut )t∈[0 ,T ]. As in variational inference, we optimize u by minimizing the path-space Kullback–Leibler divergence KL( Qu ∥ P∗). By Girsanov’s theorem, KL( Qu ∥ P∗) = KL( Qu ∥ Pref ) + EQu
+
+
+
+log pref 
+
+p (Y u 
+
+> 0
+
+)
+
+
+
+= EQu
+
+"Z T
+
+> 0
+
+g2
+
+> t
+
+2 ∥ut(Y ut )∥2 dt + log pref 
+
+p (Y u 
+
+> 0
+
+)
+
+#
+
+.
+
+(16) The objective is therefore a stochastic optimal control (SOC) problem, with running control cost  
+
+> g2
+> t
+> 2
+
+∥ut∥2 and terminal cost log pref  
+
+> p
+
+(Y u 
+
+> 0
+
+). We assume the memoryless condition : noising the target and noising the reference produce the same terminal marginal, P∗ 
+
+> T
+
+= pref  
+
+> T
+
+. In other words, the forward process (14) forgets its initial distribution by time T . This places P∗ within the variational family (15) , so the optimal control u∗
+
+achieves zero loss and recovers P∗, the exact reverse process targeting p. The learned score is then exact, sref  
+
+> t
+
++ u∗ 
+
+> t
+
+= ∇ log pt.Different choices of the reference process (14) recover or closely relate to several existing diffusion-based samplers. The path integral sampler [PIS, 77 ] uses Brownian motion ( ft = 0 , g t = 1) pinned at the origin, and the denoising diffusion sampler [DDS, 71 ] uses an equilibrium OU process as the reference with pref = N (0 , I d), for which the memoryless condition holds as T → ∞ ; non-equilibrium annealed references are studied in [ 2 , 18 ]. A related line replaces the path-space variational objective with regression targets derived from the target score identity, enabling simulation-free or adjoint-based training [ 19 , 30 , 11 ], while others estimate the intermediate scores directly through Tweedie’s formula using importance sampling or MCMC [35, 29]. 17 A separate line of work directly learns the intermediate log-densities along the diffusion path [ 44 ,64 , 15 , 54 ], with which one can apply bias-correction methods such as annealed importance sampling or sequential Monte Carlo, as in [ 54 ]. However, Grenioux and Noble [28] show that such log-density estimates are often mode-blind: even when the underlying score is learned accurately, the estimated density can misrepresent the relative weight of separated modes, making the resulting bias correction unreliable. In contrast, MAD-Path depends only on the learned score, never on an intermediate log-density estimate. It forms a single-chain MCMC that is reversible with respect to the target and therefore corrects the modes’ relative weights even when the learned score gets them wrong. See Section 6 for a numerical illustration. For multimodal targets, the reverse path-space KL objective is prone to mode collapse: it penalizes trajectories that place mass in low-density regions of the target far more heavily than those that miss well-separated modes altogether [ 72 , 31 ]. This mode-seeking behavior is characteristic of variational inference under reverse-KL objectives. A common remedy in multimodal MCMC is to add a mode-discovery component [ 55 , 69 , 67 , 40 ]. We follow the same principle in a two-stage strategy for learning the score: we first locate the modes, then build the reference process around them. Specifically, we take pref to be a Gaussian mixture whose components encode the located modes, which also keeps sref  
+
+> t
+
+in closed form. Details are given in Appendix C.1; a similar strategy appears in [50]. We emphasize that MAD-Path is agnostic to how the score is obtained and how the reference is defined: the Metropolis–Hastings correction makes p the exact invariant distribution for any approximate score bst. Score accuracy thus affects the acceptance probability, and hence efficiency, but never the distribution being sampled. Any of the approaches above, along with future improvements, may be used as applicable. For complex targets, however, constructing an informative score remains important in practice: incorporating known structure or problem-specific information about the target can be crucial for achieving high acceptance and efficient sampling. 
+
+# 6 Numerical experiments 
+
+In this section, we present numerical experiments for our method (Algorithm 1). We evaluate its performance over six examples: a mixture of Gaussians with unequal variances; a mixture of well-separated skew-normal distributions; two Bayesian mixture models applied to real-world datasets: the Old Faithful geyser [ 7 ] and fetal deaths in litters [ 13 ]; a Bayesian model for sensor network localization [36]; and a seemingly unrelated regression (SUR) model [76] with multimodal profile likelihood. On the first two synthetic targets, we compare MAD-Path against six baselines: adaptive parallel tempering (APT) [ 46 ], adaptive parallel tempering with deterministic even-odd swaps (APT-DEO) [ 52 ], tempered transition (TT) [ 47 ], annealed importance sampling (AIS) [ 48 ], sequential Monte Carlo (SMC) [ 27 , 20 ], as well as the unadjusted diffusion (UD) sampler, which uses the same learned score bst as MAD-Path but omits the Metropolis–Hastings correction. All the tempering-based methods use ten MALA steps for each within-temperature transition. We run APT and APT-DEO such that the swap rate, defined as the percentage of proposed state exchanges between parallel temperature chains that are successfully accepted, reaches around its theoretically optimal value of 0.234 [ 6 ]. For TT, we calibrate the geometric inverse-temperature ladder and the per-level MALA step size to achieve a moderate acceptance rate. For AIS and SMC, we use the adaptive schedule of [ 78 ]. In Section 6.4, we examine the sensitivity of MAD-Path to the choice of horizon T and 18 number of steps N . In the remaining examples, we mainly compare MAD-Path against APT-DEO, which proved the strongest competitor among the baselines. We measure the computational cost of each method by the number of target score evaluations and ensure each method uses roughly the same number of evaluations. MAD-Path is an amortized sampler: the target score is evaluated only during training, and the trained score bst, which does not involve the target score, is used during MCMC sampling. Therefore, the cost of gradient evaluation of MAD-Path only comes from the training phase, while the other MCMC methods (with MALA as the within-temperature transition) require target score evaluations at every step. The total wall clock time, including both training and sampling, is also comparable, as listed in Section C.2. All experiments were conducted on an Apple M3 machine with 16 GB of unified memory. Further implementation details, including the choices of pref , T , and h, as well as further results and details, are deferred to Section C. The code to reproduce the results is available at github.com/chenh77/mad-path .
+
+## 6.1 Mixture of Gaussians with unequal variances 
+
+We first evaluate our algorithm on the two-Gaussian mixture target with unequal variances, 
+
+p(x) = 12 φ x; 1d, σ 2+Id
+
+ + 12 φ x; −1d, σ 2
+
+> −
+
+Id
+
+,
+
+with d = 20, σ2+ = 0 .5, and σ2 
+
+> −
+
+= 0 .2. As discussed in Section 2, tempering-based methods are prone to torpid mixing on such targets [74]. We compare MAD-Path against tempering-based samplers under a matched computational budget, measured by the number of target score evaluations (MAD-Path: 5 .0 × 10 5; APT and APT-DEO: 2 .5 × 10 6; TT: 3 .5 × 10 6; AIS and SMC: 7 .0 × 10 5). We run MAD-Path for 10,000 iterations, at an average acceptance rate of 0.372. We run APT, APT-DEO, and TT for 12,500 iterations each, discarding the first 2,500 as burn-in. The average swap acceptance rates of APT and APT-DEO are 0.387 and 0.207, respectively, and the average acceptance rate of TT is 0.356. AIS and SMC each use 10,000 particles, for which we report the histograms and effective sample size (ESS) of the weighted samples. Finally, we include the unadjusted reverse-diffusion sampler (UD) as a baseline. Figure 3 reports histograms of the projection v⊤ 
+
+> 1
+
+x (top row) and the corresponding trace plots (bottom row), where v1 = 1d/√d is the unit vector along which the two modes are most separated. MAD-Path is the only sampler to recover the target accurately (red dashed), and its trace exhibits the most frequent crossings between the two modes. APT-DEO also crosses between the two modes but oversamples the narrow one. Because the narrow mode has a much higher peak density, a replica near it is easily swapped down to colder temperatures but rarely swapped back out. The narrow mode is thus easy to enter but slow to leave, which biases the sampler toward it. APT and TT each remain trapped in the wider mode, even under extensive tuning of the temperature schedule. AIS likewise yields biased mode-weight estimates and an ESS of only 17; the resampling step in SMC improves the ESS but still fails to recover the target accurately. Finally, the unadjusted reverse-diffusion sampler (UD) is biased, underrepresenting the narrower mode, whereas MAD-Path’s Metropolis–Hastings correction recovers the target’s mode weights accurately. 19 0.0 0.5              
+
+> −5
+> 0
+> 5
+> MAD-Path
+> 0500
+> −5
+> 0
+> 5
+> 0.0 0.5
+> APT
+> 0500
+> 0.0 0.5
+> APT-DEO
+> 0500
+> 0.0 0.5
+> TT
+> 0500
+> 0.0 0.5
+> AIS
+> 05000
+> 10 −14
+> 10 −9
+> 10 −4
+> Weight  ESS=17
+> 0.0 0.5
+> SMC
+> 05000
+> 10 −5
+> 10 −4
+> ESS=6408
+> 0.0 0.5
+> UD
+> v ⊤1 x
+> Density
+> v ⊤1 x
+> Iteration Particle rank
+
+Figure 3: Results for the two-Gaussian mixture example. Top row: empirical distribution of the diagonal projection v⊤ 
+
+> 1
+
+x for all seven samplers, with red dashed lines indicating the true marginal. Bottom row: trace plots of v⊤ 
+
+> 1
+
+x for the four MCMC samplers and sorted-weight curves for AIS and SMC. 
+
+## 6.2 Mixture of skew normals 
+
+We next consider a mixture of thirteen well-separated, 20-dimensional skew-normal distributions, following [69, 67], who extend a two-dimensional example of [70]: 
+
+p(x) ∝
+
+> 13
+
+X
+
+> k=1
+
+wk
+
+> 20
+
+Y
+
+> j=1
+
+φ
+
+ xj − (μk)j
+
+σk
+
+
+
+Φ
+
+
+
+α xj − (μk)j
+
+σk
+
+
+
+,
+
+with equal weights wk = 1 /13, skewness α = 5, and scale σk = 1 for all k. The location vectors 
+
+μk fix the first two coordinates as in [ 70 ] and repeat this pattern across the remaining eighteen; Figure 4 shows the resulting mode locations in the first two coordinates. We compare the same seven samplers as in Section 6.1, each using a comparable number of gradient evaluations (1–2 × 10 6). All MCMC samplers are run for 10,000 iterations, and AIS and SMC use 10,000 particles. MAD-Path attains an average acceptance rate of 0.240 and TT of 0.362. The average swap acceptance rates of APT and APT-DEO are 0.561 and 0.192, respectively. Figure 4 shows the histogram of the first coordinate together with scatter and trace plots of the first two coordinates. Table 1 reports the accuracy of the estimated mode weights: the total variation (TV) distance to the true weights (all equal) and the ratio of the largest to smallest estimated weight (Max/Min); the ratio is marked NA when a method fails to recover all modes. Results are averaged over 100 independent runs, with standard deviations in parentheses. In each run, MAD-Path is initialized from a draw from the learned reverse diffusion, while all other methods are initialized from the Gaussian distribution. A few observations are in order. 
+
+• Table 1 shows that MAD-Path, APT-DEO and UD all recover the 13 modes consistently across the 100 replicates. Among these, MAD-Path estimates the mode weights substantially more accurately than the other three, by both the TV distance to the true (uniform) weights and the Max/Min imbalance ratio. 20 • The histogram in Figure 4 shows that MAD-Path closely matches the true marginal of the first coordinate. Notably, the unadjusted reverse diffusion (last column) covers all local modes, yet its samples remain approximately Gaussian within each mode, as seen in both the histogram and the scatter plot: the estimated score is too inaccurate to capture the local skewness. MAD-Path corrects for this through the Metropolis–Hastings step, producing samples that reflect the true local shape. 
+
+• The two-dimensional trace plots (bottom row of Figure 4) show that MAD-Path is the only method that jumps frequently among all modes. APT-DEO also traverses all modes but spends more time in the top-right corner, toward which every local mode is skewed. This asymmetry likely induces a weight distortion analogous to the one discussed in Section 2, accounting for APT-DEO’s biased weight estimates. −10 0 10                                      
+
+> −10
+> 0
+> 10
+> x2
+> −10 010
+> 0.0
+> 0.1
+> 0.2
+> Density
+> MAD-Path
+> −10 010
+> −10
+> 0
+> 10
+> x2
+> −10 010
+> −10 010
+> APT
+> −10 010
+> −10 010
+> −10 010
+> APT-DEO
+> −10 010
+> −10 010
+> −10 010
+> TT
+> −10 010
+> −10 010
+> −10 010
+> AIS
+> 05000
+> 10 −63
+> 10 −41
+> 10 −19
+> Weight  ESS=1
+> −10 010
+> −10 010
+> SMC
+> 05000
+> 10 −6
+> 10 −5
+> 10 −4
+> 10 −3
+> ESS=6629
+> −10 010
+> −10 010
+> UD
+> x1
+> x1
+> x1Particle rank
+
+Figure 4: Results for the mixture of skew normal example. First row: marginal distribution of the first coordinate (orange) against the ground truth (blue). Second row: scatter plots of the first two coordinates, with the mode locations μk marked in red. Third row: two-dimensional trace plots of the first two coordinates for the four MCMC samplers, and sorted-weight curves for AIS and SMC. 
+
+## 6.3 Bayesian Gaussian mixture model 
+
+Mixture models are canonical examples of multimodal posteriors, owing to label switching: any permutation of the component labels leaves the likelihood unchanged, producing modes of equal mass that may be well-separated in parameter space and are often inaccessible to local MCMC. As Jasra et al. [37] note, a sampler must adequately explore all such labelings to be regarded as convergent. We consider a Bayesian Gaussian mixture model with K = 2 components on standardized 21 MAD-Path APT APT-DEO TT AIS SMC UD TV 0.0777 0.3423 0.1159 0.9231 0.7932 0.5241 0.2136 (0.0361) (0.0641) (0.0231) (0.0000) (0.0978) (0.0978) (0.0181) Max/Min 1.8819 – 2.8080 – – – 7.8484 (1.4190) (0.7594) (1.8446) Table 1: Mode-weight estimation accuracy for the mixture of skew-normals example, over 100 independent runs (standard deviations in parentheses). TV is the total variation distance between the estimated and true (uniform) mode weights; Max/Min is the ratio of the largest to the smallest estimated weight, which equals 1 under perfect estimation. A dash (–) indicates that the method failed to recover all 13 modes, in which case the ratio is undefined. observations y1, . . . , yn ∈ Rm:
+
+yi | zi, μ, Σ ∼ N (μzi , Σzi ),zi | π ∼ Cat( π),
+
+with conjugate priors μk ∼ N 2(m0, V 0), Σ −1 
+
+> k
+
+∼ Wishart (ν0, W 0), and π ∼ Dirichlet (α01K ); hyperparameter settings are given in Appendix C.2. We use the Old Faithful geyser dataset [7], comprising n = 272 observations of m = 2 variables, eruption duration and waiting time to the next eruption (both in minutes). This is a standard benchmark in density estimation and clustering, notable for its clear bimodal structure. Reparametrizing all parameters into unconstrained space yields a parameter vector in R11 ; see Appendix C.2. We evaluate the samplers by their accuracy in estimating the weights of the two modes, which are equal by symmetry. We run MAD-Path for 10,000 iterations and, for comparison, APT-DEO for 12,000, discarding the first 2,000 as burn-in. We use the same initialization as described in Section 6.2. The experiment is repeated 100 times independently. The average acceptance rate of MAD-Path is 0.607, and the average swap acceptance rate of APT-DEO is 0.347. The left panel of Figure 5 shows the empirical distribution of the estimated weight of mode 1 across 100 runs. For MAD-Path, the estimates concentrate tightly around the true value 0 .5, indicating that the chain explores both modes and mixes well across them. The APT-DEO estimates, by contrast, vary widely across runs, a sign that the chains have not fully mixed. The table in the right panel reports the fraction of runs in which each sampler recovers both modes, together with the imbalance index Max/Min—the ratio of the largest to smallest estimated mode weight, computed over successful runs. MAD-Path recovers both modes in all 100 runs, with a Max/Min ratio close to 1. APT-DEO fails to recover both modes in 6% of runs, and its Max/Min ratio is substantially larger than 1, confirming that the recovered weights are highly imbalanced even when both modes are found. 
+
+## 6.4 Effects of diffusion horizon and discretization steps 
+
+We study the effects of the horizon T and the number of discretization steps N on MAD-Path using the mixture model of beta-binomial and binomial distributions from [ 70 ]. The dataset consists of observations on fetal deaths in litters of mice [ 13 ]. The conditional distribution of death given the 22 MAD-Path APT-DEO 
+
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> Mode-1 weight
+
+MAD-Path APT-DEO Success rate 100% 94% Max/Min 1.0833 15 .4167 (0.0655) (79.7315) Figure 5: Results for the Bayesian Gaussian mixture model, comparing MAD-Path and APT-DEO over 100 independent runs. Left: empirical distribution of the estimated mode-1 weight, with the true value 0.5 marked by the red dashed line. Right: success rate (proportion of runs identifying both modes), Max/Min (ratio of the largest to smallest estimated mode weight for successful runs, equal to 1 under perfect estimation), with standard deviations in parentheses. number of implants or fetuses is defined by 
+
+p(x | n) = γ
+
+"nx
+
+ x−1Y
+
+> r=0
+
+μ + rθ 
+
+1 + rθ 
+
+> n−x−1
+
+Y
+
+> r=0
+
+1 − μ + rθ 
+
+1 + rθ 
+
+#
+
++ (1 − γ)
+
+ nx
+
+
+
+νx(1 − ν)n−x
+
+
+
+,
+
+where x is the number of deaths of mice and n the number of implants or fetuses, the mixing weight 
+
+γ ∈ [0 , 1], and where μ, ν ∈ [0 , 1], θ ≥ 0. Further details of the model are provided in Appendix C.2. We evaluate MAD-Path across a range of values of T and N , measuring the acceptance rate and the inter-mode crossings per 1,000 steps. Note that during training, we set T = 7 and N = 100. The experiments are repeated 100 times independently, and the median and interquartile range of the acceptance rate and inter-mode crossings are reported in Figure 6. The left panel of Figure 6 shows that the acceptance rate increases with N , as the discretization error decreases. Conversely, it decreases with T , since a larger T incurs a larger score error Escore 
+
+defined in Equation (12) . With T = 7, the acceptance rate plateaus around 0 .35, at which point score estimation error dominates the discretization error and larger N does not improve the acceptance rate further. The right panel of Figure 6 shows that the inter-mode crossing rate increases with both T and 
+
+N . In particular, for T ≤ 4, there is almost no mode-jumping. This corroborates the analysis in Section 2, which shows that mixing across modes requires a sufficiently long diffusion horizon for the modes to merge by the end of the forward process. Trace plots for various combinations of T
+
+and N are provided in Figure 9 in Appendix C.2. 
+
+## 6.5 Sensor network localization 
+
+We compare MAD-Path against APT-DEO during the initial burn-in phase on a sensor network localization problem studied in [e.g., 36 , 1 , 39 , 55 ]. Eleven sensors are placed in R2, three of which have known locations. The goal is to infer the remaining eight unknown locations 
+
+x1, . . . , x8 ∈ R2 from noisy inter-sensor distance measurements. Let wij ∈ { 0, 1} indicate whether the distance between sensors i and j is observed; it follows a Bernoulli distribution with success probability exp 
+
+
+
+− ∥xi−xj ∥2
+
+> 2×0.25 2
+
+
+
+. When a measurement is obtained, the observed distance yij follows 
+
+N  ∥xi − xj ∥, 0.01 2. Following [ 1, 39 , 55 ], we place an improper uniform prior on each sensor 23 10 20 30 40 50 60 70 100 150 300                
+
+> N
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Acceptance rate
+> T= 1.0
+> T= 2.0
+> T= 3.0
+> T= 4.0
+> T= 5.0
+> T= 6.0
+> T= 7.0 ★
+> 10 20 30 40 50 60 70 100 150 300
+> N
+> 0
+> 5
+> 10
+> 15
+> Inter-mode crossings
+> per 1000 steps
+
+Figure 6: MAD-Path acceptance rate (left) and inter-mode crossing rate (right) with varying horizon 
+
+T and number of steps N on the fetal deaths in litters example. Lines show the median over 100 replications; shaded regions indicate the interquartile range (25th–75th percentiles). location xi, 1 ≤ i ≤ 8. The resulting posterior is 
+
+p(x1, . . . , x8 | y, w ) ∝ Y
+
+> 1≤i≤8
+> i<j ≤11
+
+fij (xi, xj | yij , w ij ),
+
+where 
+
+fij (xi, xj | yij , w ij ) = 
+
+
+
+exp 
+
+
+
+− ∥xi−xj ∥2
+
+> 2×0.25 2
+
+
+
+exp 
+
+
+
+− ∥xi−xj ∥2
+
+> 2×0.01 2
+
+
+
+, if wij = 1 1 − exp 
+
+
+
+− ∥xi−xj ∥2
+
+> 2×0.25 2
+
+
+
+, otherwise .
+
+Sampling from this posterior presents two sources of difficulty. First, given the location of sensor 
+
+j, each observed distance yij concentrates the marginal density of sensor i near a circle of radius yij 
+
+centered at xj ; when a sensor is constrained by two or more such distances, these marginals form banana-shaped ridges. Second, the sparsity of observations induces near non-identifiability and, consequently, multimodality. Figure 10 in Appendix C.2 visualizes the posterior. For MAD-Path, we use the natural initialization from the learned reverse diffusion path. For APT-DEO, we consider two initializations, 0 .5 · 1d and 1d. The average acceptance rate of MAD-Path is 0 .254, and the average swap acceptance rates of the two APT-DEO chains are 0 .271 and 0.461, respectively. Figure 7 shows the first 500 iterations of each chain under these initializations. APT-DEO requires hundreds of iterations to locate the posterior mass during its transient phase. MAD-Path exhibits essentially no such transient phase: the mode-finding is instead absorbed into the score-learning stage, so the sampler starts from a distribution that already covers the modes. 
+
+## 6.6 Seemingly unrelated regression 
+
+A well-known multimodal posterior arises from the seemingly unrelated regression (SUR) model [ 76 ,63 ]. The model comprises M regression equations, each with its own response vector and design matrix but sharing a common error covariance: 
+
+ym = Xmβm + εm, m = 1 , . . . , M, 
+
+24 0.5 
+
+> 1.0
+> 1.5
+
+x1, 1 
+
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+
+x1, 2 
+
+> 0.5
+> 1.0
+> 1.5
+
+x2, 1 
+
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+
+x2, 2 
+
+> 0.5
+> 1.0
+> 1.5
+
+x3, 1 
+
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+
+x3, 2 
+
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+
+x4, 1 
+
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+
+x4, 2 
+
+> 0.5
+> 1.0
+> 1.5
+
+x5, 1 
+
+> 0.5
+> 1.0
+> 1.5
+
+x5, 2 
+
+> 0.5
+> 1.0
+> 1.5
+
+x6, 1 
+
+> 0.5
+> 1.0
+> 1.5
+
+x6, 2   
+
+> 0200 400
+> 0.5
+> 1.0
+> 1.5
+
+x7, 1   
+
+> 0200 400
+> 0.5
+> 1.0
+> 1.5
+
+x7, 2   
+
+> 0200 400
+> 0.5
+> 1.0
+> 1.5
+
+x8, 1   
+
+> 0200 400
+> 0.5
+> 1.0
+> 1.5
+
+x8, 2 
+
+Iteration    
+
+> MAD-Path APT-DEO (init = 0.5 1d)APT-DEO (init = 1d)
+
+Figure 7: Burn-in phase (first 500 iterations) of MAD-Path (green), APT-DEO with initial state at 0.51d (red), and APT-DEO with initial state at 1d (blue). where ym ∈ RN is the response for equation m, Xm ∈ RN ×km is the fixed design matrix, and 
+
+βm ∈ Rkm is the coefficient vector. The errors are jointly distributed as 
+
+ε = ( ε1, . . . , εM ) ∼ N (0 , Σ ⊗ IN ),
+
+with unknown covariance Σ ∈ RM ×M . We denote the full coefficient vector by β = ( β1, . . . , βM ) ∈
+
+RP 
+
+> m
+
+km . Profiling out the covariance by its MLE yields the profile log-likelihood 
+
+ℓ(β) = − N M 
+
+2 log(2 π) − N
+
+2 log det ( G(β)) − N M 
+
+2 , (17) where G(β) = R(β)⊤R(β) and R(β) = ( r1 · · · rM ) ∈ RN ×M collects the residual vectors rm(β) = 
+
+ym − β⊤
+
+mxm ∈ RN . Such profile likelihoods can exhibit multimodality in small samples [ 22 ]. We take M = 5 equations with scalar coefficients ( km = 1 for all m) and N = 10 observations per equation. This small-N regime induces strong finite-sample multimodality: the profile likelihood exhibits three distinct modes. MAD-Path is run for 10,000 iterations, achieving an average acceptance rate of 0 .327. APT-DEO is run for 12,000 iterations with the first 2,000 discarded as burn-in; it is initialized with a warm 25 start near one mode and repeated across two random seeds, attaining average swap acceptance rates of 0 .467 and 0 .470, respectively. Figure 8 shows the marginal sample distributions from MAD-Path and APT-DEO, with a reference computed by the No-U-Turn Sampler (NUTS) [ 34 ] over 50,000 iterations (dashed line). MAD-Path recovers sharp, well-separated peaks that align closely with the reference mode locations. In contrast, APT-DEO is unstable across random seeds: the relative heights of the three modes vary noticeably between runs, indicating that the chain has not fully mixed and the estimated mode weights have not settled. Under a cold-start initialization, the transient phase is even longer, further delaying convergence; see Figure 11 in Appendix C.2. 0 2                          
+
+> β1
+> 0.0
+> 0.5
+> 1.0
+> MAD-Path
+> 02
+> β2
+> 0
+> 2
+> 4
+> −2 −1 01
+> β3
+> 0
+> 2
+> 4
+> −2.5 0.0 2.5 5.0
+> β4
+> 0
+> 1
+> 05
+> β5
+> 0.0
+> 0.2
+> 02
+> β1
+> 0.0
+> 0.5
+> 1.0
+> APT-DEO 1
+> 02
+> β2
+> 0
+> 2
+> 4
+> −2 −1 01
+> β3
+> 0
+> 2
+> 4
+> −2.5 0.0 2.5 5.0
+> β4
+> 0
+> 1
+> 05
+> β5
+> 0.0
+> 0.2
+> 02
+> β1
+> 0.0
+> 0.5
+> 1.0
+> APT-DEO 2
+> 02
+> β2
+> 0
+> 2
+> 4
+> −2 −1 01
+> β3
+> 0
+> 2
+> 4
+> −2.5 0.0 2.5 5.0
+> β4
+> 0
+> 1
+> 05
+> β5
+> 0.0
+> 0.2
+
+Figure 8: Marginal sample distributions for the SUR example. The top row shows MAD-Path; the bottom two rows show APT-DEO under two different random seeds. Black dashed lines indicate the reference distribution obtained via NUTS. 
+
+# 7 Discussion 
+
+We introduced MAD-Path, a Metropolis–Hastings sampler that builds nonlocal proposals from a forward–backward diffusion path. The sampler leaves the target invariant even under an approximate score function and discretization error. We showed that the ideal diffusion-path transition has favorable mixing properties, and we characterized how the acceptance probability of MAD-Path degrades under score and discretization error. Finally, we discussed practical considerations and demonstrated the method on a range of challenging multimodal targets. Several avenues remain for future work. On the methodological side, an important open problem is to develop score-learning methods better aligned with MAD-Path. The algorithm is valid for any finite horizon T , and, as shown in Section 2, promoting inter-mode mixing only requires T to be large enough for the modes to overlap at time T . Existing path-space variational objectives, by contrast, are typically derived in the infinite-T limit. Moreover, the acceptance probability of MAD-Path is governed by a symmetrized path-space KL divergence between the exact and approximate reverse diffusions (Theorem 4.2), whereas common training objectives minimize a one-sided reverse KL (16) .26 Designing finite-T objectives that better reflect the acceptance probability of MAD-Path might improve practical efficiency. On the theoretical side, it would be interesting to establish the mixing time of MAD-Path. The present analysis separates the ideal diffusion-path transition from the effects of score and discretization error. A promising route is to view MAD-Path as a hybrid data-augmentation chain on path space. The comparison theory of Markov chains [ 5 , 56 ] may then yield spectral-gap bounds for MAD-Path by combining the gap of the ideal diffusion-path kernel (Section 2) with a conditional mixing bound for the path-space Metropolis update. 
+
+## Acknowledgments 
+
+We thank Yifan Chen, Marylou Gabrie, Louis Grenioux, Guanyang Wang, Esmeralda Whitammer, Luhuan Wu for helpful discussions on diffusion-based samplers, and Changwoo Lee for discussions on applications of this work. HC acknowledges support from the Danish Data Science Academy (DDSA) Visit Grant (2026-5978). JY acknowledges support from the Independent Research Fund Denmark (DFF) through the Sapere Aude Starting Grant (5251-00032B). 
+
+# A Proofs for Section 2 
+
+## A.1 Proof of Lemma 2.2 
+
+Proof of Lemma 2.2. Let T and T ∗ denote the operators associated with the forward transition ⃗ P
+
+and backward transition ⃗ P . For any f ∈ L2(p0) and g ∈ L2(pT ), we have 
+
+⟨f, T g⟩L2(p0) = ⟨T ∗f, g ⟩L2(pT )
+
+and P = T T ∗. Thus, for any f ∈ L2(p0) and Ep0 [f ] = 0, 
+
+⟨f, P f ⟩L2(p0) = ∥T ∗f ∥2  
+
+> L2(pT)
+
+= Var [ E [f (X0) | XT ]] .
+
+Therefore, we have Gap( P ) = 1 − sup     
+
+> f∈L2(p0)
+> Ep0[f]=0 ,f ̸=0
+
+⟨f, P f ⟩L2(p0)
+
+∥f ∥2
+
+> L2(p0)
+
+= 1 − sup     
+
+> f∈L2(p0)
+> Ep0[f]=0 ,f ̸=0
+
+Var [ E [f (X0) | XT ]] Var [ f (X0)] .
+
+The result follows from the definition of maximal correlation and the fact that sup   
+
+> f∈L2(p0)
+> g∈L2(pT)
+
+Corr( f (X0), g (XT )) 2 = sup  
+
+> f∈L2(p0)
+
+Var [ E [f (X0) | XT ]] Var [ f (X0)] .
+
+## A.2 Proof of Theorem 2.3 
+
+Proof of Theorem 2.3. Let X ∼ p and ξ ∼ N (0 , I d) be independent. Let Z = √αX + √1 − αξ and let pZ denote the distribution of Z. Let T : L2(pZ ) → L2(p) be the forward conditional expectation operator (T g)( x) = E[g(Z) | X = x] = 
+
+Z
+
+g(√αx + √1 − αξ)φ(ξ)d ξ.
+
+27 Since the maximal correlation can be equivalently expressed as sup  
+
+> g∈L2(pZ)
+
+Var [ E [g(Z) | X]] Var [ g(Z)] ,
+
+it suffices to prove that, for every g ∈ L2(pZ ) with EpZ [g] = 0, Var p [T g] ⩽ αC P
+
+1 − α + αC P
+
+Var pZ [g] .
+
+Applying integration by parts, 
+
+∇(T g)( x) = 
+
+r α
+
+1 − α E [ξg(Z) | X = x] = 
+
+r α
+
+1 − α E [ξ(g(Z) − (T g)( x)) | X = x] .
+
+For any unit vector u ∈ Rd,
+
+u⊺∇(T g)( x) = 
+
+r α
+
+1 − α E [( u⊺ξ)( g(Z) − (T g)( x)) | X = x] .
+
+Applying Cauchy–Schwarz inequality in the conditional law, 
+
+u⊺∇(T g)( x) 2 ≤ α
+
+1 − α E (u⊺ξ)2 | X = x · E (g(Z) − (T g)( x)) 2 | X = x .
+
+Therefore, 
+
+∥∇ (T g)( x)∥22 ≤ α
+
+1 − α E g(Z)2 − (T g)( x)2 | X = x .
+
+By the Poincar´ e inequality, Var p [T g] ≤ CP
+
+Z
+
+∥∇ (T g)( x)∥22p(d x) ≤ αC P
+
+1 − α Ep
+
+E g(Z)2 − (T g)( x)2 | X = x 
+
+= αC P
+
+1 − α
+
+
+
+E g(Z)2 − E (T g)( X)2
+
+= αC P
+
+1 − α
+
+
+
+Var pZ [g] − Var p [T g]
+
+
+
+.
+
+Rearranging the above inequality gives the desired result. When p = N (μ, Σ) and Z | X = N (√αX, (1 − α)Id), X and Z are jointly Gaussian, and their maximal correlation is equal to the maximum linear correlation [21, 14], which is given by 
+
+ρmax (X, Z )2 = αλ max (Σ) 1 − α + αλ max (Σ) .
+
+The upper bound on ρmax (X, Z ) implies a lower bound on Gap (P ) following Lemma 2.2. The proof is complete. 28 A.3 Proof of Proposition 2.4 
+
+Proof of Proposition 2.4. Let X ∼ p and ξ ∼ N (0 , I d) be independent, and let Z = √αX +√1 − αξ.Write ⃗ P (x, dz) = ⃗p(x, z) d z. For each label c ∈ C , define the noised component density 
+
+qc(z) := 
+
+Z
+
+> Rd
+
+pc(x)⃗p(x, z)d x.
+
+where q(z) = P 
+
+> c∈C
+
+wcqc(z) is the marginal density of Z.Let f ∈ L2(˜ p) be centered and nonconstant. Decompose f into the label and residual parts as 
+
+f (x, c ) = ac + rc(x),
+
+where 
+
+ac := E [f (X, C ) | C = c] = 
+
+Z
+
+> Rd
+
+f (x, c )pc(x)d x, rc(x) := f (x, c ) − ac.
+
+Define 
+
+Vlab := Var [ aC ] , Vin := X
+
+> c∈C
+
+wc Var pc [rc] .
+
+By the law of total variance, Var ˜p [f ] = Var [ E [f | C]] + E [Var [ f | C]] = Vlab + Vin .
+
+Now write 
+
+E[f (X, C ) | Z = z] = A(z) + R(z),
+
+where 
+
+A(z) := E[aC | Z = z], R(z) := E[rC (X) | Z = z].
+
+Our goal reduces to bounding Var [ A(z)] and Var [ R(z)] separately. 
+
+Label bound. By the definition of ρ2lab ,Var [ A(Z)] ≤ ρ2lab Vlab . (18) 
+
+Within-component bound. Given Z = z, the posterior of C is given by 
+
+ηc(z) := P [C = c | Z = z] = wcqc(z)
+
+q(z) ,
+
+and the posterior of rc given Z = z, C = c is 
+
+hc(z) := E[rc(X) | Z = z, C = c] = 
+
+Z
+
+rc(x)pc(x | z)d x, pc(x | z) := pc(x)⃗p(x, z)
+
+qc(z) .
+
+Then 
+
+R(z) = X
+
+> c
+
+ηc(z)hc(z).
+
+29 By Jensen’s inequality, Var [ R(Z)] = 
+
+Z X
+
+> c∈C
+
+ηc(z)hc(z)
+
+!2
+
+q(z)d z
+
+≤
+
+Z X
+
+> c∈C
+
+ηc(z)hc(z)2q(z) d z
+
+= X
+
+> c∈C
+
+wc
+
+Z
+
+hc(z)2qc(z) d z.
+
+Since each rc is centered under pc, the definition of ρ2 
+
+> c
+
+gives 
+
+Z
+
+hc(z)2qc(z)d z = Var qc [E[rc(X) | Z, C = c]] ≤ ρ2 
+
+> c
+
+Var pc [rc] .
+
+Combined with the last inequality, Var [ R(Z)] ≤ X
+
+> c∈C
+
+wcρ2 
+
+> c
+
+Var pc [rc] ≤ max  
+
+> c∈C
+
+ρ2
+
+> c
+
+X
+
+> c
+
+wc Var pc [rc] = max  
+
+> c∈C
+
+ρ2 
+
+> c
+
+· Vin . (19) 
+
+Combining the bounds. Using Equations (18) , (19) , and Cauchy–Schwarz inequality, we obtain Var [ E [f (C, X ) | Z]] = Var [ A(Z) + R(Z)] 
+
+≤
+
+p Var [ A(Z)] + pVar [ R(Z)] 
+
+2
+
+≤
+
+
+
+ρlab 
+
+pVlab + max  
+
+> c∈C
+
+ρc
+
+pVin 
+
+2
+
+≤
+
+
+
+ρ2lab + max  
+
+> c∈C
+
+ρ2
+
+> c
+
+
+
+(Vlab + Vin ) .
+
+Since Var ˜p [f ] = Vlab + Vin , dividing though yields Var [ E [f (C, X ) | Z]] Var ˜p [f ] ≤ ρ2lab + max  
+
+> c∈C
+
+ρ2 
+
+> c
+
+.
+
+Taking the supremum over all centered, nonconstant f ∈ L2(˜ p) gives the desired result. 
+
+## A.4 Proof of Theorem 2.5 
+
+Proof of Theorem 2.5. Since each pc satisfies a Poincar´ e inequality, Theorem 2.3 implies 
+
+ρ2 
+
+> c
+
+≤ αC P,c 
+
+1 − α + αC P,c 
+
+.
+
+Following Proposition 2.4, it suffices to lower bound the label transition gap Gap (Plab ) = 1 − ρ2lab .In Lemma A.1, we first derive the expression 1 − ρ2lab =
+
+Z q+(z)q−(z)
+
+q(z) dz =: λ(w)lab ,
+
+30 which means the spectral gap of the label transition is equal to the overlap between the noised components q+ and q−. Then we show in Lemma A.2 that the overlap λ(w)lab can be lower bounded by exp( − α 
+
+> 4(1 −α)
+
+W 22 (p+, p −)). 
+
+Lemma A.1 (Label transition gap via overlap) . Define 
+
+λ(w)lab := 
+
+Z q+(z)q−(z)
+
+w+q+(z) + w−q−(z) dz.
+
+Then 
+
+1 − ρ2lab = λ(w)lab .
+
+Proof of Lemma A.1. Fix any nonconstant function h : {+, −} → R and denote δh = h(+) − h(−). Since C is binary and P [C = c] = wc,Var [ h(C)] = w+w−δ2
+
+> h
+
+.
+
+Since P [C = c | Z = z] = ηc(z) = wcqc(z) 
+
+> q(z)
+
+, we have Var [ h(C) | Z = z] = η+(z)η−(z)δ2
+
+> h
+
+.
+
+Therefore, 
+
+E [Var [ h(C) | Z]] = 
+
+Z
+
+q(z)η+(z)η−(z)δ2
+
+> h
+
+dz
+
+=
+
+Z
+
+q(z) w+q+(z)
+
+q(z)
+
+w−q−(z)
+
+q(z) δ2 
+
+> h
+
+dz
+
+= w+w−δ2
+
+> h
+
+Z q+(z)q−(z)
+
+q(z) dz
+
+= λ(w)lab · Var [ h(C)] .
+
+By the law of total variance, Var [ E [h(C) | Z]] = Var [ h(C)] − E [Var [ h(C) | Z]] = 
+
+
+
+1 − λ(w)lab 
+
+
+
+· Var [ h(C)] .
+
+Since this holds for any h, this proves that 
+
+ρ2lab = 1 − λ(w)lab .
+
+Lemma A.2 (Overlap lower bound via Wasserstein distance) . It holds that 
+
+λ(w)lab ≥ exp 
+
+
+
+− α
+
+4(1 − α) W 22 (p+, p −)
+
+
+
+.
+
+31 Proof of Lemma A.2. By Cauchy–Schwarz inequality, 
+
+λ(w)lab =
+
+Z q+(z)q−(z)
+
+q(z) dz ·
+
+Z
+
+q(z)d z ≥
+
+ Z pq+(z)q−(z)d z
+
+2
+
+=: I2
+
+> α
+
+. (20) Let Γ be any coupling of p+ and p−, i.e., Γ is a probability measure on Rd × Rd with marginals p+
+
+and p−. Then we can write 
+
+q+(z) = 
+
+Z
+
+φ(z; √αx, (1 − α)Id)Γ(d x, dy), q−(z) = 
+
+Z
+
+φ(z; √αy, (1 − α)Id)Γ(d x, dy).
+
+By Cauchy–Schwarz inequality, 
+
+Iα =
+
+Z pq+(z)q−(z) d z ≥
+
+Z q
+
+φ(z; √αx, (1 − α)Id)φ(z; √αy, (1 − α)Id) d zΓ(d x, dy)=
+
+Z
+
+(2 π(1 − α)) −d/ 2 exp 
+
+
+
+− ∥z − √αx∥2 + ∥z − √αy∥2
+
+4(1 − α)
+
+
+
+dzΓ(d x, dy)=
+
+Z
+
+exp 
+
+
+
+− α∥x − y∥2
+
+8(1 − α)
+
+
+
+Γ(d x, dy).
+
+By Jensen’s inequality, 
+
+Iα ≥ exp 
+
+
+
+− α
+
+8(1 − α)
+
+Z
+
+∥x − y∥2 Γ(d x, dy)
+
+
+
+.
+
+Taking the infimum over all couplings Γ proves 
+
+Iα ≥ exp 
+
+
+
+− α
+
+8(1 − α) W 22 (p+, p −)
+
+
+
+.
+
+Squaring this bound and using λ(w)lab ≥ I2 
+
+> α
+
+completes the proof. 
+
+## A.5 Proof of Corollary 2.6 
+
+Proof of Corollary 2.6. Let m = √αb 1d, a2 
+
+> ±
+
+= ασ 2 
+
+> ±
+
++ (1 − α). Direct calculation gives 
+
+Iα =
+
+Z pq+(z)q−(z)d z = 1(2 π)d/ 2(a+a−)d/ 2
+
+Z
+
+exp 
+
+
+
+− ∥z − m∥2
+
+4a2+
+
+− ∥z + m∥2
+
+4a2
+
+> −
+
+
+
+dz
+
+=
+
+ 2a+a−
+
+a2+ + a2
+
+> −
+
+d/ 2
+
+exp 
+
+
+
+− ∥m∥2
+
+(a2+ + a2
+
+> −
+
+)
+
+
+
+.
+
+When α = κ/d ,
+
+a2 
+
+> c
+
+= 1 + κ(σ2 
+
+> c
+
+− 1) 
+
+d , c ∈ { +, −} .
+
+Thus 
+
+a2 
+
+> c
+
+= 1 + O(d−1), ac = 1 + O(d−1).
+
+Moreover, 
+
+∥m∥2 = αb 2d = κb 2.
+
+32 Therefore,  2a+a−
+
+a2+ + a2
+
+> −
+
+d
+
+= eo(1) 
+
+and exp 
+
+
+
+− 2∥m∥2
+
+a2+ + a2
+
+> −
+
+
+
+= exp {− κb 2 + o(1) }.
+
+Hence, by Equation (20), 
+
+λlab ⩾ I2 
+
+> α
+
+⩾ e−κb 2+o(1) .
+
+On the other hand, max  
+
+> c∈{ +,−}
+
+ρ2 
+
+> c
+
+= max 
+
+> c∈{ +,−}
+
+ασ 2
+
+> c
+
+1 − α + ασ 2
+
+> c
+
+= O(d−1).
+
+Therefore, by Proposition 2.4, Gap( P ) ⩾ e−κb 2+o(1) − O(d−1),
+
+which implies lim inf  
+
+> d→∞
+
+Gap( P ) ⩾ e−κb 2
+
+.
+
+# B Proofs for Section 4 
+
+## B.1 Proof of Theorem 4.1 
+
+Proof of Theorem 4.1. Let 
+
+b⋆t (x) := −ft(x) + g2 
+
+> t
+
+st(x)denote the exact drift used in the backward pass. Denote 
+
+At(x) := ∇ft(x) − g2
+
+> t
+
+2 ∇st(x),
+
+which is a symmetric matrix by the assumption that ∇ft is symmetric. Set h = T /N , tk = kh and abbreviate fk = ftk , b⋆k = b⋆tk , gk = gtk , Lk = Ltk , Ak = Atk . The Euler–Maruyama paths satisfy 
+
+xk+1 = xk + hf k(xk) + √h g kεk, εk
+
+> i.i.d.
+
+∼ N (0, I d),
+
+yk = yk+1 + hb ⋆k(yk+1 ) + √h g kζk, ζk
+
+> i.i.d.
+
+∼ N (0, I d),
+
+with yN = xN , and the two innovation sequences {εk}N −1 
+
+> k=0
+
+and {ζk}N −1 
+
+> k=0
+
+are independent. The log-ratio decomposes as ∆h = 
+
+> N−1
+
+X
+
+> k=0
+
+∆f 
+
+> k
+
++ 
+
+> N−1
+
+X
+
+> k=0
+
+∆b
+
+> k
+
+,
+
+33 where ∆f 
+
+> k
+
+:= log ⃗ pk(xk | xk+1 )⃗p k(xk+1 | xk) + Lk+1 (xk+1 ) − Lk(xk),
+
+∆b 
+
+> k
+
+:= log ⃗p k(yk+1 | yk)⃗pk(yk | yk+1 ) + Lk(yk) − Lk+1 (yk+1 ).
+
+For a symmetric matrix A ∈ Rd×d, define 
+
+QA(ξ) := ξ⊺Aξ − tr( A).
+
+In Lemma B.1, we perform local Taylor expansions of ∆ f 
+
+> k
+
+and ∆ b
+
+> k
+
+, and decompose ∆ h into a martingale term and a remainder term as ∆h = M + R, 
+
+where 
+
+M := M f + M b, M f := h 
+
+> N−1
+
+X
+
+> k=0
+
+QAk (xk )(εk), M b := −h 
+
+> N−1
+
+X
+
+> k=0
+
+QAk (yk+1 )(ζk),R := ∆ h − M. 
+
+(21) In Lemma B.2, we take expectations and show that the martingale term dominates the remainder term, giving 
+
+E[M ] = 0 , Var( M ) = hD(T ) + O(h3/2),
+
+∥M ∥L4 = O(h1/2), ∥R∥L2 + ∥R∥L4 = O(h). (22) The Cauchy–Schwarz inequality gives | Cov( M, R )| = O(h3/2). Therefore, Var(∆ h) = Var( M ) + 2 Cov( M, R ) + Var( R) = Var( M ) + O(h3/2).
+
+This proves that Var(∆ h) = hD(T ) + O(h3/2).
+
+It remains to prove E [∆ h] = − 12 Var(∆ h) + O(h3/2). Taylor expansion of e∆h − 1 to third order gives 
+
+e∆h − 1 = ∆ h + 12 ∆2 
+
+> h
+
++ 16 ∆3 
+
+> h
+
++ R4(∆ h), |R4(∆ h)| ≤ C(1 + e∆h )|∆h|4.
+
+Since E e∆h
+
+ = 1, we have 0 = E[e∆h − 1] = E[∆ h] + 12 E[∆ 2
+
+> h
+
+] + 16 E[∆ 3
+
+> h
+
+] + O E[(1 + e∆h )|∆h|4] . (23) From Equation (22), we have 
+
+E|∆h|4 = O(h2),
+
+and hence by Cauchy–Schwarz, 
+
+E ∆2
+
+> h
+
+ = O(h).
+
+34 For any integrable function ψ, we have E e∆h ψ(∆ h) = E [ψ(−∆h)] by Lemma B.3. Taking 
+
+ψ(x) = |x|4 gives 
+
+E e∆h |∆h|4 = E |∆h|4 = O(h2).
+
+Taking ψ(x) = |x|2 gives 0 = E ∆2
+
+> h
+
+(e∆h − 1)  = E ∆3
+
+> h
+
+ + O  E (1 + e∆h )|∆h|4 ,
+
+so that 
+
+E ∆3
+
+> h
+
+ = O(h2).
+
+Plugging E ∆3
+
+> h
+
+ = O(h2), E (1 + e∆h )|∆h|4 = O(h2) into Equation (23) gives 
+
+E [∆ h] = − 12 E ∆2
+
+> h
+
+ + O(h2).
+
+This together with E ∆2
+
+> h
+
+ = O(h) implies that |E [∆ h] | = O(h). Therefore, 
+
+E ∆2
+
+> h
+
+ = Var(∆ h) + |E [∆ h] |2 = Var(∆ h) + O(h2).
+
+Combining the last two displays gives 
+
+E [∆ h] = − 12 Var(∆ h) + O(h2) = − h
+
+2 D(T ) + O(h3/2).
+
+Lemma B.1 (Local expansion) . Let 
+
+Ak(x) := ∇fk(x) − g2
+
+> k
+
+2 ∇sk(x), QA(ξ) := ξ⊺Aξ − tr( A).
+
+Then 
+
+∆f 
+
+> k
+
+= hQ Ak (xk )(εk) + h3/2U f 
+
+> k
+
++ OL4 (h2),
+
+∆b 
+
+> k
+
+= −hQ Ak (yk+1 )(ζk) + h3/2U b 
+
+> k
+
++ OL4 (h2),
+
+and 
+
+E[U f 
+
+> k
+
+| xk] = 0 , E[U b 
+
+> k
+
+| yk+1 ] = 0 . (24) 
+
+Proof of Lemma B.1. For a scalar function H and a vector field v, write Dr H(x)[ u1, . . . , ur ] and 
+
+Dr v(x)[ u1, . . . , ur ] for their rth spatial derivatives, with the latter interpreted componentwise. All remainder estimates below are uniform in k and hold in every fixed finite Lq under the stated regularity and moment assumptions in Assumption 4.1. 
+
+Forward path. Fix k and write 
+
+x := xk, x+ := xk+1 , ε := εk.
+
+Suppress the index k on fk, gk, b⋆k, sk, and Lk. Thus, 
+
+x+ = x + hf (x) + √h g ε.
+
+35 Define 
+
+eζ := x − x+ − hb ⋆(x+)
+
+g√h .
+
+Then ∆f 
+
+> k
+
+= 12
+
+
+
+∥ε∥2 − ∥ eζ∥2
+
++ Lk+1 (x+) − Lk(x).
+
+Write 
+
+eζ = −(ε + r), r := 
+
+√hg
+
+f (x) + b⋆(x+) .
+
+Then 12
+
+
+
+∥ε∥2 − ∥ eζ∥2
+
+= −ε⊺r − 12 ∥r∥2. (25) Using b⋆ = −f + g2s and expanding b⋆(x+) around x gives 
+
+r = √h gs (x) + h∇b⋆(x)ε
+
++ h3/2
+
+ 1
+
+g ∇b⋆(x)f (x) + g
+
+2 D2b⋆(x)[ ε, ε]
+
+
+
++ OL8 (h2).
+
+Substitution into (25) yields 12
+
+
+
+∥ε∥2 − ∥ eζ∥2
+
+= −√h gs (x)⊺ε
+
++ h
+
+
+
+−ε⊺∇b⋆(x)ε − g2
+
+2 ∥s(x)∥2
+
+
+
++ h3/2
+
+
+
+− 1
+
+g ε⊺∇b⋆(x)f (x) − g
+
+2 ε⊺D2b⋆(x)[ ε, ε] − gs (x)⊺∇b⋆(x)ε
+
+
+
++ OL4 (h2).
+
+(26) Recall that Lk = Ltk and st = ∇Lt. A space-time Taylor expansion gives 
+
+Lk+1 (x+) − Lk(x) = √h gs (x)⊺ε
+
++ h
+
+
+
+∂tL(tk, x) + f (x)⊺s(x) + g2
+
+2 D2Lk(x)[ ε, ε]
+
+
+
++ h3/2
+
+
+
+gD 2Lk(x)[ ε, f (x)] + g(∂ts)( tk, x)⊺ε + g3
+
+6 D3Lk(x)[ ε, ε, ε]
+
+
+
++ OL4 (h2).
+
+(27) Since pt satisfies the Fokker–Planck equation 
+
+∂tpt = −∇ · (ftpt) + g2
+
+> t
+
+2 ∆pt = −∇ · (ftpt) + g2
+
+> t
+
+2 ∇ · (∇pt),
+
+we have 
+
+∂tLt = ∂tpt
+
+pt
+
+= −∇· ft − f ⊺ 
+
+> t
+
+st + g2
+
+> t
+
+2
+
+∇· st + ∥st∥2 . (28) 36 The order-h1/2 terms in (26) and (27) cancel. Using ∇b⋆ = −∇ f + g2∇s, D2Lk = ∇s, and (28) ,the coefficient of h in ∆ f 
+
+> k
+
+is 
+
+− ε⊺∇b⋆(x)ε − g2
+
+2 ∥s(x)∥2 + ∂tL(tk, x) + f (x)⊺s(x) + g2
+
+2 ε⊺∇s(x)ε
+
+= ε⊺
+
+
+
+∇f (x) − g2
+
+2 ∇s(x)
+
+
+
+ε − tr 
+
+
+
+∇f (x) − g2
+
+2 ∇s(x)
+
+
+
+= QAk (xk )(εk).
+
+The coefficient of h3/2 is 
+
+U f 
+
+> k
+
+= − 1
+
+g ε⊺∇b⋆(x)f (x) − g
+
+2 ε⊺D2b⋆(x)[ ε, ε]
+
+− gs (x)⊺∇b⋆(x)ε + gD 2Lk(x)[ ε, f (x)] + g(∂ts)( tk, x)⊺ε + g3
+
+6 D3Lk(x)[ ε, ε, ε].
+
+Conditionally on xk, each term in the last display is either linear in εk or homogeneous cubic in εk.Since εk is conditionally standard Gaussian given xk, we have 
+
+E[U f 
+
+> k
+
+| xk] = 0 .
+
+Collecting the preceding expansions gives ∆f 
+
+> k
+
+= hQ Ak (xk )(εk) + h3/2U f 
+
+> k
+
++ OL4 (h2).
+
+Backward path. Write 
+
+y+ := yk+1 , y := yk, ζ := ζk,
+
+and again suppress the index k on the coefficients. Then 
+
+y = y+ + hb ⋆(y+) + √h g ζ.
+
+Define 
+
+eε := y+ − y − hf (y)
+
+g√h .
+
+Then 
+
+eε = −(ζ + er), er := 
+
+√hg
+
+b⋆(y+) + f (y) ,
+
+and ∆b 
+
+> k
+
+= 12
+
+ ∥ζ∥2 − ∥ eε∥2 + Lk(y) − Lk+1 (y+)= −ζ⊺er − 12 ∥er∥2 + Lk(y) − Lk+1 (y+).
+
+37 Using b⋆ = −f + g2s and expanding f (y) around y+ gives 
+
+er = √h gs (y+) + h∇f (y+)ζ
+
++ h3/2
+
+ 1
+
+g ∇f (y+)b⋆(y+) + g
+
+2 D2f (y+)[ ζ, ζ]
+
+
+
++ OL8 (h2).
+
+Consequently, 
+
+−ζ⊺er − 12 ∥er∥2 = − √h gs (y+)⊺ζ
+
++ h
+
+
+
+−ζ⊺∇f (y+)ζ − g2
+
+2 ∥s(y+)∥2
+
+
+
++ h3/2
+
+
+
+− 1
+
+g ζ⊺∇f (y+)b⋆(y+) − g
+
+2 ζ⊺D2f (y+)[ ζ, ζ] − gs (y+)⊺∇f (y+)ζ
+
+
+
++ OL4 (h2).
+
+(29) A space-time Taylor expansion gives 
+
+Lk(y) − Lk+1 (y+) = √h gs (y+)⊺ζ
+
++ h
+
+
+
+−∂tL(tk, y+) + b⋆(y+)⊺s(y+) + g2
+
+2 D2Lk(y+)[ ζ, ζ]
+
+
+
++ h3/2
+
+
+
+gD 2Lk(y+)[ ζ, b ⋆(y+)] + g3
+
+6 D3Lk(y+)[ ζ, ζ, ζ]
+
+
+
++ OL4 (h2).
+
+(30) The order-h1/2 terms in (29) and (30) cancel. Using b⋆ = −f + g2s and the log-Fokker–Planck equation (28), the order-h coefficient in ∆ b 
+
+> k
+
+is 
+
+− ζ⊺∇f (y+)ζ − g2
+
+2 ∥s(y+)∥2 − ∂tL(tk, y+) + b⋆(y+)⊺s(y+) + g2
+
+2 ζ⊺∇s(y+)ζ
+
+= −ζ⊺
+
+
+
+∇f (y+) − g2
+
+2 ∇s(y+)
+
+
+
+ζ + tr 
+
+
+
+∇f (y+) − g2
+
+2 ∇s(y+)
+
+
+
+= −QAk (yk+1 )(ζk).
+
+The coefficient of h3/2 is 
+
+U b 
+
+> k
+
+= − 1
+
+g ζ⊺∇f (y+)b⋆(y+) − g
+
+2 ζ⊺D2f (y+)[ ζ, ζ]
+
+− gs (y+)⊺∇f (y+)ζ + gD 2Lk(y+)[ ζ, b ⋆(y+)] + g3
+
+6 D3Lk(y+)[ ζ, ζ, ζ].
+
+Conditionally on y+, each term in the last display is either linear in ζk or homogeneous cubic in ζk,Since ζk is conditionally standard Gaussian given yk+1 . Therefore, 
+
+E[U b 
+
+> k
+
+| yk+1 ] = 0 .
+
+38 Thus, ∆b 
+
+> k
+
+= −hQ Ak (yk+1 )(ζk) + h3/2U b 
+
+> k
+
++ OL4 (h2).
+
+Lemma B.2 (Leading martingale and accumulated remainder) . Let M and R be defined as in Equation (21) . Then 
+
+E[M ] = 0 , (31) Var( M ) = hD(T ) + O(h3/2), (32) 
+
+∥M ∥L4 = O(h1/2), ∥R∥L2 + ∥R∥L4 = O(h). (33) 
+
+Consequently, E|∆h|4 = O(h2).Proof of Lemma B.2. Define Fk := σ(x0, . . . , xk) for k = 0 , . . . , N . After the forward path has been generated, extend this filtration by revealing the backward states in the order yN −1, yN −2, . . . , y0.Since εk is independent of Fk,
+
+EQAk (xk )(εk) | F k
+
+ = 0 by Lemma B.4. Thus, the summands of M f are martingale differences. Similarly, when the backward summands are ordered from k = N − 1 down to k = 0, ζk is independent of the current sigma-field and of yk+1 . Hence, those summands are also martingale differences, and E[M f ] = E[M b] = 0. This proves (31). Using the martingale property and Lemma B.4, Var( M f ) = 2 h2 
+
+> N−1
+
+X
+
+> k=0
+
+E∥Ak(xk)∥2F
+
+ , (34) Var( M b) = 2 h2 
+
+> N−1
+
+X
+
+> k=0
+
+E∥Ak(yk+1 )∥2F
+
+ . (35) Conditionally on the complete forward path, the backward path starts from the fixed endpoint 
+
+yN = xN and is driven by independent innovations. Its leading martingale therefore has conditional mean zero, so Cov( M f , M b) = 0 . (36) Let Gt(x) := ∥At(x)∥2F. By the polynomial-growth assumptions on At, Gt satisfies, for some 
+
+q ⩾ 0, 
+
+|Gt(x) − Gt(z)| ⩽ C(1 + ∥x∥q + ∥z∥q )∥x − z∥.
+
+Together with the uniform moment bounds and the strong error estimate max  
+
+> 0⩽k⩽N
+
+∥xk − Xtk ∥Lq ⩽ Ch 1/2,
+
+this implies 
+
+EGtk (xk) − EGtk (Xtk ) ⩽ Ch 1/2
+
+uniformly in k. Moreover, t 7 → EGt(Xt) is 1 /2-H¨ older continuous under the same assumptions, since 
+
+∥Xt − Xs∥Lp ⩽ C|t − s|1/2. Therefore, 
+
+h 
+
+> N−1
+
+X
+
+> k=0
+
+EGtk (Xtk ) = 
+
+Z T
+
+> 0
+
+EGt(Xt) d t + O(h1/2).
+
+39 Combining the last two displays gives 
+
+h 
+
+> N−1
+
+X
+
+> k=0
+
+E[Gtk (xk)] = 
+
+Z T
+
+> 0
+
+E[Gt(Xt)] d t + O(h1/2). (37) Following the same argument and that the exact reverse process has marginal density pt, we obtain 
+
+h 
+
+> N−1
+
+X
+
+> k=0
+
+E[Gtk (yk+1 )] = 
+
+Z T
+
+> 0
+
+E[Gt(Xt)] d t + O(h1/2). (38) Equations (34)–(38) prove (32). Since M f and M b are sum of martingale differences with OL4 (h) increments, Lemma B.4 gives 
+
+∥M f ∥L4 + ∥M b∥L4 = O(h1/2).
+
+By Lemma B.1, R is the sum of the martingale difference terms h3/2U f
+
+> k
+
+, h3/2U b 
+
+> k
+
+, as well as the 
+
+OL4 (h2) remainder term. Applying Lemma B.4 again gives 
+
+h3/2 
+
+> N−1
+
+X
+
+> k=0
+
+U f 
+
+> kL2
+
++ h3/2 
+
+> N−1
+
+X
+
+> k=0
+
+U b 
+
+> kL4
+
+= O(h).
+
+Thus ∥R∥L4 = O(h). Finally, ∥∆h∥L4 ≤ ∥ M ∥L4 + ∥R∥L4 = O(h1/2), which proves E|∆h|4 =
+
+O(h2). 
+
+Lemma B.3 (Path-reversal identity) . For an integrable nonnegative function ψ,
+
+Ee∆h ψ(∆ h) = E[ψ(−∆h)] .
+
+Proof of Lemma B.3. Recall the notation from Section 3. We have ∆h(z) = log Π( Rz)Π( z) , ∆h(Rz) = −∆h(z).
+
+Therefore, 
+
+Ee∆h ψ(∆ h) =
+
+Z
+
+Π( Rz)ψ(∆ h(z)) d z =
+
+Z
+
+Π( z)ψ(−∆h(z)) d z,
+
+where the second equality uses the change of variables z 7 → Rz. This proves the identity. 
+
+Lemma B.4 (Elementary Gaussian and martingale moments) . Let ξ ∼ N (0, I d) and let A be symmetric. Then 
+
+E[QA(ξ)] = 0 , E[QA(ξ)2] = 2 ∥A∥2F, (39) 
+
+and, for fixed d,
+
+E|QA(ξ)|4 ≤ Cd∥A∥4F. (40) 
+
+In addition, let (Fk)Nk=0 be a filtration and let ηk be Fk+1 -measurable with E[ηk | F k] = 0 and 
+
+max k ∥ηk∥L4 ≤ a. Then  
+
+> N−1
+
+X
+
+> k=0
+
+ηk
+
+> L2
+
+≤ N 1/2a,  
+
+> N−1
+
+X
+
+> k=0
+
+ηk
+
+> L4
+
+≤ CN 1/2a, (41) 
+
+where C is a universal constant. 
+
+40 Proof of Lemma B.4. Diagonalizing A and using rotational invariance gives 
+
+QA(ξ) d
+
+=
+
+> d
+
+X
+
+> i=1
+
+λi(Z2 
+
+> i
+
+− 1) , Zi
+
+> i.i.d.
+
+∼ N (0 , 1) .
+
+This proves (39); expanding the fourth power proves (40). The L2 martingale bound follows from orthogonality. For the fourth moment, set Sk = Pk−1 
+
+> j=0
+
+ηj .Expanding ( Sk + ηk)4 and conditioning on Fk gives 
+
+E[S4
+
+> k+1
+
+] = E[S4 
+
+> k
+
+] + 6 ES2 
+
+> k
+
+E(η2 
+
+> k
+
+| F k) + 4 ESkE(η3 
+
+> k
+
+| F k) + E[η4
+
+> k
+
+].
+
+Jensen’s inequality gives 
+
+E(η2 
+
+> k
+
+| F k) L2 ≤ a2, E(η3 
+
+> k
+
+| F k) L4/3 ≤ a3.
+
+H¨ older’s inequality therefore gives 
+
+E[S4
+
+> k+1
+
+] ≤ E[S4 
+
+> k
+
+] + 6 a2∥S2 
+
+> k
+
+∥L2 + 4 a3∥Sk∥L4 + a4.
+
+A direct induction, with the constant chosen sufficiently large, yields E[S4 
+
+> k
+
+] ≤ Ck 2a4. This proves the second bound in (41). 
+
+## B.2 Proof of Theorem 4.2 
+
+Proof of Theorem 4.2. We use the same notation as in the proof of Theorem 4.1. Specifically, write 
+
+fk := ftk , gk := gtk , sk := stk , δk := δtk , bsk := sk + δk, bbk := −fk + g2 
+
+> k
+
+bsk,
+
+and 
+
+Ak(x) := ∇fk(x) − g2
+
+> k
+
+2 ∇sk(x), QA(ξ) := ξ⊺Aξ − tr( A).
+
+Forward path. Fix k, condition on xk, and write 
+
+x+ := xk+1 , x := xk, ε := εk, eζ := x − x+ − hbb(x+)
+
+g√h .
+
+Suppress the index k in the subsequent calculations. We have ∆f 
+
+> k
+
+= 12
+
+
+
+∥ε∥2 − ∥ eζ∥2
+
++ Lk+1 (x+) − Lk(x).
+
+As in the proof of Lemma B.1, we take the Taylor expansions around x, with b⋆ replaced by bb, and obtain 12
+
+
+
+∥ε∥2 − ∥ eζ∥2
+
+= − √h g bs⊺ε
+
++ h
+
+
+
+−ε⊺∇bbε − g2
+
+2 ∥bs∥2
+
+
+
++ h3/2
+
+
+
+− 1
+
+g ε⊺∇bbf − g
+
+2 ε⊺D2bb[ε, ε] − gbs⊺(∇bb)ε
+
+
+
++ OL8 (h2)41 as well as 
+
+Lk+1 (xk+1 ) − Lk(xk) = √h gs ⊺ε
+
++ h
+
+
+
+∂tLk + f ⊺s + g2
+
+2 ε⊺(∇s)ε
+
+
+
++ h3/2
+
+
+
+gε⊺(∂ts)( tk, x) + gε⊺(∇s)f + g3
+
+6 ε⊺D2s[ε, ε]
+
+
+
++ OL8 (h2).
+
+Since sk − bsk = −δk, the order-h1/2 coefficient in the sum of these two expansions is −gkδ⊺ 
+
+> k
+
+ε. Using 
+
+∇bbk = −∇ fk + g2
+
+> k
+
+∇sk + g2
+
+> k
+
+∇δk
+
+and the log Fokker–Planck identity (28), the order-h coefficient is 
+
+− ε⊺∇bbkε − g2
+
+> k
+
+2 ∥sk + δk∥2 + ∂tLk + f ⊺ 
+
+> k
+
+sk + g2
+
+> k
+
+2 ε⊺(∇sk)ε
+
+=ε⊺
+
+
+
+∇fk − g2
+
+> k
+
+2 ∇sk
+
+
+
+ε − ∇· fk + g2
+
+> k
+
+2 ∇· sk − g2
+
+> k
+
+ε⊺(∇δk)ε − g2
+
+> k
+
+s⊺ 
+
+> k
+
+δk − g2
+
+> k
+
+2 ∥δk∥2
+
+=QAk (x)(ε) − g2
+
+> k
+
+
+
+s⊺ 
+
+> k
+
+δk + ε⊺(∇δk)ε + 12 ∥δk∥2
+
+
+
+.
+
+In the order-h3/2 coefficient, each term is an odd polynomial in εk, and hence 
+
+E[U f 
+
+> k
+
+| xk] = 0 . (42) Collecting the coefficients gives ∆f 
+
+> k
+
+= − √h g kδk(xk)⊺εk − h
+
+2 g2
+
+> k
+
+∥δk(xk)∥2 + hQ Ak (xk )(εk)
+
+− hg 2 
+
+> k
+
+{δk(xk)⊺sk(xk) + ε⊺ 
+
+> k
+
+∇δk(xk)εk} + h3/2U f 
+
+> k
+
++ OL4 (h2). (43) 
+
+Backward path. Fix k, condition on yk+1 , and write 
+
+y+ := yk+1 , y := yk, ζ := ζk, eε := y+ − y − hf (y)
+
+g√h .
+
+Following a similar argument as in the forward path, we have 12
+
+ ∥ζ∥2 − ∥ eε∥2 = − √h g bs⊺ 
+
+> k
+
+ζ
+
++ h
+
+
+
+−ζ⊺(∇f )ζ − g2
+
+2 ∥bsk∥2
+
+
+
++ h3/2
+
+
+
+− 1
+
+g ζ⊺(∇f )bbk − g
+
+2 ζ⊺D2f [ζ, ζ] − gbs⊺ 
+
+> k
+
+(∇f )ζ
+
+
+
++ OL4 (h2)42 as well as 
+
+Lk(yk) − Lk+1 (yk+1 ) = √h gs ⊺ 
+
+> k
+
+ζ
+
++ h
+
+
+
+−∂tLk + bb⊺ 
+
+> k
+
+sk + g2
+
+2 ζ⊺(∇sk)ζ
+
+
+
++ h3/2
+
+
+
+gζ⊺(∇sk)bbk + g3
+
+6 ζ⊺D2sk[ζ, ζ]
+
+
+
++ OL4 (h2).
+
+Thus, the order-h1/2 coefficient is −gkδ⊺ 
+
+> k
+
+ζ, while the order-h coefficient is 
+
+− ζ⊺(∇fk)ζ + g2
+
+> k
+
+2 ζ⊺(∇sk)ζ − g2
+
+> k
+
+2 ∥sk + δk∥2 − ∂tLk + bb⊺ 
+
+> k
+
+sk
+
+= − QAk (y+)(ζ) − g2
+
+> k
+
+2 ∥δk(y+)∥2,
+
+where the last equality follows from bbk = −fk + g2
+
+> k
+
+(sk + δk) and the log Fokker–Planck identity (28) .The complete order-h3/2 coefficient is 
+
+U b 
+
+> k
+
+= − 1
+
+gk
+
+ζ⊺ 
+
+> k
+
+∇fk(yk+1 )bbk(yk+1 ) − gk
+
+2 ζ⊺ 
+
+> k
+
+D2fk(yk+1 )[ ζk, ζk]
+
+− gk bsk(yk+1 )⊺∇fk(yk+1 )ζk + gkζ⊺ 
+
+> k
+
+∇sk(yk+1 )bbk(yk+1 )+ g3
+
+> k
+
+6 ζ⊺ 
+
+> k
+
+D2sk(yk+1 )[ ζk, ζk]. (44) As before, the order-h3/2 coefficient is an odd polynomial in ζk, and hence 
+
+E[U b 
+
+> k
+
+| yk+1 ] = 0 . (45) Collecting the coefficients gives ∆b 
+
+> k
+
+= − √h g kδk(yk+1 )⊺ζk − h
+
+2 g2
+
+> k
+
+∥δk(yk+1 )∥2 − hQ Ak (yk+1 )(ζk)+ h3/2U b 
+
+> k
+
++ OL4 (h2). (46) 
+
+Taking expectations. Since εk is independent of xk and standard Gaussian, 
+
+E[QAk (xk )(εk) | xk] = 0 , E[ε⊺ 
+
+> k
+
+∇δk(xk)εk | xk] = ∇· δk(xk).
+
+Summation of (43) gives 
+
+E
+
+"N −1X
+
+> k=0
+
+∆f
+
+> k
+
+#
+
+= − h
+
+2 
+
+> N−1
+
+X
+
+> k=0
+
+g2
+
+> k
+
+E∥δk(xk)∥2
+
+− h 
+
+> N−1
+
+X
+
+> k=0
+
+g2
+
+> k
+
+E[δk(xk)⊺sk(xk) + ∇· δk(xk)] + O(N h 2). (47) 43 By Assumption 4.1–4.2, δt(x)pt(x) vanishes as ∥x∥ → ∞ , and ∇· (δtpt) ∈ L1. Since Xt ∼ pt and 
+
+st = ∇ log pt, Stein’s identity implies 
+
+E[δt(Xt)⊺st(Xt) + ∇· δt(Xt)] = 0 .
+
+The weak-error bound gives 
+
+E[δk(xk)⊺sk(xk) + ∇· δk(xk)] = O(h).
+
+Since N h 2 = T h = O(h), this implies that the second sum in (47) is O(h). The same weak-error bound gives 
+
+h 
+
+> N−1
+
+X
+
+> k=0
+
+g2
+
+> k
+
+E∥δk(xk)∥2 =
+
+Z T
+
+> 0
+
+g2 
+
+> t
+
+E∥δt(Xt)∥2 dt + O(h). (48) Consequently, 
+
+E
+
+"N −1X
+
+> k=0
+
+∆f
+
+> k
+
+#
+
+= − 12
+
+Z T
+
+> 0
+
+g2 
+
+> t
+
+E∥δt(Xt)∥2 dt + O(h). (49) By the same argument, we have 
+
+E
+
+"N −1X
+
+> k=0
+
+∆b
+
+> k
+
+#
+
+= − 12
+
+Z T
+
+> 0
+
+g2 
+
+> t
+
+E
+
+h
+
+∥δt( bYt)∥2i
+
+dt + O(h). (50) Combining (49) and (50) proves 
+
+E[∆] = −E score (δ, T ) + O(h).
+
+To prove the lower bound on the acceptance probability, by Jensen’s inequality, we have 
+
+E 1 ∧ e∆ = E [exp(∆ − max(∆ , 0))] ≥ exp( E [∆] − E [max(∆ , 0)]) .
+
+Since E [max(∆ , 0)] ≤ E e∆−1 = 1 /e and e−1/e > 1/2, this proves that 
+
+E 1 ∧ e∆ ≥ 12 exp( E [∆]) = 12 exp( −E score (δ, T ) + O(h)) .
+
+# C Experiment supplements 
+
+This section provides the experiment details. In particular, we describe the detailed procedure of score learning in Section 5 and provide further details of the experiments discussed in Section 6. 
+
+## C.1 Learning the score 
+
+We parametrize the control u in Section 5 by a two-layer multi-layer perceptron (MLP). 44 Noising dynamics and reference distribution We instantiate the general noising process (14) with the OU coefficients ft(x) = − 12 x and gt ≡ 1, so that Xt | X0 ∼ N (√αtX0, (1 − αt)Id) with 
+
+αt = e−t. The reference distribution is taken to be a Gaussian mixture pref = PKk=1 ˆwk N (ˆ μk, ˆΣk), fitted as described below. Because the OU dynamics are linear, the marginal pref  
+
+> t
+
+remains a Gaussian mixture with unchanged weights ˆwk, means √αt ˆμk, and covariances (1 − αt)Id + αt ˆΣk, so the reference score rt = ∇ log pref  
+
+> t
+
+is available in closed form. Moreover, the OU process approaches 
+
+N (0 , I d) at a geometric rate irrespective of the initial distribution. Therefore, the memoryless condition approximately holds for moderately large T .
+
+GMM fitting The GMM parameters are estimated in two stages: first, N particles are evolved under an annealed Langevin algorithm with inverse-temperature schedule 0 < β 1 < · · · < β L = 1 and adaptive step sizes hℓ = h/ (βℓ + ε), to obtain samples covering all major modes. The resulting samples are then post-processed to extract K prototype centers via gradient ascent and greedy merging: modes located within a given radius are merged into a single mode, and clusters with fewer than a minimal sample count are discarded. Finally, K-means is run on the collected samples initialized from the prototype centers, and the GMM parameters { ˆwk, ˆμk, ˆΣk}Kk=1 are read off from the resulting cluster assignments. 
+
+Computational cost The cost of target score evaluation typically dominates in score training (as well as sampling). Therefore, we use it as a measurement for computational cost. Since the target score is not incorporated into the parametrization of the control fθ , it is evaluated only during the annealed Langevin warm-up, the gradient ascent step, and once per trajectory during score training. Therefore, the computational cost is given by computational cost = (# temperatures) × (# steps per temperature) + (# gradient particles) × (# gradient steps) + (# training particles) × (# training iterations) .
+
+## C.2 Further details of examples 
+
+We provide additional implementation details and results for the experiments in Section 6. 
+
+Bayesian Gaussian mixture model (Section 6.3) We reparametrize all parameters into unconstrained space. The mixture weights are represented via logits, and each precision matrix Σ −1
+
+> k
+
+is parameterized through the lower-triangular Cholesky factor, with diagonal entries stored on the log scale to enforce positivity. This yields a parameter vector in R11 . Prior hyperparameters are set to m0 = ¯y, V0 = 9 diag ( ˆσ2), ν0 = p + 2 = 4, W0 = diag ( ˆσ2), and α0 = 1, where ˆσ2 denotes the per-coordinate sample variance of the data. Observations are standardized to zero mean and unit variance prior to analysis. The wall-clock times (in seconds) for MAD-Path (including score training) and APT-DEO over 100 runs are 27 .86 ± 0.24 and 27 .90 ± 0.54, respectively. 
+
+Bayesian mixture of beta-binomial and binomial (Section 6.4) Following [ 70 ], we use independent vague priors for all the parameters. In particular, we use uniform distributions on the unit interval for γ, μ and ν and an exponential prior with expectation one for θ, then apply logit 45 transformations on γ, μ, ν and a log-transformation on θ. The transformed parameters are denoted by ˜ γ, ˜μ, ˜ν and ˜θ, respectively. Figure 9 shows the trace plots of the transformed parameters under different choices of time horizon T and number of steps N . Mode crossings are more likely to happen when T and N are large, which is consistent with the results in Figure 6. −2.5                                      
+
+> 0.0
+> 2.5
+> 5.0 ̃
+> γ
+> T= 3, N= 30 T= 3, N= 150 T= 7, N= 30 T= 7, N= 150
+> −3
+> −2
+> −1
+> 0̃
+> μ
+> −4
+> −2
+> 0̃
+> θ
+> 01000 2000 3000 4000 5000
+> −2
+> 0̃
+> ν
+> 01000 2000 3000 4000 5000 01000 2000 3000 4000 5000 01000 2000 3000 4000 5000
+> Iteration
+
+Figure 9: Trace plots of the transformed parameters under MAD-Path with varying horizon T and number of steps N on the fetal deaths in litters example. 
+
+Sensor network localization (Section 6.5) Figure 10 shows the true location and posteriors of sensors. The wall-clock time for MAD-Path, including score training, is 14.83 s; the wall-clock times for the two APT-DEO chains are 14.59 s and 13.86 s, respectively. 
+
+Seemingly unrelated regression (Section 6.6) The design vectors Xm are drawn i.i.d. from 
+
+N (0 , I N ), the true coefficients βm are drawn i.i.d. from N (0 , 1), and the cross-equation covariance is set to Σ = ( AA ⊤)/M + IM with A ∼ N (0 , I M ×M ). The wall-clock time for MAD-Path, including score training, is 10.82 s; for APT-DEO, the cold-started chain takes 6.1 s, and the two warm-started chains (APT-DEO 1 and APT-DEO 2 in Figure 8) take 5.68 s and 5.87 s, respectively. As in the sensor network example (Figure 7), MAD-Path benefits from a natural warm start and so exhibits essentially no transient phase (Figure 11). APT-DEO with cold start has an average swap acceptance rate of 0.242. 46 0.00 0.25 0.50 0.75 1.00                          
+
+> z1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> z2
+> Observed distances
+> S1S2
+> S3S4
+> S5
+> S6
+> S7S8
+> 0.00 0.25 0.50 0.75 1.00
+> z1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> z2
+> MAD-Path
+> 0.00 0.25 0.50 0.75 1.00
+> z1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> z2
+> APT-DEO (init = 0.5 1d)
+> 0.00 0.25 0.50 0.75 1.00
+> z1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> z2
+> APT-DEO (init = 1d)
+> S1 S2 S3 S4 S5 S6 S7 S8 True pos. Anchor
+
+Figure 10: The left panel shows the true locations of the eleven sensors, with the three known locations marked as ⋆ and observed distances indicated by lines. The right three panels represent the posterior distributions of sensor locations obtained by MAD-Path and APT-DEO with two initializations after burn-in. 0 200 400           
+
+> −5
+> 0
+> β1
+> 0200 400
+> −5
+> 0
+> β2
+> 0200 400
+> −5.0
+> −2.5
+> 0.0
+> β3
+> 0200 400
+> −5
+> 0
+> β4
+> 0200 400
+> −5
+> 0
+> 5
+> β5
+> Iteration
+> MAD-Path APT-DEO 1 APT-DEO (cold)
+
+Figure 11: Trace plots for the first 500 iterations of MAD-Path and APT-DEO with varying initializations. Dashed lines indicate the oracle mode location. APE-DEO 1: the same chain displayed in Figure 8; APT-DEO (cold): APT-DEO with a cold start. 
+
+# References 
+
+[1] Ahn, S., Chen, Y., and Welling, M. (2013). Distributed and adaptive darting Monte Carlo through regenerations. In Artificial Intelligence and Statistics , pages 108–116. PMLR. [2] Albergo, M. S. and Vanden-Eijnden, E. (2025). NETS: A non-equilibrium transport sampler. In 
+
+International Conference on Machine Learning , pages 1026–1055. PMLR. [3] Ambrosio, L., Gigli, N., and Savar´ e, G. (2008). Gradient Flows in Metric Spaces and in the Space of Probability Measures . Lectures in Mathematics ETH Z¨ urich. Birkh¨ auser, 2 edition. [4] Anderson, B. D. (1982). Reverse-time diffusion equation models. Stochastic Processes and their Applications , 12(3):313–326. [5] Andrieu, C., Lee, A., Power, S., and Wang, A. Q. (2022). Comparison of Markov chains via weak Poincar´ e inequalities with application to pseudo-marginal MCMC. The Annals of Statistics ,50(6):3592–3618. [6] Atchad´ e, Y. F., Roberts, G. O., and Rosenthal, J. S. (2011). Towards optimal scaling of Metropolis-coupled Markov chain Monte Carlo. Statistics and Computing , 21(4):555–568. 47 [7] Azzalini, A. and Bowman, A. W. (1990). A look at some data on the Old Faithful geyser. Journal of the Royal Statistical Society: Series C , 39(3):357–365. [8] Berner, J., Richter, L., and Ullrich, K. (2024). An optimal control perspective on diffusion-based generative modeling. Transactions on Machine Learning Research .[9] Beskos, A., Pillai, N., Roberts, G., Sanz-Serna, J.-M., and Stuart, A. (2013). Optimal tuning of the hybrid Monte Carlo algorithm. Bernoulli , 19(5A):1501–1534. [10] Blessing, D., Qu, X., Neitz, A., and Ziesche, T. (2024). Beyond ELBOs: a large-scale evaluation of variational methods for sampling. In Advances in Neural Information Processing Systems (NeurIPS) .[11] Blessing, D., Richter, L., Berner, J., Malitskiy, E., and Neumann, G. (2026). Bridge matching sampler: Scalable sampling via generalized fixed-point diffusion matching. arXiv preprint arXiv:2603.00530 .[12] Bradley, R. C. (2005). Basic properties of strong mixing conditions. a survey and some open questions. Probability Surveys , 2:107–144. [13] Brooks, S. P., Morgan, B. J., Ridout, M. S., and Pack, S. (1997). Finite mixture models for proportions. Biometrics , pages 1097–1115. [14] Bryc, W. and Dembo, A. (2005). On the maximum correlation coefficient. Theory of Probability & Its Applications , 49(1):132–138. [15] Chemseddine, J., Wald, C., Duong, R., and Steidl, G. (2025). Neural sampling from Boltzmann densities: Fisher-Rao curves in the Wasserstein geometry. In The Thirteenth International Conference on Learning Representations .[16] Chen, S., Chewi, S., Li, J., Li, Y., Salim, A., and Zhang, A. R. (2023). Sampling is as easy as learning the score: theory for diffusion models with minimal data assumptions. In International Conference on Learning Representations .[17] Chen, Y., Chewi, S., Salim, A., and Wibisono, A. (2022). Improved analysis for a proximal algorithm for sampling. In Conference on Learning Theory , pages 2984–3014. PMLR. [18] Choi, J., Chen, Y., Tao, M., and Liu, G.-H. (2026). Non-equilibrium annealed adjoint sampler. 
+
+Advances in Neural Information Processing Systems , 38:90956–90988. [19] De Bortoli, V., Hutchinson, M., Wirnsberger, P., and Doucet, A. (2024). Target score matching. 
+
+arXiv preprint arXiv:2402.08667 .[20] Del Moral, P., Doucet, A., and Jasra, A. (2006). Sequential Monte Carlo samplers. Journal of the Royal Statistical Society Series B: Statistical Methodology , 68(3):411–436. [21] Dembo, A., Kagan, A., and Shepp, L. A. (2001). Remarks on the maximum correlation coefficient. Bernoulli , pages 343–350. [22] Drton, M. and Richardson, T. S. (2004). Multimodality of the likelihood in the bivariate seemingly unrelated regressions model. Biometrika , 91(2):383–392. 48 [23] Duane, S., Kennedy, A. D., Pendleton, B. J., and Roweth, D. (1987). Hybrid Monte Carlo. 
+
+Physics Letters B , 195(2):216–222. [24] Gabri´ e, M., Rotskoff, G. M., and Vanden-Eijnden, E. (2022). Adaptive Monte Carlo augmented with normalizing flows. Proceedings of the National Academy of Sciences , 119(10):e2109420119. [25] Geyer, C. J. (1991). Markov chain Monte Carlo maximum likelihood. In Computing Science and Statistics: Proceedings of the 23rd Symposium on the Interface , pages 156–163. [26] Geyer, C. J. and Thompson, E. A. (1995). Annealing Markov chain Monte Carlo with applications to ancestral inference. Journal of the American Statistical Association , 90:909–920. [27] Gordon, N. J., Salmond, D. J., and Smith, A. F. (1993). Novel approach to nonlinear/non-Gaussian Bayesian state estimation. In IEE Proceedings F (Radar and Signal Processing) , volume 140, pages 107–113. IET. [28] Grenioux, L. and Noble, M. (2026). Diffusion-based annealed Boltzmann generators: benefits, pitfalls and hopes. arXiv preprint arXiv:2601.21026 .[29] Grenioux, L., Noble, M., Gabri´ e, M., and Durmus, A. (2024). Stochastic localization via iterative posterior sampling. In Proceedings of the 41st International Conference on Machine Learning , pages 16337–16376. [30] Havens, A. J., Miller, B. K., Yan, B., Domingo-Enrich, C., Sriram, A., Levine, D. S., Wood, B. M., Hu, B., Amos, B., Karrer, B., et al. (2025). Adjoint sampling: Highly scalable diffusion samplers via adjoint matching. In International Conference on Machine Learning , pages 22204– 22237. PMLR. [31] He, J., Du, Y., Vargas, F., Zhang, D., Padhy, S., OuYang, R., Gomes, C., and Hern´ andez-Lobato, J. M. (2025). No trick, no treat: Pursuits and challenges towards simulation-free training of neural samplers. arXiv preprint arXiv:2502.06685 .[32] Ho, J., Jain, A., and Abbeel, P. (2020). Denoising diffusion probabilistic models. Advances in Neural Information Processing Systems , 33:6840–6851. [33] Hoffman, M., Sountsov, P., Dillon, J. V., Langmore, I., Tran, D., and Vasudevan, S. (2019). Neutra-lizing bad geometry in Hamiltonian Monte Carlo using neural transport. arXiv preprint arXiv:1903.03704 .[34] Hoffman, M. D. and Gelman, A. (2014). The no-U-turn sampler: Adaptively setting path lengths in Hamiltonian Monte Carlo. Journal of Machine Learning Research , 15(47):1593–1623. [35] Huang, X., Dong, H., Hao, Y., Ma, Y.-A., and Zhang, T. (2024). Reverse diffusion Monte Carlo. In International Conference on Learning Representations .[36] Ihler, A. T., Fisher III, J. W., Moses, R. L., and Willsky, A. S. (2004). Nonparametric belief propagation for self-calibration in sensor networks. In Proceedings of the 3rd International Symposium on Information Processing in Sensor Networks , pages 225–233. [37] Jasra, A., Holmes, C. C., and Stephens, D. A. (2005). Markov chain Monte Carlo methods and the label switching problem in Bayesian mixture modeling. Statistical Science , 20:50–67. 49 [38] Kloeden, P. E. and Platen, E. (1992). Numerical Solution of Stochastic Differential Equations .Springer Berlin Heidelberg. [39] Lan, S., Streets, J., and Shahbaba, B. (2014). Wormhole Hamiltonian Monte Carlo. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , volume 28. [40] L atuszy´ nski, K., Moores, M. T., and Stumpf-F´ etizon, T. (2026). MCMC methods for multi-modal distributions. In Handbook of Markov Chain Monte Carlo , pages 368–396. Chapman and Hall/CRC. [41] Lee, Y. T., Shen, R., and Tian, K. (2021). Structured logconcave sampling with a restricted Gaussian oracle. In Conference on Learning Theory , pages 2993–3050. PMLR. [42] Liu, J. S., Wong, W. H., and Kong, A. (1994). Covariance structure of the Gibbs sampler with applications to the comparisons of estimators and augmentation schemes. Biometrika , pages 27–40. [43] Marinari, E. and Parisi, G. (1992). Simulated tempering: a new Monte Carlo scheme. EPL (Europhysics Letters) , 19(6):451. [44] M´ at´ e, B. and Fleuret, F. (2023). Learning interpolations between Boltzmann densities. 
+
+Transactions on Machine Learning Research .[45] Metropolis, N., Rosenbluth, A. W., Rosenbluth, M. N., Teller, A. H., and Teller, E. (1953). Equation of state calculations by fast computing machines. The Journal of Chemical Physics ,21(6):1087–1092. [46] Miasojedow, B., Moulines, E., and Vihola, M. (2013). An adaptive parallel tempering algorithm. 
+
+Journal of Computational and Graphical Statistics , 22(3):649–664. [47] Neal, R. M. (1996). Sampling from multimodal distributions using tempered transitions. 
+
+Statistics and Computing , 6(4):353–366. [48] Neal, R. M. (2001). Annealed importance sampling. Statistics and Computing , 11(2):125–139. [49] Neal, R. M. (2011). MCMC using Hamiltonian dynamics. In Brooks, S., Gelman, A., Jones, G., and Meng, X.-L., editors, Handbook of Markov Chain Monte Carlo . Chapman and Hall/CRC. [50] Noble, M., Grenioux, L., Gabri´ e, M., and Oliviero Durmus, A. (2025). Learned reference-based diffusion sampler for multi-modal distributions. In International Conference on Learning Representations , volume 2025, pages 47046–47100. [51] N¨ usken, N. and Richter, L. (2021). Solving high-dimensional Hamilton–Jacobi–Bellman PDEs using neural networks: perspectives from the theory of controlled diffusions and measures on path space. Partial Differential Equations and Applications , 2(4):1–48. [52] Okabe, T., Kawata, M., Okamoto, Y., and Mikami, M. (2001). Replica-exchange Monte Carlo method for the isobaric–isothermal ensemble. Chemical Physics Letters , 335(5-6):435–439. [53] Papamakarios, G., Nalisnick, E., Rezende, D. J., Mohamed, S., and Lakshminarayanan, B. (2021). Normalizing flows for probabilistic modeling and inference. Journal of Machine Learning Research , 22(57):1–64. 50 [54] Phillips, A., Dau, H.-D., Hutchinson, M. J., De Bortoli, V., Deligiannidis, G., and Doucet, A. (2024). Particle denoising diffusion sampler. In International Conference on Machine Learning .[55] Pompe, E., Holmes, C., and L atuszy´ nski, K. (2020). A framework for adaptive MCMC targeting multimodal distributions. Annals of Statistics , 48(5):2930–2952. [56] Qin, Q., Ju, N., and Wang, G. (2025). Spectral gap bounds for reversible hybrid Gibbs chains. 
+
+The Annals of Statistics , 53(4):1613–1638. [57] Richter, L. and Berner, J. (2024). Improved sampling via learned diffusions. In The Twelfth International Conference on Learning Representations .[58] Roberts, G. O., Gelman, A., and Gilks, W. R. (1997). Weak convergence and optimal scaling of random walk Metropolis algorithms. The Annals of Applied Probability , 7(1):110–120. [59] Roberts, G. O. and Rosenthal, J. S. (2001). Optimal scaling for various Metropolis–Hastings algorithms. Statistical Science , 16(4):351–367. [60] Roberts, G. O. and Tweedie, R. L. (1996). Exponential convergence of Langevin distributions and their discrete approximations. Bernoulli , 2(3):341–363. [61] Song, Y. and Ermon, S. (2019). Generative modeling by estimating gradients of the data distribution. Advances in Neural Information Processing Systems , 32. [62] Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Ermon, S., and Poole, B. (2021). Score-based generative modeling through stochastic differential equations. International Conference on Learning Representations .[63] Srivastava, V. K. and Giles, D. E. (1987). Seemingly unrelated regression equations models: Estimation and inference , volume 80. CRC Press. [64] Sun, J., Berner, J., Richter, L., Zeinhofer, M., M¨ uller, J., Azizzadenesheli, K., and Anandkumar, A. (2024). Dynamical measure transport and neural PDE solvers for sampling. arXiv preprint arXiv:2407.07873 .[65] Sundberg, R. (2010). Flat and multimodal likelihoods and model lack of fit in curved exponential families. Scandinavian Journal of Statistics , 37. [66] Swendsen, R. H. and Wang, J.-S. (1986). Replica Monte Carlo simulation of spin-glasses. 
+
+Physical Review Letters , 57(21):2607. [67] Tan, L. and Lu, J. (2025). Accelerate Langevin sampling with birth-death process and exploration component. SIAM/ASA Journal on Uncertainty Quantification , 13(3):1265–1293. [68] Tawn, N. G., Roberts, G. O., and Rosenthal, J. S. (2018). Weight-preserving simulated tempering. Statistics and Computing , 30:27 – 41. [69] Tawn, N. G., Roberts, G. O., and Rosenthal, J. S. (2020). Annealed leap-point sampler for multimodal target distributions. arXiv preprint arXiv:2012.15830 .[70] Tjelmeland, H. and Hegstad, B. K. (2001). Mode jumping proposals in MCMC. Scandinavian Journal of Statistics , 28(1):205–223. 51 [71] Vargas, F., Grathwohl, W. S., and Doucet, A. (2023). Denoising diffusion samplers. In The Eleventh International Conference on Learning Representations .[72] Vargas, F., Padhy, S., Blessing, D., and N¨ usken, N. (2024). Transport meets variational inference: Controlled Monte Carlo diffusions. In The Twelfth International Conference on Learning Representations .[73] Wibisono, A. (2026). Mixing time of the proximal sampler in relative Fisher information via strong data processing inequality. IEEE Transactions on Information Theory .[74] Woodard, D. B., Schmidler, S. C., and Huber, M. (2009). Sufficient conditions for torpid mixing of parallel and simulated tempering. Electronic Journal of Probability , 14:780–804. [75] Yang, J., Roberts, G. O., and Rosenthal, J. S. (2020). Optimal scaling of random-walk Metropolis algorithms on general target distributions. Stochastic Processes and their Applications ,130(10):6094–6132. [76] Zellner, A. (1962). An efficient method of estimating seemingly unrelated regressions and tests for aggregation bias. Journal of the American statistical Association , 57(298):348–368. [77] Zhang, Q. and Chen, Y. (2022). Path integral sampler: A stochastic control approach for sampling. In International Conference on Learning Representations (ICLR) .[78] Zhou, Y., Johansen, A. M., and Aston, J. A. (2016). Toward automatic model comparison: an adaptive sequential Monte Carlo approach. Journal of Computational and Graphical Statistics ,25(3):701–726. 52

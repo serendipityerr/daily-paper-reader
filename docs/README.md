@@ -6,26 +6,31 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-13
-- 运行时间：2026-07-13 20:56:01 UTC
+- 最新运行日期：2026-07-14
+- 运行时间：2026-07-14 21:31:39 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：1
-- 速读区：0
+- 本次总论文数：3
+- 精读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读一篇高分论文《Convex Relaxations for the Optimization of Markov Processes》，获评9.0/10。  
-该研究为马可夫过程的优化提供了有效的凸松弛方法，值得关注其理论突破与应用潜力。  
-建议对优化理论或随机过程感兴趣的读者优先阅读这篇论文，以掌握前沿技术。
-- 详情：[/202607/13/README](/202607/13/README)
+1) 今日精选3篇扩散模型论文，精读2篇分别评分9.0和8.0。  
+2) 最值得看的是《Conditional Optimal Bridge》提出的黎曼流形激活控制方法，以及《MCMC with Diffusion Paths》将MCMC与扩散路径结合的新思路。  
+3) 建议优先精读9.0分论文，掌握黎曼几何在扩散引导中的高效应用，其次可速读6.0分论文了解跳跃扩散的统一视角。
+- 详情：[/202607/14/README](/202607/14/README)
 
 ### 精读区论文标签
-1. [Convex Relaxations for the Optimization of Markov Processes](/202607/13/2607.09423v1-convex-relaxations-for-the-optimization-of-markov-processes)  
+1. [Conditional Optimal Bridge for Riemannian Activation Steering](/202607/14/2607.10517v1-conditional-optimal-bridge-for-riemannian-activation-steering)  
    标签：评分：9.0/10、query:diff-bridge
-   evidence：优化插值两个指定概率分布的马尔可夫过程，涉及动态最优传输
+   evidence：将激活转向建模为残差流超球面上的薛定谔桥问题
+2. [Markov Chain Monte Carlo with Diffusion Paths](/202607/14/2607.11631v1-markov-chain-monte-carlo-with-diffusion-paths)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：扩散路径在目标分布和参考分布之间插值
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [Sticky Jump Diffusions: A Unifying View of Masked, Continuous, and Hybrid Diffusion](/202607/14/2607.10951v1-sticky-jump-diffusions-a-unifying-view-of-masked-continuous-and-hybrid-diffusion)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：粘性跳跃扩散统一了扩散范式，包含时间反转和分数驱动SDE，与随机桥过程类似
 
 
 <div class="dpr-home-promo-card">
