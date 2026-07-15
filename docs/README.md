@@ -6,31 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-14
-- 运行时间：2026-07-14 21:31:39 UTC
+- 最新运行日期：2026-07-15
+- 运行时间：2026-07-15 20:06:04 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：2
-- 速读区：1
+- 本次总论文数：2
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-1) 今日精选3篇扩散模型论文，精读2篇分别评分9.0和8.0。  
-2) 最值得看的是《Conditional Optimal Bridge》提出的黎曼流形激活控制方法，以及《MCMC with Diffusion Paths》将MCMC与扩散路径结合的新思路。  
-3) 建议优先精读9.0分论文，掌握黎曼几何在扩散引导中的高效应用，其次可速读6.0分论文了解跳跃扩散的统一视角。
-- 详情：[/202607/14/README](/202607/14/README)
+今日速读2篇论文，聚焦扩散模型采样稳定性与概率流熵正则化。  
+值得关注：扩散模型正向过程分数准确度不保证数值稳定性；路径依赖熵拉格朗日法可提升概率流平衡性。  
+建议关注数值稳定性对生成质量的影响，并尝试基于熵的路线规划方法。
+- 详情：[/202607/15/README](/202607/15/README)
 
 ### 精读区论文标签
-1. [Conditional Optimal Bridge for Riemannian Activation Steering](/202607/14/2607.10517v1-conditional-optimal-bridge-for-riemannian-activation-steering)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：将激活转向建模为残差流超球面上的薛定谔桥问题
-2. [Markov Chain Monte Carlo with Diffusion Paths](/202607/14/2607.11631v1-markov-chain-monte-carlo-with-diffusion-paths)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：扩散路径在目标分布和参考分布之间插值
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Sticky Jump Diffusions: A Unifying View of Masked, Continuous, and Hybrid Diffusion](/202607/14/2607.10951v1-sticky-jump-diffusions-a-unifying-view-of-masked-continuous-and-hybrid-diffusion)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：粘性跳跃扩散统一了扩散范式，包含时间反转和分数驱动SDE，与随机桥过程类似
+1. [Score Accuracy Along the Forward Diffusion Does Not Certify Numerical Stability in Diffusion Sampling](/202607/15/2607.08757v1-score-accuracy-along-the-forward-diffusion-does-not-certify-numerical-stability-in-diffusion-sampling)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：扩散采样中的分数准确性分析
+2. [Path-Dependent Entropic Lagrangian for Probability Flows: Balance--Entropy Routing and Composable Information Potentials](/202607/15/2607.10493v1-path-dependent-entropic-lagrangian-for-probability-flows-balance--entropy-routing-and-composable-information-potentials)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：路径依赖的熵拉格朗日用于概率流，与扩散过程的路径积分公式相关
 
 
 <div class="dpr-home-promo-card">
