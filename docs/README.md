@@ -6,29 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-15
-- 运行时间：2026-07-15 20:06:04 UTC
+- 最新运行日期：2026-07-16
+- 运行时间：2026-07-16 20:45:04 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：1
 - 精读区：0
-- 速读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今日速读2篇论文，聚焦扩散模型采样稳定性与概率流熵正则化。  
-值得关注：扩散模型正向过程分数准确度不保证数值稳定性；路径依赖熵拉格朗日法可提升概率流平衡性。  
-建议关注数值稳定性对生成质量的影响，并尝试基于熵的路线规划方法。
-- 详情：[/202607/15/README](/202607/15/README)
+今日阅读一篇动力系统能量景观学习论文，关注数据数量与质量的权衡。该研究提出一种基于能量变分最优传输的方法，为低质量数据下的建模提供新思路。建议对动力学系统建模感兴趣的读者可进一步了解其算法细节与适用场景。
+- 详情：[/202607/16/README](/202607/16/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Score Accuracy Along the Forward Diffusion Does Not Certify Numerical Stability in Diffusion Sampling](/202607/15/2607.08757v1-score-accuracy-along-the-forward-diffusion-does-not-certify-numerical-stability-in-diffusion-sampling)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：扩散采样中的分数准确性分析
-2. [Path-Dependent Entropic Lagrangian for Probability Flows: Balance--Entropy Routing and Composable Information Potentials](/202607/15/2607.10493v1-path-dependent-entropic-lagrangian-for-probability-flows-balance--entropy-routing-and-composable-information-potentials)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：路径依赖的熵拉格朗日用于概率流，与扩散过程的路径积分公式相关
+1. [Learning the Energy Landscapes of Dynamical Systems via Energetic Variational Optimal Transport under Data Quantity--Quality Trade-offs](/202607/16/2607.07919v1-learning-the-energy-landscapes-of-dynamical-systems-via-energetic-variational-optimal-transport-under-data-quantity--quality-trade-offs)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：提出了动态最优输运的能量变分方法，与桥中的最优输运相关
 
 
 <div class="dpr-home-promo-card">
