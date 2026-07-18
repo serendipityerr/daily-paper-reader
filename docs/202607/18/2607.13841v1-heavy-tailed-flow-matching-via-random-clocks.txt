@@ -1,0 +1,2176 @@
+Title: Heavy-Tailed Flow Matching via Random Clocks
+
+URL Source: https://arxiv.org/pdf/2607.13841v1
+
+Published Time: Thu, 16 Jul 2026 01:27:14 GMT
+
+Number of Pages: 40
+
+Markdown Content:
+# Heavy-Tailed Flow Matching via Random Clocks 
+
+Zhouhao Yang *
+
+zyang145@jhu.edu 
+
+Yezhen Wang †
+
+e1154541@u.nus.edu 
+
+Kenji Kawaguchi †
+
+kenji@comp.nus.edu.sg 
+
+Vladimir Braverman ‡
+
+vova@cs.jhu.edu 
+
+Haoyang Cao *
+
+hycao@jhu.edu 
+
+Abstract 
+
+Heavy-tailed data arise in many domains where rare events carry disproportionate impor-tance, such as imbalanced image datasets, financial returns, and weather extremes. Standard diffusion and flow-matching models typically begin from Gaussian noise or Gaussian source distributions, which yield tractable training targets but provide a poor inductive match for heavy-tailed data. We propose Heavy-Tailed Flow Matching via Random Clocks (HTFM), a framework that portrays heavy-tailed sources as mixtures of clock-conditioned Gaussian sources. Conditioning on a given clock path, the source distribution and flow are Gaussian; marginalizing over the clock gives a Gaussian scale mixture covering Gaussian, α-stable, and Student-t families. To make the clock-conditioned vector field practical, we encode the path-valued clock using truncated logsignature features, allowing the velocity field to adapt to the realized conditional space with negligible overhead. Empirically, on 2D imbalanced 
+
+α-stable mixtures, CIFAR10-LT, and HRRR weather fields, HTFM improves mode cover-age, sample quality, and tail-statistic recovery over Gaussian flow matching and competitive heavy-tailed baselines, while retaining the low-NFE sampling advantage of flow matching. Moreover, the random-clock formulation further provides a practical tail-control interface: by varying only the clock law or tail parameter, the same architecture can calibrate the “heaviness” of generated tails across different distribution families. 
+
+# 1 Introduction 
+
+In many real-world applications, rare or atypical observations carry disproportionately large impact relative to typical ones [8, 40]: hurricanes and heatwaves in operational weather and climate models [41, 12, 37, 15], the tail of asset returns in financial risk modeling [9, 13, 10], and minority classes in long-tailed image datasets [6, 32, 46]. A generative model is useful in such regimes only insofar as it reproduces these rare events with the right frequency and magnitude. This requirement is difficult for two related reasons. First, extreme observations are rare by construction, so empirical training data contains few samples from the relevant tail regions [15]. Second, many deep generative modeling pipelines begin from simple light-tailed randomness: variational autoencoders and generative adversarial networks commonly use Gaussian or uni-form latent priors [22, 14], while state-of-the-art diffusion and flow-matching models typically use Gaussian noising processes or Gaussian source distributions [18, 43, 29]. When the data distribution has substantially heavier tails, this light-tailed source is a poor inductive match: the model must learn tail behavior through the learned transport, which can make rare events difficult to reproduce accurately. A natural response is to replace the Gaussian source or noise with a heavy-tailed alternative. In diffusion and score-based modeling, L´ evy-Itˆ o models [45, 39] use α-stable noise but require 
+
+> ∗Department of Applied Mathematics and Statistics, Johns Hopkins University.
+> †School of Computing, National University of Singapore.
+> ‡Department of Computer Science, Johns Hopkins University.
+
+1arXiv:2607.13841v1 [cs.LG] 15 Jul 2026 nonlocal fractional-score machinery and are tied to a particular stable family. Denoising L´ evy probabilistic models (DLPM) [42] adapt the DDPM [18] construction to α-stable noise and use a denoising objective with robust aggregation over heavy-tailed randomness. Student-t-based diffusion and flow models [36] use Student-t kernels with a γ-divergence training loss and are restricted to the finite-variance regime ν > 2. Other constructions specialize the source or noise to heavy-tailed families such as Cauchy noise [28] or finite-activity jump diffusions [4]. Related tail limitations have also been studied for normalizing flows [19, 17]. These approaches demon-strate the value of heavy-tailed generative mechanisms, but they are typically built around a specific tail family and the corresponding score, kernel, sampler, or loss aggregation. In practice, the appropriate tail mechanism is rarely known in advance; a method built for one heavy-tailed family may be misspecified for another. This leaves a gap for flow matching [29, 31, 1]. Flow matching learns an ordinary differen-tial equation (ODE) that transports a source distribution to the data distribution by regressing tractable velocity targets along prescribed probability paths, rather than simulating a long reverse diffusion chain. This often enables high-quality sampling with a substantially lower number of function evaluations (NFE), and rectified-flow and optimal-transport variants fur-ther sharpen this sample-efficiency advantage [30, 44, 38, 24]. A heavy-tailed analogue of flow matching should therefore preserve the low-NFE advantages of flow matching while allowing source laws with heavier tails than Gaussians. Existing heavy-tailed diffusion and flow construc-tions make important progress, but their targets or divergences are usually derived separately for each chosen heavy-tailed family. In this paper, we propose Heavy-Tailed Flow Matching via Random Clock (HTFM). A ran-dom clock is a nondecreasing path-valued latent variable that controls the conditional covariance of the source distribution. Conditioning on a given clock path, the source distribution and the corresponding affine flow between source and data are Gaussian, so the endpoint-conditioned velocity target has the same algebraic form as in Gaussian conditional flow matching. After marginalizing over the clock, the source and flow can be heavy-tailed. The random-clock viewpoint gives a unified construction for several representative tail mech-anisms. A deterministic clock recovers vanilla Gaussian flow matching; an α-stable subordinator clock yields α-stable source marginals; and an inverse-gamma clock recovers Student-t marginals for any ν > 0, including the infinite-variance regime ν ≤ 2 not covered by finite-variance Student-t constructions [36]. Across these choices, the endpoint-conditioned target is derived in the same clock-conditioned Gaussian space, avoiding family-specific score formulas, direct use of generally unavailable α-stable densities, or Student-t-specific kernels. The remaining difficulty is that the pathwise optimal vector field is determined by the realized clock path, an infinite-dimensional object. Passing the full path into the velocity field would amount to an operator-learning problem [25] and would undermine the practical simplicity of flow sampling. We instead characterize the clock path by a finite-dimensional truncated logsignature feature [33, 7]. Path signatures enable universal finite-dimensional representations of stream-valued data and have been used as kernels, feature maps, and differentiable neural components [27, 23, 20, 21, 35]. This lets the velocity field adapt to the realized clock at negligible training and sampling cost. Empirically, our experiments support three findings about the random clock: (i) heavy-tailed clocks improve over the Gaussian-clock variant across benchmarks; (ii) different clock families behave differently even at matched polynomial tail-decay rates, indicating that the clock family is a meaningful design knob beyond tail heaviness; and (iii) explicit clock conditioning of the velocity field provides gains beyond simply sampling from a heavy-tailed source. The contributions of our paper can be summarized as follows: 1. A random-clock frame-work for heavy-tailed flow matching. We introduce HTFM, a flow-matching framework in which a path-valued random clock controls the conditional source covariance. Conditioning on the realized clock gives a Gaussian conditional source and a tractable endpoint-conditioned 2affine target; marginalizing over clocks recovers Gaussian scale-mixture families, including Gaus-sian, α-stable, and Student-t sources. 2. Signature-based clock conditioning. We encode the path-valued clock using truncated logsignature features, allowing the neural velocity field to adapt to the realized conditional Gaussian space with negligible additional cost. This provides a finite-dimensional interface for clock-conditioned vector fields. 3. Empirical results. Ex-periments on 2D imbalanced α-stable mixtures, CIFAR10-LT, and HRRR weather fields show that heavy-tailed clock laws improve over the Gaussian-clock variant and that the clock fam-ily remains important even at matched polynomial tail-decay rates. On CIFAR10-LT, HTFM compares favorably with existing heavy-tailed diffusion and ODE-based baselines, especially at low NFE; ablations further show that signature conditioning improves over using a heavy-tailed source alone. 
+
+# 2 Preliminaries 
+
+2.1 Flow matching 
+
+Flow matching learns a time-dependent vector field whose ODE transports a source distribution 
+
+p0 to the data distribution pdata . Let Xt ∈ Rd denote the state of the flow at time t ∈ [0 , 1], a stochastic process with X0 ∼ p0 and marginal law pt = Law( Xt). Concretely, consider the ODE flow dXt
+
+dt = ut(Xt), t ∈ [0 , 1] , X0 ∼ p0, (2.1) whose marginal density evolves according to the continuity equation. The goal is to choose ut
+
+so that p1 = pdata . Given the probability flow ( pt)t∈[0 ,1] and its marginal velocity field ut, the ideal marginal flow-matching (FM) objective is 
+
+LFM (θ) = Et∼Unif(0 ,1) EXt∼pt
+
+h
+
+uθ(Xt, t ) − ut(Xt) 22
+
+i
+
+. (2.2) However, the marginal field ut is usually intractable. Conditional flow matching (CFM) therefore conditions on a data endpoint X1 ∼ pdata and specifies an endpoint-conditioned path pt(· | X1)with tractable conditional velocity vt(· | X1). The corresponding objective is 
+
+LCFM (θ) = Et∼Unif(0 ,1) EX1∼pdata EXt∼pt(·| X1)
+
+h
+
+uθ(Xt, t ) − vt(Xt | X1) 22
+
+i
+
+. (2.3) Under standard L2-integrability and differentiability assumptions, the conditional and marginal objectives differ only by a θ-independent constant, so their gradients agree [29, 44]. This L2-projection principle is the basic mechanism we preserve in our framework proposed later in Section 3. 
+
+2.2 Heavy-tailed noises as Gaussian scale mixtures 
+
+Gaussian and heavy-tailed laws are primarily distinguished by their tail decay. Gaussian tails are exponentially small, whereas many heavy-tailed laws exhibit only polynomial decay. Such laws are often better suited to modeling rare but non-negligible large deviations. A convenient latent-Gaussian framework for symmetric heavy-tailed modeling is provided by Gaussian scale mixtures. Let V be a latent scale variable and let G ∼ N (0 , I d) be independent of V . A random vector X ∈ Rd is called a Gaussian scale mixture if it admits a representation of the form X = L(V )G, where L(V ) ∈ Rd×d is a measurable random matrix. Equivalently, 
+
+X | V ∼ N  0, Σ( V ), Σ( V ) := L(V )L(V )⊤. (2.4) Thus, conditioning on the latent variable V , the law remains Gaussian, whereas marginalizing over specific choices of V can recover a heavy-tailed marginal law. The mechanism is simple: 3rare large values of the latent scale generate broad conditional Gaussians, and the mixture assigns non-negligible probability to large deviations even though every conditional component is light-tailed. Representative examples include symmetric α-stable laws and Student-t laws; their concrete scale-mixture forms are recalled in Appendix A.3. This latent-Gaussian viewpoint suggests a natural strategy for flow matching. Rather than trying to regress directly against a heavy-tailed marginal flow, we condition on the latent mixing object so that the interpolation becomes conditionally Gaussian. We may then derive the conditional flow-matching target in this Gaussian regime and exploit the L2 projection principle from Section 2.1. This conditional-Gaussian perspective is also closely related to [42], which uses a conditioned representation of α-stable noise to build tractable denoising targets for diffusion models. The Gaussian scale-mixture viewpoint is already broad enough to cover many symmetric heavy-tailed laws and will be the focus of the main development in this paper. A broader latent-Gaussian framework, obtained by allowing a nonzero conditional mean in (2.4) and hence passing from Gaussian scale mixtures to Gaussian mean-variance mixtures, can also accommodate more general families of asymmetric heavy-tailed laws; we defer this extension to Appendix A.4. 
+
+# 3 Heavy-Tailed Flow Matching via Random Clocks 
+
+This section develops the random-clock framework for heavy-tailed flow matching; a related diffusion-model extension is given in Appendix B. The latent-Gaussian representation in Section 2.2 suggests replacing the scalar mixing vari-able V by a path-valued latent object, if we want to work on flow matching. We call this object a 
+
+random clock . Formally, let D([0 , 1]; R+) := {τ : [0 , 1] → R+ τ is c` adl` ag and nondecreasing },
+
+equipped with its Borel σ-field. A random clock is a random element on a probability space (Ω T , FT , PT ), T : Ω T → D([0 , 1]; R+), and we write T[0 ,1] = ( Tt)t∈[0 ,1] for the full realized clock path. Throughout, T0 = 0 almost surely. The clock is sampled independently of the base randomness used to construct the source and target variables, such as a standard Gaussian G and X1 ∼ pdata . Clock-dependent sources are nevertheless allowed: for example, X0 = L(T[0 ,1] )G is conditionally Gaussian given the realized clock path but is not independent of the clock after it is formed. 
+
+3.1 Clock-conditioned dynamics and objectives 
+
+Motivated by Section 2.2, we formulate heavy-tailed flow matching pathwise , that is, condi-tioning on a realized clock path, and reserve the outer averaging over the random clock for the final objective. Let T = ( Tt)t∈[0 ,1] be a random clock 1, and fix a realization of the full clock path T[0 ,1] .We write XTt , pTt , and uTt for the clock-conditioned process, its law pTt := Law( XTt ), and its velocity field under this realized clock path. Due to the independence of the data law and the random clock, we write XT 
+
+> 1
+
+:= X1 for the terminal data variable, and pdata (· | T[0 ,1] ) = pdata .We consider the clock-conditioned ODE dXTt
+
+dt = uTt (XTt ), t ∈ [0 , 1] , XT 
+
+> 0
+
+∼ pT 
+
+> 0
+
+:= p0(· | T[0 ,1] ), (3.1) whose conditional density satisfies the continuity equation ∂tpTt + ∇ · (pTt uTt ) = 0 . Equivalently, one may view uTt (·) as the evaluation at T[0 ,1] of a measurable map ut : Rd × D([0 , 1]; R+) → Rd.Our goal is to construct, for each realized T[0 ,1] , a flow from pT 
+
+> 0
+
+at time t = 0 to the terminal law pdata at time t = 1.   
+
+> 1When appearing as a superscript, Tindicates the clock path and is not an exponent or transpose.
+
+4Random Clock T t      
+
+> Small Random Clock  Large Random Clock
+> Clock -Conditioned Noise
+> (Light -Tailed) Data Marginal Noise
+> (Heavy -Tailed)
+> T0T110
+> Clock -Conditioned Time Original Time
+
+Figure 1: Overview of random-clock conditioning for heavy-tailed flow matching. The right col-umn shows two realized clock paths: a large clock realization (top) and a small clock realization (bottom). For each fixed clock path T , the source distribution is conditionally Gaussian, and the model learns a clock-conditioned flow from this light-tailed conditional source to the data distribution. Larger clock realizations induce broader conditional source distributions, while smaller clock realizations induce more concentrated ones. After marginalizing over clock paths, the mixture of these conditional Gaussian sources yields a heavy-tailed marginal source distri-bution. Intuitively, conditioning on a realized clock path locally stretches or compresses physical time. This conditioning moves the heavy-tailedness into the outer randomness of the clock, while the inner pathwise problem becomes conditionally Gaussian and therefore amenable to the usual L2-projection argument of flow matching. An illustration is provided in Figure 1. 
+
+Training objective. For brevity, after fixing T[0 ,1] we write EXTt for expectation under pTt ,and EXTt |XT 
+
+> 1
+
+for expectation under Law( XTt | XT 
+
+> 1
+
+, T [0 ,1] ). The pathwise marginal quadratic risk and the corresponding heavy-tailed flow-matching objective are 
+
+LHTFM (θ) := Et∼Unif(0 ,1) ET
+
+h
+
+EXTt
+
+∥uθ(XTt , t, T [0 ,1] ) − uTt (XTt )∥22
+
+i| {z }   
+
+> =: Rmarg
+> t(θ;T)
+
+. (3.2) The risk Rmarg  
+
+> t
+
+(θ; T ) is typically intractable because the pathwise marginal velocity uTt is un-known. As in [29, 31], we therefore introduce a tractable endpoint-conditioned formulation: for each fixed realized clock path T[0 ,1] , denote a conditional path pTt (· | x1) := Law( XTt | XT 
+
+> 1
+
+= x1)and a corresponding pathwise conditional velocity field vTt (· | x1) : Rd → Rd such that, for a.e. 
+
+t ∈ [0 , 1], 
+
+pTt (x) = 
+
+Z
+
+> Rd
+
+pTt (x | x1) pdata (d x1), pTt (x) uTt (x) = 
+
+Z
+
+> Rd
+
+pTt (x | x1) vTt (x | x1) pdata (d x1). (3.3) The corresponding endpoint-conditioned heavy-tailed flow-matching objective writes 
+
+LCHTFM (θ) := Et∼Unif(0 ,1) ET,X T
+
+> 1
+
+h
+
+EXTt |XT
+
+> 1
+
+∥uθ(XTt , t, T [0 ,1] ) − vTt (XTt | XT 
+
+> 1
+
+)∥22
+
+i| {z }    
+
+> =: Rcond
+> t(θ;XT
+> 1,T )
+
+. (3.4) 5The following proposition is the clock-conditioned analogue of the standard conditional– marginal equivalence [29, 31]. The standard identity requires a finite-second-moment marginal velocity and breaks down for heavy-tailed sources; recasting it pathwise in T is what makes the equivalence available in our setting, as discussed after the proposition. Assumptions and proof are in Appendix C.3. 
+
+Proposition 3.1 (Pathwise conditional–marginal equivalence) . Under the integrability and dif-ferentiability conditions in Appendix C.3, for a.e. t there exists a nonnegative Ct(T ), independent of θ, such that E Rcond  
+
+> t
+
+(θ; XT 
+
+> 1
+
+, T ) T[0 ,1] 
+
+ = Rmarg  
+
+> t
+
+(θ; T ) + Ct(T ). Consequently, whenever the risks and Ct(T ) are integrable over (t, T ) with t ∼ Unif(0 , 1) ,
+
+LCHTFM (θ) = LHTFM (θ) + Et∼Unif(0 ,1) ET [Ct(T )] . (3.5) 
+
+Thus, whenever the additive constant is finite, the two objectives have the same minimizers; when differentiation may be exchanged with the expectations, their gradients in θ are also iden-tical. 
+
+Why a clock-conditioned formulation? Without this conditioning, one would attempt to learn the unconditional marginal velocity u∗ 
+
+> t
+
+through an L2-risk of the form EXt [∥uθ(Xt, t ) −
+
+u∗ 
+
+> t
+
+(Xt)∥22], which may fail to be finite under heavy tails, since heavy-tailed laws need only admit moments of order p < 2. In practice, this infinite-variance effect can appear as exploding or highly unstable quadratic training losses, as observed in L´ evy-based models such as LIM and addressed explicitly by DLPM through robust aggregation [45, 42]. Replacing the L2-loss by a generic Lp-loss is not a satisfactory theoretical remedy either, because it destroys the L2
+
+projection structure underlying the conditional–marginal equivalence. HTFM instead fixes the realized clock path before applying flow matching. In this clock-conditioned space, the source is Gaussian and the standard conditional-flow-matching projection identity applies pathwise under Proposition 3.1. The heavy-tailedness is then pushed to the outer clock average, whose finiteness is handled by separate integrability assumptions. 
+
+3.2 Signature feature for path conditioning 
+
+The objective (3.4) fixes the inner conditional regression space through its dependence on the path-valued variable T[0 ,1] . Because T[0 ,1] is infinite-dimensional, it cannot be passed directly to a neural field; we therefore summarize the realized clock path by a finite-dimensional path-signature feature, taking the truncated logsignature ℓm(T ) defined below. Path signatures originate in rough path theory [33, 7] and have been widely used as universal finite-dimensional encodings of stream-valued data in machine learning, both as differentiable neural-network layers [20, 21] and as kernels and feature maps for sequential data [27, 23]; they are computationally cheap to evaluate yet expressive, separating paths up to tree-like equivalence on suitable compact families (Proposition D.1 in Appendix D.1). 
+
+Time-augmented signature. Let Ts := ( s, T s) ∈ R2, s ∈ [0 , 1], be the time-augmented clock path. Its truncated signature of order m is the iterated-integral tensor 
+
+ϕm(T ) := S(≤m)(T) = 
+
+
+
+1,
+
+Z  
+
+> 0<u 1<··· <u k<1
+
+dTu1 ⊗ · · · ⊗ dTuk
+
+mk=1 
+
+
+
+∈ RDm . (3.6) Time augmentation captures how clock mass is allocated in physical time. For c` adl` ag clocks observed on a discretization 0 = t0 < t 1 < · · · < t N = 1, we linearly interpolate the sampled time-augmented points  (ti, T ti )Ni=0 and take the truncated signature of the resulting piecewise linear path; this is the operational meaning of ϕm(T ) used throughout the paper. For a more 6compact representation we additionally use the truncated logsignature ℓm(T ) := log ⊗
+
+ ϕm(T ),computed in the truncated tensor algebra. The dimension reduction is substantial: for q = 2 and m = 3, the raw signature has 15 coordinates whereas the nonconstant logsignature has only 5. Precise jump conventions, dimension formulas, and the lead–lag and piecewise-constant variants are deferred to Appendix D. 
+
+Network conditioning. The neural velocity field uses ℓm(T ) as an auxiliary conditioning input alongside the scalar time t and the state XTt . In the experiments we use the concat-std 
+
+variant: ℓm(T ) is standardized using running statistics collected during training, projected to a fixed embedding size by a small learnable linear map, and concatenated with the time embedding before being injected into every residual block of the velocity-field backbone. Replacing the full path argument in (3.4) by ℓm(T ) gives the practical signature-conditioned endpoint objective 
+
+Lsig CHTFM (θ) := Et∼Unif(0 ,1) ET,X T
+
+> 1
+
+h
+
+EXTt |XT
+
+> 1
+
+h
+
+uθ(XTt , t, ℓ m(T )) − vTt (XTt | XT 
+
+> 1
+
+) 22
+
+ii 
+
+. (3.7) 
+
+Computational overhead. The signature pipeline adds a one-shot logsignature computation of complexity O(N q m) (with N clock observation points and q = 2, m ≤ 3 in our experiments), plus a small linear projection of ℓm(T ) concatenated with the time embedding. This cost is independent of the data dimension and negligible compared to a single forward pass of the velocity-field backbone on XTt ; no extra denoising or solver step is introduced. 
+
+3.3 Flow design and transport interpretation 
+
+We now specify the affine flow family used in this paper. Let Σ : D([0 , 1]; R+) → Sd 
+
+> +
+
+be a measurable map into the cone of symmetric positive semidefinite d × d matrices. Suppose that, conditioned on the realized clock path, XT 
+
+> 0
+
+∼ N  0, Σ( T[0 ,1] ), and that XT 
+
+> 0
+
+and XT 
+
+> 1
+
+are conditionally independent given T[0 ,1] . Let αTt and βTt be clock-dependent schedules such that, for almost every realized clock path, t 7 → αTt and t 7 → βTt are absolutely continuous and satisfy 
+
+αT 
+
+> 0
+
+= 0 , β T 
+
+> 0
+
+= 1 , α T 
+
+> 1
+
+= 1 , β T 
+
+> 1
+
+= 0 , β Tt > 0 for t ∈ [0 , 1) . The clock-conditioned affine path is then 
+
+XTt = αTt XT 
+
+> 1
+
++ βTt XT 
+
+> 0
+
+, t ∈ [0 , 1] . (3.8) Under (3.8), for each x1 ∈ Rd and each realized clock path T[0 ,1] , the conditional law of XTt is Gaussian (derivation in Appendix C.2): 
+
+pTt (· | x1) = Law( XTt | XT 
+
+> 1
+
+= x1) = N  αTt x1, (βTt )2Σ( T[0 ,1] ). (3.9) The random clock thus influences the interpolation through the conditional source covariance Σ( T[0 ,1] ) and through the schedule pair ( αTt , β Tt ); in both cases the path remains conditionally Gaussian once the clock is fixed. For a.e. t ∈ [0 , 1), differentiating (3.8) at fixed clock realization and substituting XT 
+
+> 0
+
+= ( XTt − αTt XT 
+
+> 1
+
+)/β Tt yields the explicit endpoint-conditioned target 
+
+vTt (x | x1) := E
+
+ dXTt
+
+dt XTt = x, X T 
+
+> 1
+
+= x1
+
+
+
+=
+
+> dβTt
+> dt
+
+βTt
+
+x + dαTt
+
+dt −
+
+> dβTt
+> dt
+
+βTt
+
+αTt
+
+!
+
+x1. (3.10) This is the same algebraic target as in Gaussian flow matching, with the deterministic schedules replaced by their clock-dependent versions. Training samples are generated by drawing T and then XTt from (3.8); the model regresses uθ(XTt , t, ℓ m(T )) toward (3.10) in (3.7). For generation, we sample T , compute ℓm(T ), draw XT 
+
+> 0
+
+∼ N (0 , Σ( T[0 ,1] )), and use a numerical ODE solver on dXTt = uθ∗ (XTt , t, ℓ m(T )) d t. 
+
+We now specialize to the straight-line flow used throughout our experiments; a more general signature-linear schedule family is deferred to Appendix D.1. 7Straight-line flow. Set αTt = t, βTt = 1 − t. Then (3.10) reduces to vTt (x | x1) = x1−x 
+
+> 1−t
+
+, t ∈
+
+[0 , 1) , and the endpoint-conditioned target has no explicit clock dependence. The clock still enters through the conditional law (3.9) via the source covariance, and hence through the projection defining the pathwise marginal optimum uTt (x) = E[vTt (XTt | XT 
+
+> 1
+
+) | XTt = x]. Anetwork that does not observe the clock can therefore only learn a clock-averaged field, whereas the clock-conditioned formulation learns the family of optima indexed by the realized clock path. This straight-line schedule cleanly recovers the heavy-tailed marginal source families used in our experiments, and additionally admits a pathwise Wp-geodesic interpretation under a p-optimal endpoint coupling that remains valid in the infinite-second-moment regime p < 2. See Appendix C.4 for the additional theorem. 
+
+Heavy-tailed marginals from clock laws. With the straight-line schedule, choosing the clock law and source covariance recovers the named heavy-tailed marginal families used in our experiments. Throughout this paragraph, Xt denotes the clock-marginal variable obtained by first sampling T and then sampling XTt in the corresponding clock-conditioned space. Equiva-lently, Law( Xt | X1 = x1) = ET
+
+Law( XTt | XT 
+
+> 1
+
+= x1, T [0 ,1] ) .2 For the representative examples, we use the area-clock covariance Σ A(T[0 ,1] ) := 2 A(T )Id, where A(T ) := R 10 Ts ds. The follow-ing theorem states that the same clock-conditioned Gaussian construction can recover three commonly used source families: Gaussian, α-stable, and Student-t. The proof is deferred to Appendix C.5. 
+
+Theorem 3.2 (Recovered clock marginals) . Assume the affine path (3.8) , the clock-independent straight-line schedule, and the covariance map ΣA(T[0 ,1] ). For notational brevity, write pt(· | 
+
+x1) := Law( Xt | X1 = x1). For every t ∈ [0 , 1) and x1 ∈ Rd, the following identities hold. 
+
+(i) If Tt = t, then pt(· | x1) = N (αtx1, β 2 
+
+> t
+
+Id), with sub-Gaussian tail decay. 
+
+(ii) Let α ∈ (0 , 2) , ρ = α/ 2, and let T be a ρ-stable subordinator normalized by E[e−sT t ] = exp( −(ρ+1) ts ρ/2) . Then pt(· | x1) is a location-shifted isotropic α-stable law with location αtx1,scale βt. In particular, its radial tail satisfies P (∥Xt − αtx1∥2 > r | X1 = x1) = Θ( r−α), r →∞.
+
+(iii) Let ν > 0. If Vν ∼ InvGamma( ν/ 2, ν/ 2) and Tt = tV ν , then pt(· | x1) is a multivariate Student-t law with location αtx1, scale β2 
+
+> t
+
+Id, ν degrees of freedom. In particular, its radial tail satisfies P (∥Xt − αtx1∥2 > r | X1 = x1) = Θ( r−ν ), r → ∞ .
+
+Beyond clock-independent straight-line schedules. The schedules αTt , β Tt may them-selves depend on the realized clock path through its truncated signature; concrete signature-linear and VE-type parameterizations and a near-linear boundary-corrected variant are collected in Appendices D.1, D.2, and A.5. Such clock-dependent schedules generally produce broader Gaussian-mixture sources rather than exact α-stable or Student-t laws, so the named recov-eries of Theorem 3.2 are specific to the clock-independent case. A detailed comparison of the random-clock formulation with DLPM, LIM, and Student-t-based heavy-tailed diffusion fami-lies, together with a discussion of data-adaptive clock laws, is given in Appendix A.2. 
+
+# 4 Experiments 
+
+To assess the effectiveness and generality of the proposed heavy-tailed flow matching model via random clock, we conduct extensive experiments across three benchmarks of increasing dimension and distinct noise structure. Full experimental details are provided in Appendix E. Ablation studies on flow type, number of function evaluations (NFE), and ODE solver are deferred to Appendix F.              
+
+> 2When ETis applied to laws, it denotes the clock mixture: ( ETμT)( B) := RμT(B)PT(d T) for every Borel set B⊆Rd. This does not require finite moments of the clock-marginal law.
+
+84.1 Experimental Setup 
+
+Datasets We use three benchmarks of increasing dimension and distinct heavy-tail structure. 
+
+(i) 2D imbalanced α-stable mixture [42] : a 9-component isotropic α-stable mixture on a 3 ×3 grid with imbalanced weights, swept over per-component stability index αD ∈ { 1.5, 1.8} (smaller αD
+
+gives heavier tails). (ii) CIFAR10-LT [6, 26] : a long-tailed subsample of CIFAR-10 at 32 ×32 with imbalance ratio ρ=0 .01. CIFAR10-LT also serves as the testbed for baseline comparison and ablations. (iii) HRRR VIL [5, 12, 36] : hourly Vertically Integrated Liquid (VIL) analyses from the High-Resolution Rapid Refresh archive, cropped to 128 ×128 over the Central US; VIL is a strongly right-tailed quantity tied to convective weather extremes, following [36]. Sample sizes, splits, augmentations, backbones, optimizers, and samplers are detailed in Appendix E. 
+
+Tasks and Metrics On 2D α-stable mixtures, we evaluate mode coverage ability across mod-els using the precision–recall f pr 1 score [42], computed between real and generated samples. On CIFAR10-LT, we report Fr´ echet Inception Distance [16] (FID), computed against the full long-tailed training split. On HRRR VIL, we follow [37, 36] and evaluate unconditional generation of VIL fields. For quantitative tail analysis, we compare flattened generated and test-set intensity samples using three one-dimensional tail-aware statistics: the kurtosis ratio (KR), skewness ratio (SR), and a tail-restricted two-sample Kolmogorov–Smirnov statistic (KS). All results are averaged over 3 random seeds. Formal definitions and implementation details are provided in Appendix E.3. 
+
+Methods Following Theorem 3.2, different specifications of clock lead to different underlying source distribution for HTFM. In the following, we refer to the deterministic-clock variant 
+
+Tt=t as HTFM-G, essentially recovering the standard Gaussian flow matching; the α/ 2-stable subordinator clock as HTFM-α; and the inverse-Gamma clock Tt=tV ν for student-t, where 
+
+Vν ∼ InvGamma( ν/ 2, ν/ 2), as HTFM-t. Each variant is indexed by the polynomial tail-decay rate of its source: pα for α-stable, pν for Student-t, and p=∞ for Gaussian (since Gaussians essentially have exponential tail decay). Thus, the polynomial tail-decay rate serves as the tail-calibration parameter across clock families. 
+
+4.2 Cross-Domain Tail Calibration with Random Clocks                                                              
+
+> Method 2D synthetic ( fpr 1↑)CIFAR10-LT HRRR VIL Variant pαD=1 .5αD=1 .8FID ↓KR ↓SR ↓KS ↓
+> HTFM-G ∞0.888 0.893 19.29 0.72 0.68 0.42 HTFM-α
+> 1.6 0.943 0.934 16.19 0.04 0.11 0.11 1.7 0.941 0.923 16.10 0.47 0.06 0.04 1.8 0.931 0.921 15.89 0.06 0.31 0.03
+> HTFM-t
+> 1.7 0.962 0.959 16.31 0.56 0.14 0.14 2.0 0.954 0.950 16.76 0.43 0.52 0.21 3.0 0.943 0.939 16.14 0.16 0.41 0.16
+
+Table 1: HTFM main results across benchmarks. p is the polynomial tail-decay exponent ( pα for HTFM-α and 
+
+pν for HTFM-t). Bold indicates the best result in each column. We first study whether HTFM can act as a single heavy-tailed flow-matching framework across differ-ent datasets. For each benchmark, we keep the training protocol fixed and vary only the random-clock law and its tail parameter, thereby com-paring the Gaussian clock HTFM-G against the two heavy-tailed clock families HTFM-α and HTFM-t. We report one sampling budget per benchmark: f pr 1 at NFE=10 on the 2D mixture, FID at NFE=100 on CIFAR10-LT, and HRRR VIL tail statistics at NFE=50. See Appendix E for detailed information. Table 1 reveals two patterns. (i) HTFM with a heavy-tailed clock consistently out-performs HTFM-G across three datasets, which indicates that the random clock provides a useful inductive bias for heavy-tailed generation. (ii) The tail-decay exponent alone does not determine the best source family. At the matched decay rate p=1 .7, HTFM-t performs 9Method Noise Support NFE Polynomial Tail Decay Exponent                                                                                                                                                               
+
+> α-stable Student-tGaussian pα= 1 .6pα= 1 .7pα= 1 .8pα= 1 .9pν= 1 .7pν= 2 .0pν= 3 .0p=∞
+> Baselines Heavy Tailed Gaussian
+> LIM 20 135.9 130.2 126.8 132.5 ––––
+> ✓✗✗100 34.70 34.11 32.40 34.10 ––––500 20.22 19.18 18.23 20.60 ––––DLPM 20 29.16 28.55 32.49 30.96 –––35.49
+> ✓✗✓100 18.18 18.23 18.29 18.74 –––22.28 500 15.26 14.91 15.35 15.43 –––19.47 DLIM 20 21.30 23.90 22.75 24.50 –––25.45
+> ✓✗✓100 19.69 20.38 18.46 19.60 –––21.63 500 17.22 17.73 17.90 18.14 –––19.92 t-Flow 20 ––––––22.49 –
+> ✗✓✗100 ––––––19.05 –500 ––––––17.66 –
+> Our Framework Heavy Tailed Gaussian
+> HTFM 20 17.52 17.13 16.91 16.76 19.91 20.48 19.35 22.67
+> ✓✓✓100 16.19 16.10 15.89 16.21 16.31 16.76 16.14 19.29 500 15.27 15.04 14.99 15.67 15.97 16.51 15.38 19.04
+
+Table 2: Main CIFAR10-LT results. We report FID at each NFE while sweeping the polynomial tail-decay parameter p. A dash “–” marks method–tail pairs that are not applicable. best on the 2D mixture, whereas HTFM-α performs better on CIFAR10-LT and HRRR VIL. Thus, the polynomial tail-decay rate captures only part of the modeling choice: the shape of the source beyond its asymptotic tail rate, such as the jump structure of α-stable clocks versus the scale-mixture geometry of Student-t clocks, also interacts with the data distribution. This suggests that the clock family is a meaningful design knob even after the nominal tail heaviness is fixed. 
+
+4.3 Comparison with Baselines 
+
+In Table 2, we compare HTFM against four heavy-tailed generative baselines on CIFAR10-LT under matched backbone and training budget: LIM [45, 39], DLPM/DLIM [42], and t-Flow [36]. Columns sweep the polynomial tail-decay rate across the union of the α-stable range 
+
+pα ∈ { 1.6, 1.7, 1.8, 1.9}, the Student-t range pν ∈ { 1.7, 2.0, 3.0}, and the Gaussian limit p = ∞.Three observations can be made. (i) HTFM provides a versatile interface for tail calibration. LIM and DLPM/DLIM are tied to α-stable laws, while t-Flow is tied to the finite-variance Student-t regime. In contrast, HTFM recovers the Gaussian, α-stable, and Student-t
+
+regimes by changing only the random-clock law, while keeping the same backbone and train-ing objective. (ii) HTFM inherits the low-NFE efficiency of flow matching. At low NFE, HTFM substantially improves over the α-stable diffusion baselines LIM and DLPM; at larger NFE, HTFM and DLPM become more comparable. (iii) HTFM outperforms the ODE-based heavy-tailed samplers. Compared with DLIM and t-Flow, HTFM achieves consistently lower FID across the reported NFE budgets. 
+
+4.4 Ablation: Signature Order for Clock Conditioning 
+
+This ablation tests whether HTFM’s gains come solely from using a heavy-tailed source, or whether the velocity field also benefits from observing the realized clock. On CIFAR10-LT, we report FID at NFE= 100 while varying the order m of the logsignature feature ℓm(T ) supplied to the network (cf. (3.7)). The case m = 0 denotes no clock feature: the model is still trained with samples from the random-clock source, but only observes ( Xt, t ). For m ≥ 1, the model additionally receives logsignature features of the realized clock path, allowing the vector field to adapt to the corresponding conditional Gaussian space. For HTFM-t, the affine clock Tt = tV ν
+
+10 is already determined by first-order path information, so higher-order features are omitted.                                
+
+> Variant Tail exp. m= 0 m= 1 m= 2 HTFM-αpα= 1 .616.78 16.19 16.21
+> pα= 1 .716.65 16.10 16.46
+> pα= 1 .816.49 15.89 15.94 HTFM-tpν= 1 .718.72 16.31 –
+> pν= 2 .017.30 16.75 –
+> pν= 3 .016.58 16.14 –
+
+Table 3: Signature-order ablation on CIFAR10-LT. Bold indicates the best re-sult in each row. Table 3 demonstrates the effectiveness of using signature features for clock-conditioning in HTFM. Across all reported HTFM-α and HTFM-t settings, using m=1 improves over the clock-independent m=0 variant. Meanwhile, increasing the order from m=1 to m=2 does not provide a consistent additional gain, suggesting that first-order clock information already captures the dominant conditional-scale variation for this benchmark. 
+
+# 5 Conclusion 
+
+We introduced Heavy-Tailed Flow Matching via Random Clocks (HTFM), which represents different families of heavy-tailed sources as mixtures of clock-conditioned Gaussian sources within a single flow-matching objective. Using truncated logsignature features, HTFM con-ditions the velocity field on the realized clock with negligible overhead. Across 2D synthetic data, CIFAR10-LT, and HRRR weather fields, HTFM improves over the Gaussian-clock vari-ant, enables controllable tail calibration, and achieves favorable low-NFE performance against heavy-tailed baselines. 11 References 
+
+[1] Michael S Albergo and Eric Vanden-Eijnden. Building normalizing flows with stochastic interpolants. arXiv preprint arXiv:2209.15571 , 2022. [2] D. F. Andrews and C. L. Mallows. Scale mixtures of normal distributions. Journal of the Royal Statistical Society: Series B (Methodological) , 36(1):99–102, 1974. [3] O. Barndorff-Nielsen, J. Kent, and M. Sørensen. Normal variance-mean mixtures and z-distributions. International Statistical Review , 50(2):145–159, 1982. [4] Adrian Baule. Generative modelling with jump-diffusions. arXiv preprint arXiv:2503.06558 , 2025. [5] Stanley G Benjamin, Stephen S Weygandt, John M Brown, and ... A north american hourly assimilation and model forecast cycle: The rapid refresh. Monthly Weather Review ,144(4):1669–1694, 2016. [6] Kaidi Cao, Colin Wei, Adrien Gaidon, Nikos Arechiga, and Tengyu Ma. Learning imbal-anced datasets with label-distribution-aware margin loss. In Advances in Neural Informa-tion Processing Systems , 2019. [7] Ilya Chevyrev and Andrey Kormilitzin. A primer on the signature method in machine learning. In Signature Methods in Finance: An Introduction with Computational Applica-tions , pages 3–64. Springer, 2025. [8] Stuart Coles, Joanna Bawa, Lesley Trenner, and Pat Dorazio. An introduction to statistical modeling of extreme values , volume 208. Springer, 2001. [9] Rama Cont. Empirical properties of asset returns: stylized facts and statistical issues. 
+
+Quantitative Finance , 1(2):223–236, 2001. [10] Rama Cont, Mihai Cucuringu, Renyuan Xu, and Chao Zhang. Tail-gan: Learning to simulate tail risk scenarios. Management Science , 72(4):2917–2936, 2026. [11] Christa Cuchiero, Francesca Primavera, and Sara Svaluto-Ferro. Universal approximation theorems for continuous functions of c` adl` ag paths and l´ evy-type signature models. Finance and Stochastics , 29(2):289–342, 2025. [12] David C Dowell, Curtis R Alexander, Eric P James, Stephen S Weygandt, Stanley G Ben-jamin, Geoffrey S Manikin, Benjamin T Blake, John M Brown, Joseph B Olson, Ming Hu, et al. The high-resolution rapid refresh (hrrr): An hourly updating convection-allowing forecast model. part i: Motivation and system description. Weather and Forecasting ,37(8):1371–1395, 2022. [13] Paul Embrechts, Claudia Kl¨ uppelberg, and Thomas Mikosch. Modelling extremal events: for insurance and finance , volume 33. Springer Science & Business Media, 2013. [14] Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. In Advances in Neural Information Processing Systems , volume 27, 2014. [15] Gaby J Gr¨ undemann, Nick van de Giesen, Lukas Brunner, and Ruud van der Ent. Rarest rainfall events will see the greatest relative increase in magnitude under future climate change. Communications Earth & Environment , 3(1):235, 2022. 12 [16] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilib-rium. In Advances in Neural Information Processing Systems , 2017. [17] Tennessee Hickling and Dennis Prangle. Flexible tails for normalizing flows. In Proceedings of the 42nd International Conference on Machine Learning , volume 267 of Proceedings of Machine Learning Research , pages 23155–23178. PMLR, 2025. [18] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. 
+
+Advances in neural information processing systems , 33:6840–6851, 2020. [19] Priyank Jaini, Ivan Kobyzev, Yaoliang Yu, and Marcus Brubaker. Tails of Lipschitz tri-angular flows. In Proceedings of the 37th International Conference on Machine Learning ,volume 119 of Proceedings of Machine Learning Research , pages 4673–4681. PMLR, 2020. [20] Patrick Kidger, Patric Bonnier, Imanol Perez Arribas, Cristopher Salvi, and Terry Lyons. Deep signature transforms. Advances in neural information processing systems , 32, 2019. [21] Patrick Kidger and Terry J. Lyons. Signatory: differentiable computations of the signature and logsignature transforms, on both CPU and GPU. In International Conference on Learning Representations , 2021. [22] Diederik P. Kingma and Max Welling. Auto-encoding variational bayes. In International Conference on Learning Representations , 2014. [23] Franz J. Kiraly and Harald Oberhauser. Kernels for sequentially ordered data. Journal of Machine Learning Research , 20(31):1–45, 2019. [24] Nikita Kornilov, Petr Mokrov, Alexander Gasnikov, and Alexander Korotin. Optimal flow matching: Learning straight trajectories in just one step. Advances in Neural Information Processing Systems , 37:104180–104204, 2024. [25] Nikola Kovachki, Zongyi Li, Burigede Liu, Kamyar Azizzadenesheli, Kaushik Bhattacharya, Andrew Stuart, and Anima Anandkumar. Neural operator: Learning maps between func-tion spaces with applications to pdes. Journal of Machine Learning Research , 24(89):1–97, 2023. [26] Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. Technical report, University of Toronto, 2009. [27] Daniel Levin, Terry Lyons, and Hao Ni. Learning from the past, predicting the statistics for the future, learning an evolving system. arXiv preprint arXiv:1309.0260 , 2013. [28] Qi Lian, Yu Qi, and Yueming Wang. Cauchy diffusion: A heavy-tailed denoising diffu-sion probabilistic model for speech synthesis. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pages 24549–24557, 2025. [29] Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching for generative modeling. arXiv preprint arXiv:2210.02747 , 2022. [30] Qiang Liu. Rectified flow: A marginal preserving approach to optimal transport. arXiv preprint arXiv:2209.14577 , 2022. [31] Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and transfer data with rectified flow. arXiv preprint arXiv:2209.03003 , 2022. 13 [32] Ziwei Liu, Zhongqi Miao, Xiaohang Zhan, Jiayun Wang, Boqing Gong, and Stella X Yu. Large-scale long-tailed recognition in an open world. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 2537–2546, 2019. [33] Terry Lyons. Rough paths, signatures and the modelling of functions on streams. arXiv preprint arXiv:1405.4537 , 2014. [34] Frank J Massey Jr. The Kolmogorov–Smirnov test for goodness of fit. Journal of the American Statistical Association , 46(253):68–78, 1951. [35] James Morrill, Cristopher Salvi, Patrick Kidger, and James Foster. Neural rough differ-ential equations for long time series. In Proceedings of the 38th International Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research , pages 7829–7838. PMLR, 2021. [36] Kushagra Pandey, Jaideep Pathak, Yilun Xu, Stephan Mandt, Michael Pritchard, Arash Vahdat, and Morteza Mardani. Heavy-tailed diffusion models. arXiv preprint arXiv:2410.14171 , 2024. [37] Jaideep Pathak, Shashank Subramanian, Peter Harrington, Sanjeev Raja, Ashesh Chat-topadhyay, Morteza Mardani, Thorsten Kurth, David Hall, Zongyi Li, Kamyar Azizzade-nesheli, Pedram Hassanzadeh, Karthik Kashinath, and Animashree Anandkumar. Four-CastNet: A global data-driven high-resolution weather model using adaptive Fourier neural operators. arXiv preprint arXiv:2202.11214 , 2022. [38] Aram-Alexandre Pooladian, Heli Ben-Hamu, Carles Domingo-Enrich, Brandon Amos, Yaron Lipman, and Ricky TQ Chen. Multisample flow matching: Straightening flows with minibatch couplings. arXiv preprint arXiv:2304.14772 , 2023. [39] Vadim Popov, Assel Yermekova, Tasnima Sadekova, Artem Khrapov, and Mikhail Sergee-vich Kudinov. Improved sampling algorithms for l´ evy-itˆ o diffusion models. In The Thir-teenth International Conference on Learning Representations .[40] Sidney I Resnick. Heavy-tail phenomena: probabilistic and statistical modeling . Springer, 2007. [41] Sonia I Seneviratne, Xuebin Zhang, Muhammad Adnan, Wafae Badi, Claudine Dereczyn-ski, A Di Luca, Subimal Ghosh, Iskhaq Iskandar, James Kossin, Sophie Lewis, et al. Weather and climate extreme events in a changing climate. Climate change 2021: The physical science basis: Working group I contribution to the sixth assessment report of the intergovernmental panel on climate change , pages 1513–1766, 2021. [42] Dario Shariatian, Umut Simsekli, and Alain Oliviero Durmus. Heavy-tailed diffusion with denoising levy probabilistic models. In The Thirteenth International Conference on Learn-ing Representations .[43] Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. 
+
+arXiv preprint arXiv:2011.13456 , 2020. [44] Alexander Tong, Kilian Fatras, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid Rector-Brooks, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based generative models with minibatch optimal transport. arXiv preprint arXiv:2302.00482 ,2023. 14 [45] Eun Bi Yoon, Keehun Park, Sungwoong Kim, and Sungbin Lim. Score-based generative models with l´ evy processes. Advances in Neural Information Processing Systems , 36:40694– 40707, 2023. [46] Tianjiao Zhang, Huangjie Zheng, Jiangchao Yao, Xiangfeng Wang, Mingyuan Zhou, Ya Zhang, and Yanfeng Wang. Long-tailed diffusion models with oriented calibration. In The twelfth international conference on learning representations , 2024. 15 Appendix Contents 
+
+A Additional Discussions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 A.1 Related work . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 A.2 Detailed comparison with existing heavy-tailed models. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .17 A.3 Representative Gaussian scale mixtures . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18 A.4 Gaussian mean-variance mixtures and asymmetric extensions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 A.5 Other admissible clock-conditioned paths . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 
+
+B All-clock extension to diffusion models . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 
+
+C Additional results and proofs of main theorems . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 C.1 A note on conditioning on the clock history. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .25 C.2 Conditional Gaussian law of the affine path . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 C.3 Detailed pathwise equivalence result and proof. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .26 C.4 Clock-conditioned straight-line geodesic . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26 C.5 Proof of Theorem 3.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27 
+
+D Additional Information on Log-Signature . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28 D.1 Signature-linear schedules . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29 D.2 VE-type signature-linear schedule . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31 
+
+E Experimental Setup . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32 E.1 Dataset . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32 E.2 Baselines . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33 E.3 Evaluation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33 E.4 Denoiser Architecture . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34 E.5 Training . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35 E.6 Sampling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35 
+
+F Ablation Studies . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36 F.1 Effect of Flow Type . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36 F.2 Effect of Number of Function Evaluations (NFE) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36 F.3 Effect of ODE Solver . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37 
+
+G Visualizations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37 
+
+# A Additional Discussions 
+
+A.1 Related work 
+
+Heavy-tailed diffusion and flow models. Most diffusion and flow-matching generative models use Gaussian reference distributions or Gaussian perturbation kernels. Several recent works replace this Gaussian mechanism by heavy-tailed alternatives. L´ evy score models use 
+
+α-stable L´ evy processes and replace the ordinary score by a fractional score, leading to nonlocal reverse-time dynamics and deterministic fractional probability-flow samplers [45, 39]. DLPM and DLIM instead build a discrete-time α-stable analogue of DDPM/DDIM; their key practical step is a Gaussian scale-mixture augmentation that makes the conditional reverse kernels Gaus-sian while the marginal noising law remains heavy-tailed [42]. Student-t-based diffusion and flow models replace Gaussian perturbation kernels with Student-t kernels and derive family-specific denoising posteriors and training divergences, including t-Flow as a heavy-tailed flow construc-tion [36]. Cauchy Diffusion studies the Cauchy case in speech synthesis, using Cauchy noise and a ratio-of-Gaussians view to support stochastic and deterministic sampling in a DDPM-style vocoder [28]. Related jump-diffusion generative models consider finite-activity jumps and marginal-matching reverse dynamics [4]. Our random-clock formulation follows the same broad motivation of using heavy-tailed perturbation families, but differs in where the tractability is imposed: after conditioning on a realized clock path, the flow-matching problem is Gaussian and uses the ordinary conditional velocity target, while marginalizing the clock produces the heavy-tailed source or path family. 16 Latent Gaussian mixtures and random time changes. Gaussian scale mixtures provide a classical route from conditionally Gaussian models to heavy-tailed marginals [2]. More general normal variance-mean mixtures can also be interpreted as Brownian motions with drift stopped at independent random times, and include many skewed and heavy-tailed families [3]. This latent-Gaussian perspective is exactly the mechanism exploited by DLPM for α-stable noising [42]. Our construction extends this idea from a scalar mixing variable to a path-valued clock. The clock can determine the conditional source covariance, the interpolation schedule, or both. Thus, the model keeps a Gaussian conditional regression problem but allows the outer clock law to encode family choice, tail heaviness, and path-dependent allocation of noise. 
+
+Signature and logsignature transforms. Path signatures originate in rough path theory and give an order-sensitive sequence of iterated-integral features for streams [33, 7]. In statistics and machine learning, signature features have been used as universal, truncated representations for stream-valued inputs [27], as kernels for sequential data [23], and as differentiable neural-network components [20, 21]. Logsignature features are especially relevant when one wants a compact nonredundant representation of path increments; for example, neural rough differential equations summarize long driving signals over subintervals by logsignatures [35]. Recent ap-proximation results also justify signature-linear representations of path functionals on suitable compact path sets, including c` adl` ag settings [11]. Our use of signatures is narrower: the clock path is not the generated sample path, but a latent conditioning environment. We use low-order logsignature features to give the neural velocity field finite-dimensional access to the realized random clock, and, optionally, to parameterize clock-dependent affine schedules. 
+
+A.2 Detailed comparison with existing heavy-tailed models 
+
+The related-work overview in Appendix A.1 surveys heavy-tailed diffusion and flow construc-tions. Here we elaborate on the technical contrast between the random-clock formulation and the closest prior families. 
+
+DLPM and L´ evy-based diffusion. DLPM [42] obtains heavy-tailed diffusion transitions via α-stable innovations and a robust outer power applied to empirical losses. As shown in Theorem 3.2(ii), our stable-subordinator clock with the area-clock covariance reproduces the same α-stable marginal source family. The two constructions differ at two levels. At the flow-matching target level , DLPM averages over noise realizations and learns a clock-marginal vector field, whereas conditioning on the realized clock path turns the regression into a clock-indexed family of pathwise optima uTt ; a network with access to the clock can learn the appropriate optimum for each noise realization, and the random-clock view can therefore be read as a refinement of the DLPM stable-noise construction with the same marginal family but a better-specified flow-matching target. We expect empirical gains when different clock realizations induce meaningfully different optima, and the formulation also avoids direct use of the generally unavailable α-stable density. At the loss level , the outer robust power z 7 → zr with 0 < r < 1used by DLPM destroys the additive projection decomposition in Proposition 3.1; in contrast, the random-clock formulation keeps the inner problem in a conditionally Gaussian L2-projection space and treats any robustification over sampled clocks as an estimator-level stabilization rather than a change of the population target. Compared with L´ evy score and L´ evy–Itˆ o diffusion models [45, 39], the flow-matching construction further avoids a nonlocal fractional-score target: after conditioning on the clock, the endpoint-conditioned target remains the explicit affine expression (3.10). 
+
+Student-t diffusion and t-Flow. Student-t diffusion and t-Flow models replace Gaussian perturbations by Student-t heavy-tailed perturbations [36]. Their construction is tailored to the 17 Student-t family: it derives Student-t-specific perturbation kernels and uses a γ-divergence ob-jective, with the practical formulation restricted to the finite-variance regime ν > 2. Extending that derivation formally to ν ≤ 2 is mathematically problematic, rather than merely an im-plementation detail, because the covariance-based normalizations and finite-variance quantities used by the Student-t perturbation model cease to be well-defined. In contrast, the inverse-gamma clock in Theorem 3.2(iii) is well-defined for every ν > 0, so our pathwise construction covers the extremely heavy-tailed infinite-variance regime ν ≤ 2 without changing the condi-tional Gaussian target. 
+
+Toward data-adaptive clocks. The most general use of random clocks would not prescribe the clock law in advance. Instead, one could estimate a clock distribution from data, or infer a data-dependent posterior over clock paths with an amortized model, and then use the inferred clock as the conditioning variable in (3.7). This would turn the clock into a learned latent description of local tail behavior rather than a hand-chosen family such as a stable subordinator or inverse-gamma slope. Developing such data-adaptive clock inference requires additional identifiability and estimation assumptions, so we leave it as a future extension. 
+
+A.3 Representative Gaussian scale mixtures 
+
+We recall two standard Gaussian scale-mixture examples that are only mentioned briefly in Section 2.2. For α ∈ (0 , 2], a centered symmetric isotropic α-stable random vector Sα ∈ Rd is characterized by 
+
+E
+
+h
+
+ei⟨ξ,S α⟩i
+
+= exp  −∥ ξ∥α 
+
+> 2
+
+/2, ξ ∈ Rd. (A.1) The case α = 2 reduces to the Gaussian law, whereas for α < 2 the law is heavy-tailed, with radial tail probability 
+
+P (∥Sα∥2 > r ) ≍ r−α, r → ∞ .
+
+With this normalization, Sα admits the Gaussian scale-mixture representation 
+
+Sα d
+
+= pVα G, 
+
+where G ∼ N (0 , I d) and Vα is a positive α/ 2-stable mixing variable independent of G, with Laplace transform 
+
+E[e−sV α ] = exp 
+
+
+
+−2α/ 2−1sα/ 2
+
+, s ≥ 0.
+
+Likewise, a centered d-dimensional Student-t random vector Zν with ν > 0 degrees of freedom and identity scale has density 
+
+fν,d (x) = Γ (ν + d)/2
+
+Γ( ν/ 2) ( νπ )d/ 2
+
+
+
+1 + ∥x∥22
+
+ν
+
+−(ν+d)/2
+
+, x ∈ Rd, (A.2) and satisfies 
+
+P (∥Zν ∥2 > r ) ≍ r−ν , r → ∞ .
+
+It can be written as 
+
+Zν d
+
+= pVν G, Vν ∼ InvGamma( ν/ 2, ν/ 2) ,
+
+with Vν independent of G. These examples make explicit why conditioning on the latent scale leaves a Gaussian problem, while marginalizing the latent scale produces polynomial tails. 18 A.4 Gaussian mean-variance mixtures and asymmetric extensions 
+
+The main text focuses on centered Gaussian scale mixtures, which already cover a broad class of symmetric heavy-tailed laws. A natural extension is to allow the latent variable to affect both the conditional mean and the conditional covariance, leading to the class of Gaussian mean-variance mixtures .Let V be a latent random variable taking values in a measurable space V, and let G ∼N (0 , I d) be independent of V . A random vector X ∈ Rd is called a Gaussian mean-variance mixture if it admits a representation of the form 
+
+X = m(V ) + L(V )G, (A.3) where m : V → Rd and L : V → Rd×d are measurable. Equivalently, 
+
+X | V ∼ N  m(V ), Σ( V ), Σ( V ) := L(V )L(V )⊤. (A.4) The heavy-tailed or asymmetric nature of the marginal law is produced by marginalizing over the latent variable V , while conditional on V the distribution remains Gaussian. The centered Gaussian scale-mixture subclass from the main text is recovered by setting 
+
+m(V ) ≡ 0. When m(V )̸ = 0, the latent variable affects not only the covariance but also the location, and the resulting marginal law may be asymmetric. Thus Gaussian mean-variance mixtures provide a natural route to skewed heavy-tailed extensions. In the random-clock setting, the corresponding extension would be to replace the centered conditional source law 
+
+XT 
+
+> 0
+
+∼ N  0, Σ( T[0 ,1] )
+
+by the more general form 
+
+XT 
+
+> 0
+
+∼ N  m(T[0 ,1] ), Σ( T[0 ,1] ), (A.5) where m : D([0 , 1]; R+) → Rd is a measurable mean functional. Under the affine interpolation 
+
+XTt = αtXT 
+
+> 1
+
++ βtXT 
+
+> 0
+
+,
+
+we then have 
+
+XTt | XT 
+
+> 1
+
+= x1 ∼ N  αtx1 + βtm(T[0 ,1] ), β 2 
+
+> t
+
+Σ( T[0 ,1] ). (A.6) Hence the path remains conditionally Gaussian after conditioning on the clock path, so the latent-Gaussian principle underlying the flow-matching construction continues to hold. Moreover, the explicit affine target formula is unaffected by this extension. Indeed, for a.e. 
+
+t ∈ [0 , 1), the identity 
+
+XT 
+
+> 0
+
+= XTt − αtXT
+
+> 1
+
+βt
+
+still holds pathwise, so substituting into dXTt
+
+dt = dαt
+
+dt XT 
+
+> 1
+
++ dβt
+
+dt XT
+
+> 0
+
+yields 
+
+E
+
+ dXTt
+
+dt XTt = x, X T 
+
+> 1
+
+= x1
+
+
+
+=
+
+> dβt
+> dt
+
+βt
+
+x + dαt
+
+dt −
+
+> dβt
+> dt
+
+βt
+
+αt
+
+!
+
+x1. (A.7) Thus, even in the more general mean-variance mixture setting, the affine clock-conditioned target retains the same closed-form expression as in the centered case. What changes is the induced marginal family after integrating out the clock, which may now be skewed as well as heavy-tailed. This extension suggests that the random-clock framework is not limited to symmetric Gaus-sian scale mixtures. By allowing a nonzero conditional mean functional m(T[0 ,1] ), one can in principle accommodate a broader class of asymmetric heavy-tailed laws while preserving condi-tional Gaussianity. We do not pursue this direction further in the main text. 19 A.5 Other admissible clock-conditioned paths 
+
+The main text focuses on the straight-line interpolation, which is the most common choice in conditional flow matching and already suffices for the heavy-tailed framework developed here. More generally, however, the same clock-conditioned construction applies to a broader class of affine paths. Let α, β : [0 , 1] → R be absolutely continuous functions such that 
+
+α0 = 0 , β0 = 1 , α1 = 1 , β1 = 0 ,
+
+and assume βt > 0 for all t ∈ [0 , 1). Define 
+
+XTt = αtXT 
+
+> 1
+
++ βtXT 
+
+> 0
+
+, t ∈ [0 , 1] . (A.8) As in Section 3.3, if XT 
+
+> 0
+
+∼ N (0 , Σ( T[0 ,1] )) and XT 
+
+> 0
+
+and XT 
+
+> 1
+
+are conditionally independent given 
+
+T[0 ,1] , then 
+
+pTt (· | x1) = Law( XTt | XT 
+
+> 1
+
+= x1) = N  αtx1, β 2 
+
+> t
+
+Σ( T[0 ,1] ). (A.9) Moreover, for a.e. t ∈ [0 , 1), dXTt
+
+dt = dαt
+
+dt XT 
+
+> 1
+
++ dβt
+
+dt XT 
+
+> 0
+
+, XT 
+
+> 0
+
+= XTt − αtXT
+
+> 1
+
+βt
+
+,
+
+so the corresponding conditional flow-matching target is 
+
+vTt (x | x1) = 
+
+> dβt
+> dt
+
+βt
+
+x + dαt
+
+dt −
+
+> dβt
+> dt
+
+βt
+
+αt
+
+!
+
+x1. (A.10) Thus any admissible pair ( α, β ) yields an explicit clock-conditioned path/target pair. 
+
+VP-type path. A natural diffusion-inspired choice is the variance-preserving schedule. Let ¯α : [0 , 1] → [0 , 1] be absolutely continuous with ¯α0 = 0 , ¯α1 = 1 ,
+
+and assume ¯ αt < 1 for t ∈ [0 , 1). Define 
+
+αt = ¯ αt, βt =
+
+q
+
+1 − ¯α2 
+
+> t
+
+.
+
+Then 
+
+XTt = ¯ αtXT 
+
+> 1
+
++
+
+q
+
+1 − ¯α2 
+
+> t
+
+XT 
+
+> 0
+
+, (A.11) which is the analogue of a variance-preserving interpolation. In this case, (A.10) becomes 
+
+vTt (x | x1) = − ¯αt d ¯ αt
+
+> dt
+
+1 − ¯α2
+
+> t
+
+x +
+
+> d ¯ αt
+> dt
+
+1 − ¯α2
+
+> t
+
+x1. (A.12) 
+
+VE-type path. A variance-exploding analogue can also be accommodated within the affine framework. Let σ : [0 , 1] → [0 , 1] be an absolutely continuous schedule such that 
+
+σ0 = 1 , σ1 = 0 , σt > 0 for t ∈ [0 , 1) .
+
+Set 
+
+αt = 1 − σt, βt = σt.
+
+20 Then the corresponding affine interpolation is 
+
+XTt = (1 − σt)XT 
+
+> 1
+
++ σtXT 
+
+> 0
+
+, t ∈ [0 , 1] . (A.13) Conditioning on XT 
+
+> 1
+
+= x1 and the realized clock path T[0 ,1] , we have 
+
+pTt (· | x1) = Law( XTt | XT 
+
+> 1
+
+= x1) = N  (1 − σt)x1, σ 2 
+
+> t
+
+Σ( T[0 ,1] ). (A.14) Thus the conditional variance is directly controlled by the scale schedule σ2 
+
+> t
+
+. Although our interpolation is written in the generative direction from source to data, this corresponds to a variance-exploding schedule when viewed backward from t = 1 to t = 0. Differentiating (A.13) gives dXTt
+
+dt = − dσt
+
+dt XT 
+
+> 1
+
++ dσt
+
+dt XT 
+
+> 0
+
+, XT 
+
+> 0
+
+= XTt − (1 − σt)XT
+
+> 1
+
+σt
+
+.
+
+Substituting into (A.10), or directly into dXTt 
+
+> dt
+
+, yields the conditional flow-matching target 
+
+vTt (x | x1) = 
+
+> dσt
+> dt
+
+σt
+
+(x − x1), t ∈ [0 , 1) . (A.15) A simple concrete choice is the polynomial schedule 
+
+σt = (1 − t)γ , γ > 0,
+
+for which 
+
+XTt =  1 − (1 − t)γ XT 
+
+> 1
+
++ (1 − t)γ XT 
+
+> 0
+
+,
+
+and 
+
+vTt (x | x1) = − γ
+
+1 − t (x − x1). (A.16) More generally, any absolutely continuous decreasing schedule σt with the above endpoint con-ditions yields an admissible VE-type path within the same clock-conditioned affine framework. 
+
+# B All-clock extension to diffusion models 
+
+In this appendix we record how the random-clock viewpoint extends to score-based diffusion models. The point of this subsection is slightly different from the flow-matching construction in the main text. Flow matching only needs a clock-conditioned interpolation and an explicit velocity target; it does not require reversing a stochastic process. Diffusion models do require a reverse-time dynamics, and for general c` adl` ag clocks this dynamics is not, in general, a purely local score SDE. The correct all-clock statement is a reverse-kernel formulation. The familiar local score SDE is recovered on the continuous part of the clock, and in particular for absolutely continuous clocks. Let W be a standard d-dimensional Brownian motion independent of the clock T . Given drift f : [0 , 1] × Rd → Rd and deterministic diffusion matrix G : [0 , 1] → Rd×d, consider the clock-conditioned forward dynamics dXt = ft(Xt) d t + Gt dWTt , X0 ∼ p0(· | T[0 ,1] ). (B.1) For a fixed realized clock path, WTt is a semimartingale with quadratic variation Tt. If T is continuous, this is a continuous martingale; if T has jumps, then WTt has Gaussian jumps with covariance proportional to the clock jump sizes. Write at := GtG⊤ 
+
+> t
+
+and pTt := Law( Xt | T[0 ,1] ). Whenever pTt has a density, we define the clock-conditioned score by 
+
+sTt (x) := ∇x log pTt (x). (B.2) 21 As in the main text, the density is conditioned on the full clock path. This is the right object for clock-dependent initial laws such as X0 = L(T[0 ,1] )G; in general it cannot be replaced by conditioning only on T[0 ,t ].We first state the reverse dynamics in a form that is valid for arbitrary realized c` adl` ag clock paths. For 0 ≤ s < t ≤ 1, let P Ts,t (x, dy) denote the conditional forward transition kernel of (B.1) from time s to time t, given the full clock path. Thus pTs P Ts,t = pTt . The reverse transition from t back to s is the Bayes kernel associated with this joint law. 
+
+Theorem B.1 (All-clock reverse dynamics in kernel form) . Fix a realized clock path T ∈
+
+D([0 , 1]; R+). Assume that the forward equation (B.1) is well posed, that regular conditional transition kernels P Ts,t exist, and that pTs P Ts,t = pTt for 0 ≤ s < t ≤ 1. For s < t , define a reverse kernel RTt,s (y, dx) by the measure identity 
+
+pTt (d y) RTt,s (y, dx) = pTs (d x) P Ts,t (x, dy) (B.3) 
+
+on Rd × Rd. Equivalently, when transition densities exist, 
+
+RTt,s (y, dx) = pTs (x)pTs,t (y | x)
+
+pTt (y) dx. (B.4) 
+
+Let (Yr)r∈[0 ,1] be the reverse-time Markov process initialized by Y0 ∼ pT 
+
+> 1
+
+and, for 0 ≤ r < r ′ ≤ 1,using the transition 
+
+Law( Yr′ ∈ dx | Yr = y, T [0 ,1] ) = RT  
+
+> 1−r, 1−r′
+
+(y, dx). (B.5) 
+
+Then the reverse process is conditional marginal-matching: 
+
+Law( Yr | T[0 ,1] ) = pT
+
+> 1−r
+
+, r ∈ [0 , 1] . (B.6) 
+
+Proof. Fix 0 ≤ s < t ≤ 1. Integrating (B.3) over y ∈ Rd gives, for every measurable set A ⊆ Rd,
+
+Z
+
+> Rd
+
+RTt,s (y, A ) pTt (d y) = 
+
+Z
+
+> A
+
+P Ts,t (x, Rd) pTs (d x) = pTs (A).
+
+Thus a single reverse step transports pTt back to pTs . Taking t = 1 − r and s = 1 − r′, this says that if Yr ∼ pT
+
+> 1−r
+
+, then the transition (B.5) gives Yr′ ∼ pT 
+
+> 1−r′
+
+. Since Y0 ∼ pT 
+
+> 1
+
+, iterating this identity over any finite partition of [0 , 1] yields Law( Yr | T[0 ,1] ) = pT 
+
+> 1−r
+
+for every r ∈ [0 , 1]. The Markov kernels are consistent because they are the regular conditional kernels of the same forward Markov law read backward in time, so the corresponding reverse process exists by the usual extension construction. The theorem is deliberately stated without a score. A score is a local object, whereas a jump of the clock produces a finite, nonlocal update of the law. This can be seen explicitly. Let 
+
+t be a jump time of the realized clock and set h := ∆ Tt = Tt − Tt− > 0. Since the drift term has no atom in physical time, the forward jump is 
+
+Xt = Xt− + GtZt, Zt ∼ N (0 , hI d),
+
+so the jump kernel is QTt (x, dy) = N (y; x, ha t)(d y). Therefore 
+
+pTt (d y) = 
+
+Z
+
+QTt (x, dy) pTt−(d x),
+
+and the reverse jump is the Bayes kernel characterized by 
+
+pTt (d y)RTt,t −(y, dx) = pTt−(d x)QTt (x, dy). (B.7) 22 When at is nonsingular, this becomes the density formula 
+
+RTt,t −(y, dx) = pTt−(x)φha t (y − x)
+
+R pTt−(z)φha t (y − z) d z dx, (B.8) where φha t is the Gaussian density with covariance ha t. Thus reverse jumps are posterior sampling steps. They cannot be represented exactly by the local drift term atsTt dTt.We next recover the usual score-based formula from the kernel theorem on the continuous part of the clock. Write 
+
+T ct := Tt − X
+
+> 0<s ≤t
+
+∆Ts
+
+for the continuous part of the realized clock, and define the reversed continuous clock bT cr := 
+
+T c 
+
+> 1
+
+−T c
+
+> 1−r
+
+. At reverse times corresponding to jumps of T , the process uses the jump kernel (B.7); between these jumps, or if the clock is continuous, the reverse dynamics have the following local representation. 
+
+Corollary B.2 (Local score form on the continuous clock part) . Assume the hypotheses of Theorem B.1. In addition, assume that the continuous part of the forward law admits strictly positive smooth densities, that the usual decay and integrability conditions for integration by parts hold, and that the local reverse equations below are well posed. On the continuous clock part, with τ = 1 − r, the reverse process has the local score representation 
+
+dYr = −fτ (Yr) d r + aτ sTτ (Yr) d bT cr + Gτ d ¯W bT cr
+
+, (B.9) 
+
+where ¯W is a standard Brownian motion. If T is continuous, this local equation alone gives 
+
+Law( Yr | T[0 ,1] ) = pT 
+
+> 1−r
+
+for all r ∈ [0 , 1] . If T has jumps, it must be supplemented by the reverse jump kernels (B.7) at the corresponding reverse jump times. For the continuous part, the deterministic probability-flow equation is 
+
+dZr = −fτ (Zr) d r + 12 aτ sTτ (Zr) d bT cr . (B.10) 
+
+When T has jumps, an exact deterministic flow across a jump additionally requires choosing a transport map from pTt to pTt−; this choice is not canonical and is not determined by the score alone. Proof. We prove the continuous part; the jump updates are already identified by Theorem B.1. Let ψ ∈ C∞ 
+
+> c
+
+(Rd). Along the continuous part of the forward dynamics, the conditional law satisfies the weak equation d
+
+Z
+
+ψ(x)pTt (x) d x =
+
+Z
+
+ft(x) · ∇ ψ(x)pTt (x) d x dt + 12
+
+Z
+
+Tr( at∇2ψ(x)) pTt (x) d x dT ct .
+
+Set qr = pT 
+
+> 1−r
+
+and τ = 1 − r. Since bT cr = T c 
+
+> 1
+
+− T c
+
+> 1−r
+
+, this forward weak equation gives d
+
+Z
+
+ψ(x)qr(x) d x = −
+
+Z
+
+fτ (x) · ∇ ψ(x)qr(x) d x dr − 12
+
+Z
+
+Tr( aτ ∇2ψ(x)) qr(x) d x d bT cr .
+
+Now let ρr = Law( Yr | T[0 ,1] ) for the local SDE (B.9). Its weak equation is d
+
+Z
+
+ψ(x)ρr(x) d x = −
+
+Z
+
+fτ (x) · ∇ ψ(x)ρr(x) d x dr
+
++
+
+Z
+
+aτ sTτ (x) · ∇ ψ(x)ρr(x) d x d bT cr
+
++ 12
+
+Z
+
+Tr( aτ ∇2ψ(x)) ρr(x) d x d bT cr .
+
+23 Substituting ρr = qr = pTτ and using pTτ sTτ = ∇pTτ , integration by parts gives 
+
+Z
+
+aτ sTτ · ∇ ψ p Tτ dx =
+
+Z
+
+aτ ∇pTτ · ∇ ψ dx = −
+
+Z
+
+Tr( aτ ∇2ψ)pTτ dx. 
+
+Therefore the two d bT cr -terms combine to − 12
+
+R Tr( aτ ∇2ψ)pTτ dx d bT cr , which matches the weak equation for qr. With matching initial law at r = 0, uniqueness gives the stated marginal matching. For the deterministic equation (B.10), the weak equation has the same drift term but only 
+
+> 12
+
+R aτ sTτ · ∇ ψ ζ r dx d bT cr in the clock direction. Substituting ζr = qr and applying the same integration by parts yields exactly the same weak equation for qr. Hence Law( Zr | T[0 ,1] ) = pT
+
+> 1−r
+
+on the continuous part. If the clock is absolutely continuous, Tt = R t 
+
+> 0
+
+ℓs ds, then d bT cr = ℓτ dr, and (B.9) reduces to dYr = −fτ (Yr) + ℓτ aτ sTτ (Yr)dr + pℓτ Gτ d ¯Br, τ = 1 − r, 
+
+while the probability flow becomes dZr = −fτ (Zr) + 12 ℓτ aτ sTτ (Zr)dr. 
+
+This is the classical reverse-SDE/probability-flow structure with the diffusion rate modulated by the realized clock rate. The learning target associated with the local continuous dynamics is the clock-conditioned score sTt . Accordingly, for continuous-clock diffusion implementations, or for the continuous part of a jump-clock implementation, a pathwise score-matching objective is 
+
+LDSM (θ) := Et∼Unif(0 ,1) ωt ET
+
+h
+
+EXt|T
+
+h
+
+sθ(Xt, t, η T ) − sTt (Xt) 22
+
+ii 
+
+, (B.11) where ωt > 0 is an optional weighting schedule. For clocks with jumps, this score objective does not by itself specify the reverse jump kernels in (B.7); exact reverse simulation for such clocks requires those nonlocal kernels, or an additional approximation to them. In practice, the marginal score sTt is typically unavailable. One may therefore use a clock-conditioned denoising score-matching objective whenever the forward transition kernel given (X0, T [0 ,1] ) is tractable: 
+
+LCDSM (θ):= Et∼Unif(0 ,1) ωt EX0,T 
+
+h
+
+EXt|X0,T 
+
+h
+
+sθ(Xt, t, η T ) − ∇ xt log pt(xt | X0, T [0 ,1] ) xt=Xt
+
+> 22
+
+ii 
+
+. (B.12) Under the same square-integrability and projection conditions as standard denoising score matching, the conditional score in (B.12) projects onto the marginal score sTt after conditioning on ( Xt, T [0 ,1] ). For linear-Gaussian forward schedules, the conditional kernel is Gaussian. If 
+
+Xt | (X0, T [0 ,1] ) ∼ N  mt(X0, T [0 ,1] ), Q t(T[0 ,1] ),
+
+then 
+
+∇xt log pt(xt | X0, T [0 ,1] ) = − Qt(T[0 ,1] )−1 xt − mt(X0, T [0 ,1] ),
+
+and (B.12) becomes 
+
+LCDSM (θ):= Et∼Unif(0 ,1) ωt EX0,T 
+
+
+
+EXt|X0,T 
+
+
+
+sθ(Xt, t, η T ) + Qt(T[0 ,1] )−1 Xt − mt(X0, T [0 ,1] ) 22
+
+ 
+
+.
+
+(B.13) 24 C Additional results and proofs of main theorems 
+
+C.1 A note on conditioning on the clock history 
+
+The main construction conditions on the full realized clock path T[0 ,1] . In general this condi-tioning cannot be replaced by conditioning only on the past clock history T[0 ,t ], because the clock-conditioned source may itself depend on future clock values such as T1. The follow-ing lemma records the additional non-anticipativity condition under which such a reduction is valid. 
+
+Lemma C.1 (Clock-history reduction under non-anticipative initialization) . Consider the for-ward construction (B.1) . Assume that, for every t ∈ [0 , 1] , the initial variable X0 is conditionally independent of σ(T(t, 1] ) given σ(T[0 ,t ]), and that the Brownian motion driving the SDE is inde-pendent of the clock and of the base randomness used to form X0. Then, for every t ∈ [0 , 1] ,
+
+Law( Xt | T[0 ,1] ) = Law( Xt | T[0 ,t ]) a.s. Equivalently, whenever both sides admit conditional densities, 
+
+pt(· | T[0 ,1] ) = pt(· | T[0 ,t ]) a.s. Proof. Fix t ∈ [0 , 1] and set 
+
+Gt := σ(X0, T [0 ,t ]) ∨ σ(Wu : 0 ≤ u ≤ Tt).
+
+By non-anticipativity of the forward dynamics, Xt is measurable with respect to Gt. Since Tt
+
+is σ(T[0 ,t ])-measurable and the Brownian motion W is independent of the entire clock, σ(Wu :0 ≤ u ≤ Tt) is conditionally independent of σ(T(t, 1] ) given σ(T[0 ,t ]). By assumption the same is true for X0. Hence Gt, and therefore Xt, is conditionally independent of σ(T(t, 1] ) given σ(T[0 ,t ]). For any bounded measurable test function φ,
+
+E φ(Xt) σ(T[0 ,1] ) = E φ(Xt) σ(T[0 ,t ]) a.s. ,
+
+which proves the claim. The non-anticipativity assumption in Lemma C.1 is essential. For example, if X0 | T[0 ,1] ∼N (0 , T 1Id), then already at t = 0 the conditional law given T[0 ,1] is N (0 , T 1Id), whereas the conditional law given T[0 ,0] is the corresponding mixture over T1. These laws are generally different. This is why the main flow-matching construction consistently uses pTt = Law( XTt ) = Law( Xt | T[0 ,1] ) rather than replacing it by a past-clock conditional law. 
+
+C.2 Conditional Gaussian law of the affine path 
+
+We verify the conditional Gaussian law (3.9) stated in the main text. Recall the assumptions: conditional on the realized clock path T[0 ,1] , XT 
+
+> 0
+
+∼ N (0 , Σ( T[0 ,1] )); XT 
+
+> 0
+
+and XT 
+
+> 1
+
+are conditionally independent given T[0 ,1] ; and the affine path is XTt = αTt XT 
+
+> 1
+
++βTt XT 
+
+> 0
+
+with deterministic schedules 
+
+αTt , β Tt given T[0 ,1] .
+
+Proof of (3.9) . Fix T[0 ,1] and XT 
+
+> 1
+
+= x1. Under this conditioning, αTt and βTt are deterministic, and the conditional independence assumption gives XT 
+
+> 0
+
+| (XT 
+
+> 1
+
+= x1, T [0 ,1] ) ∼ N (0 , Σ( T[0 ,1] )) .
+
+Hence 
+
+XTt | (XT 
+
+> 1
+
+= x1, T [0 ,1] ) = αTt x1 + βTt XT 
+
+> 0
+
+(XT 
+
+> 1
+
+= x1, T [0 ,1] )is an affine transformation of a Gaussian, with mean αTt x1 and covariance ( βTt )2Σ( T[0 ,1] ). There-fore 
+
+XTt (XT 
+
+> 1
+
+= x1, T [0 ,1] ) ∼ N  αTt x1, (βTt )2Σ( T[0 ,1] ),
+
+which is precisely (3.9). 25 C.3 Detailed pathwise equivalence result and proof 
+
+Proposition C.2 (Detailed pathwise conditional–marginal equivalence) . Assume (3.3) and suppose that, for every θ in the parameter class and for a.e. t ∈ [0 , 1] ,
+
+E ∥uθ(XTt , t, T [0 ,1] )∥22 + ∥vTt (XTt | XT 
+
+> 1
+
+)∥22 T[0 ,1] 
+
+ < ∞ a.s. Then, for a.e. t, there exists a nonnegative σ(T[0 ,1] )-measurable random variable Ct(T ), inde-pendent of θ, such that 
+
+E
+
+h
+
+Rcond  
+
+> t
+
+(θ; XT 
+
+> 1
+
+, T ) T[0 ,1] 
+
+i
+
+= Rmarg  
+
+> t
+
+(θ; T ) + Ct(T ).
+
+Consequently, whenever the risks and Ct(T ) are integrable over (t, T ) with t ∼ Unif(0 , 1) ,
+
+LCHTFM (θ) = LHTFM (θ) + Et∼Unif(0 ,1) ET [Ct(T )] .
+
+In particular, if the additive constant is finite, the two population objectives have the same minimizers. If uθ is differentiable in θ and differentiation may be exchanged with the conditional expectations, the clock expectation, and the uniform-time expectation, then 
+
+∇θLCHTFM (θ) = ∇θLHTFM (θ).
+
+Proof of Propositions 3.1 and C.2. Fix a time t for which the assumptions hold. By (3.3), 
+
+uTt (x) = E vTt (XTt | XT 
+
+> 1
+
+) XTt = x
+
+for pTt -a.e. x, where expectations are taken in the fixed-clock conditional probability space. The same identity is understood in the weak sense when densities are not used. Thus, within the clock-conditioned environment indexed by T , uTt (XTt ) is the L2-projection of the pathwise condi-tional velocity vTt (XTt | XT 
+
+> 1
+
+) onto the sigma-field σ(XTt ). Applying the conditional Pythagorean identity gives 
+
+E
+
+h
+
+Rcond  
+
+> t
+
+(θ; XT 
+
+> 1
+
+, T ) T[0 ,1] 
+
+i
+
+= Rmarg  
+
+> t
+
+(θ; T ) + E
+
+h
+
+vTt (XTt | XT 
+
+> 1
+
+) − uTt (XTt ) 22 T[0 ,1] 
+
+i
+
+= Rmarg  
+
+> t
+
+(θ; T ) + Ct(T ),
+
+where 
+
+Ct(T ) := E
+
+h
+
+vTt (XTt | XT 
+
+> 1
+
+) − uTt (XTt ) 22 T[0 ,1] 
+
+i
+
+≥ 0.
+
+If the risks and Ct(T ) are integrable over ( t, T ) with t ∼ Unif(0 , 1), then Fubini’s theorem yields 
+
+LCHTFM (θ) = LHTFM (θ) + Et∼Unif(0 ,1) ET [Ct(T )] . (C.1) The last term is independent of θ. Hence, whenever it is finite, the two population objectives have the same minimizers. If uθ is differentiable in θ and differentiation may be exchanged with the conditional expectations, the clock expectation, and the uniform-time expectation, then 
+
+∇θLCHTFM (θ) = ∇θLHTFM (θ). 
+
+C.4 Clock-conditioned straight-line geodesic 
+
+Theorem C.3 (Clock-conditioned straight-line geodesic) . Fix p ∈ [1 , ∞). For a.e. realized clock path T , assume p0(· | T[0 ,1] ), p data ∈ P p(Rd), and let πT be a p-optimal coupling between them. Then μTt :=  (1 − t)x0 + tx 1
+
+
+
+> #
+
+πT , t ∈ [0 , 1] , is a constant-speed Wp-geodesic from p0(· | T[0 ,1] )
+
+to pdata .
+
+26 Proof. Fix a realized clock path T for which p0(· | T[0 ,1] ) ∈ P p(Rd), and abbreviate 
+
+μ0 := p0(· | T[0 ,1] ), μ1 := pdata , μr :=  (1 − r)x0 + rx 1
+
+
+
+> #
+
+πT , r ∈ [0 , 1] .
+
+Then μTt = μt. By assumption μ0, μ 1 ∈ P p(Rd), so the p-optimal transport problem is well posed and Wp(μ0, μ 1) < ∞.For any r, r ′ ∈ [0 , 1], the pushforward 
+
+ (1 − r)x0 + rx 1, (1 − r′)x0 + r′x1
+
+
+
+> #
+
+πT
+
+is a coupling of μr and μr′ . Hence, using the optimality of πT at the last step, 
+
+Wp(μr, μ r′ )p ≤
+
+Z
+
+∥(r − r′)( x1 − x0)∥p dπ T = |r − r′|p Wp(μ0, μ 1)p. (C.2) Now fix 0 ≤ r ≤ r′ ≤ 1. Applying (C.2) to the pairs (0 , r ), ( r, r ′), and ( r′, 1), we obtain 
+
+Wp(μ0, μ r) + Wp(μr, μ r′ ) + Wp(μr′ , μ 1)
+
+≤ r W p(μ0, μ 1) + ( r′ − r) Wp(μ0, μ 1) + (1 − r′) Wp(μ0, μ 1)= Wp(μ0, μ 1).
+
+On the other hand, the triangle inequality yields 
+
+Wp(μ0, μ 1) ≤ Wp(μ0, μ r) + Wp(μr, μ r′ ) + Wp(μr′ , μ 1).
+
+Therefore equality holds throughout, and in particular, 
+
+Wp(μr, μ r′ ) = |r − r′| Wp(μ0, μ 1) for all r, r ′ ∈ [0 , 1] .
+
+Thus ( μTt )t∈[0 ,1] is a constant-speed Wp-geodesic between p0(· | T[0 ,1] ) and pdata .
+
+Remark C.4. For each fixed clock path with finite covariance matrix, p0(· | T[0 ,1] ) = N (0 , Σ( T[0 ,1] )) 
+
+belongs to Pq(Rd) for every q ≥ 1. Thus Theorem C.3 is pathwise in T : after conditioning on the clock, the source side does not restrict the choice of p, and the admissible p is governed by the data moment assumption. This does not imply that the clock-marginal source law has all moments; after integrating out T , stable or Student-t clock choices can again produce heavy-tailed sources with limited or infinite moments. The classical W2-statement is recovered when the data law has a finite second moment and the argument is applied pathwise. 
+
+C.5 Proof of Theorem 3.2 
+
+Proof of Theorem 3.2. By (3.9) and the source covariance Σ A(T[0 ,1] ) := 2 A(T )Id, where A(T ) := 
+
+R 10 Ts ds, for every fixed clock path and endpoint XT 
+
+> 1
+
+= x1,
+
+XTt | XT 
+
+> 1
+
+= x1 ∼ N  αtx1, 2β2 
+
+> t
+
+A(T )Id
+
+, A(T ) = 
+
+Z 10
+
+Ts ds. 
+
+Thus the clock-marginal conditional law is a Gaussian scale mixture. For the deterministic clock Tt = t, A(T ) = 1 /2, so the covariance above is β2 
+
+> t
+
+Id. This proves the Gaussian case. For the stable case, let α ∈ (0 , 2), ρ = α/ 2, and let T be the ρ-stable subordinator in the theorem. With A(T ) = R 10 Tsds, the integration-by-parts identity for Lebesgue–Stieltjes integrals gives 
+
+A(T ) = 
+
+Z 10
+
+(1 − s) d Ts.
+
+27 Using the independent increments of the subordinator, for any λ ≥ 0, 
+
+E
+
+h
+
+e−λA (T )i
+
+= exp 
+
+
+
+− ρ + 1 2
+
+Z 10
+
+(λ(1 − s)) ρ ds
+
+
+
+= exp 
+
+
+
+− λρ
+
+2
+
+
+
+. (C.3) Therefore, for any ξ ∈ Rd,
+
+E
+
+h
+
+ei⟨ξ,X t⟩ | X1 = x1
+
+i
+
+= exp  iα t⟨ξ, x 1⟩ ET
+
+exp  −β2 
+
+> t
+
+A(T )∥ξ∥22
+
+ 
+
+= exp  iα t⟨ξ, x 1⟩ exp 
+
+
+
+− βαt ∥ξ∥α
+
+> 2
+
+2
+
+
+
+. (C.4) This is the characteristic function of a location-shifted isotropic α-stable law with location 
+
+αtx1 and scale βt, under the normalization used in the main text. The radial tail asymptotics 
+
+P(∥Xt − αtx1∥2 > r | X1 = x1) = Θ( r−α) as r → ∞ then follow from the standard tail behavior of isotropic α-stable laws [40]. For the Student-t case, Tt = tV ν gives A(T ) = Vν /2, and hence Σ A(T[0 ,1] ) = Vν Id. Since 
+
+Vν ∼ InvGamma( ν/ 2, ν/ 2), marginalizing over Vν yields 
+
+pXt|X1=x1 (x) = 
+
+Z ∞
+
+> 0
+
+1(2 πβ 2 
+
+> t
+
+v)d/ 2 exp 
+
+
+
+− ∥x − αtx1∥22
+
+2β2 
+
+> t
+
+v
+
+ (ν/ 2) ν/ 2
+
+Γ( ν/ 2) v−ν/ 2−1e−ν/ (2 v) dv
+
+= Γ(( ν + d)/2) Γ( ν/ 2)( νπ )d/ 2βdt
+
+
+
+1 + ∥x − αtx1∥22
+
+νβ 2
+
+> t
+
+−(ν+d)/2
+
+. (C.5) This is the multivariate Student-t density with location αtx1, scale β2 
+
+> t
+
+Id, and ν degrees of freedom, whose radial tail satisfies P(∥Xt − αtx1∥2 > r | X1 = x1) = Θ( r−ν ) as r → ∞ [40]. 
+
+# D Additional Information on Log-Signature 
+
+This appendix fixes the signature-feature convention used in Section 3.2. The main paper specializes the clock feature to the truncated logsignature, ηT = ℓm(T ). For completeness we keep the generic notation ηT throughout this appendix and discuss alternative choices (raw signatures, lead–lag transforms, or concatenations with simple summaries). The feature ηT
+
+has two roles: it conditions the learned vector field uθ(XTt , t, η T ), and, when a clock-dependent trajectory is used, it may also parameterize the interpolation schedules αTt and βTt . Throughout this appendix, the feature is a summary of the full realized clock path T[0 ,1] , sampled before drawing the clock-conditioned source and before solving the generation ODE. Let z : [0 , 1] → Rq be a continuous path of bounded variation. Its signature is the tensor series 
+
+S(z) = 
+
+
+
+1,
+
+Z
+
+> 0<u 1<1
+
+dzu1 ,
+
+Z
+
+> 0<u 1<u 2<1
+
+dzu1 ⊗ dzu2 , . . . 
+
+
+
+,
+
+and its truncation to order m is denoted by S(≤m)(z). The truncated logsignature is LogSig (≤m)(z) := log ⊗
+
+ S(≤m)(z),
+
+where log ⊗ is computed in the truncated tensor algebra. Unlike the raw signature, the logsig-nature lies in the truncated free Lie algebra and removes many algebraic redundancies among tensor coordinates. In our application, q = 2 and the path is the time-augmented clock Ts = ( s, T s). Since the random clocks considered in the paper may be c` adl` ag and may have jumps, we do not rely on a canonical signature of the jump path itself. Instead, for a discretization 0 = t0 < t 1 < · · · <tN = 1, we form the sampled time-augmented path 
+
+ Tt0 , Tt1 , . . . , TtN
+
+ =  (t0, T t0 ), (t1, T t1 ), . . . , (tN , T tN )
+
+28 and compute signatures after linearly interpolating these sampled points. With this convention, 
+
+ϕm(T ) := S(≤m)(Tlin )is the truncated signature feature used in (3.6), where Tlin denotes the piecewise linear in-terpolation of the sampled time-augmented clock. A logsignature version of the same feature is 
+
+ℓm(T ) := LogSig (≤m)(Tlin ).
+
+Thus the model feature ηT may be chosen as ϕm(T ), as ℓm(T ), or as a concatenation of ei-ther representation with simple clock summaries such as T1 or R 10 Tsds. When invoking the signature-linear approximation result in Proposition D.1, one should take the raw signature coordinates ϕm(T ), because the proposition is stated for linear functionals of signatures. In neural-network conditioning, we often use the logsignature ℓm(T ), since it is more compact; using logsignature coordinates in the learned schedules should therefore be understood as a practical finite-dimensional parameterization, not as the literal raw-signature universality state-ment. Under the piecewise linear convention, a jump in the sampled clock is represented by a steep linear segment between two consecutive observation times. Other conventions, such as inserting explicit vertical jump segments or using a lead–lag transform, would define different finite-dimensional features. They do not change the flow-matching identities in the main text: after conditioning on T[0 ,1] , the path remains Gaussian as in (3.9), and the endpoint-conditioned target remains the affine expression (3.10). The feature ηT only summarizes the realized clock environment for the network and, when used, for the schedule parameterization. The first logsignature level is the increment of the time-augmented path, so it records (1 , T 1 −
+
+T0), which is (1 , T 1) under the standing assumption T0 = 0. Higher levels encode how clock mass is allocated over physical time. For example, in two dimensions the second Lie level corresponds to the signed area between the physical-time coordinate and the clock coordinate; for monotone clocks this separates paths with the same terminal value T1 but different temporal allocations of their increments. This is why low-order signature information can represent path-dependent functionals such as the area-clock quantity R 10 Tsds used in Section 3.3. The dimension reduction from signature to logsignature can be substantial. For a q-dimensional path, the raw truncated signature has 1 + Pmk=1 qk coordinates including the con-stant coordinate, whereas the nonconstant truncated logsignature has dimension 
+
+> m
+
+X
+
+> k=1
+
+ℓq(k), ℓq(k) := 1
+
+k
+
+X
+
+> r|k
+
+μ(r)qk/r ,
+
+where μ is the M¨ obius function. Thus, for the time-augmented clock ( q = 2) and truncation order m = 3, the raw nonconstant signature has dimension 2+4+8 = 14, while the logsignature has dimension 2 + 1 + 2 = 5. This compactness is the main reason that the experiments use truncated logsignature features for ηT when conditioning the neural velocity field. 
+
+D.1 Signature-linear schedules 
+
+This subsection gives the schedule details that are summarized in Section 3.3. The compactness assumption in Proposition D.1 below is the usual setting for uniform approximation. For heavy-tailed clocks, which need not live on a compact path set globally, the proposition should be read either on compact truncations of the clock space, on high-probability compact subsets, or after applying the feature normalizations used in training. The time augmentation is important: it records the order in which clock mass is accumulated, so path functionals such as R 10 Tsds can be represented by low-order signature information. 29 Proposition D.1 (Signature-linear approximation of clock functionals) . Let K be a compact set of time-augmented, piecewise linear clock paths T = ( s, T s)s∈[0 ,1] on which the signature separates paths up to tree-like equivalence. Let F : [0 , 1] × K → R be continuous. Then for every 
+
+ε > 0, there exist a truncation level m and a continuous coefficient curve c : [0 , 1] → RDm such that 
+
+sup 
+
+> t∈[0 ,1]
+
+sup  
+
+> T∈K
+
+|F (t, T ) − ⟨ c(t), ϕ m(T )⟩| < ε. (D.1) 
+
+In particular, clock-dependent schedule functionals such as T 7 → αt(T ) and T 7 → βt(T ) can be represented, up to arbitrary uniform accuracy on compact clock families, by linear functionals of a sufficiently high-order truncated signature: 
+
+αt(T ) ≈ ⟨ a(t), ϕ m(T )⟩, βt(T ) ≈ ⟨ b(t), ϕ m(T )⟩. (D.2) The proposition motivates representing clock-dependent interpolation coefficients by signature-linear functions. A direct form is 
+
+αT,m t = ⟨a(t), ϕ m(T )⟩, βT,m t = ⟨b(t), ϕ m(T )⟩, (D.3) where a(t), b (t) ∈ RDm are coefficient curves. If these curves are absolutely continuous in t,then for a fixed realized clock path the physical-time derivatives are explicit: dαT,m t
+
+dt =
+
+ da(t)dt , ϕ m(T )
+
+
+
+, dβT,m t
+
+dt =
+
+ db(t)dt , ϕ m(T )
+
+
+
+. (D.4) Thus the flow-matching target differentiates the scalar-time coefficient curves, not the clock path itself. The direct form (D.3) does not automatically enforce the endpoint constraints αT 
+
+> 0
+
+= 0 , β T 
+
+> 0
+
+=1, α T 
+
+> 1
+
+= 1 , β T 
+
+> 1
+
+= 0 , β Tt > 0 for t ∈ [0 , 1). A boundary-corrected near-linear schedule is obtained as follows. Let λ : [0 , 1] → R be absolutely continuous with λ0 = 0, and set 
+
+At(T ) := ⟨a(t), η T ⟩, Bt(T ) := ⟨b(t), η T ⟩. (D.5) Then define 
+
+αTt = t + λt(1 − t)At(T ), βTt = 1 − t + λt(1 − t)Bt(T ) = (1 − t) 1 + λtBt(T ). (D.6) The endpoint constraints are automatic: 
+
+αT 
+
+> 0
+
+= 0 , αT 
+
+> 1
+
+= 1 , βT 
+
+> 0
+
+= 1 , βT 
+
+> 1
+
+= 0 . (D.7) The path is admissible whenever 1 + λtBt(T ) > 0, t ∈ [0 , 1) . (D.8) Writing dAt(T )dt =
+
+ da(t)dt , η T
+
+
+
+, dBt(T )dt =
+
+ db(t)dt , η T
+
+
+
+,
+
+the required derivatives are dαTt
+
+dt = 1 + 
+
+ dλt
+
+dt (1 − t) − λt
+
+
+
+At(T ) + λt(1 − t) dAt(T )dt , (D.9) dβTt
+
+dt = − 1 + λtBt(T ) + (1 − t)
+
+ dλt
+
+dt Bt(T ) + λt
+
+dBt(T )dt
+
+
+
+, (D.10) 
+
+> dβTt
+> dt
+
+βTt
+
+= − 11 − t + 
+
+> dλt
+> dt
+
+Bt(T ) + λt dBt(T )dt
+
+1 + λtBt(T ) . (D.11) 30 The singularity at t = 1 is the same terminal singularity present in the straight-line flow-matching target and is irrelevant for the time-integrated objective, where t = 1 is not sampled. A symmetric special case uses a single clock-dependent time warp. Let 
+
+Ct(T ) := ⟨c(t), η T ⟩, γTt := t + λt(1 − t)Ct(T ), (D.12) and set 
+
+αTt = γTt , βTt = 1 − γTt = (1 − t) 1 − λtCt(T ). (D.13) This preserves the straight-line form XTt = γTt XT 
+
+> 1
+
++(1 −γTt )XT 
+
+> 0
+
+, while allowing the realized clock path to accelerate or decelerate the interpolation. The endpoint-conditioned target simplifies to 
+
+vTt (x | x1) = 
+
+> dγTt
+> dt
+
+1 − γTt
+
+(x1 − x), t ∈ [0 , 1) . (D.14) 
+
+D.2 VE-type signature-linear schedule 
+
+For the clock-aware trajectory ablation, we use a variance-exploding (VE)-type affine path written in the signature-linear form (D.3). This is a deterministic affine flow path inspired by VE noise schedules, not an additional stochastic SDE. Since all clocks in this experiment satisfy T1 > 0, define the normalized clock ¯Ts := Ts/T 1 and the normalized time-augmented path ¯Ts = ( s, ¯Ts). Let ϕm( ¯T ) denote the raw truncated signature of ¯T. For m ≥ 2, let ect and 
+
+etc be the unit vectors selecting the level-two signature coordinates with words ( c, t) and ( t, c), where t denotes physical time and c denotes the normalized clock coordinate. Then 
+
+ect , ϕ m( ¯T ) =
+
+Z
+
+> 0<u<v< 1
+
+d ¯Tu dv =
+
+Z 10
+
+¯Tu du, (D.15) 
+
+etc , ϕ m( ¯T ) =
+
+Z
+
+> 0<u<v< 1
+
+du d ¯Tv = 1 −
+
+Z 10
+
+¯Tv dv. (D.16) Thus the signed clock-shape score 
+
+Rm(T ) := rm, ϕ m( ¯T ) , rm := ect − etc , (D.17) satisfies 
+
+Rm(T ) = 2 
+
+Z 10
+
+¯Ts ds − 1. (D.18) It is zero for a linear normalized clock, positive when clock mass accumulates early, negative when it accumulates late, and bounded by [ −1, 1] for nondecreasing normalized clocks. We use the normalized linear VE decay σVE (t) = 1 − t and introduce independent signature-linear clock-shape corrections: 
+
+αT,m t = t + λαt(1 − t)Rm(T ), βT,m t = (1 − t) 1 + λβ tR m(T ). (D.19) Equivalently, with e∅ denoting the constant signature coordinate, 
+
+aVE (t) = te ∅ + λαt(1 − t)rm, (D.20) 
+
+bVE (t) = (1 − t)e∅ + λβ t(1 − t)rm, (D.21) so that 
+
+αT,m t = aVE (t), ϕ m( ¯T ) , βT,m t = bVE (t), ϕ m( ¯T ) . (D.22) In the experiments we use λα = λβ = 1 /4. More generally, since |Rm(T )| ≤ 1, any |λβ | < 1gives βT,m t ≥ (1 − t)(1 − | λβ |) > 0 for t < 1, so the affine path is admissible. 31 Writing Rm = Rm(T ), the derivatives are dαT,m t
+
+dt = 1 + λα(1 − 2t)Rm, dβT,m t
+
+dt = −1 + λβ (1 − 2t)Rm, (D.23) and hence 
+
+LT,m t := 
+
+> dβT,m t
+> dt
+
+βT,m t
+
+= −1 + λβ (1 − 2t)Rm
+
+(1 − t) 1 + λβ tR m
+
+ . (D.24) Substituting these quantities into (3.10) gives 
+
+vT,m t (x | x1) = LT,m t x + dαT,m t
+
+dt − LT,m t αT,m t
+
+!
+
+x1
+
+= LT,m t x +
+
+h
+
+1 + λα(1 − 2t)Rm − LT,m t
+
+ t + λαt(1 − t)Rm
+
+i
+
+x1, t ∈ [0 , 1) .
+
+(D.25) When λα = λβ = 0, this reduces to the linear VE path αt = t, βt = 1 − t. The one-warp path is recovered only in the special symmetric case λβ = −λα; the ablation above uses the more general affine form XTt = αT,m t XT 
+
+> 1
+
++ βT,m t XT 
+
+> 0
+
+.
+
+# E Experimental Setup 
+
+This section documents the full configuration shared across all reported HTFM and baseline runs. Unless explicitly noted, any HTFM clock variant (Gaussian, α-stable, Student-t) uses the same backbone and optimizer for a given dataset; the only differences are the random-clock law and the optional path-feature conditioning. All experiments are implemented in PyTorch. 
+
+E.1 Dataset 
+
+We use three benchmarks at increasing scale. 
+
+2D imbalanced α-stable mixture. A 9-component isotropic α-stable mixture in R2. Com-ponents sit on a uniformly spaced 3 ×3 grid with spacing 2 .0, each component is a 2-D isotropic 
+
+α-stable variable with scale 0 .1, and the mixture weights are: 
+
+{0.18 , 0.08 , 0.14 , 0.06 , 0.09 , 0.10 , 0.16 , 0.07 , 0.12 } (range 0 .06–0 .18). We sweep the per-component stability index αD ∈ { 1.5, 1.8} and draw 32 ,000 training samples per setting; an additional 24 ,000-sample reference set is held out for evaluation. 
+
+CIFAR10-LT. The long-tailed CIFAR-10 split [6] of the original CIFAR-10 train set [26]. With imbalance ratio ρ = 0 .01, head count 5000, and 10 classes, the per-class counts follow a geometric schedule and total ≈ 12 ,406 training images at 32 ×32. A deterministic subset is precomputed and reused across all runs to keep the baselines identical at the dataset level. Random horizontal flips are the only augmentation. 
+
+HRRR VIL. Vertically Integrated Liquid (VIL) hourly analyses from the High-Resolution Rapid Refresh weather system [5], cropped to a 128 ×128 window over the Central US following the protocol of [36]. Train/test split mirrors theirs: years {2019 , 2020 } for training ( ≈ 17 ,400 valid hourly fields after dropping NaN slots) and year {2021 } for test ( ≈ 8,700). Per-channel 
+
+z-score statistics are computed on the training years and applied to both splits. 32 E.2 Baselines 
+
+We compare HTFM against four heavy-tailed generative baselines, each run under the same backbone and training budget as HTFM (see Sections E.4 and E.5): 
+
+• LIM [45, 39]: L´ evy-Itˆ o stochastic differential equation with α-stable driving noise; trained with a fractional-score regression loss and sampled with the model’s α-stable reverse SDE solver at reverse-step budget 1000. 
+
+• DLPM [42]: discrete-time α-stable analogue of DDPM; uses 4000 training-time reverse steps with the Gaussian scale-mixture augmentation, sampling via its native stochastic predictor. 
+
+• DLIM [42]: deterministic α-stable sampler sharing the DLPM predictor backbone; We set η=0 for deterministic generation. 
+
+• t-Flow [36]: heavy-tailed flow with a finite-variance Student-t source; reported only on the Student-t parameter range pν > 2 where its construction is well-defined. 
+
+E.3 Evaluation 
+
+Each benchmark uses the standard tail-aware metric for its scale. 
+
+2D mixture. We use the precision–recall f pr 1 score of [42]. Let Xref = {xi}Ni=1 and Xgen =
+
+{yj }Nj=1 be the reference and generated sample sets ( N = 24 ,000 here). For a set X and a point 
+
+z, write rk(z; X ) for the distance from z to its k-th nearest neighbor in X , and define the k-NN manifold 
+
+Mk(X ) = [
+
+> z∈X
+
+B z, r k(z; X ),
+
+i.e. the union of ℓ2-balls around each sample with radius given by its own k-th nearest-neighbor distance. The precision and recall relative to this support estimate are P = 1
+
+|X gen |
+
+X
+
+> y∈X gen
+
+1y ∈ M k(Xref ), R = 1
+
+|X ref |
+
+X
+
+> x∈X ref
+
+1x ∈ M k(Xgen ),
+
+and the score is their harmonic mean 
+
+f pr 1 = 2 P R P + R .
+
+Higher is better. We use k = 10 throughout. 
+
+CIFAR10-LT. We report Fr´ echet Inception Distance (FID) [16], the standard image-generation metric. Each 32 ×32 image (real and generated) is passed through a pre-trained Inception-V3 network and embedded as a 2048-dimensional feature vector at the final average-pooling layer. Letting ( μdata , Σdata ) and ( μgen , Σgen ) be the empirical mean and covariance of the two feature sets, FID is the squared 2-Wasserstein distance between the two fitted Gaussians, FID = ∥μdata − μgen ∥22 + Tr  Σdata + Σ gen − 2(Σ data Σgen )1/2. (E.1) The reference set is the full long-tail train split (12 ,406 images at 32 ×32); the generated set is 12 ,406 images sampled from the EMA-averaged model copy at the listed NFE budget. Lower is better. 33 HRRR VIL. Following [36], we report three one-dimensional tail statistics aligned to the operational interest in HRRR extremes. We generate 20 ,000 samples from each model, flatten them together with the ≈ 8,760 test fields into 1-D intensity samples, and compute the metrics below. Lower is better for all three. 
+
+Kurtosis Ratio (KR). Sample kurtosis is the (normalized) fourth-order moment, charac-terizing how heavy the distribution’s tails are relative to the central mass. Let kdata and ksim 
+
+denote the empirical kurtosis of the reference and generated samples. The kurtosis ratio is KR = 1 − ksim  
+
+> kdata
+
+. (E.2) 
+
+Skewness Ratio (SR). Sample skewness is the (normalized) third-order moment, char-acterizing the asymmetry of a tailed distribution. With sdata , s sim the empirical skewness on reference and generated, SR = 1 − ssim  
+
+> sdata
+
+. (E.3) 
+
+Tail Kolmogorov–Smirnov (KS). The two-sample KS statistic [34] measures the sup-norm distance between two empirical CDFs. For heavy-tailed distributions we evaluate it on the tails to focus the metric on the rare-extreme regime that both KR and SR weight only indirectly. We retain generated and reference samples lying above the 99 .9-th percentile (right tail) or below the 0 .1-th percentile (left tail), compute the two-sample KS statistic per side, and average over the two sides for an overall score. For the VIL channel the underlying distribution has no left tail, so we report the right-tail KS statistic only. 
+
+E.4 Network Architecture 
+
+2D mixture. A small MLP with 4 residual blocks of width 64, SiLU activations, GroupNorm, and a learnable time embedding of size 32. The same backbone is shared across HTFM and the FM baselines. 
+
+CIFAR10-LT. The DDPM-style U-Net of [18]: 128 base channels, channel multipliers (1 , 2, 2, 2), two residual blocks per scale, 4 attention heads, self-attention at resolution 16, dropout 0. The 
+
+same U-Net is used by HTFM, LIM, DLPM, DLIM, and t-Flow so that any FID difference reflects the noising/clock formulation rather than backbone capacity. For HTFM, the U-Net is additionally equipped with the path-feature conditioning module described below. 
+
+HRRR VIL. The NCSN++ backbone of [43] on 128 ×128 single-channel inputs, with base channels 32, channel multipliers (1 , 2, 2, 4, 4), four residual blocks per scale, 4 attention heads, self-attention at resolution 16, FIR (1 , 3, 3, 1) up/down-sampling, swish nonlinearities, Group-Norm, and BigGAN-style residual blocks. Sigma range [0 .01 , 50] on 1000 noise scales when used with score-based baselines. 
+
+Path-feature conditioning (HTFM-specific). HTFM’s velocity network conditions on a clock-derived path feature ϕ that summarizes the realized clock trajectory of each sample. The feature source depends on the random clock: 
+
+• Student-t clock Tt=tV ν , Vν ∼ InvGamma( ν/ 2, ν/ 2). The path is fully determined by the single scalar Vν , so we take ϕ= log Vν ∈ R (dϕ=1); no signature is needed. 
+
+• α-stable subordinator clock . We discretize the time-augmented path {(ti, T ti )}Ni=0 on a fixed N =200 grid, standardize each of the two channels along time, and take its truncated logsignature of order m (default m=1, i.e. ϕ ∈ R2 collecting the increments of the two channels). The construction matches Section 3.2. 34 • Deterministic clock Tt=t (HTFM-G, p=∞). No path feature; the conditioning module is omitted entirely and the network reduces to a standard time-conditioned velocity field. The raw feature ϕ ∈ Rdϕ is mapped through a shared two-layer MLP ϕpath : Rdϕ → R128 
+
+with SiLU activations, dropout 0, and an internal hidden width of 128. The 128-dimensional path embedding is injected into the velocity network at every residual block by concatenation with the time embedding. In the original block the time embedding temb ∈ Rdt is mapped to a per-channel scale/shift via a linear Wt ∈ RCout ×dt ; with path conditioning this is replaced by a wider linear Wt,ϕ ∈ RCout ×(dt+128) acting on the concatenation [ temb ∥ ϕpath ]. The same concatenation-at-every-block scheme is used identically by the DDPM U-Net (CIFAR10-LT), the NCSN++ U-Net (HRRR VIL), and the residual-MLP backbone (2D mixture); this keeps the comparison against LIM/DLPM/DLIM/t-Flow clean, since their backbones have no analogous trajectory-summary input and therefore see only the time embedding. For completeness, our implementation also supports a zero-initialized FiLM modulation interface that produces a per-channel (scale , shift) from ϕpath and applies it at the middle block. All HTFM rows reported in the paper use only the concatenation interface; FiLM is left disabled. 
+
+E.5 Training 
+
+All runs use AdamW with default β’s. Per-dataset hyperparameters are listed below. 
+
+2D mixture. Learning rate 5 ×10 −3, batch size 1024, EMA decay 0 .99, total number of epochs 100. 
+
+CIFAR10-LT. Learning rate 2 ×10 −4 with 500 warmup steps and a step-LR schedule (decay factor 0 .99 every 1000 steps); batch size 100; EMA decay 0 .9999 used for evaluation; gradient clipping at ℓ2 norm 1 .0. Models are trained for 2000 epochs. 
+
+HRRR VIL. Learning rate 10 −4 with 1000 warmup steps and no LR decay; weight decay 0; batch size 128; EMA decay 0 .9999; gradient clipping at 5 .0. Models are trained for 1500 epochs. 
+
+HTFM-specific knobs. For HTFM the random clock is one of: deterministic Tt = t (Gaus-sian limit, HTFM-G), an α-stable subordinator with decay degree pα ∈ { 1.6, 1.7, 1.8, 1.9} on CIFAR10-LT and pα ∈ { 1.6, 1.7, 1.8} on HRRR, or a Student-t random-slope clock Tt = tV ν ,
+
+Vν ∼ InvGamma( ν/ 2, ν/ 2), with decay degree pν ∈ { 1.7, 2.0, 3.0} on CIFAR10-LT and HRRR (extended to pν = 1 .5 on the 2D mixture where a degenerate variance is acceptable). The training loss is the clock-conditioned L2 flow-matching objective with velocity prediction. 
+
+E.6 Sampling 
+
+All HTFM and FM-based variants integrate the learned velocity field with a fixed-step ODE solver; LIM, DLPM, and DLIM use their respective (stochastic) reverse processes. 
+
+2D mixture. Deterministic Euler ODE solver; 24 ,000 samples generated per setting and compared to a held-out 24 ,000-sample reference set. 
+
+CIFAR10-LT. Deterministic Euler ODE solver for HTFM and the baselines. DLPM uses its native predictor; DLIM uses the deterministic ( η=0) variant. Higher-order solvers are reported only in the solver ablation (Appendix F.3). Unless otherwise stated, all FID results use the final EMA checkpoint after the fixed training budget. 35 HRRR VIL. Heun’s second-order ODE solver at 25 reverse steps (NFE = 50 per sample), following [36]. Tail statistics are evaluated on 20 ,000 generated samples. 
+
+E.7 Compute Resources 
+
+All experiments were conducted on a mix of NVIDIA L40S (48GB) and A100 (80GB) GPUs. CIFAR10-LT runs use up to 8 L40S GPUs in parallel, while HRRR VIL runs use A100 80G GPUs to accommodate the larger 128 × 128 single-channel inputs and the NCSN++ backbone. The total training budget is fixed by the per-dataset epoch counts reported in Appendix E.5 (100 epochs for the 2D mixture, 2000 epochs for CIFAR10-LT, and 1500 epochs for HRRR VIL). Sampling cost is dominated by the listed NFE budgets and the ODE/SDE solver choices in Appendix E.6. 
+
+# F Ablation Studies 
+
+Unless otherwise stated, ablations are conducted on CIFAR10-LT because it exposes both global generation quality and tail-class coverage while remaining more economical than the HRRR sweep. The same protocol can be repeated on 2D toy distributions for visualization and on HRRR for the final robustness check. 
+
+F.1 Effect of Flow Type 
+
+Flow type Level 0 Level 1 Level 2 Straight line 16.65 16.10 16.46 Signature-linear VE 16.43 16.19 16.71 
+
+Table 4: Flow-type ablation on CIFAR10-LT under HTFM-α at pα = 1.7. We compare two clock-conditioned interpolation schedules in FID performance: the clock-blind straight line and a signature-linear VE schedule whose mix-ing weights depend on log-signature features of the realized clock path. Columns vary the signature order provided to the velocity net-work. Each cell reports the FID at sampling NFE= 100 using the Euler ODE solver. We next ablate the interpolation schedule it-self, holding the random clock and the source covariance fixed. We compare two flow types implemented in our codebase: (i) the stan-dard straight-line interpolation XTt = tX 1 +(1 − t)XT 
+
+> 0
+
+, which ignores the realized clock and moves linearly in physical time t; and (ii) a signature-linear VE schedule whose inter-polation coefficients are convex combinations parameterized by truncated logsignature fea-tures of the clock path, with mixing weights 
+
+λα, λ β controlling how aggressively the sched-ule deviates from straight line. Comparing these two schedules under a matched signa-ture feature isolates the value of clock-aware versus clock-blind interpolation. We run this ablation on the HTFM-α family at pα = 1 .7 as a representative slice of the heavy-tailed regime. 
+
+F.2 Effect of Number of Function Evaluations (NFE) 
+
+We next vary the number of function evaluations (NFE) used by the sampler, holding training fixed and changing only the sampling budget. This ablation measures each method’s quality– cost tradeoff: Figure 2 plots FID against NFE for HTFM-α, DLPM, and DLIM at three decay degrees pα ∈ { 1.6, 1.7, 1.8}.Three trends are visible across all three panels. (i) HTFM-α dominates at low NFE. 
+
+The red curve sits well below both baselines from the smallest sampling budget, and the gap to DLPM is largest precisely where compute is scarcest – consistent with HTFM inheriting the low-NFE sample efficiency of flow matching rather than the slow burn-in of α-stable diffusion. 
+
+(ii) DLPM closes the gap only at high NFE. The blue curve falls steeply with more solver steps and crosses or matches HTFM-α near the right edge of the budget range, indicating that 36 20 50 100 200 500            
+
+> NFE
+> 16
+> 18
+> 20
+> 22
+> 24
+> 26
+> 28
+> FID
+> p= 1.6
+> 20 50 100 200 500
+> NFE
+> 16
+> 18
+> 20
+> 22
+> 24
+> 26
+> 28
+> FID
+> p= 1.7
+> 20 50 100 200 500
+> NFE
+> 15.0
+> 17.5
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> FID
+> p= 1.8
+> HTFM-
+> DLPM
+> DLIM
+
+Figure 2: NFE-vs-FID curves on CIFAR10-LT. One panel per decay degree pα ∈ { 1.6, 1.7, 1.8};lines compare HTFM-α (ours) with the DLPM and DLIM baselines. Lower FID is better. 
+
+Solver NFE = 20 NFE = 50 NFE = 100 Euler (1st order) 20.80 17.92 16.31 Heun (2nd order) 18.55 17.44 15.87 Midpoint (2nd order) 17.82 16.51 15.81 
+
+AB2 (2nd order, multi-step) 18.02 16.47 15.82 
+
+Table 5: ODE-solver ablation on CIFAR10-LT under HTFM-α at pα = 1 .7. Each cell reports FID (12 ,406 generated vs 12 ,406 reference, EMA, lower is better) at the listed total NFE budget; for the higher-order solvers the number of integration steps is ⌊NFE /NFE-per-step ⌋.
+
+Bold indicates per-column best. the two methods become broadly comparable at the asymptotic-quality end of the curve. The crossover happens later for heavier tails (smaller pα), where the sampler has more high-frequency content to integrate through. (iii) DLIM plateaus. The green curve flattens early and stays above both other methods for the rest of the range, so its deterministic sampler does not scale further with extra NFE on this benchmark. Together these curves give the same message as the main-text CIFAR10-LT comparison: HTFM-α matches the asymptotic quality of the strongest 
+
+α-stable diffusion baseline while strictly dominating it under tight NFE budgets. 
+
+F.3 Effect of ODE Solver 
+
+This ablation compares the integration scheme used during sampling, holding the trained model fixed and varying only the solver and the matched NFE budget. We compare four fixed-step ODE solvers implemented in our codebase: explicit Euler (1st order), Heun and midpoint (2nd-order single-step Runge–Kutta), and Adams–Bashforth AB2 (2nd-order multi-step). Higher-order solvers reduce the per-step discretization error of the velocity integration, but each step costs more network evaluations: a step of Heun/midpoint/AB2 costs 2 NFE. At a matched total NFE budget the higher-order solvers therefore take fewer integration steps, so the ablation captures the per-NFE quality–accuracy tradeoff rather than a per-step comparison. We report HTFM-α at pα = 1 .7 as a representative slice. 
+
+# G Visualizations 
+
+This section collects qualitative visualizations that complement the quantitative results in the main text. 37 G.1 2D toy distributions: clock-degree sweep 
+
+Figure 3 compares HTFM-α samples generated under clocks of different decay degrees (rows: 
+
+p = ∞, pα = 1 .8, pα = 1 .5) against ground-truth samples (top row) across five 2D toy targets (columns: checkerboard , two moons , swiss roll , rings , olympic rings ). The same back-bone, training schedule, and NFE budget are used for every cell; only the random-clock law is swept. 
+
+Figure 3: HTFM-α samples on five 2D toy distributions (checkerboard , two moons ,
+
+swiss roll , rings , olympic rings ) under decay exponents p ∈ {∞ , 1.8, 1.5} (α in the fig-ure denotes the α-stable stability index of the random clock; the top row is ground truth). Same backbone, training, and NFE across cells. 
+
+G.2 2D SαS mixture: baseline comparison at NFE =20 
+
+Figure 4 compares HTFM against DLPM and DLIM on the 2D imbalanced α-stable mixture at NFE=20, on two stability indices αdata ∈ { 1.5, 1.8} (rows). Each panel overlays generated sam-ples (blue) on the corresponding real data (orange in the leftmost column). HTFM reproduces the imbalanced grid pattern more cleanly. 
+
+G.3 CIFAR10-LT: generated samples 
+
+Figure 5 shows generated 32 ×32 samples from HTFM-α on CIFAR10-LT, organised so that each column collects samples from a single CIFAR-10 class. 38 Figure 4: Generated samples on the 2D imbalanced α-stable mixture at NFE=20. Rows: 
+
+αdata = 1 .8 (top), αdata = 1 .5 (bottom). Columns: real data, HTFM, DLPM, DLIM. W1
+
+distances to the real data are reported below each generated panel. 39 Figure 5: CIFAR10-LT generated samples from HTFM-α. Each column corresponds to one CIFAR-10 class; from left to right: airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck . This is also the CIFAR10-LT head-to-tail order, i.e. per-class training-sample counts decrease from the leftmost to the rightmost column. Sample fidelity broadly tracks the per-class training-set size: the head classes airplane and automobile (leftmost two columns) produce the sharpest, most coherent images, while progressively rarer classes (rightward) exhibit more artefacts and weaker class identity. 40
