@@ -6,27 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-18
-- 运行时间：2026-07-18 21:04:52 UTC
+- 最新运行日期：2026-07-19
+- 运行时间：2026-07-19 20:40:41 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：1
 - 精读区：0
-- 速读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今日浏览2篇论文，均为7.0分速读，聚焦流匹配与空间聚类分析。重点关注随机时钟带来的重尾流匹配方法，以及基于Metropolis-Hastings扩散距离的空间聚类测量。建议深入研读这两篇论文的理论推导，并尝试将重尾流匹配技术应用于非均匀采样数据场景。
-- 详情：[/202607/18/README](/202607/18/README)
+今日收录1篇论文，速读1篇，聚焦于自学习扩散模型生成晶格配置。最值得关注的方向是利用自学习机制提升扩散模型在晶格结构生成中的性能。建议读者关注该模型在材料科学中的应用潜力，尤其是对生成质量的实际评估。
+- 详情：[/202607/19/README](/202607/19/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Heavy-Tailed Flow Matching via Random Clocks](/202607/18/2607.13841v1-heavy-tailed-flow-matching-via-random-clocks)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：流匹配连接源和目标分布，类似于扩散桥
-2. [Measuring Spatial Clustering via Metropolis-Hastings Diffusion Distance](/202607/18/2607.14880v1-measuring-spatial-clustering-via-metropolis-hastings-diffusion-distance)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：通过图上扩散距离衡量两个概率分布之间的差异
+1. [Lattice Configuration Generation with a Self-Learning Diffusion Model](/202607/19/2607.12587v1-lattice-configuration-generation-with-a-self-learning-diffusion-model)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：使用基于分数的扩散模型进行采样
 
 
 <div class="dpr-home-promo-card">
