@@ -1,0 +1,2107 @@
+Title: Cluster-Aware Matching via Laplacian Optimal Transport
+
+URL Source: https://arxiv.org/pdf/2607.16178v1
+
+Published Time: Mon, 20 Jul 2026 01:25:36 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# Cluster-Aware Matching via Laplacian Optimal Transport 
+
+Gabriel Samberg , Department of Applied Mathematics, Tel Aviv University 
+
+YoonHaeng Hur ∗, Department of Statistics, Columbia University 
+
+Yuehaw Khoo , Department of Statistics, University of Chicago 
+
+Nir Sharon , Department of Applied Mathematics, Tel Aviv University 
+
+Abstract 
+
+In many applications of matching, the point clouds to be matched are not merely unstructured sets of points but rather samples from distributions with an intrinsic cluster structure. In such cases, as individual points are often interchangeable within a coherent region, finding a robust region-to-region alignment is more desirable than establishing a precise point-to-point correspondence. To this end, we propose a novel approach for cluster-aware matching based on Laplacian Optimal Transport (LapOT). The key idea is to regularize the optimal transport problem with quadratic Laplacian terms constructed from similarity graphs of the point clouds, which encourages the optimal coupling to respect the cluster structure of both point sets. We also introduce Refined Simultaneous Clustering (RSC), a method that leverages the cluster-aware coupling obtained from LapOT to produce consistent partitions across the point sets, which can overcome the limitations of independent clustering and yield more stable and interpretable results. We demonstrate the effectiveness of our approach through theoretical analysis and empirical experiments, showing that LapOT indeed produces cluster-aware matching that leads to more consistent and meaningful alignments between point clouds. 
+
+# 1 Introduction 
+
+Matching is a fundamental problem of establishing meaningful correspondences or alignment [46, 37] between two or more sets of points drawn from potentially distinct distributions or geometric spaces. Traditionally rooted in computer vision and pattern recognition for rigid and non-rigid shape alignment [4, 29], the scope of point matching has expanded significantly with the advent of high-dimensional statistics and machine learning. Importantly, along with the rise of closely related optimal transport theory [47] and computation [32], establishing accurate point-to-point correspondences is increasingly critical in many applications, such as computational biology [40, 5], biological imaging [35, 43, 52], word translation [1, 16], to name a few. In many applications, the point clouds to be matched are not merely unstructured sets of points but rather samples from distributions with an intrinsic cluster structure. These clusters often represent meaningful regions or components of the underlying objects, such as the limbs of a human figure or functional groups of proteins. In such cases, as individual points are often interchangeable within a coherent region, finding a robust region-to-region alignment is more desirable than establishing a precise point-to-point correspondence. A natural yet naive approach to achieve such a region-level alignment would be to first cluster each point cloud independently and then match the resulting clusters. However, this two-stage approach can be extremely problematic due to the instability of clustering algorithms [3, 34, 49], leading to inconsistent partitions across the point sets, which in turn severely degrades the quality of the subsequent matching. This instability is illustrated in Figure 1(a), where independent clustering fails to produce consistent partitions for two similar shapes. This motivates the need for a cluster-aware matching framework that integrates information about the cluster structure directly into the matching process. By treating matching and clustering as coupled problems, we can leverage the shared structure of the point clouds to obtain more robust and meaningful correspondences. 
+
+> ∗Corresponding author: yoonhaeng.hur@columbia.edu
+
+1arXiv:2607.16178v1 [stat.ML] 17 Jul 2026 To this end, we propose a novel approach for cluster-aware matching based on Laplacian Optimal Trans-port (LapOT). The key idea is to regularize the optimal transport problem with quadratic Laplacian terms that encourage the optimal coupling to respect the cluster structure of both point sets. This is achieved by constructing similarity graphs for each point cloud, where the edges encode the likelihood of points belong-ing to the same cluster. The resulting Laplacian regularization terms promote similar rows and columns in the optimal coupling for points that are close in their respective similarity graphs, effectively encouraging a cluster-aware matching. We demonstrate the effectiveness of our approach through theoretical analysis and empirical experiments, showing that LapOT indeed produces cluster-aware couplings that lead to more consistent and meaningful alignments between point clouds. We also introduce a Refined Simultaneous Clustering (RSC) method that leverages the cluster-aware coupling obtained from LapOT to produce consistent partitions across the point sets. By conditioning the clustering process on the information provided by the matching, RSC can overcome the limitations of independent clustering and yield more stable and interpretable results. Figure 1(b) illustrates the improved clustering obtained by RSC, which produces consistent and meaningful clusters across both shapes. The rest of the paper is organized as follows. In Section 2, after laying out the relevant background, we introduce the LapOT framework. Section 3 establishes theoretical guarantees for the cluster-aware properties of the optimal coupling obtained from LapOT. In Section 4, we present the RSC method and demonstrate its effectiveness through experiments on 3D shapes, followed by further applications in Section 5.  
+
+> (a) Independent Clustering (b) Our Method (RSC)
+
+Figure 1: Clustering of two 3D human shapes from the CAPOD dataset [31]. (a) is obtained by applying spectral clustering independently to the two shapes with k = 5 for each shape, which yields inconsistent partitions. (b) is the result of our proposed Refined Simultaneous Clustering (RSC) method, which produces consistent and meaningful clusters across both shapes learned from the cluster-aware matching obtained via Laplacian optimal transport. See Section 4 for details. 
+
+Notation. Let tr( A) denote the trace of a square matrix A. For matrices A, B of the same dimension, let ⟨A, B ⟩ ≜ tr( A⊤B) denote their Frobenius inner product, with the associated Frobenius norm ∥A∥F ≜p⟨A, A ⟩. For a matrix A ∈ Rn×m, let ∥A∥1 ≜ P 
+
+> i,j
+
+|Aij | and ∥A∥∞ = max i,j |Aij |. For a vector v ∈ Rn and a symmetric positive semi-definite matrix L ∈ Rn×n, let ∥v∥L ≜ √v⊤Lv . Let R+ = [0 , ∞). For any n ∈ N,let Sn be the set of all permutations of [ n] = {1, . . . , n }, let 1 n = (1 , . . . , 1) ∈ Rn denote the all-ones vector, and let ∆ n ≜ {a ∈ Rn 
+
+> +
+
+: Pni=1 ai = 1 } be the probability simplex. For a ∈ ∆n and b ∈ ∆m, we denote by Πa,b ≜ {P ∈ Rn×m 
+
+> +
+
+: P 1m = a and P ⊤1n = b} the set of couplings between a and b. For any P ∈ Rn×m 
+
+> +
+
+, let 
+
+H(P ) ≜ − P 
+
+> i,j
+
+Pij (log( Pij ) − 1) denote the Shannon entropy; we also use H(v) ≜ − P 
+
+> i
+
+vi(log( vi) − 1) to denote the Shannon entropy of a vector v ∈ Rn
+
+> +
+
+. For two vectors u, v ∈ Rn, let u/v denote the element-wise division of u by v. For a vector v ∈ Rn, let diag( v) denote the diagonal matrix with v on the diagonal. For any z ∈ Rd, let δz denote the Dirac measure at z.
+
+# 2 Laplacian Optimal Transport 
+
+Point matching concerns finding a correspondence between two sets of points {X1, . . . , X n} and {Y1, . . . , Y m}
+
+defined on some sets X and Y, respectively. This section introduces Laplacian Optimal Transport (LapOT), 2a novel approach for point matching that incorporates the cluster structure of the point sets. We first review relevant background on point matching and optimal transport, followed by a detailed description of LapOT and its low-rank extension. 
+
+2.1 Preliminaries: Matching, Optimal Transport, and Clustering 
+
+Quadratic Matching. Quadratic matching is one standard approach for point matching, which seeks a suitable alignment between two sets of points based on pairwise relationships. To this end, we first define two pairwise relationship matrices A ∈ Rn×n and B ∈ Rm×m, which capture the relationships between the points in {X1, . . . , X n} and {Y1, . . . , Y m}, respectively. The choice of A and B depends on the specific application and the nature of the data. For instance, when X is a metric space with a metric dX , we may set Aii ′ = dX (Xi, X i′ ); when the points are from a graph, we may use the adjacency matrix as A. Once suitable A, B are chosen, quadratic matching seeks the best alignment between them. Particularly, when 
+
+n = m, this can be formulated as follows: min 
+
+> σ∈S n
+> n
+
+X
+
+> i,i ′=1
+
+|Aii ′ − Bσ(i)σ(i′)|p, (1) where p > 0 is a suitable exponent. In words, (1) finds the permutation that minimizes the total discrepancy between A and B after alignment. When n̸ = m, we may seek the best alignment in terms of couplings, leading to the following formulation: min 
+
+> π∈Πa,b
+> n
+
+X
+
+> i,i ′=1
+> m
+
+X
+
+> j,j ′=1
+
+|Aii ′ − Bjj ′ |pπij πi′j′ , (2) where a ∈ ∆n and b ∈ ∆m are user-specified weights to emphasize the importance of the points. In plain language, this formulation seeks a coupling that aligns A, B with the smallest total discrepancy. When X , Y
+
+are metric spaces with A, B being the pairwise distances of the points, (2) is the Gromov-Wasserstein distance [27] between two empirical measures Pni=1 aiδXi and Pmj=1 bj δYj . Despite its rich theoretical properties [28, 12] and practical success across various domains [33, 45, 1, 53, 7, 19], quadratic matching is NP-hard: notice that (1) is a quadratic assignment problem [24, 26], and (2) is a non-convex quadratic program. 
+
+Profile-Based Matching and Optimal Transport. Another approach to point matching is to assign suitable profiles to the points and match them if the profiles are similar, which has been considered by [11] and [20] for graph and object matching, respectively. Concretely, we assign to Xi the weighted distribution 
+
+μi ≜ Pni′=1 ai′ δAii ′ as its profile, called a degree profile in [11] when A is the adjacency matrix and a distance profile in [20] when A consists of the pairwise distances. Similarly, Yj ’s profile is defined as νj ≜Pmj′=1 bj′ δBjj ′ . Here, ai’s and bj ’s are user-specified weights to emphasize the importance of the points. Now that the profiles are one-dimensional measures, we construct a matrix C ∈ Rn×m whose entries measure the similarity between the profiles based on a suitable discrepancy, for instance, Cij = W1(μi, ν j ) when using the Wasserstein distance. Then, the point matching problem can be reduced to the following optimization problem: min 
+
+> π∈Πa,b
+
+⟨π, C ⟩, (3) which is a discrete optimal transport (OT) problem between Pni=1 aiδXi and Pmj=1 bj δYj , with C serving as a transport cost matrix. Unlike quadratic matching, (3) is a linear program that can be solved by polynomial-time algorithms. Of course, solving (3) can still be computationally expensive for large-scale problems. To tackle this, the following entropic regularized optimal transport problem [51, 10, 32] has been proposed: given any a ∈ ∆n, b ∈ ∆m, and C ∈ Rn×m,
+
+OT ε(a, b, C ) ≜ min 
+
+> π∈Πa,b
+
+⟨π, C ⟩ − εH (π). (4) Adding the entropic regularization term to (3) leads to a strongly convex problem. Crucially, (4) can be solved efficiently via the Sinkhorn algorithm that iteratively scales the kernel matrix e−C/ε so that its row and column sums become a and b, respectively. 3Clustering via Graph Cuts. One common approach to clustering is to view the data as a graph and partition the graph into clusters by minimizing the graph cuts. To be specific, consider an undirected graph with n vertices with an adjacency matrix K ∈ Rn×n. Here, the idea is to cluster the vertices of the graph by minimizing the total weight of edges that are cut by the partition. Given a partition I1 ∪ · · · ∪ I k = [ n] of the vertices, each partition Ij represents a cluster, and the total weight of edges that are cut by Ij is given by P   
+
+> i∈I j,i ′/∈I j
+
+Kii ′ . Hence, the sum of these weights for all partitions, weighted by the size of the partitions, can be written as kX
+
+> j=1
+
+P   
+
+> i∈I j,i ′/∈I j
+
+Kii ′
+
+|I j | ,
+
+which is called the ratio cut of the partition. This can be rewritten as ⟨P, LP ⟩, where L = diag( K1n) − K
+
+is the unnormalized graph Laplacian and P ∈ Rn×k is the partition matrix defined by Pij = 1√|I j | if vertex 
+
+i belongs to partition Ij and Pij = 0 otherwise. Accordingly, minimizing the ratio cut can be formulated as the following optimization problem: min  
+
+> P∈Rn×k
+
+⟨P, LP ⟩, subject to Pij =
+
+( 1√|I j | if vertex i belongs to partition Ij ,
+
+0 otherwise .
+
+This, however, is a combinatorial optimization problem that is NP-hard. A common relaxation is to relax the constraint on P to be P ⊤P = Ik, which leads to the following optimization problem: min  
+
+> P∈Rn×k
+
+⟨P, LP ⟩, subject to P ⊤P = Ik,
+
+which boils down to finding the k eigenvectors of L corresponding to the k smallest eigenvalues. This is the backbone of spectral clustering [2, 8, 48], which is a widely used clustering algorithm in practice. Instability of clustering [3, 34, 49] can lead to unreliable scientific findings and downstream decisions filled with uncertainty [42, 44], which has motivated a huge body of work on uncertainty quantification for clustering [23, 17, 25, 18, 50, 22, 30]. However, these methods are not designed to produce consistent partitions across multiple point sets, which is crucial for cluster-aware matching. This motivates the need for a new approach that can leverage the shared structure of the point clouds to obtain more robust and meaningful correspondences. 
+
+2.2 Laplacian Optimal Transport (LapOT) 
+
+We introduce Laplacian Optimal Transport (LapOT), a novel approach for point matching that incorporates the cluster structure of the point sets. The key idea is to regularize the optimal transport problem (4) with quadratic Laplacian regularization terms that encourage the optimal coupling to carry the cluster structure of both point sets. To this end, we require the user to specify the cluster structure of the point sets in the form of similarity graphs, represented by the symmetric matrices KX ∈ Rn×n and KY ∈ Rm×m, for the point sets {X1, . . . , X n}
+
+and {Y1, . . . , Y m}, respectively. The entry ( KX )ii ′ (resp. ( KY )jj ′ ) represents the similarity between Xi and 
+
+Xi′ (resp. Yj and Yj′ ), where the larger value indicates higher similarity and thus being more likely to belong to the same cluster. The choice of KX and KY depends on the specific application and the nature of the data. For instance, when X is a metric space with a metric dX , we may set ( KX )ii ′ = e−dX (Xi,X i′ )/σ for some σ > 0; when the points are from a graph, we may use the usual binary adjacency matrix as KX . The same applies to KY for the point set {Y1, . . . , Y m}.Now, we want the optimal coupling to reflect the cluster structure encoded by KX and KY . Concretely, when ( KX )ii ′ (resp. ( KY )jj ′ ) is large, we want to encourage the i-th and i′-th rows (resp. j-th and j′-th columns) of the optimal coupling to be similar to each other. In other words, if Xi and Xi′ are similar to each other, we want them to be matched to similar distributions over {Y1, . . . , Y m}; the same applies to Yj ’s. To do so, we define LX = diag( KX 1n) − KX and LY = diag( KY 1m) − KY , which are the unnormalized graph Laplacians of the similarity graphs defined by KX and KY , respectively. Then, for a coupling π ∈ Πa,b ,4consider the following terms: 
+
+⟨π, L X π⟩ = tr( π⊤LX π) = 12
+
+> n
+
+X
+
+> i,i ′=1
+
+(KX )ii ′ ∥πi − πi′ ∥22,
+
+⟨π, πL Y ⟩ = tr( πL Y π⊤) = 12
+
+> m
+
+X
+
+> j,j ′=1
+
+(KY )jj ′ ∥π⊤ 
+
+> j
+
+− π⊤ 
+
+> j′
+
+∥22.
+
+(5) Here, πi and π⊤ 
+
+> j
+
+are the i-th row and j-th column of the coupling π, respectively. By adding these terms to (4), we encourage the optimal coupling to have similar rows for similar Xi’s and similar columns for similar Yj ’s. Accordingly, the optimal coupling is incentivized to carry the cluster structure of both point sets defined by KX and KY .In summary, given any a ∈ ∆n, b ∈ ∆m, C ∈ Rn×m, and LX , L Y defined as above, we define LapOT as follows: 
+
+LapOT λx,λ y ,λ (a, b, C, L X , L Y ) ≜ min 
+
+> π∈Πa,b
+
+⟨π, C ⟩ + λx⟨π, L X π⟩ + λy ⟨π, πL Y ⟩ − λH (π), (6) where λx, λ y , λ > 0 are hyperparameters that control the strength of the regularization. We can view LapOT as a generalization of entropic OT: when λx = λy = 0, LapOT reduces to entropic OT. By tuning λx, λ y ,we can control the extent to which the optimal coupling is encouraged to carry the cluster structure of the point sets, which can be beneficial for downstream tasks such as clustering and alignment. 
+
+Optimization of LapOT. Note that the objective function of (6) consists of the convex quadratic terms— as the graph Laplacian is positive semidefinite—and the strongly convex entropic regularization term. Hence, (6) is a strongly convex optimization problem that can be solved by general-purpose convex optimization solvers. However, such solvers, which usually rely on interior point methods, can be inefficient for large-scale problems. [21] proposed specialized algorithms for smooth objective functions with entropic regularization over couplings, which encompasses (6) as a special case. Their algorithms call the Sinkhorn algorithm as a subroutine, and the number of Sinkhorn calls is independent of the coupling size nm if λ is sufficiently large compared to the norm of λxLX + λy LY or depends logarithmically on nm if λ is sufficiently small (including the case λ = 0). Therefore, the algorithms are far more efficient than general-purpose convex optimization solvers, especially for large-scale problems, and we use them to solve (6) in our experiments. We refer the readers to [21] for more details on the algorithms and their theoretical guarantees. 
+
+Remark 1. The Laplacian regularization terms in (5) were also considered in [14] and [9] in the context of domain adaptation. However, they do not study the cluster-awareness property of this regularization, which is the main focus of this paper. 
+
+2.3 Low-Rank Extension of Laplacian Optimal Transport 
+
+As LapOT encourages the optimal coupling to carry the cluster structure of the point sets, it is natural to expect that the optimal coupling of LapOT enjoys a low-rank structure. While we will formally justify this in Section 3, we propose a method to directly impose a low-rank constraint on the optimal coupling of LapOT, which can be beneficial for large-scale problems. In the optimal transport literature, low-rank structure of couplings has been proposed and studied by [15, 39, 38] based on the following notion of non-negative rank: rk +(M ) := min 
+
+(
+
+r ∈ N : ∃R1, . . . , R r ∈ Rn×m 
+
+> +
+
+s.t. rk( R1) = · · · = rk( Rr ) = 1 and M =
+
+> r
+
+X
+
+> i=1
+
+Ri
+
+)
+
+, (7) where rk is the usual rank of a matrix. The idea of low-rank optimal transport is to solve the optimal transport problem by imposing a non-negative rank constraint on the coupling, namely, the set Π a,b of all couplings is replaced by the set of couplings with a non-negative rank of at most r defined as Πa,b (r) ≜ {P ∈ Πa,b : rk +(P ) ≤ r}.
+
+5The feasible set becomes non-convex, and the resulting optimization problem is no longer convex. In [39], instead of directly optimizing over Π a,b (r), the following observation is made: Πa,b (r) = [
+
+> g∈∆+
+> r
+
+Πa,g,b where Πa,g,b = U diag(1 r /g )V ⊤ : U ∈ Πa,g and V ∈ Πb,g , (8) which leads to the following reformulation of the low-rank optimal transport problem: min 
+
+> π∈Πa,b (r)
+
+⟨π, C ⟩ = min 
+
+> (U,V,g )∈C (a,b,r )
+
+⟨U diag(1 r /g )V ⊤, C ⟩,
+
+where 
+
+C(a, b, r ) = {(U, V, g ) ∈ Rn×r 
+
+> +
+
+× Rm×r 
+
+> +
+
+× Rr 
+
+> +
+
+: U 1r = a, V 1r = b, U ⊤1n = V ⊤1m = g}. (9) While the right-hand side of (8) is non-convex as the objective function is not jointly convex in U, V, g ,one can efficiently utilize Dykstra’s algorithm [13] to solve the problem as a subroutine of a mirror descent algorithm with KL divergence. [39] also considers the entropic regularized version of the low-rank optimal transport problem (8) by adding individual entropic regularization terms for U, V, g to the objective function, which leads to the following optimization problem: min 
+
+> (U,V,g )∈C (a,b,r )
+
+⟨U diag(1 r /g )V ⊤, C ⟩ − λH (U ) − λH (V ) − λH (g).
+
+Accordingly, a natural extension of LapOT to the low-rank setup can be formulated as follows: min  
+
+> (U,V,g )∈C (a,b,r )
+
+q(U diag(1 r /g )V ⊤) − λH (U ) − λH (V ) − λH (g), (10) where q : Rn×m 
+
+> +
+
+→ R is the quadratic objective function of LapOT defined as 
+
+q(π) = ⟨π, C ⟩ + λx⟨π, L X π⟩ + λy ⟨π, πL Y ⟩.
+
+As in [39], we can efficiently solve (10) by utilizing Dykstra’s algorithm as a subroutine of a mirror descent algorithm with KL divergence. We defer the details of the optimization scheme to Section A in the appendix. 
+
+# 3 Theory 
+
+This section studies the theoretical properties of Laplacian optimal transport. As noted earlier, the Laplacian regularization terms in (5) encourage the optimal coupling to be smooth with respect to the graph structures of LX and LY . Therefore, if LX and LY are induced by graphs with multiple connected components, then the optimal coupling is expected to be block-constant with respect to the partitions induced by the connected components, which leads to a low-rank structure of the optimal coupling. Our main result, Theorem 1, provides a non-asymptotic bound on the deviation of the optimal coupling from its block-averaged version with respect to the partitions induced by the connected components of LX
+
+and LY . This result shows that the optimal coupling is close to a block-constant matrix when (1) the cost matrix is close to a block-constant matrix, (2) the regularization parameters λx and λy are large, or (3) the spectral gaps of LX and LY are large. 
+
+Theorem 1. Let π⋆ be the solution to LapOT λx,λ y ,λ (a, b, C, L X , L Y ) with λx, λ y > 0. Assume the following. (i) LX and LY are induced by graphs with r and s connected components, where {Aα}rα=1 and {Bβ }sβ=1 
+
+are the corresponding partitions of the index sets [n] and [m], respectively. (ii) a and b are block-constant with respect to the partitions {Aα}rα=1 and {Bβ }sβ=1 , respectively. Let LX = Φ X ΛX Φ⊤ 
+
+> X
+
+and LY = Φ Y ΛY Φ⊤ 
+
+> Y
+
+be their orthogonal decompositions, where ΛX and ΛY are diagonal matrices consisting of the eigenvalues μX 
+
+> 1
+
+≤ · · · ≤ μXn and μY 
+
+> 1
+
+≤ · · · ≤ μYm of LX and LY , respectively. For any ℓ ∈ [n] and h ∈ [m], define the projection matrices as PX,ℓ ≜ ΦX,ℓ Φ⊤ 
+
+> X,ℓ
+
+and PY,h ≜ ΦY,h Φ⊤
+
+> Y,h
+
+, where 
+
+ΦX,ℓ and ΦY,h are the submatrices consisting of the first ℓ and h columns of ΦX and ΦY , respectively. Then, 
+
+6PX,r π⋆ and π⋆PY,s are obtained by block-averaging the rows and columns of π⋆ with respect to the partitions 
+
+{Aα}rα=1 and {Bβ }sβ=1 , respectively. Moreover, we have 
+
+∥π⋆ − PX,r π⋆∥2F ≤ ∥PX,r C − C∥∞
+
+λxμXr+1 
+
+and ∥π⋆ − π⋆PY,s ∥2F ≤ ∥CP Y,s − C∥∞
+
+λy μYs+1 
+
+. (11) 
+
+Proof. From spectral graph theory, e.g., Proposition 2 of [48], notice that (i) implies that the eigenspaces of 
+
+LX and LY corresponding to the zero eigenvalues ( μX 
+
+> 1
+
+= · · · = μXr = 0 and μY 
+
+> 1
+
+= · · · = μYs = 0) are spanned by the indicator vectors of the connected components of the graphs. Accordingly, we have LX ΦX,r = 0 and LY ΦY,s = 0. Also, we deduce that left multiplication by PX,r and right multiplication by PY,s are the operators that average matrices with respect to the partitions {Aα}rα=1 and {Bβ }sβ=1 , respectively. Now, we compare the objective values of π⋆ and PX,r π⋆ in LapOT λx,λ y ,λ (a, b, C, L X , L Y ). Notice that 
+
+PX,r π⋆ ∈ Πa,b . To see this, observe that (ii) implies PX,r a = a and PY,s b = b. Hence, 
+
+PX,r π⋆1m = PX,r a = a and (PX,r π⋆)⊤1n = ( π⋆)⊤PX,r 1n = ( π⋆)⊤1n = b. 
+
+As LX PX,r = 0, we have ⟨PX,r π⋆, L X PX,r π⋆⟩ = 0. By the optimality of π⋆, we have 
+
+⟨π⋆, C ⟩ + λx⟨π⋆, L X π⋆⟩ + λy ⟨π⋆, π ⋆LY ⟩ − λH (π⋆) ≤ ⟨ PX,r π⋆, C ⟩ + λy ⟨PX,r π⋆, P X,r π⋆LY ⟩ − λH (PX,r π⋆).
+
+As ⟨PX,r π⋆, C ⟩ = ⟨π⋆, P X,r C⟩, we have 
+
+λ(H(PX,r π⋆) − H(π⋆)) + λx⟨π⋆, L X π⋆⟩ ≤ ⟨ π⋆, P X,r C − C⟩ + λy ⟨PX,r π⋆, P X,r π⋆LY ⟩ − λy ⟨π⋆, π ⋆LY ⟩.
+
+Since PX,r π⋆ is obtained by block-averaging the rows of π⋆ with respect to the partition {Aα}rα=1 , we have 
+
+H(PX,r π⋆) ≥ H(π⋆) due to the concavity of H. Also, we observe ⟨PX,r π⋆, P X,r π⋆LY ⟩ ≤ ⟨ π⋆, π ⋆LY ⟩. To see this, let ϕi be the i-th column of Φ X . Then, 
+
+⟨π⋆, π ⋆LY ⟩ − ⟨ PX,r π⋆, P X,r π⋆LY ⟩ = tr( π⋆LY (π⋆)⊤) − tr(Φ ⊤ 
+
+> X,r
+
+π⋆LY (π⋆)⊤ΦX,r )=
+
+> n
+
+X
+
+> i=r+1
+
+ϕ⊤ 
+
+> i
+
+π⋆LY (π⋆)⊤ϕi
+
+≥ 0,
+
+where the inequality holds because π⋆LY (π⋆)⊤ is positive semi-definite. Meanwhile, 
+
+⟨π⋆, P X,r C − C⟩ ≤ ∥ π⋆∥1∥PX,r C − C∥∞ = ∥PX,r C − C∥∞.
+
+Hence, 
+
+λx⟨π⋆, L X π⋆⟩ ≤ ∥ PX,r C − C∥∞. (12) Now, we derive a lower bound on λx⟨π⋆, L X π⋆⟩. Let ˜ π = Φ ⊤ 
+
+> X
+
+π⋆ be the representation of π⋆ in the eigenbasis of LX . Then, we have 
+
+⟨π⋆, L X π⋆⟩ = tr(( π⋆)⊤LX π⋆) = tr(˜ π⊤ΛX ˜π) = 
+
+> n
+
+X
+
+> i=1
+> m
+
+X
+
+> j=1
+
+μXi ˜π2 
+
+> ij
+
+≥ μXr+1 
+
+> n
+
+X
+
+> i=r+1
+> m
+
+X
+
+> j=1
+
+˜π2 
+
+> ij
+
+.
+
+Meanwhile, 
+
+PX,r π⋆ = Φ X,r Φ⊤ 
+
+> X,r
+
+π⋆ = Φ X
+
+Φ⊤
+
+> X,r
+
+0
+
+
+
+π⋆ = Φ X
+
+˜π1: r
+
+0
+
+
+
+,
+
+where ˜ π1: r is the submatrix of ˜ π containing the first r rows. Hence, from π⋆ = Φ X ˜π, we have 
+
+∥π⋆ − PX,r π⋆∥2F =
+
+> n
+
+X
+
+> i=r+1
+> m
+
+X
+
+> j=1
+
+˜π2 
+
+> ij
+
+.
+
+Hence, μXr+1 ∥π⋆ −PX,r π⋆∥2F ≤ ⟨ π⋆, L X π⋆⟩, which, together with (12), implies the first inequality in (11). The second inequality in (11) can be proved similarly by comparing the objective values of π⋆ and π⋆PY,s .7From the bounds in (11), we immediately deduce that π⋆ = PX,r π⋆ and π⋆ = π⋆PY,s if PX,r C = C and 
+
+CP Y,s = C, respectively. In other words, if the matching cost is determined at the cluster level, then the optimal coupling indeed captures the cluster-level matching due to the Laplacian regularization terms and thus admits a low-rank structure with non-negative rank, defined in (7), bounded by the number of clusters. This is summarized in the following corollary. 
+
+Corollary 1. In Theorem 1, we deduce the following. (i) If C is row block-constant with respect to the partition {Aα}rα=1 , namely, PX,r C = C, then π⋆ is row block-constant with respect to the partition {Aα}rα=1 , namely, π⋆ = PX,r π⋆, and rk +(π⋆) ≤ r.(ii) If C is column block-constant with respect to the partition {Bβ }sβ=1 , namely, CP Y,s = C, then π⋆ is column block-constant with respect to the partition {Bβ }sβ=1 , namely, π⋆ = π⋆PY,s , and rk +(π⋆) ≤ s.(iii) If both (i) and (ii) hold, or equivalently, PX,r CP Y,s = C, then π⋆ is block-constant with respect to the product partition {Aα × Bβ }α∈[r],β ∈[s], namely, π⋆ = PX,r π⋆PY,s , and rk +(π⋆) ≤ min {r, s }.
+
+Meanwhile, from the bounds in (11), we deduce that π⋆ converges to its block-averaged version as λx and 
+
+λy increase, showing that stronger Laplacian regularization leads to a more pronounced low-rank structure of the optimal coupling. Indeed, at the limit of λx → ∞ or λy → ∞ , the optimal coupling converges to its block-averaged version. In this case, we can further characterize the limit of the optimal coupling as follows. 
+
+Proposition 1. In Theorem 1, we deduce the following. (i) If λx → ∞ , then π⋆ converges as follows: 
+
+lim  
+
+> λx→∞
+
+π⋆ = arg min 
+
+> π∈Πa,b
+
+⟨π, P X,r C⟩ + λy ⟨π, πL Y ⟩ − λH (π).
+
+(ii) If λy → ∞ , then π⋆ converges as follows: 
+
+lim   
+
+> λy→∞
+
+π⋆ = arg min 
+
+> π∈Πa,b
+
+⟨π, CP Y,s ⟩ + λx⟨π, L X π⟩ − λH (π).
+
+(iii) If λx, λ y → ∞ , then π⋆ converges as follows: 
+
+lim   
+
+> λx,λ y→∞
+
+π⋆ = arg min 
+
+> π∈Πa,b
+
+⟨π, P X,r CP Y,s ⟩ − λH (π).
+
+Proof. To show (i), let π⋆λx denote the optimal coupling for a given λx. Now, consider a sequence {λ(k) 
+
+> x
+
+}k∈N
+
+such that λ(k) 
+
+> x
+
+→ ∞ as k → ∞ . Since Π a,b is compact, there exists a convergent subsequence of {π⋆λ(k)
+
+> x
+
+}k∈N;by swapping the original sequence with its convergent subsequence, we may assume that {π⋆λ(k)
+
+> x
+
+}k∈N converges to some ˜ π ∈ Πa,b . We now claim ˜π = arg min 
+
+> π∈Πa,b
+
+⟨π, P X,r C⟩ + λy ⟨π, πL Y ⟩ − λH (π) =: π⋆
+
+> ∞
+
+.
+
+We first note that π⋆ 
+
+> ∞
+
+= PX,r π⋆
+
+> ∞
+
+. To see this, as in the proof of Theorem 1, observe that PX,r π⋆ 
+
+> ∞
+
+∈ Πa,b ,
+
+H(PX,r π⋆
+
+> ∞
+
+) ≥ H(π⋆
+
+> ∞
+
+), and ⟨PX,r π⋆
+
+> ∞
+
+, P X,r π⋆
+
+> ∞
+
+LY ⟩ ≤ ⟨ π⋆
+
+> ∞
+
+, π ⋆
+
+> ∞
+
+LY ⟩. Hence, 
+
+⟨PX,r π⋆
+
+> ∞
+
+, P X,r C⟩ + λy ⟨PX,r π⋆
+
+> ∞
+
+, P X,r π⋆
+
+> ∞
+
+LY ⟩ − λH (PX,r π⋆
+
+> ∞
+
+) ≤ ⟨ π⋆
+
+> ∞
+
+, P X,r C⟩ + λy ⟨π⋆
+
+> ∞
+
+, π ⋆
+
+> ∞
+
+LY ⟩ − λH (π⋆
+
+> ∞
+
+),
+
+where we also use ⟨PX,r π⋆
+
+> ∞
+
+, P X,r C⟩ = ⟨π⋆
+
+> ∞
+
+, P X,r C⟩. By the uniqueness of the minimizer π⋆
+
+> ∞
+
+, we conclude that π⋆ 
+
+> ∞
+
+= PX,r π⋆
+
+> ∞
+
+.For notational convenience, let π⋆λ(k)
+
+> x
+
+= π⋆k for k ∈ N. Then, by the optimality of π⋆k, we have 
+
+⟨π⋆k, C ⟩ + λ(k) 
+
+> x
+
+⟨π⋆k, L X π⋆k⟩ + λy ⟨π⋆k, π ⋆kLY ⟩ − λH (π⋆k) ≤ ⟨ π⋆
+
+> ∞
+
+, C ⟩ + λy ⟨π⋆
+
+> ∞
+
+, π ⋆
+
+> ∞
+
+LY ⟩ − λH (π⋆
+
+> ∞
+
+), (13) 8where we use ⟨π⋆
+
+> ∞
+
+, L X π⋆
+
+> ∞
+
+⟩ = 0 from π⋆ 
+
+> ∞
+
+= PX,r π⋆
+
+> ∞
+
+. Now, we claim lim 
+
+> k→∞
+
+
+
+⟨π⋆k, C ⟩ + λ(k) 
+
+> x
+
+⟨π⋆k, L X π⋆k⟩ + λy ⟨π⋆k, π ⋆kLY ⟩ − λH (π⋆k)
+
+
+
+= ⟨˜π, P X,r C⟩ + λy ⟨˜π, ˜πL Y ⟩ − λH (˜ π). (14) To see this, use (11) to deduce that lim  
+
+> k→∞
+
+PX,r π⋆k = lim  
+
+> k→∞
+
+π⋆k = ˜ π. 
+
+Hence, lim 
+
+> k→∞
+
+⟨π⋆k, C ⟩ = lim 
+
+> k→∞
+
+⟨PX,r π⋆k, C ⟩ = lim 
+
+> k→∞
+
+⟨π⋆k, P X,r C⟩ = ⟨˜π, P X,r C⟩ (15) and lim  
+
+> k→∞
+
+(λy ⟨π⋆k, π ⋆kLY ⟩ − λH (π⋆k)) = λy ⟨˜π, ˜πL Y ⟩ − λH (˜ π). (16) Meanwhile, as in the proof of Theorem 1, we have the following from the optimality of π⋆k:
+
+λ(k) 
+
+> x
+
+⟨π⋆k, L X π⋆k⟩ ≤ ⟨ PX,r π⋆k, C ⟩ + λy ⟨PX,r π⋆k, P X,r π⋆kLY ⟩ − λH (PX,r π⋆k) − ⟨ π⋆k, C ⟩ − λy ⟨π⋆k, π ⋆kLY ⟩ + λH (π⋆k),
+
+where the right-hand side converges to 0 as k → ∞ by the previous two limits. Hence, lim  
+
+> k→∞
+
+λ(k) 
+
+> x
+
+⟨π⋆k, L X π⋆k⟩ = 0 . (17) Combining (15), (16), and (17), we obtain (14). Then, combining (13) and (14), we have 
+
+⟨˜π, P X,r C⟩ + λy ⟨˜π, ˜πL Y ⟩ − λH (˜ π) ≤ ⟨ π⋆
+
+> ∞
+
+, P X,r C⟩ + λy ⟨π⋆
+
+> ∞
+
+, π ⋆
+
+> ∞
+
+LY ⟩ − λH (π⋆
+
+> ∞
+
+),
+
+where we use ⟨π⋆
+
+> ∞
+
+, C ⟩ = ⟨π⋆
+
+> ∞
+
+, P X,r C⟩ from π⋆ 
+
+> ∞
+
+= PX,r π⋆
+
+> ∞
+
+. By the uniqueness of the minimizer π⋆
+
+> ∞
+
+, we conclude that ˜ π = π⋆
+
+> ∞
+
+.Hence, we have shown that for any sequence {λ(k) 
+
+> x
+
+}k∈N such that λ(k) 
+
+> x
+
+→ ∞ , the corresponding sequence of optimal couplings {π⋆λ(k)
+
+> x
+
+}k∈N has a convergent subsequence that converges to π⋆
+
+> ∞
+
+. As the limit is independent of the choice of the sequence {λ(k) 
+
+> x
+
+}k∈N, we conclude that π⋆λx → π⋆ 
+
+> ∞
+
+as λx → ∞ . This proves (i). The proofs of (ii) and (iii) follow similarly. The above results describe an idealized setting in which clusters are represented as connected components of the similarity graphs. In the numerical experiments below, however, the similarity graphs are constructed from RBF kernels and are typically connected, while the degree-based marginals need not be block-constant. In this setting, the appropriate analog of block-constancy is low-frequency smoothness with respect to the graph Laplacians. The following result makes this connection precise: for arbitrary graph Laplacians, the LapOT solution is close to its projection onto the low-frequency eigenspaces of the two graphs, with an error controlled by the regularization parameters and the corresponding spectral gaps. This provides a theoretical explanation for why the coupling obtained by LapOT can be used in RSC to reveal approximate cluster structure even when the input graphs are connected. 
+
+Proposition 2. Let π⋆ be the solution of LapOT λx,λ y ,λ (a, b, C, L X , L Y ), where LX and LY are arbitrary graph Laplacians having the eigenvalues μX 
+
+> 1
+
+≤ · · · ≤ μXn and μY 
+
+> 1
+
+≤ · · · ≤ μYm of LX and LY , respectively. Let PX,ℓ and PY,h denote the orthogonal projections onto the first ℓ and h eigenvectors of LX and LY ,respectively, as in Theorem 1. Define 
+
+τλ(C) = min 
+
+> π∈Πa,b
+
+{⟨ π, C ⟩ − λH (π)}.
+
+Then, for any ℓ < n and h < m , we have 
+
+∥π⋆ − PX,ℓ π⋆∥2F ≤ F (π⋆) − τλ(C)
+
+λxμXℓ+1 
+
+and ∥π⋆ − π⋆PY,h ∥2F ≤ F (π⋆) − τλ(C)
+
+λy μYh+1 
+
+,
+
+where F (π) = ⟨π, C ⟩ + λx⟨π, L X π⟩ + λy ⟨π, πL Y ⟩ − λH (π).
+
+9Proof. By optimality, F (π⋆) ≤ F (π) for any π ∈ Πa,b . Since ⟨π⋆, C ⟩ − λH (π⋆) ≥ τλ(C), we obtain 
+
+λx⟨π⋆, L X π⋆⟩ + λy ⟨π⋆, π ⋆LY ⟩ ≤ F (π) − τλ(C).
+
+As this is true for any π ∈ Πa,b , we have 
+
+λx⟨π⋆, L X π⋆⟩ + λy ⟨π⋆, π ⋆LY ⟩ ≤ F (π⋆) − τλ(C).
+
+Now, recall the orthogonal decomposition LX = Φ X ΛX Φ⊤ 
+
+> X
+
+in Theorem 1. Then, 
+
+⟨π⋆, L X π⋆⟩ =
+
+> n
+
+X
+
+> i=1
+
+μXi ∥e⊤ 
+
+> i
+
+Φ⊤ 
+
+> X
+
+π⋆∥22 ≥ μXℓ+1 
+
+> n
+
+X
+
+> i=ℓ+1
+
+∥e⊤ 
+
+> i
+
+Φ⊤ 
+
+> X
+
+π⋆∥22 = μXℓ+1 ∥π⋆ − PX,ℓ π⋆∥2F.
+
+Hence, the first bound follows, and the second bound follows analogously. Another conclusion from Proposition 2 is 
+
+∥π⋆ − PX,ℓ π⋆PY,h ∥F ≤
+
+s
+
+F (π⋆) − τλ(C)
+
+λxμXℓ+1 
+
++
+
+s
+
+F (π⋆) − τλ(C)
+
+λy μYh+1 
+
+,
+
+which follows from 
+
+π⋆ − PX,ℓ π⋆PY,h = ( I − PX,ℓ )π⋆ + PX,ℓ π⋆(I − PY,h )and the triangle inequality. The quantity F (π⋆) − τλ(C) ≥ 0 is the gap between the LapOT and entropic-OT optimal values, both computed by the solver. Hence, Proposition 2 thus provides an a posteriori certificate: after solving LapOT, one may evaluate the right-hand side directly to verify that π⋆ concentrates on the low-frequency eigenspaces of LX and LY . The bound is non-vacuous whenever this value gap is small relative to λxμXℓ+1 and λy μYh+1 .Accordingly, Proposition 2 states that when the similarity graphs have a pronounced eigengap after ℓ and 
+
+h eigenvectors, the optimal coupling is close to a matrix whose rows and columns vary primarily along the corresponding approximate cluster indicators. This provides the theoretical mechanism behind the use of LapOT inside RSC, even when the graphs are connected and the marginals are not block-constant. To conclude, Theorem 1 should be viewed as the exact disconnected-graph limit, while Proposition 2 explains the connected-graph regime used in the experiments in the following sections. In Section 5.2, we indeed report the upper bound on the right-hand side of Proposition 2 for the stock market data, numerically confirming the decay of the projection error as the dimension of the low-frequency eigenspaces increases. 
+
+# 4 Refined Simultaneous Clustering 
+
+This section introduces a new approach for clustering two point clouds simultaneously, which we call Refined Simultaneous Clustering (RSC). We have seen in the previous sections that the optimal coupling of LapOT can capture the cluster structure of the two point clouds. RSC is a practical method that distills the cluster structure from the optimal coupling of LapOT and uses it to perform simultaneous clustering of the two point clouds with the goal of making the clustering of both clouds more aligned with each other. The full procedure of RSC is summarized in Algorithm 1. After obtaining the optimal coupling π⋆ from LapOT, we apply k-means to the rows and columns of π⋆ and define the switch matrices πX 
+
+> switch
+
+∈ { 0, 1}n×n
+
+and πY 
+
+> switch
+
+∈ { 0, 1}m×m as follows: (πX
+
+> switch
+
+)ij =
+
+(
+
+1 if row i and row j belong to the same cluster ,
+
+0 otherwise , (18) (πY
+
+> switch
+
+)ij =
+
+(
+
+1 if column i and column j belong to the same cluster ,
+
+0 otherwise . (19) By applying k-means to the rows (resp. columns) of π⋆, we cluster together points in X (resp. Y ) that have a similar fuzzy matching with Y (resp. X). Then, in Step 4 of Algorithm 1, we refine the original input 10 Algorithm 1 Refined Simultaneous Clustering 
+
+Input: matching cost C ∈ Rn×m, marginal weights a ∈ ∆n and b ∈ ∆m.
+
+Input: similarity matrices KX ∈ Rn×n and KY ∈ Rm×m.
+
+Input: hyperparameters λx, λ y , λ for regularization and k, k ′ ∈ N for clustering.  
+
+> 1:
+
+Define LX = diag( KX 1n) − KX and LY = diag( KY 1m) − KY . 
+
+> 2:
+
+Find the solution π⋆ of LapOT λx,λ y ,λ (a, b, C, L X , L Y ).  
+
+> 3:
+
+Apply k-means with k′ clusters to the rows, columns of π⋆ to define πX
+
+> switch
+
+, πY 
+
+> switch
+
+per (18), (19).  
+
+> 4:
+
+˜KX ← KX ⊙ πX 
+
+> switch
+
+and ˜KY ← KY ⊙ πY 
+
+> switch
+> 5:
+
+Update the graph Laplacians: ˜LX ← diag( ˜KX 1n) − ˜KX and ˜LY ← diag( ˜KY 1m) − ˜KY 
+
+> 6:
+
+Apply spectral clustering with k clusters to ˜LX and ˜LY to obtain the final clusters of X and Y .
+
+Output: Final clusters of X and Y .similarity matrices KX and KY by multiplying them element-wise with the switch matrices πX 
+
+> switch
+
+and πY
+
+> switch
+
+,respectively. Then, we recalculate the refined graph Laplacians ˜LX and ˜LY based on the refined similarity matrices ˜KX and ˜KY , followed by the usual spectral clustering procedure to obtain the final clusters of X
+
+and Y . Here, the idea is to condition the final clustering procedure on the similarity matrices refined by the switch matrices, expecting the cluster formation in X and Y to reflect the matching relations between the clouds, and hence, to be more aligned with each other. It is worth noting the similarity between RSC and the standard spectral clustering procedure. Spectral clustering is a two-step procedure that first obtains suitable spectral embeddings via various methods like Laplacian eigenmaps [2] or diffusion maps [8], and then applies k-means to the spectral embeddings to obtain the final clusters of a single point cloud. In RSC, we first obtain the optimal coupling of LapOT, which encodes the cluster-aware matching information between the two point clouds, allowing us to leverage the shared information between the two point clouds in the subsequent clustering step. Figure 1(b) earlier in the paper shows an example of the RSC method applied to two point clouds X and 
+
+Y taken from the CAPOD dataset [31]. Here, Algorithm 1 is applied with k′ = 3 for the switch matrices in Step 3 and k = 5 for the final spectral clustering in Step 6. Unlike the independent clustering of X and 
+
+Y shown in Figure 1(a), the RSC method correctly captures the matching cluster structure between the two clouds, resulting in aligned clusters. The input similarity matrices are computed using the RBF kernel, while the marginal weights are based on the degrees from the similarity matrices as explained below. The cost matrix is computed using the Wasserstein-1 distance between the distance profiles of points in X and 
+
+Y as described in Section 2.1. 
+
+Switch Matrices. The role of the switch matrices πX 
+
+> switch
+
+and πY 
+
+> switch
+
+is to capture the coarse cluster structure of the two point clouds based on the optimal coupling π⋆ before moving on to the final clustering step. Hence, the choice of the number of clusters k′ for the switch matrices governs the rough partition of the point clouds, distilling the cluster structure of the match encoded by the optimal coupling of LapOT. In practice, we choose k′ to be slightly more than half the number of clusters k for the final clustering step, so that the switch matrices capture the coarse cluster structure of the two clouds, while the subsequent clustering step can still produce clusters with enough granularity. Figure 2 visualizes the 3D human shapes in Figure 1 clustered according to the switch matrices πX 
+
+> switch
+
+and πY 
+
+> switch
+
+with k′ = 3. We can see that the rough cluster structure of the two clouds is captured by the switch matrices, providing a good starting point for the final clustering step. 
+
+Degree-Based Marginals. While it is common to set a, b to be uniform distributions in practice, we found that using degree-based marginals can improve the performance of RSC. The idea is to assign higher weights to points that are more significant in the similarity graph, which can help to capture the cluster structure of the point clouds more effectively. Precisely, we define the degree-based marginals as follows: 
+
+ai = deg( Xi)
+
+Pni′=1 deg( Xi′ ) and bj = deg( Yj )
+
+Pmj′=1 deg( Yj′ ) ,
+
+11 Figure 2: Clustering of two 3D human shapes according to the clustering structure encoded in the switch matrices πX 
+
+> switch
+
+and πY
+
+> switch
+
+.where deg( Xi) = Pni′=1 (KX )ii ′ and deg( Yj ) = Pmj′=1 (KY )jj ′ are the degrees of points Xi and Yj in the similarity graphs, respectively. In this case, the distance profiles to define the cost matrix C as described in Section 2.1 are also based on the degree-based marginals. 
+
+Discussion. Figure 3 shows additional examples of RSC applied to two point clouds from the CAPOD dataset. The first row shows two 3D dog shapes, while the second row shows two 3D dolphin shapes. In both cases, RSC produces more consistent clusters across the two point clouds compared to independent clustering. On top of these, we also experimented with the low-rank version of LapOT in Step 2 of Algorithm 1 with 
+
+r = 10, which also yields consistent clusters across the two point clouds. Overall, these results demonstrate the effectiveness of RSC in capturing the cluster structure of two point clouds simultaneously, leveraging the shared information between them to produce more aligned clusters. Of course, like any clustering method, RSC is not guaranteed to produce perfectly consistent clusters across the two point clouds and depends on the choice of hyperparameters and similarity matrices. We leave a more detailed study of the hyperparameter selection for RSC to future work.   
+
+> (a) Independent Clustering (b) RSC (c) RSC (Low-Rank)
+
+Figure 3: Other examples of RSC applied to two point clouds from the CAPOD dataset. The first row shows two 3D dog shapes, while the second row shows two 3D dolphin shapes. (c) shows the results of RSC with the low-rank version of LapOT in Step 2 of Algorithm 1 with r = 10. 
+
+# 5 Applications 
+
+5.1 Alignment via Refined Simultaneous Clustering 
+
+Finding a rigid transformation that best aligns two point clouds is a fundamental problem in many applica-tions, including computer vision, robotics, and 3D modeling. Once we establish a correspondence between 12 the two clouds, we can formulate an orthogonal Procrustes problem to estimate the underlying rigid trans-formation. In this section, we demonstrate how this can be done by applying RSC. We pick a 3D human shape from the CAPOD dataset [31] as our point cloud X and generate a second point cloud Y by applying a random rotation to X and adding isotropic Gaussian noise N (0 , σ 2I3), which is shown in Figure 4(a). We begin by applying RSC, following the same hyperparameter selection procedure used to produce Figure 1(b) as described in Section 4; the result is shown in Figure 4(b). Then, we calculate the centroids of each cluster in X and Y and assign to each centroid a weight proportional to the sum of degrees of the points in its cluster. Now, we consider matching between the centroids of the clusters in X and Y following the usual distance profile matching (3) in Section 2.1. Then, for k = 5 matched cluster pairs, we perform the pointwise matching between the points in the matched clusters following the distance profile matching again, which can be done in parallel for each matched cluster pair. Finally, based on the established correspondence between the two clouds, we estimate the underlying rotation by solving the orthogonal Procrustes problem.  
+
+> (a) Point Clouds (b) RSC
+
+Figure 4: Point clouds and the result of RSC. (a) shows the point cloud of a human (left) and the same point cloud rotated and with noise added (right). (b) shows the result of RSC applied to the clouds in (a) with k = 5 clusters. For presentation purposes, the clouds are rotated to share the same viewing angle. The main contribution here is to avoid global matching between the two clouds, which can be computa-tionally expensive and fail to capture the local structure of the clouds. Instead, we simultaneously cluster the clouds in a consistent manner via RSC and establish a correspondence between the matched clusters, thereby breaking the global matching problem into smaller subproblems that can be solved simultaneously. For a varying level of noise σ2, we report the relative error in spectral norm between the estimated and true underlying rotation. We compare the proposed method with two alternative approaches: (i) an ICP [4] pipeline starting with fast point feature histograms [36] and RANSAC algorithms for a coarse global correspondence estimate, followed by the generalized ICP algorithm [41], and (ii) the global Distance Profile Matching (DPM) between clouds X and Y as formulated in [20], followed by the usual orthogonal Procrustes problem. Here, the noise level is converted to a signal-to-noise ratio (SNR) in decibels, defined as SNR db = 10 log 10 (σ2 
+
+> X
+
+/σ 2), where σ2 
+
+> X
+
+is the variance of the point cloud X and σ2 is the variance of the added noise. We repeat the comparison test over ten independent runs and report the mean relative error in Table 1. First, we note that for a low to moderate presence of noise, our approach and the global DPM approach perform remarkably well, while the ICP pipeline quickly deteriorates as the noise level increases. For higher noise levels, our method is more robust than the global DPM approach. When using global DPM in a high-noise setup, there are no restrictions on the match, and a point can potentially be matched with every other point in the opposite cloud, which can lead to a less accurate match. In contrast, our method restricts the match to clusters that are more likely to be similar, thereby yielding a more accurate match. 
+
+5.2 Non-Euclidean Application: RSC on High-Dimensional Stock Market Data 
+
+So far, we have focused on point clouds under the Euclidean metric to define the distance profiles. However, as profiles can be defined under any suitable similarity measure, we can also apply RSC beyond the usual Euclidean setting. In this section, we demonstrate the application of RSC to high-dimensional stock market data, where the similarity measure is based on the correlation between the returns of stocks. 13 Methods SNR db 24.91 18.89 15.37 10.90 4.92 2.91 
+
+ICP Pipeline 0.03285 0.37441 1.15744 1.67079 2.24804 2.51093 Global DPM 0.00288 0.00722 0.01460 0.02889 0.12395 0.25521 Our Method 0.00668 0.02421 0.03134 0.09283 0.10219 0.20242 Table 1: Mean spectral-norm relative error between the estimated and true underlying rotations over ten independent runs, for varying noise levels σ2 expressed in SNR db .Here, our goal is to cluster the top 50 companies from S&P 500 (USA) and the top 50 companies from the Japanese stock market simultaneously, in order to analyze the similarity relations in the stock market between the two countries. For each company, we consider the daily closing price of its stock over a period of 5 years starting from the first day of 2020, which gives us a time series of length T = 1256 (the number of trading days in 5 years), say, ( P (1) , . . . , P (T )). We normalize the time series so that P (1) = 1 for all stocks. We do that to neutralize scaling problems that can occur from differences in currencies (US dollars to Japanese yen) and different starting points in value. We then compute the daily returns of each stock as the percentage change in price from the previous day, namely, R(t) = ( P (t) − P (t − 1)) /P (t − 1) for 
+
+t = 2 , . . . , T and R(1) = 0. We take ( R(1) , R (2) , . . . , R (T )) ∈ RT as the feature vector for each stock, which gives us a point cloud of size n = 50 in RT for both the S&P 500 and Japanese companies. 0 200 400 600 800 1000 1200       
+
+> Time step
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Normalized price 0200 400 600 800 1000 1200
+> Time step
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> Normalized price
+
+Figure 5: Normalized daily stock prices for the top 50 companies from the S&P 500 (left) and top 50 Japanese companies by market cap (right) over five years from 2020. Let Ri = ( Ri(1) , . . . , R i(T )) for i = 1 , . . . , n be the returns of the n companies in S&P 500. For 
+
+i, i ′ = 1 , . . . , n , we define the covariance between the returns of companies i and i′ as Cov( Ri, R i′ ) = 1
+
+T − 1
+
+> T
+
+X
+
+> t=1
+
+(Ri(t) − ¯Ri)( Ri′ (t) − ¯Ri′ ),
+
+where ¯Ri = 1
+
+> T
+
+PTt=1 Ri(t) is the mean return of company i. Then, the correlation between the returns of companies i and i′ is defined as ρii ′ := Cov( Ri,R i′ )
+
+√Var( Ri)Var( Ri′ ) , where Var( Ri) = Cov( Ri, R i) is the variance of the returns of company i. Finally, we define the similarity dii ′ between companies i and i′ as dii ′ = p2(1 − ρii ′ ), which we treat as a distance measure between the two companies. Note that when Ri and Ri′ are positively correlated, dii ′ is small. We define the similarity in the same way for the Japanese companies. This distance is then transformed into a similarity score using an RBF kernel as before, from which the similarity matrices 
+
+KX and KY are constructed. Since the correlation-based RBF graphs in this example are connected, the exact block-constancy guar-antee of Theorem 1 is best interpreted as an idealized limiting case. The relevant mechanism here is Propo-14 sition 2: LapOT suppresses oscillatory components of the coupling over the two market similarity graphs, so broad sector-level structure can appear as an approximately low-rank or block-structured coupling. Unlike the previous examples, we construct the cost matrix C for LapOT using different similarity profiles than the ones used to construct the similarity matrices KX and KY . This is because we want to capture different financial characteristics of the stocks in the two countries. Specifically, we take the beta of each stock as a measure of its systematic risk, a measure of a stock’s volatility in relation to the overall market. The beta of stock i is βi = Cov( Ri, R market )/Var( Rmarket ), where Rmarket is the return of the market index. The cost Cij is then set to the Wasserstein-1 distance between the similarity profiles that are picked so that W1(μi, ν j ) is an upper bound on |βi − βj |. This choice of cost encourages matching stocks with similar systematic risk profiles. The formulation of the specific choice for μi and νj can be found in Section B in the appendix. With this setup, we expect LapOT to produce a coupling that aligns companies with similar sector-based 13.NTT INC 
+
+> 16.JAPAN TOBACCO INC
+> 19.TAKEDA PHARMACEUTICAL CO LTD
+> 34.CANON INC
+> 26.AEON CO LTD
+> 12.CHUGAI PHARMACEUTICAL CO
+> 38.SHIONOGI & CO
+> 17.SOFTBANK CORP.
+> 32.EAST JAPAN RAILWAY CO
+> 31.CENTRAL JAPAN RAILWAY CO
+> 42.KIRIN HOLDINGS COMPANY LIMITED
+> 43.JAPAN EXCHANGE GROUP
+> 30.ASTELLAS PHARMA
+> 29.SEVEN & I HOLDINGS CO LTD
+> 46.WEST JAPAN RAILWAY CO
+> 47.EISAI CO LTD
+> 40.ASAHI GROUP HLDGS
+> 18.KDDI CORPORATION
+> 33.TDK CORP
+> 0.TOYOTA MOTOR CORP
+> 36.KYOCERA CORP
+> 37.LASERTEC CORP
+> 39.NIDEC CORPORATION
+> 41.EBARA CORP
+> 44.T&D HOLDINGS INC
+> 45.SUBARU CORPORATION
+> 35.NOMURA HOLDINGS INC.
+> 28.HONDA MOTOR CO
+> 24.DAIICHI SANKYO COMPANY LIMITED
+> 25.FANUC CORPORATION
+> 1.MITSUBISHI UFJ FINANCIAL GROUP
+> 2.HITACHI
+> 3.SOFTBANK GROUP CORP
+> 4.SUMITOMO MITSUI FINANCIAL GROUP
+> 5.SONY GROUP CORPORATION
+> 6.FAST RETAILING CO LTD
+> 7.TOKYO ELECTRON
+> 8.ADVANTEST CORP
+> 27.DAI-ICHI LIFE HOLDINGS INC
+> 9.MIZUHO FINANCIAL GROUP
+> 11.KEYENCE CORP
+> 14.SHIN-ETSU CHEMICAL CO
+> 15.MITSUBISHI ELECTRIC CORP
+> 20.RECRUIT HOLDINGS CO LTD
+> 21.PANASONIC HOLDINGS CORP
+> 22.DAIKIN INDUSTRIES
+> 23.KOMATSU
+> 48.NISSAN MOTOR CO
+> 10.TOKIO MARINE HOLDINGS INC
+> 49.YAMAHA MOTOR CO
+
+13.ExxonMobil 
+
+48.PepsiCo 
+
+23.AbbVie 
+
+22.Palantir Technologies 
+
+36.RTX Corporation 
+
+20.Chevron Corporation 
+
+19.Oracle Corporation 
+
+18.Costco 
+
+37.Philip Morris International 
+
+34.Merck & Co. 
+
+15.Johnson & Johnson 
+
+14.Visa Inc. 
+
+27.Procter & Gamble 
+
+26.Caterpillar Inc. 
+
+11.Lilly (Eli) 
+
+10.Walmart 
+
+9.Berkshire Hathaway 
+
+28.Home Depot (The) 
+
+41.T-Mobile US 
+
+42.IBM 
+
+43.Linde plc 
+
+29.Coca-Cola Company (The) 
+
+45.McDonald's 
+
+46.Verizon 
+
+30.Cisco 
+
+39.UnitedHealth Group 
+
+0.Nvidia 
+
+38.Goldman Sachs 
+
+40.Wells Fargo 
+
+44.Intel 
+
+47.American Express 
+
+35.Morgan Stanley 
+
+33.Applied Materials 
+
+24.Bank of America 
+
+31.GE Aerospace 
+
+25.Advanced Micro Devices 
+
+21.Netflix 
+
+17.Mastercard 
+
+16.Micron Technology 
+
+12.JPMorgan Chase 
+
+8.Tesla, Inc. 
+
+7.Meta Platforms 
+
+6.Broadcom 
+
+5.Alphabet Inc. (Class C) 
+
+4.Alphabet Inc. (Class A) 
+
+3.Amazon 
+
+2.Microsoft 
+
+1.Apple Inc. 
+
+32.Lam Research 
+
+49.KLA Corporation 
+
+Figure 6: The solution of LapOT applied to the US-Japan stock market data. We permuted the rows and columns of the optimal coupling to better visualize its low-rank structure. 15 behaviors (captured by LX , L Y ) and similar market volatility profiles (captured by C). In Figure 6, we show the low-rank structure of the optimal coupling solution to (6), indicating broad cluster similarities between the two countries. To complement the low-rank structure observed in Figure 6, we numerically evaluate the upper bound in Proposition 2 for increasing values of ℓ and h. Figure 7 provides direct numerical support for the proposition: the theoretical bound uniformly controls the projection error and captures its decay as the dimensions of the retained low-frequency eigenspaces increase. In the appendix, Figures 8 and 9 show the results of applying RSC to the companies from the USA and Japan, respectively, showing a consistent pattern in the results. 0 10 20 30 40 50 
+
+> l = h
+> 0.00
+> 0.01
+> 0.02
+> 0.03
+> 0.04
+> Theoretical upper bound
+> Numerical error
+
+Figure 7: Comparison between the theoretical upper bound and the projection error ∥π⋆ − PX,ℓ π⋆PY,h ∥F of the optimal coupling π⋆, evaluated for ℓ = h = 1 , . . . , n − 1. 
+
+# References 
+
+[1] David Alvarez-Melis and Tommi S Jaakkola. Gromov-Wasserstein alignment of word embedding spaces. 
+
+arXiv preprint arXiv:1809.00013 , 2018. [2] Mikhail Belkin and Partha Niyogi. Laplacian eigenmaps and spectral techniques for embedding and clustering. In Advances in Neural Information Processing Systems , 2001. [3] Shai Ben-David, Ulrike Von Luxburg, and D´ avid P´ al. A sober look at clustering stability. In Conference on Learning Theory , 2006. [4] Paul J Besl and Neil D McKay. A method for registration of 3-D shapes. IEEE Transactions on Pattern Analysis and Machine Intelligence , 14(2):239–256, 1992. [5] Andrew J Blumberg, Mathieu Carriere, Michael A Mandell, Raul Rabadan, and Soledad Villar. MREC: A fast and versatile framework for aligning and matching point clouds with applications to single cell molecular data. arXiv preprint arXiv:2001.01666 , 2020. [6] Richard A Brealey, Stewart C Myers, and Franklin Allen. Principles of Corporate Finance . McGraw Hill, 2011. [7] Charlotte Bunne, David Alvarez-Melis, Andreas Krause, and Stefanie Jegelka. Learning generative models across incomparable spaces. In International Conference on Machine Learning , 2019. [8] Ronald R Coifman and St´ ephane Lafon. Diffusion maps. Applied and Computational Harmonic Analysis ,21(1):5–30, 2006. [9] Nicolas Courty, R´ emi Flamary, Devis Tuia, and Alain Rakotomamonjy. Optimal transport for domain adaptation. IEEE Transactions on Pattern Analysis and Machine Intelligence , 39(9):1853–1865, 2017. 16 [10] Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. In Advances in Neural Information Processing Systems , 2013. [11] Jian Ding, Zongming Ma, Yihong Wu, and Jiaming Xu. Efficient random graph matching via degree profiles. Probability Theory and Related Fields , 179(1):29–115, 2021. [12] Th´ eo Dumont, Th´ eo Lacombe, and Fran¸ cois-Xavier Vialard. On the existence of Monge maps for the Gromov-Wasserstein problem. Foundations of Computational Mathematics , 25(2):463–510, 2025. [13] Richard L Dykstra. An algorithm for restricted least squares regression. Journal of the American Statistical Association , 78(384):837–842, 1983. [14] Sira Ferradans, Nicolas Papadakis, Gabriel Peyr´ e, and Jean-Fran¸ cois Aujol. Regularized discrete optimal transport. SIAM Journal on Imaging Sciences , 7(3):1853–1882, 2014. [15] Aden Forrow, Jan-Christian H¨ utter, Mor Nitzan, Philippe Rigollet, Geoffrey Schiebinger, and Jonathan Weed. Statistical optimal transport via factored couplings. In International Conference on Artificial Intelligence and Statistics , 2019. [16] Edouard Grave, Armand Joulin, and Quentin Berthet. Unsupervised alignment of embeddings with Wasserstein procrustes. In International Conference on Artificial Intelligence and Statistics , 2019. [17] Joeri Hofmans, Eva Ceulemans, Douglas Steinley, and Iven Van Mechelen. On the added value of bootstrap analysis for K-means clustering. Journal of Classification , 32(2):268–284, 2015. [18] Hanwen Huang, Yufeng Liu, Ming Yuan, and JS Marron. Statistical significance of clustering using soft thresholding. Journal of Computational and Graphical Statistics , 24(4):975–993, 2015. [19] YoonHaeng Hur, Wenxuan Guo, and Tengyuan Liang. Reversible Gromov–Monge sampler for simulation-based inference. SIAM Journal on Mathematics of Data Science , 6(2):283–310, 2024. [20] YoonHaeng Hur and Yuehaw Khoo. Robust point matching with distance profiles. Journal of Machine Learning Research , 26(205):1–38, 2025. [21] YoonHaeng Hur and Tengyuan Liang. A convexified matching approach to imputation and individual-ized inference. arXiv preprint arXiv:2407.05372 , 2024. [22] YoonHaeng Hur, Anirban Nath, and Genevera Allen. Inference for clustering: Conformal sets for cluster labels. arXiv preprint arXiv:2604.03488 , 2026. [23] M. K. Kerr and G. A. Churchill. Bootstrapping cluster analysis: Assessing the reliability of conclusions from microarray experiments. Proceedings of the National Academy of Sciences , 98(16):8961–8965, 2001. [24] Tjalling C Koopmans and Martin Beckmann. Assignment problems and the location of economic activities. Econometrica , pages 53–76, 1957. [25] Chuen-Ming Liu, Zhi-Ping Niu, and Kuan-Ting Liao. Mechanisms to improve clustering uncertain data with UKmeans. Data & Knowledge Engineering , 116:1–18, 2018. [26] Eliane Maria Loiola, Nair Maria Maia De Abreu, Paulo Oswaldo Boaventura-Netto, Peter Hahn, and Tania Querido. A survey for the quadratic assignment problem. European Journal of Operational Research , 176(2):657–690, 2007. [27] Facundo M´ emoli. Gromov-Wasserstein distances and the metric approach to object matching. Founda-tions of Computational Mathematics , 11(4):417–487, 2011. [28] Facundo M´ emoli and Tom Needham. Comparison results for Gromov-Wasserstein and Gromov-Monge distances. ESAIM: Control, Optimisation and Calculus of Variations , 30:78, 2024. [29] Andriy Myronenko and Xubo Song. Point set registration: Coherent point drift. IEEE Transactions on Pattern Analysis and Machine Intelligence , 32(12):2262–2275, 2010. 17 [30] Anirban Nath, YoonHaeng Hur, and Genevera I Allen. Weighted conformal clustering. arXiv preprint arXiv:2606.00436 , 2026. [31] Panagiotis Papadakis. The canonically posed 3d objects dataset. In Eurographics Workshop on 3D Object Retrieval , pages 33–36, 2014. [32] Gabriel Peyr´ e and Marco Cuturi. Computational optimal transport: With applications to data science. 
+
+Foundations and Trends ® in Machine Learning , 11(5-6):355–607, 2019. [33] Gabriel Peyr´ e, Marco Cuturi, and Justin Solomon. Gromov-Wasserstein averaging of kernel and distance matrices. In International Conference on Machine Learning , 2016. [34] Alexander Rakhlin and Andrea Caponnetto. Stability k-means clustering. In Advances in Neural Information Processing Systems , 2006. [35] Aryan Tajmir Riahi, Geoffrey Woollard, Fr´ ed´ eric Poitevin, Anne Condon, and Khanh Dao Duc. Alig-nOT: An optimal transport based algorithm for fast 3d alignment with applications to cryogenic elec-tron microscopy density maps. IEEE/ACM Transactions on Computational Biology and Bioinformatics ,20(6):3842–3850, 2023. [36] Radu Bogdan Rusu, Nico Blodow, and Michael Beetz. Fast point feature histograms (FPFH) for 3d registration. IEEE International Conference on Robotics and Automation , pages 3212–3217, 2009. [37] Yusuf Sahillio˘ glu. Recent advances in shape correspondence. The Visual Computer , 36(8):1705–1721, 2020. [38] Meyer Scetbon and Marco Cuturi. Low-rank optimal transport: Approximation, statistics and debiasing. In Advances in Neural Information Processing Systems , 2022. [39] Meyer Scetbon, Marco Cuturi, and Gabriel Peyr´ e. Low-rank Sinkhorn factorization. In International Conference on Machine Learning , 2021. [40] Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh Solomon, Joshua Gould, Siyan Liu, Stacie Lin, Peter Berube, Lia Lee, Jenny Chen, Justin Brumbaugh, Philippe Rigollet, Konrad Hochedlinger, Rudolf Jaenisch, Aviv Regev, and Eric S. Lander. Optimal-transport analysis of single-cell gene expression identifies developmental trajectories in reprogramming. Cell ,176(4):928–943, 2019. [41] Aleksandr Segal, Dirk Haehnel, and Sebastian Thrun. Generalized-ICP. In Robotics: Science and Systems . The MIT Press, 2010. [42] Yasin Senbabao˘ glu, George Michailidis, and Jun Z Li. Critical limitations of consensus clustering in class discovery. Scientific Reports , 4(1):6207, 2014. [43] Amit Singer and Ruiyi Yang. Alignment of density maps in Wasserstein distance. Biological Imaging ,4:e5, 2024. [44] Kyle S Smith, Yiran Li, Parthiv Haldipur, Brian L Gudenas, Kathleen J Millen, Volker Hovestadt, and Paul A Northcott. Lack of evidence for the transitional cerebellar progenitor. Nature , 643(8071):E1–E8, 2025. [45] Justin Solomon, Gabriel Peyr´ e, Vladimir G Kim, and Suvrit Sra. Entropic metric alignment for corre-spondence problems. ACM Transactions on Graphics , 35(4):1–13, 2016. [46] Oliver Van Kaick, Hao Zhang, Ghassan Hamarneh, and Daniel Cohen-Or. A survey on shape corre-spondence. Computer Graphics Forum , 30(6):1681–1707, 2011. [47] C´ edric Villani. Topics in Optimal Transportation . American Mathematical Society, 2003. [48] Ulrike Von Luxburg. A tutorial on spectral clustering. Statistics and Computing , 17(4):395–416, 2007. 18 [49] Ulrike Von Luxburg. Clustering stability: An overview. Foundations and Trends ® in Machine Learning ,2(3):235–274, 2010. [50] Sara Wade and Zoubin Ghahramani. Bayesian cluster analysis: Point estimation and credible balls (with discussion). Bayesian Analysis , 13(2):559–626, 2018. [51] Alan Geoffrey Wilson. The use of entropy maximising models, in the theory of trip distribution, mode split and route split. Journal of Transport Economics and Policy , pages 108–126, 1969. [52] Yang Xiao, Wang Lu, Jie Ji, Ruimeng Ye, Gen Li, Xiaolong Ma, and Bo Hui. Optimal transport for brain-image alignment: Unveiling redundancy and synergy in neural information processing. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 20445–20455, 2025. [53] Hongteng Xu, Dixin Luo, Hongyuan Zha, and Lawrence Carin Duke. Gromov-Wasserstein learning for graph matching and node embedding. In International Conference on Machine Learning , 2019. 
+
+# A Optimization of Low-Rank LapOT 
+
+This section discusses the optimization scheme for solving the low-rank version of the LapOT problem (10). As noticed in [39], the division by g in the objective function of (10) can lead to numerical instability. To mitigate this issue, [39] suggests restricting the search domain to 
+
+C(a, b, r, α ) := {(U, V, g ) ∈ C (a, b, r ) : g ≥ α1r },
+
+where α > 0 is a user-defined stability parameter. This restriction prevents any entry of g from being too close to zero. Hence, a stable formulation of the low-rank LapOT problem (10) is given by min  
+
+> (U,V,g )∈C (a,b,r,α )
+
+f (U, V, g ), (20) where f (U, V, g ) is the objective function in (10), namely, 
+
+f (U, V, g ) = ⟨U diag(1 r /g )V ⊤, C ⟩
+
++ λx⟨U diag(1 r /g )V ⊤, L X U diag(1 r /g )V ⊤⟩ + λy ⟨U diag(1 r /g )V ⊤, U diag(1 r /g )V ⊤LY ⟩− λH (U ) − λH (V ) − λH (g).
+
+Algorithm 3 presented at the end of this section summarizes the optimization scheme for solving (20). To understand Algorithm 3, let us start by following [39] to rewrite the feasible set C(a, b, r, α ) as the intersection of two sets C1(a, b, r, α ) and C2(r), where 
+
+C1(a, b, r, α ) ≜ {(U, V, g ) ∈ Rn×r 
+
+> +
+
+× Rm×r 
+
+> +
+
+× Rr 
+
+> +
+
+: U 1r = a, V 1r = b, g ≥ α1r },
+
+C2(r) ≜ {(U, V, g ) ∈ Rn×r 
+
+> +
+
+× Rm×r 
+
+> +
+
+× Rr 
+
+> +
+
+: U ⊤1n = V ⊤1m = g},
+
+which allows us to apply Dykstra’s algorithm for projection onto the intersection of convex sets. As in [39], we implement mirror descent under the KL divergence to solve (20). More precisely, for xk ≜ (Uk, V k, g k)and step size γk > 0 at iteration k, we update xk+1 by solving the following optimization problem: 
+
+xk+1 = arg min 
+
+> x∈C (a,b,r,α )
+
+⟨∇ f (xk), x ⟩ + 1
+
+γk
+
+KL (x ∥ xk),
+
+which is equivalent to 
+
+xk+1 = arg min 
+
+> x∈C (a,b,r,α )
+
+KL (x ∥ xk ⊙ exp( −γk∇f (xk))) , (21) where ⊙ denotes the element-wise product, and the exponential is taken element-wise. Here, the gradient 
+
+∇f (U, V, g ) is given by 
+
+∇U f = M V diag(1 r /g ) + λ log( U ),
+
+∇V f = M ⊤U diag(1 r /g ) + λ log( V ),
+
+∇g f = − diag( U ⊤M V )
+
+g2 + λ log( g),
+
+19 where g2 is the vector obtained by squaring each entry of g, and M is given by 
+
+M = 2 λxLX U diag(1 r /g )V ⊤ + 2 λy U diag(1 r /g )V ⊤LY + C. 
+
+The projection onto C(a, b, r, α ) under the KL divergence in (21) can be efficiently computed using Dykstra’s algorithm, which alternates between projecting onto C1(a, b, r, α ) and C2(r). To see this, define ˜Uk ≜ Uk ⊙ exp( −γk∇U f (Uk, V k, g k)) = Uk ⊙ exp ( −γk (MkVkdiag(1 r /g k) + λ log( Uk))) ,
+
+˜Vk ≜ Vk ⊙ exp( −γk∇V f (Uk, V k, g k)) = Vk ⊙ exp  −γk
+
+ M ⊤ 
+
+> k
+
+Ukdiag(1 r /g k) + λ log( Vk) ,
+
+˜gk ≜ gk ⊙ exp( −γk∇g f (Uk, V k, g k)) = gk ⊙ exp 
+
+
+
+−γk
+
+
+
+− diag( U ⊤ 
+
+> k
+
+MkVk)
+
+g2
+
+> k
+
++ λ log( gk)
+
+ 
+
+,
+
+where Mk is defined as 
+
+Mk = 2 λxLX Ukdiag(1 r /g k)V ⊤ 
+
+> k
+
++ 2 λy Ukdiag(1 r /g k)V ⊤ 
+
+> k
+
+LY + C. 
+
+Hence, the mirror descent update in (21) can be rewritten as (Uk+1 , V k+1 , g k+1 ) = arg min 
+
+> (U,V,g )∈C (a,b,r,α )
+
+KL 
+
+
+
+(U, V, g ) ∥ ( ˜Uk, ˜Vk, ˜gk)
+
+
+
+. (22) 
+
+Dykstra’s Algorithm. Changing the variable names to ( ξ(1) , ξ (2) , ξ (3) ) ∈ Rn×r 
+
+> +
+
+× Rm×r 
+
+> +
+
+× Rr 
+
+> +
+
+in (22), we now derive the Dykstra’s algorithm to solve the following: arg min 
+
+> (U,V,g )∈C (a,b,r,α )
+
+KL 
+
+
+
+(U, V, g ) ∥ (ξ(1) , ξ (2) , ξ (3) )
+
+
+
+. (23) Algorithm 2 summarizes Dykstra’s algorithm for solving (23), where r(·) and c(·) denote the row and column sum operators, respectively. To see this, recall that Dykstra’s algorithm [13] iterates as follows: (ξ(1) 2k+1 , ξ (2) 2k+1 , ξ (3) 2k+1 ) = arg min 
+
+> (U,V,g )∈C 1(a,b,r,α )
+
+KL 
+
+
+
+(U, V, g ) ∥ (ξ(1) 2k ⊙ q(1) 2k−1, ξ (2) 2k ⊙ q(2) 2k−1, ξ (3) 2k ⊙ q(3) 2k−1)
+
+
+
+,
+
+(q(1) 2k+1 , q (2) 2k+1 , q (3) 2k+1 ) = ξ(1) 2k ⊙ q(1) 2k−1
+
+ξ(1) 2k+1 
+
+, ξ(2) 2k ⊙ q(2) 2k−1
+
+ξ(2) 2k+1 
+
+, ξ(3) 2k ⊙ q(3) 2k−1
+
+ξ(3) 2k+1 
+
+!
+
+,
+
+(ξ(1) 2k+2 , ξ (2) 2k+2 , ξ (3) 2k+2 ) = arg min 
+
+> (U,V,g )∈C 2(r)
+
+KL 
+
+
+
+(U, V, g ) ∥ (ξ(1) 2k+1 ⊙ q(1) 2k , ξ (2) 2k+1 ⊙ q(2) 2k , ξ (3) 2k+1 ⊙ q(3) 2k )
+
+
+
+,
+
+(q(1) 2k+2 , q (2) 2k+2 , q (3) 2k+2 ) = ξ(1) 2k+1 ⊙ q(1) 2k
+
+ξ(1) 2k+2 
+
+, ξ(2) 2k+1 ⊙ q(2) 2k
+
+ξ(2) 2k+2 
+
+, ξ(3) 2k+1 ⊙ q(3) 2k
+
+ξ(3) 2k+2 
+
+!
+
+.
+
+Propositions 2 and 3 of [39] state the closed-form solutions for the projections onto C1(a, b, r, α ) and C2(r), where (24) and (25) provide the respective formulas. Algorithm 2 iterates these projections until the row sums of ξ(1) 2k+2 and ξ(2) 2k+2 are sufficiently close to a and b, respectively. 
+
+Adaptive Step Size. We use the adaptive step size scheme proposed by [38] to avoid overflowing in the exponent terms used as input for Dykstra’s algorithm. Hence, when solving (21) at iteration k, we set the step size γk to be 
+
+γk = γ
+
+∥∇ f (xk)∥2
+
+> ∞
+
+,
+
+where γ > 0 is a user-defined parameter. Following the recommendation of [38], we set γ ∈ [1 , 10] for the initialization. 20 Algorithm 2 Dykstra (ξ(1) , ξ (2) , ξ (3) , a, b, α, δ )
+
+Input: ξ(1) ∈ Rn×r 
+
+> +
+
+, ξ(2) ∈ Rm×r 
+
+> +
+
+, ξ(3) ∈ Rr 
+
+> +
+
+with positive entries, marginal weights a ∈ ∆n and b ∈ ∆m.
+
+Input: stability parameter α > 0, desired accuracy δ > 0. 
+
+1: Initialize ( ξ(1) 0 , ξ (2) 0 , ξ (3) 0 ) = ( ξ(1) , ξ (2) , ξ (3) ) and ( q(1)  
+
+> −1
+
+, q (2)  
+
+> −1
+
+, q (3)  
+
+> −1
+
+) = ( q(1) 0 , q (2) 0 , q (3) 0 ) = (1 n×r , 1m×r , 1r ). 
+
+2: Set k = 0. 
+
+3: while || ξ(1) 2k 1r − a∥1 + || ξ(2) 2k 1r − b∥1 ≥ δ do 
+
+4: Update 
+
+ξ(1) 2k+1 = diag ar(ξ(1) 2k ⊙ q(1) 2k−1)
+
+!
+
+(ξ(1) 2k ⊙ q(1) 2k−1),ξ(2) 2k+1 = diag br(ξ(2) 2k ⊙ q(2) 2k−1)
+
+!
+
+(ξ(2) 2k ⊙ q(2) 2k−1),ξ(3) 2k+1 = max 
+
+
+
+ξ(3) 2k ⊙ q(3) 2k−1, α 1r
+
+
+
+.
+
+(24) 
+
+5: Update 
+
+ξ(3) 2k+2 =
+
+
+
+ξ(3) 2k+1 ⊙ q(3) 2k ⊙ c(ξ(1) 2k+1 ⊙ q(1) 2k ) ⊙ c(ξ(2) 2k+1 ⊙ q(2) 2k )
+
+1/3
+
+,ξ(1) 2k+2 = ( ξ(1) 2k+1 ⊙ q(1) 2k ) ⊙ diag ξ(3) 2k+2 
+
+c(ξ(1) 2k+1 ⊙ q(1) 2k )
+
+!
+
+,ξ(2) 2k+2 = ( ξ(2) 2k+1 ⊙ q(2) 2k ) ⊙ diag ξ(3) 2k+2 
+
+c(ξ(2) 2k+1 ⊙ q(2) 2k )
+
+!
+
+.
+
+(25) 
+
+6: Update k ← k + 1. 
+
+7: end while Output: (ξ(1) 2k , ξ (2) 2k , ξ (3) 2k ). 
+
+Algorithm 3 Low-Rank LapOT 
+
+Input: matching cost C ∈ Rn×m, marginal weights a ∈ ∆n and b ∈ ∆m.
+
+Input: Graph Laplacians LX ∈ Rn×n and LY ∈ Rm×m, hyperparameters λx, λ y , λ .
+
+Input: rank r ∈ N, stability parameter α > 0, desired accuracy δ > 0 for Dykstra’s algorithm. 
+
+Input: number of iterations T ∈ N.
+
+1: Initialize ( U0, V 0, g 0) ∈ Rn×r 
+
+> +
+
+× Rm×r 
+
+> +
+
+× Rr 
+
+> +
+
+with positive entries. 
+
+2: for k = 0 , . . . , T − 1 do 
+
+3: Set the step size γk = γ    
+
+> ∥∇ f(Uk,V k,g k)∥2
+> ∞
+
+.
+
+4: Compute 
+
+Mk = 2 λxLX Ukdiag(1 r /g k)V ⊤ 
+
+> k
+
++ 2 λy Ukdiag(1 r /g k)V ⊤ 
+
+> k
+
+LY + C. 
+
+5: Compute ˜Uk = Uk ⊙ exp ( −γk (MkVkdiag(1 r /g k) + λ log( Uk))) ,
+
+˜Vk = Vk ⊙ exp  −γk
+
+ M ⊤ 
+
+> k
+
+Ukdiag(1 r /g k) + λ log( Vk) ,
+
+˜gk = gk ⊙ exp 
+
+
+
+−γk
+
+
+
+− diag( U ⊤ 
+
+> k
+
+MkVk)
+
+g2
+
+> k
+
++ λ log( gk)
+
+ 
+
+.
+
+6: Update ( Uk+1 , V k+1 , g k+1 ) = Dykstra ( ˜Uk, ˜Vk, ˜gk, a, b, α, δ ). 
+
+7: end for return (UT , V T , g T ). 21 B Further Details of the Stock Market Application 
+
+Similarity Profiles. For the data introduced in Section 5.2, between every two stocks i and j, we set the similarity between them to be ¯ρij = Cov( Ri, Pj 
+
+> Pmarket
+
+Rj )Var( Rmarket ) ,
+
+where Pmarket is the price of the market index, and Rmarket is the return of the market index. The distributions induced by these similarity profiles are then μi = 1
+
+> n
+
+Pnk=1 δ¯ρik and νj = 1
+
+> n
+
+Pnk=1 δ ¯ρ′jk . Now, let Cij =
+
+W1(μi, ν j ), and assume ¯ ρi1 ≤ ¯ρi2 ≤ · · · ≤ ¯ρin and ¯ ρ′j1 ≤ ¯ρ′j2 ≤ · · · ≤ ¯ρ′jn , without loss of generality. Then, we have 
+
+W1(μi, ν j ) = 1
+
+n
+
+> n
+
+X
+
+> k=1
+
+|¯ρik − ¯ρ′jk |≥ 1
+
+n |
+
+> n
+
+X
+
+> k=1
+
+¯ρik − ¯ρ′jk |
+
+= | 1
+
+n
+
+> n
+
+X
+
+> k=1
+
+Cov( Ri, Pk 
+
+> Pmarket
+
+Rk)Var( Rmarket ) − 1
+
+n
+
+> n
+
+X
+
+> k=1
+
+Cov( R′ 
+
+> j
+
+, P ′ 
+
+> k
+> P′
+> market
+
+R′
+
+> k
+
+)Var( R′
+
+> market
+
+) |
+
+= | Cov( Ri, R market )Var( Rmarket ) − Cov( R′ 
+
+> j
+
+, R ′
+
+> market
+
+)Var( R′
+
+> market
+
+) |
+
+= |βi − β′ 
+
+> j
+
+|,
+
+which, in practice, appears to be a pretty tight upper bound. This means that by choosing such C, we connect the cost of transportation between the American stock i and the Japanese stock j with the difference between their betas [6]. 
+
+Additional Results of RSC Here, we provide visualizations of the results of using our method on financial data. In Figures 8 and 9, we show the cluster structure obtained by using RSC on the data introduced in Section 5.2. 22 41.T-Mobile US 
+
+> 28.Home Depot (The)
+> 27.Procter & Gamble
+> 43.Linde plc
+> 42.IBM
+> 48.PepsiCo
+> 23.AbbVie
+> 22.Palantir Technologies
+> 34.Merck & Co.
+> 19.Oracle Corporation
+> 18.Costco
+> 45.McDonald's
+> 29.Coca-Cola Company (The)
+> 14.Visa Inc.
+> 15.Johnson & Johnson
+> 11.Lilly (Eli)
+> 10.Walmart
+> 9.Berkshire Hathaway
+> 46.Verizon
+> 39.UnitedHealth Group
+> 37.Philip Morris International
+> 30.Cisco
+> 21.Netflix
+> 7.Meta Platforms
+> 5.Alphabet Inc. (Class C)
+> 4.Alphabet Inc. (Class A)
+> 3.Amazon
+> 2.Microsoft
+> 1.Apple Inc.
+> 38.Goldman Sachs
+> 35.Morgan Stanley
+> 24.Bank of America
+> 40.Wells Fargo
+> 17.Mastercard
+> 12.JPMorgan Chase
+> 47.American Express
+> 31.GE Aerospace
+> 26.Caterpillar Inc.
+> 36.RTX Corporation
+> 13.ExxonMobil
+> 20.Chevron Corporation
+> 44.Intel
+> 0.Nvidia
+> 32.Lam Research
+> 25.Advanced Micro Devices
+> 16.Micron Technology
+> 8.Tesla, Inc.
+> 6.Broadcom
+> 33.Applied Materials
+> 49.KLA Corporation
+
+41.T-Mobile US 
+
+28.Home Depot (The) 
+
+27.Procter & Gamble 
+
+43.Linde plc 
+
+42.IBM 
+
+48.PepsiCo 
+
+23.AbbVie 
+
+22.Palantir Technologies 
+
+34.Merck & Co. 
+
+19.Oracle Corporation 
+
+18.Costco 
+
+45.McDonald's 
+
+29.Coca-Cola Company (The) 
+
+14.Visa Inc. 
+
+15.Johnson & Johnson 
+
+11.Lilly (Eli) 
+
+10.Walmart 
+
+9.Berkshire Hathaway 
+
+46.Verizon 
+
+39.UnitedHealth Group 
+
+37.Philip Morris International 
+
+30.Cisco 
+
+21.Netflix 
+
+7.Meta Platforms 
+
+5.Alphabet Inc. (Class C) 
+
+4.Alphabet Inc. (Class A) 
+
+3.Amazon 
+
+2.Microsoft 
+
+1.Apple Inc. 
+
+38.Goldman Sachs 
+
+35.Morgan Stanley 
+
+24.Bank of America 
+
+40.Wells Fargo 
+
+17.Mastercard 
+
+12.JPMorgan Chase 
+
+47.American Express 
+
+31.GE Aerospace 
+
+26.Caterpillar Inc. 
+
+36.RTX Corporation 
+
+13.ExxonMobil 
+
+20.Chevron Corporation 
+
+44.Intel 
+
+0.Nvidia 
+
+32.Lam Research 
+
+25.Advanced Micro Devices 
+
+16.Micron Technology 
+
+8.Tesla, Inc. 
+
+6.Broadcom 
+
+33.Applied Materials 
+
+49.KLA Corporation Figure 8: The cluster structure of the top 50 stocks from S&P 500 found by the RSC. We see the rough partition into {big tech, semiconductor & deep tech infrastructure, finance, energy, pharma & retail & the rest }.23 0.TOYOTA MOTOR CORP 
+
+> 45.SUBARU CORPORATION
+> 36.KYOCERA CORP
+> 35.NOMURA HOLDINGS INC.
+> 28.HONDA MOTOR CO
+> 48.NISSAN MOTOR CO
+> 23.KOMATSU
+> 21.PANASONIC HOLDINGS CORP
+> 15.MITSUBISHI ELECTRIC CORP
+> 49.YAMAHA MOTOR CO
+> 2.HITACHI
+> 29.SEVEN & I HOLDINGS CO LTD
+> 34.CANON INC
+> 26.AEON CO LTD
+> 38.SHIONOGI & CO
+> 40.ASAHI GROUP HLDGS
+> 42.KIRIN HOLDINGS COMPANY LIMITED
+> 43.JAPAN EXCHANGE GROUP
+> 19.TAKEDA PHARMACEUTICAL CO LTD
+> 30.ASTELLAS PHARMA
+> 17.SOFTBANK CORP.
+> 16.JAPAN TOBACCO INC
+> 13.NTT INC
+> 12.CHUGAI PHARMACEUTICAL CO
+> 47.EISAI CO LTD
+> 18.KDDI CORPORATION
+> 31.CENTRAL JAPAN RAILWAY CO
+> 46.WEST JAPAN RAILWAY CO
+> 32.EAST JAPAN RAILWAY CO
+> 1.MITSUBISHI UFJ FINANCIAL GROUP
+> 44.T&D HOLDINGS INC
+> 10.TOKIO MARINE HOLDINGS INC
+> 4.SUMITOMO MITSUI FINANCIAL GROUP
+> 27.DAI-ICHI LIFE HOLDINGS INC
+> 9.MIZUHO FINANCIAL GROUP
+> 11.KEYENCE CORP
+> 14.SHIN-ETSU CHEMICAL CO
+> 8.ADVANTEST CORP
+> 20.RECRUIT HOLDINGS CO LTD
+> 7.TOKYO ELECTRON
+> 22.DAIKIN INDUSTRIES
+> 6.FAST RETAILING CO LTD
+> 39.NIDEC CORPORATION
+> 5.SONY GROUP CORPORATION
+> 37.LASERTEC CORP
+> 25.FANUC CORPORATION
+> 3.SOFTBANK GROUP CORP
+> 33.TDK CORP
+> 41.EBARA CORP
+> 24.DAIICHI SANKYO COMPANY LIMITED
+
+0.TOYOTA MOTOR CORP 
+
+45.SUBARU CORPORATION 
+
+36.KYOCERA CORP 
+
+35.NOMURA HOLDINGS INC. 
+
+28.HONDA MOTOR CO 
+
+48.NISSAN MOTOR CO 
+
+23.KOMATSU 
+
+21.PANASONIC HOLDINGS CORP 
+
+15.MITSUBISHI ELECTRIC CORP 
+
+49.YAMAHA MOTOR CO 
+
+2.HITACHI 
+
+29.SEVEN & I HOLDINGS CO LTD 
+
+34.CANON INC 
+
+26.AEON CO LTD 
+
+38.SHIONOGI & CO 
+
+40.ASAHI GROUP HLDGS 
+
+42.KIRIN HOLDINGS COMPANY LIMITED 
+
+43.JAPAN EXCHANGE GROUP 
+
+19.TAKEDA PHARMACEUTICAL CO LTD 
+
+30.ASTELLAS PHARMA 
+
+17.SOFTBANK CORP. 
+
+16.JAPAN TOBACCO INC 
+
+13.NTT INC 
+
+12.CHUGAI PHARMACEUTICAL CO 
+
+47.EISAI CO LTD 
+
+18.KDDI CORPORATION 
+
+31.CENTRAL JAPAN RAILWAY CO 
+
+46.WEST JAPAN RAILWAY CO 
+
+32.EAST JAPAN RAILWAY CO 
+
+1.MITSUBISHI UFJ FINANCIAL GROUP 
+
+44.T&D HOLDINGS INC 
+
+10.TOKIO MARINE HOLDINGS INC 
+
+4.SUMITOMO MITSUI FINANCIAL GROUP 
+
+27.DAI-ICHI LIFE HOLDINGS INC 
+
+9.MIZUHO FINANCIAL GROUP 
+
+11.KEYENCE CORP 
+
+14.SHIN-ETSU CHEMICAL CO 
+
+8.ADVANTEST CORP 
+
+20.RECRUIT HOLDINGS CO LTD 
+
+7.TOKYO ELECTRON 
+
+22.DAIKIN INDUSTRIES 
+
+6.FAST RETAILING CO LTD 
+
+39.NIDEC CORPORATION 
+
+5.SONY GROUP CORPORATION 
+
+37.LASERTEC CORP 
+
+25.FANUC CORPORATION 
+
+3.SOFTBANK GROUP CORP 
+
+33.TDK CORP 
+
+41.EBARA CORP 
+
+24.DAIICHI SANKYO COMPANY LIMITED Figure 9: The cluster structure of the top 50 Japanese stocks found by the RSC. We see the rough partition into {automotive & mobility, Japan Railway, finance, semiconductor & electronics manufactur-ing & technology, pharma & retail & the rest }.24
