@@ -1,0 +1,1062 @@
+Title: anyakrakusuma: A Python Library for Entropic Schrödinger Bridges on Idealized Geometries
+
+URL Source: https://arxiv.org/pdf/2607.18184v1
+
+Published Time: Tue, 21 Jul 2026 02:12:11 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# anyakrakusuma : A Python Library for Entropic Schr¨ odinger Bridges on Idealized Geometries 
+
+# Sandy H. S. Herho 1,2,3, Dasapta E. Irawan 1,∗, Agus W. Jatmiko 4,Sito F. Biosa 5, Candrasa S. Dharma 6, Edi Riawan 7,Astyka Pamumpuni 1, Rendy D. Kartiko 1, Rusmawan Suwarman 7,and Deny J. Puradimaja 1
+
+> 1
+
+Applied Geology Research Group, Bandung Institute of Technology, Bandung, West Java 40132, Indonesia 
+
+> 2
+
+Department of Earth and Planetary Sciences, University of California, Riverside, CA 92521, USA 
+
+> 3
+
+Center for Agrarian Studies, Bandung Institute of Technology, Bandung, West Java 40132, Indonesia 
+
+> 4
+
+Headquarters of the Indonesian Air Force (Mabes TNI AU), Cilangkap, East Jakarta 13870, Indonesia 
+
+> 5
+
+Department of Visual Communication Design – Animation, BINUS University, West Jakarta 11480, Indonesia 
+
+> 6
+
+Indonesian Navy Hydro-Oceanography Center (Pushidrosal), Ancol Timur, North Jakarta 14430, Indonesia 
+
+> 7
+
+Atmospheric Science Research Group, Bandung Institute of Technology, Bandung, West Java 40132, Indonesia 
+
+> ∗
+
+Corresponding Author: dasaptaerwin@itb.ac.id 
+
+Abstract 
+
+We present anyakrakusuma , an open-source Python library that solves the discrete static Schr¨ odinger bridge problem, the entropically regularized counterpart of optimal transport, through a log-domain Sinkhorn– Knopp iteration and reconstructs the entropic interpolation between two empirical point clouds. The solver is paired with a diagnostic pipeline that characterizes the optimal coupling and the intermediate distributions through information-theoretic and geometric measures. We exercise the library on four idealized planar cases spanning a circle-to-circle dilation, a spiral-to-mixture fragmentation, a rigid reorientation of two moons, and a Lissajous-to-trefoil deformation. The log-domain formulation is necessary rather than merely convenient at the parameters studied, where the cost-to-regularization ratio reaches four hundred and the Gibbs kernel underflows double precision across most of its range; the iteration nonetheless attains a marginal residual of 10 −9 and unit marginal fidelity in every case. Residual histories decay geometrically over approximately eight decades at per-iteration contraction factors between 0 .966 and 0 .976, which are local rates near the fixed point that lie many orders of magnitude below the worst-case Hilbert-metric bound. The covariance analysis recovers an imposed ninety-degree reorientation to within 0 .07 ◦, roughly forty times smaller than its uncertainty, across a masked interval of near-isotropy on which the principal axis is unobservable. The diagnostics are reported with explicit attention to the regimes in which each is well defined, including the differential entropy, which is meaningful only on the open interpolation interval. The presented cases are constructed rather than measured; quantitative application to empirical point clouds requires further study. 
+
+Keywords: entropic optimal transport; information-theoretic diagnostics; log-domain Sinkhorn algorithm; Python scientific software; Schr¨ odinger bridge problem. 
+
+# 1 Introduction 
+
+The Schr¨ odinger bridge problem asks for the most likely evolution of a cloud of particles between two observed distributions, given a reference stochastic dynamics, and was posed in its original form as a question about the statistical behavior of diffusing particles conditioned on their initial and final states [35, 36]. In modern terms the problem is an entropy-minimizing interpolation on path space, and it is now understood to be the stochastic, entropically regularized counterpart of the optimal transport problem, to which it reduces in the vanishing-noise limit [28, 5]. This correspondence has placed the Schr¨ odinger bridge at the intersection of probability, statistical mechanics, and computational mathematics, where it supplies a principled way to connect two empirical states through a dynamics that is neither purely deterministic nor purely diffusive [11, 41]. Interest in the problem has grown with the recognition that its discrete static form is solved by the same matrix-scaling iteration that underlies entropic optimal transport. The introduction of an entropic penalty renders the transport problem strictly convex and solvable by the Sinkhorn–Knopp iteration at a cost far below that of the underlying linear program [7, 40], and the same machinery, together with its Bregman-projection and stabilized-scaling refinements, now forms the standard computational backbone for entropic transport [31, 1, 34]. The resulting framework has been carried well beyond its origins, from the continuous-state generative models that treat the bridge as the finite-time analogue of a diffusion [8] to applications across the physical and data sciences where two snapshots of a system must be joined by a plausible intervening process. The breadth of this adoption has made the quality and transparency of the underlying solvers a matter of practical consequence. That breadth has not been matched by a corresponding supply of reusable, well-documented scientific software. Implementations of the entropic bridge are frequently embedded within larger machine-learning pipelines, tuned 1arXiv:2607.18184v1 [physics.comp-ph] 20 Jul 2026 to a single application, and released without the archival data formats, reproducible configurations, or standard-ized diagnostics that characterize mature community codes in adjacent computational fields. A researcher who wishes to study the bridge itself, rather than a downstream task built upon it, is often left to reconstruct the solver and its analysis from scratch. The absence of a purpose-built, openly documented tool for the discrete Schr¨ odinger bridge, coupled with information-theoretic diagnostics and climate-and-forecast-compliant output, impedes systematic exploration, cross-study comparison, and reproducibility in the same way that has been noted for other idealized-modeling communities [14, 27]. A productive response to this situation has been to build compact, single-purpose solvers whose numerical core is legible and just-in-time compiled for research-grade throughput, and to pair each with a diagnostic layer that quantifies the organization of the solution beyond first-moment summaries and with self-describing output that supports archival and reuse. Idealized solvers constructed in this manner have proven effective across a range of physical settings, including shear-driven instability [19], collective animal motion [15], nonlinear dispersive waves [22], and wave attenuation in coastal environments [16], and the same emphasis on numerical transparency under-lies reproducibility studies across computing platforms [17, 18]. Information-theoretic diagnostics in particular have repeatedly exposed organizational structure that order-parameter or first-moment descriptions leave hidden [15, 22]. The entropic Schr¨ odinger bridge is a natural setting for the same treatment, since its coupling and its intermediate distributions carry precisely the kind of structure that such diagnostics are designed to measure. This paper presents anyakrakusuma , an open-source Python library that solves the discrete static Schr¨ odinger bridge problem through a log-domain Sinkhorn–Knopp iteration and reconstructs the entropic interpolation be-tween two empirical point clouds, together with a diagnostic pipeline that characterizes the coupling and the intermediate distributions through information-theoretic and geometric measures. The solver and its diagnostics are exercised on four idealized planar cases, chosen to span a circle-to-circle dilation, a spiral-to-mixture frag-mentation, a rigid reorientation of two moons, and a Lissajous-to-trefoil deformation, which between them probe convergence, the structure of the optimal coupling, the evolution of the intermediate density, and the informa-tional and geometric descriptors of the bridge. Consistent with the aim of providing a verified computational foundation rather than an application to measured data, the four cases are constructed rather than observed, and the diagnostics are reported with explicit attention to the regimes in which each is well defined. The mathe-matical formulation and numerical implementation are developed first, followed by the four demonstration cases, their diagnostic analysis, and a discussion of the results and their limitations. 
+
+# 2 Methods 
+
+# 2.1 Model Description 
+
+The problem treated in this work was first formulated by Erwin Schr¨ odinger in two papers in the early 1930s [35, 36]. Consider an ensemble of independent Brownian particles whose spatial distribution is recorded at two dis-tinct instants in time, and suppose that the recorded distributions are mutually inconsistent with free diffusion. Schr¨ odinger’s problem is to identify the most likely evolution of the ensemble between the two observations. Modern probabilistic and analytical treatments have made the question precise and have shown that its resolu-tion coincides with the solution of an entropy-regularized version of the Monge–Kantorovich optimal transport problem [28, 5, 31]. The following development establishes the correspondence in three stages. A path-space formulation grounded in the relative entropy of measures reduces to a coupling problem on the product of the endpoint spaces, and the resulting variational problem is then cast in the finite-dimensional form that governs the discrete computation. Let d ∈ N denote the spatial dimension and ε > 0 a fixed positive parameter. Consider independent particles diffusing in Rd on the unit time interval t ∈ [0 , 1] according to the stochastic differential equation dXt = √ε dWt, X0 ∼ ρ0, (1) where Xt ∈ Rd is the particle position at time t, Wt is a standard d-dimensional Wiener process, and ρ0 : Rd →
+
+R≥0 is the prescribed probability density of the initial position. The parameter ε plays the role of a diffusivity. Throughout what follows, Ω := C([0 , 1]; Rd) denotes the space of continuous paths ω : [0 , 1] → Rd, equipped with the supremum norm, and P(Ω) denotes the Borel probability measures on Ω. The reference path measure 
+
+R ∈ P (Ω) is the law of the diffusion (1), that is, the joint distribution of the random trajectory {Xt}t∈[0 ,1] . For a path ω ∈ Ω and a time t ∈ [0 , 1], ωt ∈ Rd denotes the position at time t.Suppose that at the terminal time t = 1 a second density ρ1 : Rd → R≥0 is observed, and that ρ1 does not match the one-time marginal of X1 predicted by (1). Schr¨ odinger’s problem selects the path measure P ⋆ closest to R in relative entropy among those whose endpoint marginals are exactly ( ρ0, ρ 1) [28, 5], 
+
+P ⋆ = arg min   
+
+> P∈Π( ρ0,ρ 1)
+
+KL( P ∥ R) . (2) Here Π( ρ0, ρ 1) ⊂ P (Ω) is the set of path measures whose endpoint pushforwards match the prescribed marginals, Π( ρ0, ρ 1) = P ∈ P (Ω) : P ◦ ω−10 = ρ0, P ◦ ω−11 = ρ1 , (3) and KL( P ∥ R) is the Kullback–Leibler (KL) divergence, KL( P ∥ R) = 
+
+Z
+
+> Ω
+
+log 
+
+ dP
+
+dR (ω)
+
+
+
+dP (ω), (4) 2defined whenever P is absolutely continuous with respect to R, with d P/ dR the Radon–Nikodym derivative, and as + ∞ otherwise [26]. The minimizer P ⋆, when it exists, admits an interpretation through the theory of large deviations as the most likely empirical distribution of a large collection of independent trajectories of (1), conditional on the empirical endpoint marginals matching ( ρ0, ρ 1) [11]. The problem stated in (2) is posed on the infinite-dimensional path space Ω, and its direct discretization is neither obvious nor efficient. A classical reduction lowers the problem to one posed on the product of the endpoint spaces. Let R0,1 ∈ P (Rd × Rd) denote the joint law of the endpoints ( ω0, ω 1) under R. For the diffusion (1), the transition density is the Gaussian heat kernel at time one, so R0,1 admits the explicit factorization 
+
+R0,1(d x, dy) = ρ0(x) kε(x, y ) d x dy, kε(x, y ) = (2 πε )−d/ 2 exp 
+
+
+
+− ∥x − y∥2
+
+2ε
+
+
+
+, (5) where x, y ∈ Rd are the endpoint positions, ∥ · ∥ denotes the Euclidean norm on Rd, and kε is the density of X1
+
+given X0 = x under the reference dynamics. Any path measure P ∈ P (Ω) admits a unique disintegration into its endpoint marginal π ∈ P (Rd × Rd), defined by 
+
+π(d x, dy) = P (ω0 ∈ dx, ω 1 ∈ dy) , (6) together with the family of conditional path measures 
+
+P x,y (·) = P   · ω0 = x, ω 1 = y , (x, y ) ∈ Rd × Rd. (7) The analogous disintegration of R produces the conditional family {Rx,y }, in which Rx,y is the law of the Brownian bridge of diffusivity ε on [0 , 1] that starts at x and ends at y [11]. The chain rule for relative entropy then yields the additive decomposition [28] KL( P ∥ R) = KL( π ∥ R0,1) + 
+
+Z
+
+> Rd×Rd
+
+KL( P x,y ∥ Rx,y ) π(d x, dy). (8) The two terms on the right of (8) are coupled only through the marginal π, and the second term is minimized term by term in ( x, y ) by setting the conditional law to its reference value P ⋆,x,y = Rx,y . The minimization in (2) therefore reduces to a problem for the endpoint coupling alone, 
+
+π⋆ = arg min   
+
+> π∈Π( ρ0,ρ 1)
+
+KL( π ∥ R0,1) , (9) where Π( ρ0, ρ 1) now denotes the set of probability measures on the product space Rd × Rd whose first and second marginals equal ρ0 and ρ1, respectively. The original dynamic problem is recovered from π⋆ by gluing the Brownian bridge laws Rx,y along the optimal endpoint coupling. Substituting the explicit form of R0,1 from (5) into the relative entropy in (9) and discarding constants that do not depend on π produces 
+
+π⋆ = arg min   
+
+> π∈Π( ρ0,ρ 1)
+
+Z
+
+> Rd×Rd
+
+∥x − y∥2
+
+2 dπ(x, y ) + ε KL( π ∥ ρ0 ⊗ ρ1) , (10) where ρ0 ⊗ ρ1 denotes the independent product measure on Rd × Rd. The functional in (10) is the Monge– Kantorovich optimal transport cost with quadratic ground cost, regularized by an entropic term of strength 
+
+ε [3, 41]. As ε → 0+, the minimizer of (10) converges to the unregularized Wasserstein-optimal coupling, which is supported on the graph of the Brenier map [3, 30, 4]. In the opposite limit ε → ∞ , the entropic term dominates the cost and the minimizer converges to the product measure ρ0 ⊗ ρ1, in which the source and target are statistically independent. For empirical measures supported on finite point clouds, the problem (10) becomes finite-dimensional. Let 
+
+μ =
+
+> n
+
+X
+
+> i=1
+
+ai δxi , ν =
+
+> m
+
+X
+
+> j=1
+
+bj δyj , (11) where {xi}ni=1 and {yj }mj=1 are points in Rd, δx is the Dirac mass at x, and the weight vectors a ∈ Rn>0 and 
+
+b ∈ Rm>0 lie on the open probability simplices, that is, P 
+
+> i
+
+ai = P 
+
+> j
+
+bj = 1 with all entries positive. A coupling between μ and ν is represented by a nonnegative matrix π ∈ Rn×m 
+
+> ≥0
+
+with entries πij ≥ 0, i = 1 , . . . , n , j = 1 , . . . , m ,interpreted as the mass transported from xi to yj . Define the cost matrix C ∈ Rn×m 
+
+> ≥0
+
+by 
+
+Cij = ∥xi − yj ∥2, (12) and the transportation polytope Π( a, b ) = 
+
+n
+
+π ∈ Rn×m 
+
+> ≥0
+
+: π 1m = a, π ⊤ 1n = b
+
+o
+
+, (13) where 1k ∈ Rk denotes the column vector of all ones. The continuous problem (10) then becomes the discrete convex program 
+
+π⋆ = arg min   
+
+> π∈Π( a,b )
+
+⟨C, π ⟩F + ε
+
+> n
+
+X
+
+> i=1
+> m
+
+X
+
+> j=1
+
+πij log 
+
+ πij 
+
+aibj
+
+
+
+, (14) where ⟨C, π ⟩F = P 
+
+> ij
+
+Cij πij is the Frobenius inner product of C and π, and the convention 0 log 0 = 0 is used. 3The factor of one half that appears in the quadratic cost of (10) has been absorbed into a redefinition of ε,following the convention standard in the computational entropic transport literature [31]. The convex program (14) admits a closed-form characterization of its minimizer. Introducing Lagrange mul-tipliers f ∈ Rn and g ∈ Rm for the row and column marginal constraints in (13), and setting the gradient of the Lagrangian with respect to πij to zero, gives the first-order optimality condition 
+
+π⋆ij = ai bj exp 
+
+ fi + gj − Cij 
+
+ε
+
+
+
+= ui Kij vj , i = 1 , . . . , n, j = 1 , . . . , m, (15) where the scaling vectors u ∈ Rn>0 and v ∈ Rm>0 are given by ui = ai exp( fi/ε ) and vj = bj exp( gj /ε ), and the Gibbs kernel K ∈ Rn×m>0 has entries 
+
+Kij = exp 
+
+
+
+− Cij 
+
+ε
+
+
+
+. (16) The matrix-scaling structure π⋆ = diag( u) K diag( v) has been studied since the 1960s, and the pair ( u, v ) is known to exist and to be unique up to the rescaling ( u, v ) 7 → (αu, α −1v) for α > 0, given that the marginal constraints are imposed [39, 40]. The discrete scalings ( u, v ) are point-cloud realizations of a pair of positive functions φ, ψ : Rd × [0 , 1] → R>0 that solve the coupled Schr¨ odinger system, 
+
+∂tφ(x, t ) = ε
+
+2 ∆φ(x, t ), (17) 
+
+∂tψ(x, t ) = − ε
+
+2 ∆ψ(x, t ), (18) where ∆ = Pdk=1 ∂2/∂x 2 
+
+> k
+
+is the Laplacian on Rd. The intermediate-time density factors multiplicatively as 
+
+ρt(x) = φ(x, t ) ψ(x, t ), and the boundary conditions φ(·, 0) ψ(·, 0) = ρ0 and φ(·, 1) ψ(·, 1) = ρ1 close the system at both ends [28, 5]. Equations (17) and (18) consist of a forward heat equation for φ and a formally time-reversed heat equation for ψ. The time-reversed companion distinguishes Schr¨ odinger’s formulation from standard parabolic theory and motivated his interest in the problem as an analogue of quantum-mechanical probability conservation. Reconstruction of the intermediate-time density ρt for t ∈ (0 , 1) from the optimal coupling π⋆ exploits the conditional-bridge identity established between (8) and (9), which restores Brownian bridge dynamics on each pair of endpoints. Conditional on ( X0, X 1) = ( x, y ) drawn from π⋆, the optimal process Xt is the Brownian bridge of diffusivity ε between x and y on [0 , 1], whose marginal at time t is Gaussian, 
+
+Xt (X0 = x, X 1 = y) ∼ N ((1 − t) x + t y, ε t (1 − t) Id) , (19) where N (μ, Σ) denotes the multivariate normal distribution on Rd with mean vector μ ∈ Rd and covariance matrix Σ ∈ Rd×d, and Id ∈ Rd×d is the identity matrix [11]. Integrating (19) against the optimal coupling yields the intermediate-time density, 
+
+ρt(z) = 
+
+Z
+
+> Rd×Rd
+
+N (z; (1 − t) x + t y, ε t (1 − t) Id) d π⋆(x, y ), z ∈ Rd, (20) where N (z; μ, Σ) is the value of the Gaussian density at z. The variance ε t (1 − t) along the bridge attains its maximum ε/ 4 at t = 1 /2 and vanishes at the two endpoints t = 0 and t = 1, so the boundary marginals ρ0
+
+and ρ1 are recovered exactly. In the limit ε → 0+, the Gaussian kernel in (20) contracts to a Dirac mass on the segment (1 − t) x + t y , and the intermediate density reduces to the L2-Wasserstein displacement interpolation associated with the Brenier map [3]. Equations (1)–(20) specify the model in full. The discrete optimal coupling π⋆ defined in (14), the dual scaling pair ( u, v ) that produces it through (15), and the intermediate-time density ρt reconstructed from (20) are the three quantities that the formulation delivers. The parameter ε plays a double role, serving simultaneously as the diffusivity of the reference Brownian motion and as the strength of the entropic regularization in (14), with small values producing sharp couplings that approach the unregularized optimal transport plan and large values producing diffuse couplings that approach statistical independence between source and target. 
+
+# 2.2 Numerical Implementation 
+
+The routines that translate the discrete formulation (14)–(20) into executable computations are packaged as the 
+
+anyakrakusuma library, a Python implementation in which all inner loops are accelerated by Numba just-in-time compilation to LLVM intermediate representation and dispatched across CPU threads through the prange con-struct [27], while all array storage and higher-level operations rely on NumPy [14]. Numba compilation is optional at import time and a pure NumPy fallback is provided for environments in which the compiler is unavailable, at the cost of a substantial slowdown on the inner Sinkhorn loops. All floating-point arithmetic is performed in IEEE 754 double precision, and the just-in-time decorators are configured with the fastmath=True option, which permits associative reordering of floating-point additions to enable vectorization at the price of strict bitwise re-producibility across compiler versions [13]. The associated numerical drift is not consequential for the algorithm at hand, since the log-domain Sinkhorn updates are themselves invariant under shifts of the potentials that far exceed the accumulated fused-multiply-add error. The main entry point is the SchrodingerBridgeSolver class, which exposes the point-cloud transport problem through a solve method that returns the pair ( f, g ) together with the materialized plan and diagnostic quantities, and a generate trajectory method that produces the 4bridge interpolation at a uniform time grid. The squared-Euclidean cost matrix C ∈ Rn×m 
+
+> ≥0
+
+of (12) is assembled through a triply nested loop over the source index i ∈ { 1, . . . , n }, the target index j ∈ { 1, . . . , m }, and the coordinate index k ∈ { 1, . . . , d },
+
+Cij =
+
+> d
+
+X
+
+> k=1
+
+(xik − yjk )2, i = 1 , . . . , n, j = 1 , . . . , m, (21) with the outer loop over i parallelized through prange . The inner two loops are kept explicit rather than replaced by vectorized broadcasting because Numba compiles the explicit form to tight machine code with cache-friendly access patterns on the row-major NumPy arrays, avoiding the temporary allocations that a broadcasting expression would generate. Storage for C is preallocated as a contiguous n × m float64 array, giving a memory footprint of 8 nm bytes and a computational cost of O(nmd ) elementary operations for the assembly. The Sinkhorn iterations that solve (14) are executed in the logarithmic domain, replacing the exponential-domain scalings ui and vj of (15) by the dual potentials 
+
+fi = ε log ui, gj = ε log vj , i = 1 , . . . , n, j = 1 , . . . , m. (22) Working with ( f, g ) rather than ( u, v ) removes the risk of underflow or overflow when ε is small relative to the range of Cij , a regime in which the Gibbs kernel entries Kij = exp( −Cij /ε ) of (16) can lie many decades below the smallest representable double-precision number. The log-domain formulation and its stabilized vari-ants have become standard practice for entropic transport at small regularization, both in the balanced setting treated here [34, 31] and in the more general scaling framework developed for unbalanced and multi-marginal extensions [6, 1]. The load-bearing primitive is the numerically stable log-sum-exp (LSE) evaluated with the max-trick, LSE( z1, . . . , z L) = zmax + log 
+
+> L
+
+X
+
+> ℓ=1
+
+exp( zℓ − zmax ), zmax = max  
+
+> ℓ
+
+zℓ, (23) implemented as a self-contained Numba-compiled routine with a special-case branch that returns zmax directly whenever the maximum is infinite, so that empty softmin evaluations do not propagate NaN through the subse-quent arithmetic. In terms of ( f, g ) and the KL optimality conditions produced by (14), one full Sinkhorn sweep amounts to the pair of updates 
+
+f (k+1)  
+
+> i
+
+= ε log ai − ε LSE j
+
+g(k) 
+
+> j
+
+− Cij 
+
+ε
+
+!
+
+, i = 1 , . . . , n, (24) 
+
+g(k+1)  
+
+> j
+
+= ε log bj − ε LSE i
+
+f (k+1)  
+
+> i
+
+− Cij 
+
+ε
+
+!
+
+, j = 1 , . . . , m, (25) in which the superscript denotes the iteration index and the second update uses the freshly computed f (k+1) 
+
+rather than the stale f (k), corresponding to a Gauss–Seidel rather than a Jacobi sweep. A direct consequence of the ordering in (24)–(25) is that the column-marginal constraint of the transportation polytope (13) is satisfied exactly at the end of every sweep, 
+
+> n
+
+X
+
+> i=1
+
+exp f (k+1)  
+
+> i
+
++ g(k+1)  
+
+> j
+
+− Cij 
+
+ε
+
+!
+
+= bj , j = 1 , . . . , m, (26) while the row marginal P 
+
+> j
+
+π(k+1)  
+
+> ij
+
+deviates from ai by an amount that decreases monotonically as the iteration proceeds. The outer loops in (24) and (25) are parallelized across threads, while the inner LSE evaluation is kept serial per thread to preserve the deterministic max-trick evaluation order, giving each full sweep a computational cost of O(nm ) elementary operations after the cost matrix has been assembled. The formulation (24)–(25) is the standard log-domain Sinkhorn recursion [31, 1], and it reduces to the classical multiplicative Sinkhorn–Knopp iteration on the scalings ( u, v ) in the limit of large ε [39, 40, 23]. Both potentials are initialized to the zero vector, f (0) = 0 and g(0) = 0, corresponding to the independent product coupling u(0)  
+
+> i
+
+v(0)  
+
+> j
+
+= aibj in (15) and offering no informative prior to bias the iteration toward any particular transport structure. The logarithms of the marginal weight vectors, log a and log b, are precomputed once at solver entry after adding a floor of 10 −300 inside the logarithm to guard against strictly zero entries in user-supplied marginals; for the default uniform weights ai = 1 /n and bj = 1 /m this floor is inactive. Convergence is monitored through the ℓ1 residual of the row marginal constraint in (13), 
+
+η(k) = π(k)1m − a 1
+
+=
+
+> n
+
+X
+
+> i=1
+> m
+
+X
+
+> j=1
+
+π(k) 
+
+> ij
+
+− ai , (27) which is evaluated without materializing the plan through the log-domain identity log 
+
+
+
+π(k)1m
+
+ 
+
+> i
+
+= f (k)
+
+> i
+
+ε + LSE j
+
+g(k) 
+
+> j
+
+− Cij 
+
+ε
+
+!
+
+, i = 1 , . . . , n, (28) 5which is derived by taking the logarithm of the row sum of the Gibbs factorization (15) and grouping the constant 
+
+f (k) 
+
+> i
+
+/ε outside the LSE. The residual (27) is evaluated at every tenth Sinkhorn sweep rather than at every sweep to amortize the associated O(nm ) cost across the intervening iterations. The check is deliberately asymmetric, using only the row-marginal residual rather than the sum of row and column residuals, since the column-marginal identity (26) already holds up to floating-point precision at the end of each sweep. The convergence properties of the Sinkhorn recursion under mild positivity assumptions on the marginals were established in the classical setting [39, 23], and the log-domain adaptation preserves the geometric contraction rate in the Hilbert projective metric that underlies those results. The tolerance η(k) < 10 −9 and the iteration cap of two thousand sweeps adopted here are configuration-file parameters that may be adjusted at run time. Once the potentials ( f, g ) satisfy the convergence criterion (27), the optimal transport plan is materialized on the exponential scale by direct evaluation of 
+
+π⋆ij = exp 
+
+ fi + gj − Cij 
+
+ε
+
+
+
+, i = 1 , . . . , n, j = 1 , . . . , m, (29) consistent with the Gibbs factorization (15) after the change of variables (22). Materialization is performed only once, after the iterative refinement has terminated, and the associated loss of log-domain stability is confined to individual matrix entries whose value is below the smallest representable positive double-precision number and which contribute negligibly to any downstream statistic [34]. The transport cost is computed as the Frobenius pairing 
+
+⟨C, π ⋆⟩F =
+
+> n
+
+X
+
+> i=1
+> m
+
+X
+
+> j=1
+
+Cij π⋆ij , (30) evaluated on the materialized plan, matching the objective (14) evaluated at the optimum. Reconstruction of the intermediate-time density ρt in (20) proceeds by drawing samples from the marginal law rather than by evaluating ρt on a spatial grid, which would be infeasible for the domain-free point-cloud data type. The Brownian-bridge formula (19) shows that a sample from ρt may be obtained by a two-step composition: first draw endpoint indices ( i, j ) from the discrete joint distribution induced by π⋆, and then draw the intermediate position from the conditional Gaussian law with mean (1 −t) xi +t y j and covariance ε t (1 −t) Id.Conditioned on the source index i, the target index j is drawn from the discrete conditional distribution 
+
+P(j | i) = π⋆ij 
+
+P 
+
+> j′
+
+π⋆ij ′
+
+= π⋆ij 
+
+ai
+
+, (31) where the second equality holds exactly at convergence and is the reason that the marginal residual (27) rather than the plan itself controls sampling fidelity. The categorical draw is executed by inverse cumulative distribution function sampling, that is, by drawing a uniform random variable U ∼ U (0 , 1) and selecting the smallest index 
+
+j⋆(i, U ) for which 
+
+> j⋆
+
+X
+
+> j′=1
+
+π⋆ij ′
+
+ai
+
+≥ U. (32) The intermediate-time sample is then 
+
+Xt,i = (1 − t) xi + t y j⋆(i,U ) + pε t (1 − t) Zi, Zi ∼ N (0 , I d), (33) with the Gaussian noise drawn coordinatewise from the standard normal distribution provided by np.random.randn 
+
+and scaled by the bridge standard deviation pε t (1 − t) derived from (19). A defensive branch reassigns the sam-ple to xi whenever the row sum P 
+
+> j
+
+π⋆ij falls below 10 −300 , an eventuality that in practice occurs only when the convergence tolerance has been set orders of magnitude below the achievable double-precision floor. Full trajectories are constructed by repeating the sampling procedure (32)–(33) over a uniform time grid 
+
+tℓ = ℓNf − 1 , ℓ = 0 , 1, . . . , N f − 1, (34) of Nf frames on the unit interval. At t = 0 and t = 1 the boundary constraints are enforced exactly by returning the source cloud X and the target cloud Y respectively, bypassing the stochastic sampling procedure and guaranteeing that the reconstructed trajectory reproduces the prescribed endpoints to machine precision. At interior time levels the sampling routine is called with a per-frame random seed constructed by adding the frame index to a user-specified base seed, which yields independent draws from ρtℓ across frames and produces a visualization of marginal evolution rather than of Lagrangian particle paths. While a pathwise construction, in which each particle is assigned a fixed Brownian-bridge realization across all frames, would produce smoother apparent trajectories, the marginal-sampling procedure adopted here has the advantage that each frame is a statistically valid draw from the correct intermediate density. Beyond the primary transport plan and its bridge reconstruction, the solver evaluates a small collection of diagnostic quantities at convergence. The plan entropy 
+
+H(π⋆) = −
+
+> n
+
+X
+
+> i=1
+> m
+
+X
+
+> j=1
+
+π⋆ij log π⋆ij (35) 6measures the effective dispersion of the coupling, evaluated with the convention 0 log 0 = 0 and restricted in practice to entries above the underflow floor of 10 −300 . The normalized effective support exp( H(π⋆)) /(nm )translates the entropy into a scale-free number in (0 , 1] that approaches unity for a diffuse near-independent coupling and 1 / max( n, m ) for a permutation-like coupling that concentrates all mass on a small subset of entries. The row and column marginal residuals evaluated on the materialized plan (29), 
+
+rrow = max 
+
+> i
+> m
+
+X
+
+> j=1
+
+π⋆ij − ai , rcol = max 
+
+> j
+> n
+
+X
+
+> i=1
+
+π⋆ij − bj , (36) together with the total plan mass P 
+
+> ij
+
+π⋆ij and the ℓ1 residual (27) at the final iteration, provide a consistency audit whose deviation from the theoretical values of 0, 0, 1, and 0 respectively quantifies the numerical residual accumulated during the iteration. All diagnostics, along with the potentials, the plan, and the bridge trajectory, are written to a self-describing NetCDF-4 file following the Climate and Forecast (CF) conventions [33, 20], with float32 storage adopted for the bulk quantities to keep archival footprints manageable while retaining the 
+
+float64 working precision at run time. 
+
+# 2.3 Numerical Experiments 
+
+Four demonstration cases exercise anyakrakusuma across a graded sequence of source and target geometries. Each case fixes the point-cloud size at n = m = 1000, the spatial dimension at d = 2, the marginal weights at uniform values ai = 1 /n and bj = 1 /m , the Sinkhorn tolerance at η(k) < 10 −9, the iteration cap at two thousand sweeps, and the base random seed at the value 42; source and target point clouds are generated with random seeds 42 and 1042 respectively, so that the two clouds are drawn from independent streams of a reproducible pseudorandom sequence. The regularization parameter ε and the frame count Nf are chosen case by case, and their values are tabulated together with the source and target parametrizations in the descriptions that follow. Although the demonstration parameters adopt uniform marginals and a two-dimensional embedding, the underlying routines described earlier accept nonuniform marginal weights and arbitrary spatial dimension d; the built-in distribution generators and the animation utilities of anyakrakusuma , however, are specialized to the two-dimensional case, so that experiments beyond the plane require user-supplied point clouds. 
+
+Case 1: Circle to circle. The source distribution is the uniform measure on the unit circle, sampled by 
+
+xi = (cos θi, sin θi) , θi = 2π(i − 1) 
+
+n + φ, i = 1 , . . . , n, (37) with a global phase φ ∼ U (0 , 2π/n ) drawn once at the outset to randomize the angular offset. The target distribution is the uniform measure on the concentric circle of radius 2, sampled by the same construction with radius rescaled from 1 to 2 and an independent phase drawn from the same distribution. No perturbation noise is applied at either endpoint, so the two clouds lie exactly on their respective circles. The regularization parameter is set to ε = 0 .02 and the trajectory is rendered on a grid of Nf = 120 frames. This case isolates radial rescaling in the absence of angular reorganization and provides a baseline against which the more complex geometries are compared. 
+
+Case 2: Spiral to Gaussian mixture. The source distribution is an Archimedean spiral with two full turns, sampled by 
+
+xi = ri (cos θi, sin θi) , θi = 0 .5 + 4π − 0.5
+
+n − 1 (i − 1) , ri = 1.5 θi
+
+4π , (38) for i = 1 , . . . , n , with additive isotropic Gaussian perturbation of standard deviation σsrc = 0 .01. The target distribution is a mixture of four Gaussian components with centers arranged uniformly on the circle of radius 1.5, 
+
+ck = 1 .5
+
+
+
+cos 2π(k − 1) 4 , sin 2π(k − 1) 4
+
+
+
+, k = 1 , 2, 3, 4, (39) with each component contributing n/ 4 points drawn from N (ck, 0.15 2I2). The regularization is set to ε = 0 .05 and the trajectory is rendered on Nf = 120 frames. This case tests the solver on a topology-changing transition from a one-dimensional connected support to a disconnected four-modal target. 
+
+Case 3: Two moons to rotated two moons. The source distribution is the two-moons configuration, an interleaved pair of half-circles sampled by 
+
+xi =
+
+((cos αi, sin αi) + ξi, i = 1 , . . . , ⌊n/ 2⌋,
+
+(1 − cos βi, 12 − sin βi) + ξi, i = ⌊n/ 2⌋ + 1 , . . . , n, (40) where the angular parameters αi ∈ [0 , π ] and βi ∈ [0 , π ] are equispaced within their respective half of the sample and ξi ∼ N (0 , 0.05 2I2) is the additive isotropic perturbation applied independently to each point. The target distribution is obtained by applying a rotation of π/ 2 radians about the empirical centroid ¯ x = n−1 P 
+
+> i
+
+xi of a 7freshly drawn two-moons cloud, 
+
+yj = ¯x +
+
+cos( π/ 2) − sin( π/ 2) sin( π/ 2) cos( π/ 2) 
+
+
+
+(x′ 
+
+> j
+
+− ¯x), j = 1 , . . . , n, (41) where {x′ 
+
+> j
+
+}nj=1 is the fresh two-moons cloud generated with the target random seed. The regularization is set to 
+
+ε = 0 .03 and the trajectory is rendered on Nf = 120 frames. This case tests the coupling on a nontrivial angular reorganization between two clouds of identical shape but distinct orientation. 
+
+Case 4: Lissajous curve to trefoil projection. The source distribution is the Lissajous curve with frequency ratio 3:2 and phase shift π/ 2, scaled to unit amplitude 1 .5, 
+
+xi = 1 .5 (sin(3 ti + π/ 2) , sin(2 ti)) , ti = 2π(i − 1) 
+
+n , i = 1 , . . . , n, (42) sampled uniformly in the parameter t ∈ [0 , 2π). The target distribution is the two-dimensional projection of the trefoil knot, 
+
+yj = 1.53 (sin sj + 2 sin(2 sj ), cos sj − 2 cos(2 sj )) , sj = 2π(j − 1) 
+
+n , j = 1 , . . . , n, (43) sampled uniformly in the parameter s ∈ [0 , 2π). No perturbation noise is applied to either curve. The regulariza-tion is set to ε = 0 .04 and the trajectory is rendered on the denser grid of Nf = 150 frames, reflecting the greater topological complexity of the intermediate density in the transition between the two self-intersecting curves. 
+
+# 2.4 Data Analyses 
+
+The Sinkhorn iteration history, the optimal coupling, and the bridge trajectory stored in each NetCDF file are subjected to four independent diagnostic analyses that quantify, respectively, the numerical convergence of the dual iteration, the geometric content of the discrete coupling, the spatial evolution of the intermediate density, and the informational and structural evolution of the point cloud along the bridge. All four analyses are implemented in Python and rely on NumPy for array manipulation [14], SciPy for the kernel density estimator, nearest-neighbor queries, and special functions [42], and Matplotlib for the publication figures [21], with the NetCDF interface exposed through netCDF4 [33]. The four diagnostic categories are treated in turn below. The convergence history of the log-domain Sinkhorn iteration is recorded by the solver every ten sweeps, so that the vector {η(kℓ)} of stored marginal residuals is associated with iteration indices 
+
+kℓ = 10 ℓ, ℓ = 0 , 1, . . . , L − 1, (44) where L is the number of stored samples and η(k) is the row marginal violation defined in (27). Under the contraction properties of the Sinkhorn recursion in the Hilbert projective metric [39, 23], the residual is expected to decay geometrically, so that log 10 η(k) is approximately linear in k. A least-squares fit log 10 η(kℓ) ≈ β0 + β1 kℓ, ℓ = 0 , 1, . . . , L − 1, (45) is carried out over the positive-residual subset, and the per-iteration contraction factor is reported as 10 β1 . As an independent check of the geometric-decay assumption, a per-step contraction ratio 
+
+r(kℓ) =
+
+ η(kℓ+1 )
+
+η(kℓ)
+
+1/10 
+
+, ℓ = 0 , 1, . . . , L − 2, (46) is computed and plotted against kℓ, with the exponent 1 /10 converting the between-record ratio to a per-iteration quantity. A flat sequence r(kℓ) approximately equal to 10 β1 indicates that the geometric-decay assumption is well satisfied, while systematic drift signals a departure from strict linearity in the log-domain. The fit (45) is defined only when at least two positive-residual samples are recorded, so scenarios that converge below tolerance at the first evaluation contribute one summary line to the report but no fitted rate. The optimal coupling π⋆ materialized through (29) is analyzed through the discrete conditional distribution and the associated barycentric projection. For each source index i, the row conditional 
+
+P (j | i) = π⋆ij 
+
+Pmj′=1 π⋆ij ′
+
+, j = 1 , . . . , m, (47) which coincides with the sampling distribution (31) used in the bridge reconstruction, gives the entropic-transport analogue of the target of a deterministic Monge map. The barycentric image of xi under the coupling is the conditional-expectation map 
+
+T (xi) = E[Y | X = xi] = 
+
+> m
+
+X
+
+> j=1
+
+P (j | i) yj , i = 1 , . . . , n, (48) which in the deterministic limit ε → 0+ approaches the Brenier map and in the diffuse limit ε → ∞ collapses to the marginal mean of the target [3, 31]. The per-source dispersion of the coupling is quantified through the row Shannon entropy 
+
+Hi = −
+
+> m
+
+X
+
+> j=1
+
+P (j | i) log P (j | i), i = 1 , . . . , n, (49) 8with the convention 0 log 0 = 0 enforced by restricting the sum to the positive-mass entries. The corresponding perplexity exp( Hi) is the effective number of target points that carry nonvanishing mass from xi, and its arith-metic mean ⟨exp( Hi)⟩i is reported as a single case-level summary of the coupling’s diffuseness. A complementary summary is the mean peak conditional probability ⟨max j P (j | i)⟩i, which approaches unity for permutation-like plans and 1 /m for the diffuse product coupling. The displacement magnitude ∥T (xi) − xi∥ furnishes a scalar per-source measure of the transport work, reported as its mean, median, and maximum across the source cloud. When the stored plan is subsampled to a p×p retained block by the solver’s NetCDF writer, the source and target clouds are aligned to the retained rows and columns through the same strided index selection ιℓ = ⌊ℓ(n−1) /(p−1) ⌋ used at storage time, and the retained rows are renormalized before the conditional (47) is formed. In this subsampled regime the reported quantities are computed over a strided subset rather than over the full plan and are labeled accordingly in the diagnostic report. The intermediate marginals ρt reconstructed through the bridge sampler are subjected to a Gaussian kernel density estimate (KDE) at five representative interpolation times T = {0, 0.25 , 0.5, 0.75 , 1}. For a snapshot time t⋆ ∈ T , the sample cloud is either the stored frame at t⋆ when the time grid contains t⋆ exactly, or the linear temporal interpolation between the two straddling frames when it does not. On the resulting cloud, the density estimate at grid point z is ˆρt(z) = 1
+
+n h dnX
+
+> i=1
+
+K
+
+ z − Xt,i 
+
+h
+
+
+
+, (50) with an isotropic Gaussian kernel K and bandwidth h selected by Scott’s rule of thumb, h = n−1/(d+4) [37, 38], as implemented in the scipy.stats.gaussian kde routine [42]. The density is evaluated on a 140 × 140 grid spanning the joint bounding box of the source, target, and all intermediate clouds, and is normalized to its per-panel maximum so that the cross-time and cross-case comparison is carried out on the scale-free field ρ† 
+
+> t
+
+(z) = ˆρt(z)/ max z ˆρt(z). Three summary quantities are computed on ρ† 
+
+> t
+
+. The high-density region count 
+
+Nreg (t) = # connected components of {z : ρ† 
+
+> t
+
+(z) ≥ 0.5} , (51) formed under four-connectivity on the pixel lattice, provides a ridge-robust replacement for the raw mode count: a ring-shaped support counts as a single region, while spatially separated concentrations count individually. The effective support area 
+
+Aeff (t) = exp − X
+
+> c
+
+pc(t) log pc(t)
+
+!
+
+∆x ∆y, pc(t) = ρ† 
+
+> t
+
+(zc)
+
+P 
+
+> c′
+
+ρ† 
+
+> t
+
+(zc′ ) , (52) in which the sum runs over grid cells c with center zc and area ∆ x ∆y, gives a participation-based measure of the area occupied by the density that does not degenerate for supports concentrated near a low-dimensional manifold, in contrast to the point-mass summary that would be given by the argmax of ρ† 
+
+> t
+
+. The support fraction 
+
+|{ z : ρ† 
+
+> t
+
+(z) ≥ 0.03 }| /(140 2) complements the effective area with a simple thresholded-coverage statistic that tracks with the visual footprint of each panel. The bridge point cloud is further characterized at every stored frame through the Kozachenko–Leonenko k-nearest-neighbor estimator of the differential entropy of ρt [24, 25], ˆH(ρt) = −ψ(k) + ψ(n) + log cd + dn
+
+> n
+
+X
+
+> i=1
+
+log ri(t), (53) with k = 5, digamma function ψ, unit-ball volume 
+
+cd = πd/ 2
+
+Γ( d/ 2 + 1) , (54) and ri(t) the Euclidean distance from Xt,i to its k-th nearest neighbor in the frame-t cloud, computed through the 
+
+scipy.spatial.cKDTree query with a floor of 10 −12 to guard against exact-coincidence pairs. The estimator (53) is consistent for absolutely continuous densities in Rd and exhibits √n-convergence in the limit of large sample size; its finite-sample behavior at the endpoint clouds, where the mass concentrates near a lower-dimensional curve, is understood as a comparative diagnostic rather than as an estimate of a well-defined two-dimensional differential entropy. As a reference against which the measured value at the midpoint of the bridge may be compared, the differential entropy of the pure Brownian-bridge noise term of (19), whose covariance is ε t (1 − t) Id, is 
+
+Hdiff (t) = d
+
+2 log(2 πe ε t (1 − t)) , (55) which at t = 1 /2 reduces to ( d/ 2) log( πe ε/ 2) and serves as a lower bound on the entropy that a bridge marginal must carry whenever the endpoint contribution is negligible. The second-moment geometry of ρt is summarized through the sample covariance matrix ˆΣ( t) = 1
+
+n − 1
+
+> n
+
+X
+
+> i=1
+
+ Xt,i − ¯Xt
+
+   Xt,i − ¯Xt
+
+⊤ , ¯Xt = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+Xt,i , (56) with eigenvalues λmin (t) ≤ λmax (t) computed through numpy.linalg.eigvalsh . Three ellipse descriptors follow: 9the root-mean-square (RMS) dispersion rms( t) = 
+
+q
+
+tr ˆΣ( t) = pλmin (t) + λmax (t), (57) the eccentricity 
+
+e(t) = 
+
+s
+
+1 − λmin (t)
+
+λmax (t) , (58) and the doubled principal-axis angle Θ( t) = atan2 
+
+
+
+2 ˆΣ12 (t), ˆΣ11 (t) − ˆΣ22 (t)
+
+
+
+, (59) whose halving gives the principal-axis direction modulo π. The doubled representation removes the axis-wrap ambiguity that would corrupt a direct estimate of the axis angle, and permits temporal unwrapping to be performed by standard phase-unwrap on Θ( t) [29]. Because the principal-axis direction is resolved only for anisotropic clouds, the orientation angle is reported only at frames with eccentricity above a fixed threshold, 
+
+e(t) ≥ 0.25; below this threshold the two eigenvalues are too close for the principal axis to be meaningfully distinguished from a random rotation of an isotropic disk. The unwrap is applied within each contiguous run of resolved frames but never across a masked run, since the axis direction on the two sides of an isotropic gap can be near-antipodal and the connecting branch is not determined by the data. Uncertainty in the frame-wise estimates of the differential entropy (53), the RMS dispersion (57), the eccentric-ity (58), and the doubled angle (59) is quantified through subsampling without replacement, chosen in preference to the classical bootstrap because resampling with replacement generates coincident particles that corrupt the nearest-neighbor entropy through log 0 singularities in the ri [32, 10]. For each frame, B = 80 subsamples of size 
+
+m = ⌊0.8 n⌋ are drawn from the frame cloud without replacement, each of the four descriptors is recomputed on the subsample, and the subsample standard deviation is rescaled to the full-sample standard deviation through the √n-convergence identity ˆσn =
+
+r mn ˆσm, (60) which is the standard subsampling correction for statistics whose asymptotic distribution is centered at a fixed limit and scales as n−1/2 [32]. A ninety-five-percent confidence band is then formed as ˆθn ± 1.96 ˆ σn under a Gaussian approximation for the linear descriptors. For the doubled angle Θ, whose ambient space is the unit circle, the subsample spread is quantified through the mean resultant length 
+
+R = 1
+
+B
+
+> B
+
+X
+
+> b=1
+
+exp 
+
+
+
+i Θ(b)
+
+, (61) from which the circular standard deviation follows through the standard identity σcirc = √−2 log R [29], undefined in the vanishing-R limit and guarded in the implementation by a lower cutoff R > 10 −12 . The corresponding half-width on the axis angle, obtained after halving the doubled representation and rescaling through (60), is reported in degrees. The per-case diagnostic reports collect these quantities into a fixed plain-text layout that lists, for each of the four cases, the convergence flag and iteration count, the log-linear contraction factor and its per-step check, the barycentric-map summary statistics, the KDE snapshot table with region count, effective area, support fraction, and centroid at each of the five snapshot times, and the frame-wise differential entropy at t ∈ { 0, 1/2, 1} together with the net production ˆH(ρ1) − ˆH(ρ0), the peak entropy and its time of occurrence, the RMS dispersion at the three canonical times together with its peak, and the axis reorientation (Θ(1) − Θ(0) + 90 ◦) mod 180 ◦ − 90 ◦
+
+folded to the interval ( −90 ◦, 90 ◦] to remove the mod-π ambiguity of principal-axis directions. Each descriptor is accompanied by the mean across frames of the ninety-five-percent half-width from the subsampling calculation, which quantifies the average size of the uncertainty band in the corresponding figure panel and provides a scalar summary of the statistical resolution at which each geometric feature has been recovered. 
+
+# 3 Results 
+
+The four demonstration cases were executed under the parameter settings specified above, each as an independent process that logged its parameters, solver diagnostics, and a timing breakdown alongside the NetCDF archive. The resulting archives were passed through the four diagnostic analyses without further intervention. All values reported below are taken directly from the run logs and the diagnostic output. Quantities are dimensionless unless a unit is stated. Every case satisfied the marginal-residual tolerance η(k) < 10 −9 within the two-thousand-sweep cap, and every run reported a marginal fidelity of 1 .00000000 and terminated without warnings or errors. The sweep counts at termination were 1, 721, 581, and 651 for cases 1 through 4 respectively, corresponding to 1, 73, 59, and 66 recorded residual samples at the ten-sweep recording stride. Case 1 met the tolerance at the first residual evaluation, at which point the residual stood at η = 3 .771506 × 10 −15 , approximately seventeen times the double-precision unit roundoff 2 −52 ≈ 2.220 × 10 −16 . The log-linear fit of equation (45) is undefined for a single recorded sample, so no contraction factor is reported for case 1 and that case is absent from the convergence panels. The 10 remaining three cases entered the iteration with residuals of order unity, η(0) = 1 .127457, 0 .799201, and 0 .535817 for cases 2, 3, and 4, and terminated at 8 .116460 × 10 −10 , 9 .982731 × 10 −10 , and 8 .503125 × 10 −10 . The fitted slopes were −1.071160 × 10 −2, −1.511440 × 10 −2, and −1.171978 × 10 −2 decades per sweep, giving per-iteration contraction factors 10 β1 of 0 .975637, 0 .965796, and 0 .973375. The ordering of the contraction factors across the three fitted cases does not follow the ordering of the regularization parameter, the fastest contraction being recorded at ε = 0 .03 and the slowest at ε = 0 .05. Table 1 collects the convergence summary. Figure 1(a) shows the residual histories on a logarithmic ordinate together with the fitted geometric decays. The histories are linear over approximately eight decades in all three fitted cases, and the fitted lines are visually indistinguishable from the data over the greater part of that range. Figure 1(b) shows the per-step contraction ratio of equation (46). In each case the ratio rises through a transient occupying the first several tens of sweeps and settles onto the corresponding fitted factor within approximately one hundred sweeps, remaining flat to within the resolution of the panel thereafter. 0 100 200 300 400 500 600 700 
+
+iteration [dimensionless]     
+
+> 10 8
+> 10 6
+> 10 4
+> 10 2
+> 10 0
+> marginal error [dimensionless]
+
+(a)        
+
+> 0100 200 300 400 500 600 700
+
+iteration [dimensionless] 
+
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> 0.98
+> 1.00
+> contraction factor [dimensionless]
+
+(b)    
+
+> Spiral to Gaussian Mixture Two Moons to Rotated Two Moons Lissajous to Trefoil geometric fit
+
+Figure 1: Convergence of the log-domain Sinkhorn iteration for the three cases that produced a fittable residual history. (a) Marginal constraint violation η(k) = ∥π(k)1m − a∥1 against sweep index, with the fitted geometric decays of equation (45) overlaid as dashed lines. (b) Per-iteration contraction ratio r(kℓ) of equation (46) against sweep index, with the fitted factor 10 β1 of each case shown as a dotted horizontal line. Case 1 satisfied the convergence tolerance at the first residual evaluation and contributes a single recorded sample, from which no rate can be fitted; it is therefore absent from both panels. Table 1: Convergence summary of the log-domain Sinkhorn iteration. The residual η(k) is the ℓ1 row-marginal violation of equation (27), recorded every ten sweeps. The contraction factor is 10 β1 from the fit of equation (45). Case ε Sweeps η(0) ηfinal 10 β1
+
+1 0.02 1 3.7715 × 10 −15 3.7715 × 10 −15 —2 0.05 721 1.1275 × 10 0 8.1165 × 10 −10 0.97564 3 0.03 581 7.9920 × 10 −1 9.9827 × 10 −10 0.96580 4 0.04 651 5.3582 × 10 −1 8.5031 × 10 −10 0.97338 Turning to the converged coupling, the transport cost ⟨C, π ⋆⟩ of equation (30) was 1 .010013, 0 .808137, 0 .866267, and 0 .313295 for cases 1 through 4. The joint plan entropy H(π⋆) of equation (35) was 10 .7487, 11 .6086, 11 .2869, and 10 .9313 nats, and the effective sparsity exp( H(π⋆)) /(nm ), the joint perplexity expressed as a fraction of the 
+
+nm available cells, was 0 .046568, 0 .110043, 0 .079772, and 0 .055899. The largest transport cost accompanies the largest interpolation distance and the smallest coupling entropy accompanies the smallest regularization parameter, with case 1 the sole exception in which the entropy is not the largest despite the smallest cost. The point-cloud size n = m = 1000 exceeds the 500 × 500 retention limit of the NetCDF writer, so the archived plan is a strided block of the full coupling in all four cases, and the conditional quantities that follow are formed on that retained block after row renormalization. The mean row entropy ⟨Hi⟩i of equation (49) was 3 .147765, 4.008085, 3 .688627, and 3 .330434 nats for cases 1 through 4, with across-row standard deviations of 4 .15 × 10 −4,0.341770, 0 .193910, and 0 .249708 nats. The across-row dispersion in case 1 is therefore smaller than in the other 11 three cases by between two and three orders of magnitude. The corresponding mean perplexities ⟨exp( Hi)⟩i
+
+were 23 .2840, 58 .0584, 40 .7015, and 28 .9141 retained target points, and the mean peak conditional probabilities 
+
+⟨max j P (j | i)⟩i were 0 .070853, 0 .047862, 0 .054963, and 0 .065483. The block-normalized plan entropies recomputed on the retained block were 9 .362373, 10 .225071, 9 .898303, and 9 .545067 nats. The difference between the stored full-plan entropy and the block value takes the val-ues 1 .386295, 1 .383553, 1 .388623, and 1 .386243 nats and agrees with log 4 = 1 .386294 to within 2 .8 × 10 −3
+
+nats in every case. The barycentric displacement magnitudes ∥T (xi) − xi∥ of equation (48) had means of 0.994994, 0 .819043, 0 .822200, and 0 .467656, medians of 0 .994994, 0 .828984, 0 .803999, and 0 .476303, and maxima of 0 .995037, 1 .232309, 1 .540545, and 0 .989937. In case 1 the mean, median, and maximum agree to within 4.3 × 10 −5, while in the remaining cases the maximum exceeds the mean by between 0 .41 and 0 .72. Table 2 collects the coupling summary. Figure 2 shows the barycentric map of each case as displacement arrows from a strided subset of ninety source points to their conditional-mean images, overlaid on the source and target clouds. The arrows in figure 2(a) are directed radially outward and are of visually uniform length. Those in figure 2(b) converge onto the four mixture centers, the arrow bundles originating along the turns of the spiral and terminating in tight clusters. Figure 2(c) shows arrows of markedly heterogeneous length and direction. Figure 2(d) shows arrows directed predominantly inward from the outer excursions of the Lissajous curve toward the trefoil lobes. 1.5 0.0 1.5 
+
+> 1.5
+> 0.0
+> 1.5
+> y [dimensionless]
+
+(a)   
+
+> 1.5 0.0 1.5
+> 1.5
+> 0.0
+> 1.5
+
+(b)    
+
+> 1012
+
+x [dimensionless] 
+
+> 1
+> 0
+> 1
+> y [dimensionless]
+
+(c)   
+
+> 101
+
+x [dimensionless] 
+
+> 1
+> 0
+> 1
+
+(d)       
+
+> Source Target Transport T(x) = [Y|X=x]
+
+Figure 2: Barycentric projection T (x) = E[Y | X = x] of the entropic coupling, defined in equation (48) and shown as displacement arrows from source points to their conditional-mean images. (a) Case 1, circle to circle. (b) Case 2, spiral to Gaussian mixture. (c) Case 3, two moons to rotated two moons. (d) Case 4, Lissajous curve to trefoil projection. Source and target clouds are drawn as faint markers. Arrows are shown for a strided subset of ninety source points per panel for legibility. Because n = 1000 exceeds the 500 × 500 storage retention limit, the map is evaluated on the retained strided block of the coupling after row renormalization. 12 Table 2: Transport, conditional, and barycentric summary of the optimal coupling. The transport cost ⟨C, π ⋆⟩
+
+and effective sparsity exp( H(π⋆)) /(nm ) are evaluated on the full plan; the conditional quantities are evaluated on the retained 500 × 500 block after row renormalization, and the perplexity is in units of retained target points. Case ε ⟨C, π ⋆⟩ Eff. sparsity ⟨Hi⟩i [nats] ⟨exp( Hi)⟩i ⟨∥ T (x) − x∥⟩ 
+
+1 0.02 1.010013 0.046568 3.147765 23.2840 0.994994 2 0.05 0.808137 0.110043 4.008085 58.0584 0.819043 3 0.03 0.866267 0.079772 3.688627 40.7015 0.822200 4 0.04 0.313295 0.055899 3.330434 28.9141 0.467656 The bridge marginals reconstructed from these couplings were examined next through their KDEs. The Scott bandwidth factor returned by the estimator was 0 .3162 in all four cases, consistent with n−1/(d+4) at n = 1000 and d = 2. Of the five snapshot times T = {0, 0.25 , 0.5, 0.75 , 1}, the two endpoints coincide with stored frames in every case, whereas the three interior times fall between stored frames on both the 120-frame and the 150-frame grid and were therefore obtained by linear temporal interpolation between the straddling frames. The high-density region count Nreg (t) of equation (51) held at unity across all five snapshots in case 1 and at two across all five snapshots in case 3. In case 2 the count followed the sequence 1 , 3, 4, 4, 4, and in case 4 the sequence 2 , 1, 1, 1, 1. The effective support area Aeff (t) of equation (52) increased monotonically in case 1 from 5.65001 to 14 .57646, rose and then fell in cases 2 and 3 with maxima of 8 .39379 at t = 0 .75 and 6 .18053 at t = 0 .5respectively, and decreased monotonically in case 4 from 11 .28943 to 8 .40737. The support fraction reached the saturation value 1 .00000 at t = 0 and t = 0 .25 in case 4, and remained at or below 0 .91041 at every snapshot in the other three cases. The cloud centroid coincided with the origin to five decimal places at both endpoints in cases 1 and 4, and departed from the origin by at most 1 .98 × 10 −3 at the interior snapshots of case 1. In case 2 the centroid moved from ( −0.00005 , −0.12400) at t = 0 to ( −0.00787 , 0.00398) at t = 1. In case 3 the centroid moved from (0 .50166 , 0.25285) at t = 0 to (0 .00000 , 0.00000) at t = 1, a net displacement of magnitude 0 .56178, with the intermediate values decreasing approximately linearly in t. Table 3 collects the snapshot summary. Figure 3 shows the normalized density ρ† 
+
+> t
+
+as a four-by-five montage, one row per case and one column per snapshot time. The first row shows an annulus of increasing radius and decreasing relative thickness. The second row shows the spiral fragmenting into four separated concentrations. The third row shows two crescent-shaped ridges whose long axes differ in orientation between the first and the last column. The fourth row shows four bright concentrations at t = 0 evolving toward a three-lobed pattern at t = 1. The spatial extent of each row is the joint bounding box of the clouds of that case, so panel areas are not comparable between rows. 13 1.5 
+
+> 0.0
+> 1.5
+> y [dimensionless]
+
+(a) (b) (c) (d) (e) 
+
+> 1.5
+> 0.0
+> 1.5
+> y [dimensionless]
+
+(f) (g) (h) (i) (j) 
+
+> 1.5
+> 0.0
+> 1.5
+> y [dimensionless]
+
+(k) (l) (m) (n) (o)   
+
+> 1.5 0.0 1.5
+
+x [dimensionless] 
+
+> 1.5
+> 0.0
+> 1.5
+> y [dimensionless]
+
+(p)   
+
+> 1.5 0.0 1.5
+
+x [dimensionless] 
+
+(q)   
+
+> 1.5 0.0 1.5
+
+x [dimensionless] 
+
+(r)   
+
+> 1.5 0.0 1.5
+
+x [dimensionless] 
+
+(s)   
+
+> 1.5 0.0 1.5
+
+x [dimensionless] 
+
+(t)         
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> normalized density t/max t[dimensionless]
+
+Figure 3: Gaussian kernel density estimates of the bridge marginal ρt, normalized to the per-panel maximum and evaluated on a 140 × 140 grid. Rows correspond to cases 1 through 4 from top to bottom, columns to the snapshot times t = 0, 0 .25, 0 .5, 0 .75, and 1 from left to right. Panels (a)–(e) show case 1, (f)–(j) case 2, (k)–(o) case 3, and (p)–(t) case 4. Normalized density below 0 .03 is rendered white. The spatial extent of each row is the joint bounding box of the source, target, and intermediate clouds of that case and therefore differs between rows. 14 Table 3: Kernel density estimate summary at the five snapshot times. Nreg is the high-density region count of equation (51), Aeff the effective support area of equation (52), and the support fraction the proportion of the per-case panel at which the normalized density is at least 0 .03. Effective areas and support fractions are referred to the per-case bounding box and are not comparable across cases. Case t Nreg Aeff Support fraction Centroid (¯ x, ¯y)1 0.00 1 5.65001 0.38735 (0 .00000 , 0.00000) 0.25 1 8.92757 0.61148 (−0.00196 , 0.00031) 0.50 1 12.25540 0.82862 (0 .00017 , −0.00003) 0.75 1 14.25660 0.91000 (0 .00170 , 0.00020) 1.00 1 14.57646 0.91041 (0 .00000 , 0.00000) 2 0.00 1 6.05907 0.40842 (−0.00005 , −0.12400) 0.25 3 7.86339 0.53005 (−0.00586 , −0.09478) 0.50 4 8.38575 0.61194 (−0.01107 , −0.06721) 0.75 4 8.39379 0.63842 (−0.01332 , −0.02325) 1.00 4 7.92023 0.60842 (−0.00787 , 0.00398) 3 0.00 2 5.01334 0.48020 (0 .50166 , 0.25285) 0.25 2 5.94372 0.57036 (0 .37584 , 0.19356) 0.50 2 6.18053 0.59740 (0 .25089 , 0.12248) 0.75 2 5.90077 0.56883 (0 .12806 , 0.07345) 1.00 2 4.98573 0.47653 (0 .00000 , 0.00000) 4 0.00 2 11.28943 1.00000 (0 .00000 , 0.00000) 0.25 1 11.16493 1.00000 (0 .00194 , 0.00021) 0.50 1 10.60357 0.99128 (−0.00249 , −0.00185) 0.75 1 9.63979 0.93464 (0 .00168 , −0.00169) 1.00 1 8.40737 0.83362 (0 .00000 , 0.00000) Frame-wise descriptors of the same trajectories complete the picture. The Kozachenko–Leonenko estimator of equation (53) returned ˆH(ρ0) = −1.396695, −0.674706, 0 .258929, and 0 .938705 nats at the source endpoint of cases 1 through 4, and ˆH(ρ1) = −0.010401, 0 .398166, 0 .244849, and −0.054806 nats at the target endpoint. The corresponding differences ˆH(ρ1) − ˆH(ρ0) were 1 .386294, 1 .072872, −0.014080, and −0.993511 nats, the value recorded for case 1 agreeing with log 4 = 1 .386294 to six decimal places. Both endpoint clouds of cases 1 and 4 lie on parametric curves to which no perturbation noise was applied, as recorded by the source and target noise of 0 .0 in the case 1 log, so for those two cases the endpoint estimates are formed on samples whose support is one-dimensional and no interpretation as a two-dimensional differential entropy is claimed here. At the midpoint the estimator returned ˆH(ρ1/2) = 1 .003174, 1 .389257, 1 .195729, and 1 .864651 nats, exceeding the corresponding noise-only reference Hdiff (1 /2) of equation (55), which takes the values −2.460440, −1.544150, 
+
+−2.054975, and −1.767293 nats, by 3 .463614, 2 .933407, 3 .250704, and 3 .631944 nats. The entropy attained an interior maximum in every case, of 1 .069491, 1 .423968, 1 .235989, and 1 .945279 nats, located at t = 0 .6303, 0.4370, 0 .4790, and 0 .4228 respectively. The mean across frames of the ninety-five-percent half-width on ˆH lay between 0 .029953 and 0 .033622 nats in all four cases. The RMS dispersion of equation (57) took the values 1 .000500, 1 .501205, and 2 .001001 at t = 0, 1 /2, and 1 in case 1, increasing monotonically and departing from linearity at the midpoint by 4 .54 × 10 −4, which is below the mean half-width of 1 .574 × 10 −3 for that case. In case 2 the dispersion increased monotonically from 0 .875659 through 1 .170203 to 1 .514369. In case 3 it fell from 0 .998302 to 0 .940295 at the midpoint before returning to 0 .999436, with a recorded maximum of 1 .003315 at t = 0 .9832. In case 4 it decreased monotonically from 1.500751 through 1 .303508 to 1 .118593. The mean half-widths on the dispersion ranged from 1 .574 × 10 −3 to 9.230 × 10 −3 across the four cases. The eccentricity of equation (58) remained below the resolution threshold e = 0 .25 at every frame in cases 1 and 4, spanning [0 .000000 , 0.147554] and [0 .000064 , 0.207380] respectively, so the principal-axis angle is re-ported as undefined for those two cases and no reorientation is quoted. In case 2 the eccentricity spanned [0 .042739 , 0.471671] and the angle was resolved at 76 of 120 frames, giving first and last resolved values of 
+
+−37 .6281 ◦ and −59 .1271 ◦ and a net folded reorientation of −21 .4990 ◦, against a mean ninety-five-percent half-width of 12 .0446 ◦. In case 3 the eccentricity spanned [0 .141166 , 0.883400] and the angle was resolved at 114 of 120 frames, giving first and last resolved values of −18 .6137 ◦ and 71 .3167 ◦ and a net folded reorientation of 89 .9304 ◦, against a mean ninety-five-percent half-width of 2 .8204 ◦. The case 3 reorientation therefore departs from the imposed rotation of 90 ◦ by 0 .0696 ◦, a discrepancy some forty times smaller than the mean half-width of the estimate, whereas the case 2 reorientation is smaller in magnitude than twice its mean half-width. Table 4 collects the frame-wise summary. Figure 4 shows the four frame-wise descriptors against interpolation time together with their subsampling 15 uncertainty bands. Figure 4(a) shows a concave profile in every case, rising steeply away from t = 0 and falling steeply toward t = 1. Figure 4(b) shows the monotone linear profile of case 1, the monotone increase of case 2, the shallow interior minimum of case 3, and the monotone decrease of case 4. Figure 4(c) shows the low, flat eccentricity traces of cases 1 and 4 alongside the pronounced interior minimum of case 3 at t ≈ 0.5. Figure 4(d) shows the resolved orientation segments, the case 3 trace being interrupted over the interval on which its eccentricity falls below threshold and resuming approximately 90 ◦ from its earlier level. 0.0 0.2 0.4 0.6 0.8 1.0 
+
+> 0.8
+> 0.0
+> 0.8
+> 1.6
+> H( t) [nats]
+
+(a)      
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 2.00
+> RMS dispersion [dimensionless]
+
+(b)      
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+
+interpolation time t [dimensionless] 
+
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> eccentricity [dimensionless]
+
+(c)      
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+
+interpolation time t [dimensionless] 
+
+> 80
+> 40
+> 0
+> 40
+> 80
+> orientation [deg]
+
+(d) 
+
+> Circle to Circle
+> Spiral to Gaussian Mixture
+> Two Moons to Rotated Two Moons
+> Lissajous to Trefoil
+
+Figure 4: Frame-wise descriptors of the bridge marginal against interpolation time t. (a) Kozachenko–Leonenko differential entropy ˆH(ρt) of equation (53) at k = 5. (b) RMS dispersion of equation (57). (c) Eccentricity of equation (58). (d) Principal-axis orientation, reported only at frames whose eccentricity is at least 0 .25 and unwrapped within, but never across, contiguous resolved runs. Shaded bands are the ninety-five-percent intervals obtained by subsampling without replacement at B = 80 replicates and m/n = 0 .8, rescaled to full sample size through equation (60). Cases 1 and 4 are absent from panel (d), their eccentricity remaining below the resolution threshold at every frame. 16 Table 4: Frame-wise informational and geometric summary along the bridge. Entropies are Kozachenko–Leonenko estimates of equation (53) in nats, evaluated at k = 5. The reorientation is the folded net change in principal-axis angle, quoted with the mean ninety-five-percent half-width across resolved frames; it is undefined for cases 1 and 4, whose eccentricity remains below the resolution threshold at every frame. The endpoint entropies of cases 1 and 4 are evaluated on noiseless parametric curves. Case ε ˆH(ρ0) ˆH(ρ1/2) ˆH(ρ1) max t ˆH (t) max t rms Reorientation [deg] 1 0.02 −1.3967 1.0032 −0.0104 1.0695 (0.6303) 2.0010 —2 0.05 −0.6747 1.3893 0.3982 1.4240 (0.4370) 1.5144 −21 .499 ± 12 .045 3 0.03 0.2589 1.1957 0.2448 1.2360 (0.4790) 1.0033 89 .930 ± 2.820 4 0.04 0.9387 1.8647 −0.0548 1.9453 (0.4228) 1.5008 —All wall-clock timings reported in this section were measured on a single laptop, a Lenovo ThinkPad T440s (model 20AQ006HUS) with an Intel Core i7-4600U processor (four logical cores at a maximum clock of 3 .30 GHz), running Linux Lite 6.6 (x86 64) under Linux kernel 5.15.0-185-generic, and therefore characterize the method on commodity hardware rather than an optimized high-performance configuration. The run logs record the wall-clock cost of each case, decomposed into the generation of the source and target clouds, solver initialization, the Sinkhorn solve, trajectory generation, data serialization, and animation rendering. The solve occupied 2 .897, 9.134, 9 .174, and 8 .217 seconds for cases 1 through 4, cloud generation and serialization together remained below 0 .4 seconds in every case, and the total wall-clock time was 61 .341, 54 .383, 59 .965, and 75 .244 seconds. Animation rendering accounted for between 82 .5% and 91 .8% of the total in every case, so the solver and its diagnostics constitute a minor fraction of the end-to-end runtime. The single-sweep case 1 solve nevertheless required 2 .897 seconds, larger than a per-sweep extrapolation from the other cases would predict, because the just-in-time compilation of the solver kernels is performed once per process and is charged to the first solve. Table 5 collects the timing breakdown. Table 5: Wall-clock timing breakdown from the run logs, in seconds. The solve column is the log-domain Sinkhorn iteration and includes the one-time just-in-time compilation of the solver kernels; the visualization column is the animation rendering. The thread count was left to automatic selection in all runs. Case Distributions Solver init Solve Trajectory Serialization Visualization Total 1 0.000 0.248 2.897 1.811 0.087 56.296 61.341 2 0.001 0.005 9.134 0.087 0.292 44.863 54.383 3 0.003 0.040 9.174 0.105 0.110 50.532 59.965 4 0.000 0.005 8.217 0.106 0.076 66.839 75.244 
+
+# 4 Discussion 
+
+The four demonstration cases place the log-domain formulation in the regime for which it was adopted. The ratio max ij Cij /ε lies between 252 and 400 across the four cases, so the Gibbs kernel entries Kij = exp( −Cij /ε ) of (16) span several hundred decades and underflow the smallest representable double-precision number over most of their range. An exponential-domain implementation of the Sinkhorn recursion would therefore fail outright at these settings, whereas the potentials ( f, g ) of (22) remained bounded, the marginal residual reached 10 −9, and the reported marginal fidelity was unity to eight decimal places in every case. This behavior is consistent with the motivation for log-domain and stabilized scaling schemes [34, 31, 6]. The residual histories are geometric over approximately eight decades, in qualitative agreement with the classical theory of the Sinkhorn recursion, which establishes convergence and a geometric rate through the contraction of the scaling map in the Hilbert projective metric [39, 40, 12, 23]. The quantitative content of that theory is nevertheless inaccessible at the present parameters. The Birkhoff contraction ratio associated with the kernel (16) is κ = ( √η − 1) /(√η + 1) with η = exp(max ij Cij /ε ) [12], so that 1 − κ ranges from about 10 −55 
+
+to 10 −87 over the four cases. The guaranteed rate is thus numerically indistinguishable from unity and predicts no useful decay, while the observed per-iteration factors lie between 0 .966 and 0 .976. The measured decay is therefore an asymptotic local rate attained near the fixed point rather than a realization of the worst-case bound, and the gap between the two is many orders of magnitude. Consistent with this, the three fitted factors do not order with ε. Because the present design varies ε and the source and target geometry together, and because only three cases admit a fit, the data cannot separate the two influences, and no relation between the contraction rate and the regularization parameter is claimed here. A sweep in ε at fixed geometry would be required to address that question and is left to future work. Case 1 warrants separate comment, since its convergence at the first residual evaluation is a structural rather than a numerical result. The source and target of (37) are both sampled at angles that are equispaced up to a global phase, so the squared-distance cost satisfies Cij = r20 +r21 −2r0r1 cos(2 π(i−j)/n +∆ φ) and depends on the indices only through ( i−j) mod n. The cost matrix is consequently circulant, and for a circulant cost with uniform 17 marginals the dual potentials that solve (14) are constant vectors, which the updates (24)–(25) reach in a single sweep from the zero initialization. The recorded residual of 3 .771506 × 10 −15 is the floating-point signature of an exactly attained solution rather than of a rapidly converging iteration. Two independent diagnostics corroborate the interpretation: the row entropies of the conditional coupling have a standard deviation of 4 .15 × 10 −4 nats across the retained block, every row being a cyclic shift of every other, and the barycentric displacement has mean and maximum differing by 4 .3 × 10 −5. Case 1 accordingly verifies that the implementation recovers the closed-form solution where one exists, but it does not exercise the iteration, and it should not be read as a convergence baseline. The conditional structure of the couplings behaves broadly as the regularization would suggest, the most diffuse coupling occurring at the largest ε and the sharpest at the smallest. This ordering is carried by the effective sparsity exp( H(π⋆)) /(nm ), which rises from 0 .046568 at ε = 0 .02 to 0 .110043 at ε = 0 .05, and which measures the joint perplexity of the plan as a fraction of the nm available cells. The ordering is not strict at the level of the conditional perplexity, since case 3 at ε = 0 .03 carries more effective targets per source than case 4 at ε = 0 .04: the diffuseness of a row is set by ε relative to the local separation of target points rather than by ε alone, and the four geometries differ in that separation. The transport cost recorded in the logs is likewise geometric in origin, being largest for case 1, whose supports are separated by a full unit of radius, and smallest for case 4, whose interleaved lobes require the least displacement. Interpretation of the reported conditional quantities requires care on a separate count. The plan is archived on a strided 500 × 500 block of a 1000 × 1000 coupling, which retains one quarter of the entries. If the retained entries are representative of the whole, the renormalized block entropy satisfies Hblock = H(π⋆) − log 4, and the differences reported above agree with log 4 to within 2 .8 × 10 −3 nats in all four cases. That agreement is an internal consistency check that the strided block does carry a representative quarter of the mass. The same argument applied at the level of a single row, where one half of the targets is retained, gives Hblock  
+
+> i
+
+= Hfull  
+
+> i
+
+− log 2 and hence a perplexity that is understated by a factor of two. The reported values of 23 .2840, 58 .0584, 40 .7015, and 28 .9141 therefore correspond to full-plan effective target counts of approximately 46 .6, 116 .1, 81 .3, and 57 .8, and the reported peak conditional probabilities correspondingly overstate the full-plan values by close to a factor of two. The barycentric displacements are unaffected, the conditional mean over a uniformly strided subset of a smooth conditional being unbiased. Archiving the full plan, at a cost of 8 n2 bytes, would remove the need for this correction and is the preferable course for point-cloud sizes at which the storage remains tractable. The mean barycentric displacement of case 1, 0 .994994, falls short of the exact radial separation of unity by 0.5%. The shortfall is not a numerical defect but a property of the barycentric projection at finite regularization. The conditional expectation (48) averages the target points over an arc whose angular width is set by ε, and the average of points on a circle over an arc of nonzero width lies strictly inside that circle. The image radius is therefore smaller than 2, and the deficit contracts as ε → 0+, in which limit the coupling concentrates on the graph of the Brenier map and the barycentric projection recovers it exactly [3, 30, 4]. The same mechanism underlies the difference between the barycentric map and the sampled bridge of (33), the former reporting a conditional mean and the latter a draw from the conditional itself. The entropy estimates require the most careful reading of any quantity reported here, and the endpoint values of cases 1 and 4 do not admit the interpretation that their name suggests. The Kozachenko–Leonenko estimator and its analysis presuppose a distribution that is absolutely continuous with respect to Lebesgue measure on 
+
+Rd, a hypothesis under which the bias and variance have been characterized in detail [24, 9, 2]. The source and target clouds of cases 1 and 4 carry no perturbation noise, as the source and target noise of 0 .0 recorded in the case 1 log confirms, and they lie exactly on one-dimensional parametric curves, which are Lebesgue-null in the plane. The corresponding differential entropy is not defined, and the finite values returned by (53) are artifacts of finite sample size. The mechanism is explicit in the estimator: for n points spread along a rectifiable curve of length L, the k-th nearest-neighbor distances scale as ri ∼ L/n , so that the sum in (53) contributes 2 log( L/n )while the digamma term contributes log n, giving ˆH(ρ) ≈ const + 2 log L − log n. Two consequences follow and both are visible in the reported numbers. First, the estimate diverges logarithmically as the sample grows, so the recorded value of ˆH(ρ0) = −1.396695 for case 1 is a statement about n = 1000 and not about the source distribution. Second, differencing two curve-supported estimates at equal n cancels the sample-size term and isolates 2 log( L1/L 0). For case 1 both endpoints are circles of radii 1 and 2, so the prediction is 2 log 2 = 1 .386294 nats, which is precisely the recorded value of ˆH(ρ1) − ˆH(ρ0) to six decimal places. The quantity tabulated as the net entropy production of case 1 is therefore a measurement of the ratio of two curve lengths. The corresponding value for case 4, −0.993511 nats, carries the same character and reflects the trefoil projection being shorter than the Lissajous curve of equal parametric sampling. Case 3 provides the internal control that confirms the diagnosis, its endpoints carrying additive noise of standard deviation 0 .05 and therefore being genuinely two-dimensional: its recorded difference of −0.014080 nats is consistent with zero, as the isometry relating its two endpoint distributions requires. Case 2, whose source carries only a small perturbation of standard deviation 0 .01 while its target is a genuine mixture of Gaussians, occupies an intermediate position and its endpoint difference should not be interpreted quantitatively either. The conservative reading of the present data is that ˆH(ρt) is informative on the open interval t ∈ (0 , 1), where the bridge noise of variance ε t (1 − t) renders every marginal absolutely continuous, and that the two endpoint columns should be excluded from any comparison. Applying a small perturbation to the case 1 and case 4 generators would place all four cases on a common footing and is the natural remedy. 18 Read on the open interval, the entropy profiles are consistent with the structure of the bridge. Every case attains an interior maximum, which follows from the bridge variance ε t (1 − t) of (19) vanishing at both ends and peaking at t = 1 /2 [11]. The measured midpoint entropies exceed the noise-only reference (55) by between 2.93 and 3 .63 nats, confirming that the marginal at the midpoint is not dominated by the diffusive term and retains substantial geometric structure inherited from the endpoints. The maxima are displaced from t = 1 /2in a direction that tracks the deterministic part of the interpolation: case 3, whose endpoints are related by an isometry, peaks at t = 0 .4790, closest to the symmetric value, whereas case 1, whose support lengthens monotonically, peaks late at t = 0 .6303 and case 4, whose support shortens, peaks early at t = 0 .4228. The symmetric noise contribution alone would place every maximum at t = 1 /2, so the displacement measures the asymmetry of the drift term. The geometric descriptors supply the principal quantitative verification of the pipeline. The target of case 3 is generated by rotating a two-moons cloud through π/ 2, and the recovered net reorientation of the covariance principal axis is 89 .9304 ◦, departing from the imposed value by 0 .0696 ◦, roughly forty times smaller than the mean ninety-five-percent half-width of 2 .8204 ◦. The recovery is achieved across a masked interval near t = 1 /2 over which the cloud passes through near-isotropy, the eccentricity falling to 0 .141166, and over which the principal axis is genuinely unobservable. Declining to unwrap the angle across that gap costs nothing here, since the two resolved segments differ by approximately the imposed rotation, and it avoids attributing to the data a branch choice the data do not determine [29]. The contrast with case 2 is instructive: its net reorientation of −21 .4990 ◦
+
+is smaller in magnitude than twice its mean half-width of 12 .0446 ◦ and is resolved at only 76 of 120 frames, so the present data do not support a claim of net axis reorientation in that case. Cases 1 and 4 remain below the eccentricity threshold at every frame, which is the expected behavior for a circle and for two curves possessing rotational symmetry of order greater than two, whose covariance is isotropic by construction. The timing breakdown recorded in the logs situates the computational cost of the method. The Sinkhorn solve occupied between 2 .897 and 9 .174 seconds per case, and the generation of the distributions, the trajectory, and the serialized archive together remained below one second in every case, so the transport computation and its diagnostics are a minor part of the end-to-end runtime. Animation rendering dominated the total, accounting for between 82 .5% and 91 .8% of the wall-clock time, which reflects a design choice to emit a rendered interpolation film rather than a property of the solver. The single-sweep case 1 nevertheless spent 2 .897 seconds in the solve, because the just-in-time compilation of the numerical kernels [27] is performed once per process and charged to the first solve; the compiled cost per sweep, inferred from the multi-hundred sweep cases, is on the order of ten milliseconds. Because the thread count was left to automatic selection in every run and the bridge sampler draws its randomness within a thread-parallel region, the timings and the sampled trajectories are tied to the thread configuration of the host, and bitwise reproducibility across differing thread counts is not guaranteed, in common with the associative reordering permitted by the compiler options adopted here [13]. Three features of the analysis limit the strength of the conclusions and are stated here rather than left to inference. First, the case 3 target cloud has its centroid at the origin while the source cloud has its centroid at (0 .50166 , 0.25285), so the rigid motion realized between the two clouds is a rotation composed with a translation of magnitude 0 .56178 rather than a rotation about a common centroid. The transport cost of 0 .866267 and the barycentric displacements of case 3 accordingly contain a translational contribution and are not a pure measure of angular reorganization. The covariance-based descriptors are translation-invariant and are unaffected, so the recovery of the rotation angle discussed above is not compromised. Second, the three interior snapshot times of the density montage do not coincide with stored frames on either the 120-frame or the 150-frame grid and are obtained by linear interpolation between straddling frames. Because consecutive frames are independent draws from their respective marginals rather than points of a common Lagrangian path, a weighted blend of two such frames with weights w and 1 − w carries bridge noise of variance reduced by a factor w2 + (1 − w)2, equal to 0.5 at t = 1 /2 and 0 .625 at t = 0 .25 and t = 0 .75, and additionally replaces each particle’s target by a convex combination of two independently drawn targets. The interior panels therefore understate the dispersion of ρt
+
+and are contracted slightly toward the barycentric image. Choosing Nf so that the snapshot times fall on stored frames, for which Nf = 121 suffices, would remove the artifact. Third, the region count Nreg (t) of (51) is a count of connected components of a fixed super-level set of a KDE and is therefore contingent on both the level and the bandwidth [37, 38], and it is not a topological invariant of the underlying support. Its value is interpretable where the target possesses well-separated components, as in the sequence 1 , 3, 4, 4, 4 of case 2, which tracks the fragmentation of a connected curve into the four components of the mixture. It is less informative for the ridge-like supports of cases 1 and 4. The support fraction is referred to a per-case bounding box, saturates at unity for case 4 at the first two snapshots, and should not be compared across cases; the effective area, which carries units of area through the cell-area factor in (52), is the more robust of the two coverage measures. Several further limitations bound the scope of the present study. All four cases fix n = m = 1000 and d = 2, so neither the scaling of the solver with point-cloud size nor its behavior in higher dimensions is assessed here; the O(nm ) cost per sweep and the 8 nm -byte footprint of the dense cost matrix are the binding constraints on the former. The regularization is fixed within each case, so the entropic bias of the coupling is not resolved as a function of ε. The diagnostics are computed on single realizations at a fixed base seed, and the uncertainty bands quantify sampling variability within a realization rather than variability across independent runs. Finally, the four cases are constructed rather than measured, and the extent to which the observed behavior transfers to empirical point clouds arising in applications, where the marginals are noisy and possibly of unequal mass, 19 remains to be established. The unbalanced and multi-marginal extensions of the scaling framework [6, 1] provide the natural setting in which those questions would be posed. 
+
+# 5 Conclusions 
+
+This work presented anyakrakusuma , a Python library that solves the discrete static Schr¨ odinger bridge prob-lem through a log-domain Sinkhorn–Knopp iteration and reconstructs the entropic interpolation between two empirical point clouds, together with a diagnostic pipeline exercised on four idealized planar cases spanning a circle-to-circle dilation, a spiral-to-mixture fragmentation, a rigid reorientation of two moons, and a Lissajous-to-trefoil deformation. The log-domain formulation was necessary rather than merely convenient at the parameters studied: the cost-to-regularization ratio reached four hundred, at which the Gibbs kernel underflows double pre-cision across most of its range, yet the iteration reached a marginal residual of 10 −9 and unit marginal fidelity in every case, with geometric residual decay over approximately eight decades at per-iteration contraction factors between 0 .966 and 0 .976. These are local rates attained near the fixed point and lie many orders of magnitude below the worst-case Hilbert-metric bound, which is vacuous at these settings; the circle-to-circle case converged in a single sweep because its equispaced angular sampling renders the cost matrix circulant, a structural exact-ness that serves as a correctness check rather than a convergence baseline. The covariance analysis recovered the imposed ninety-degree reorientation of the two-moons case to within 0 .07 ◦, roughly forty times smaller than the estimator’s uncertainty and across a masked interval of near-isotropy on which the principal axis is unobservable, which is the strongest quantitative validation the pipeline provides. The analysis equally delimited what the diagnostics cannot support, and these boundaries are as much a part of the result as the recoveries: the differential entropy is well defined only on the open interpolation interval, the endpoint estimates of the two noiseless cases measure curve length rather than entropy, the conditional cou-pling statistics carry an exact factor-of-two offset from the subsampled plan storage, the rotation case realizes an unintended rigid translation, and the interior density snapshots are temporally interpolated between inde-pendently sampled frames, each with a stated remedy in perturbing the noiseless generators, archiving the full plan, recentering the rotated target, and aligning the frame count with the snapshot times. Future work follows directly from these limitations: a regularization sweep at fixed geometry would separate the influence of ε on the contraction rate from that of the transport geometry, while systematic study of the solver’s scaling with sample size and dimension, replacement of the dense cost matrix by stabilized sparse scaling for larger problems [34], and extension to unbalanced and multi-marginal settings [6, 1] would move the library from idealized demonstrations toward the empirical point clouds that motivate entropic transport in practice, with the software, configurations, and diagnostic scripts released openly so that the present results can be reproduced and extended. 
+
+# Acknowledgements 
+
+The authors used Claude Sonnet 5 (Anthropic, PBC) solely as a writing-assistance tool to refine English vocab-ulary and grammar during the preparation of this manuscript. All scientific content, interpretations, analyses, conclusions, and any remaining linguistic imperfections are the sole responsibility of the authors. 
+
+# Funding 
+
+This study was funded by the Indonesian Ministry of Education, Culture, Research, and Technology 2026 (169/C3/DT.05.00/PL-BARU/2026). 
+
+# Author Contributions 
+
+S.H.S.H. : Conceptualization, Data curation, Formal analysis, Investigation, Methodology, Software, Visualiza-tion, Validation, Writing – original draft. D.E.I. : Funding acquisition, Project administration, Supervision, Resources, Writing – review and editing. A.W.J. : Supervision, Writing – review and editing. S.F.B. : Super-vision, Writing – review and editing. C.S.D. : Supervision, Writing – review and editing. E.R. : Supervision, Writing – review and editing. A.P. : Supervision, Writing – review and editing. R.D.K. : Supervision, Writing – review and editing. R.S. : Supervision, Resources, Writing – review and editing. D.J.P. : Supervision, Resources, Writing – review and editing. 
+
+# Data Availability 
+
+The anyakrakusuma library source code is available on GitHub at https://github.com/sandyherho/anyakrakusuma 
+
+and from the Python Package Index at https://pypi.org/project/anyakrakusuma/ . The supplementary data-analysis scripts that reproduce the diagnostic metrics and figures are available at https://github.com/ sandyherho/suppl_anyakrakusuma . All supplementary outputs, comprising the raw NetCDF archives, the computed diagnostic metrics, the run logs and timing breakdowns, and all figures, are permanently archived on the Open Science Framework at https://doi.org/10.17605/OSF.IO/VQWF4 . The library, the supplementary scripts, and the archived outputs are all released under the MIT license. 20 References 
+
+[1] Benamou, J.-D.; Carlier, G.; Cuturi, M.; Nenna, L.; Peyr´ e, G. Iterative Bregman Projections for Regularized Transportation Problems. SIAM J. Sci. Comput. 2015 , 37(2) , A1111–A1138. https://doi.org/10.1137/ 141000439 .[2] Berrett, T.B.; Samworth, R.J.; Yuan, M. Efficient multivariate entropy estimation via k-nearest neighbour distances. Ann. Stat. 2016 , 47(1) , 288–318. https://doi.org/10.1214/18-AOS1688 .[3] Brenier, Y. Polar factorization and monotone rearrangement of vector-valued functions. Commun. Pure Appl. Math. 1991 , 44(4) , 375–417. https://doi.org/10.1002/cpa.3160440402 .[4] Carlier, G.; Duval, V.; Peyr´ e, G.; Schmitzer, B. Convergence of Entropic Schemes for Optimal Transport and Gradient Flows. SIAM J. Math. Anal. 2017 , 49(2) , 1385–1418. https://doi.org/10.1137/15M1050264 .[5] Chen, Y.; Georgiou, T.T.; Pavon, M. On the Relation Between Optimal Transport and Schr¨ odinger Bridges: A Stochastic Control Viewpoint. J. Optim. Theory Appl. 2016 , 169 , 671–691. https://doi.org/10.1007/ s10957-015-0803-z .[6] Chizat, L.; Peyr´ e, G.; Schmitzer, B.; Vialard, F.-X. Scaling algorithms for unbalanced optimal transport problems. Math. Comp. 2018 , 87 , 2563–2609. https://doi.org/10.1090/mcom/3303 .[7] Cuturi, M. Sinkhorn Distances: Lightspeed Computation of Optimal Transport. In Advances in Neural Information Processing Systems 26 (NeurIPS 2013) ; Curran Associates, Inc., 2013; pp. 2292–2300. https: //proceedings.neurips.cc/paper/2013/hash/af21d0c97db2e27e13572cbf59eb343d-Abstract.html .[8] De Bortoli, V.; Thornton, J.; Heng, J.; Doucet, A. Diffusion Schr¨ odinger Bridge with Applications to Score-Based Generative Modeling. In Advances in Neural Information Processing Systems 34 (NeurIPS 2021) ;Curran Associates, Inc., 2021; pp. 17695–17709. https://proceedings.neurips.cc/paper/2021/hash/ 940392f5f32a7ade1cc201767cf83e31-Abstract.html .[9] Delattre, S.; Fournier, N. On the Kozachenko–Leonenko entropy estimator. J. Stat. Plan. Inference 2017 ,
+
+185 , 69–93. https://doi.org/10.1016/j.jspi.2017.01.004 .[10] Efron, B.; Tibshirani, R.J. An Introduction to the Bootstrap ; Chapman & Hall/CRC: New York, NY, 1994. 
+
+https://doi.org/10.1201/9780429246593 .[11] F¨ ollmer, H. Random fields and diffusion processes. In ´Ecole d’ ´Et´ e de Probabilit´ es de Saint-Flour XV–XVII, 1985–87 ; Hennequin, P.L., Ed.; Lecture Notes in Mathematics, Vol. 1362; Springer: Berlin, Heidelberg, Germany, 1988; pp. 101–203. https://doi.org/10.1007/BFb0086180 .[12] Franklin, J.; Lorenz, J. On the scaling of multidimensional matrices. Linear Algebra Appl. 1989 , 114–115 ,717–735. https://doi.org/10.1016/0024-3795(89)90490-4 .[13] Goldberg, D. What every computer scientist should know about floating-point arithmetic. ACM Comput. Surv. 1991 , 23(1) , 5–48. https://doi.org/10.1145/103162.103163 .[14] Harris, C.R.; Millman, K.J.; van der Walt, S.J.; Gommers, R.; Virtanen, P.; Cournapeau, D.; Wieser, E.; Taylor, J.; Berg, S.; Smith, N.J.; Kern, R.; Picus, M.; Hoyer, S.; van Kerkwijk, M.H.; Brett, M.; Haldane, A.; del R´ ıo, J.F.; Wiebe, M.; Peterson, P.; G´ erard-Marchant, P.; Sheppard, K.; Reddy, T.; Weckesser, W.; Abbasi, H.; Gohlke, C.; Oliphant, T.E. Array programming with NumPy. Nature 2020 , 585 , 357–362. 
+
+https://doi.org/10.1038/s41586-020-2649-2 .[15] Herho, S.H.S.; Anwar, I.P.; Khadami, F.; Handayani, A.P.; Sujatmiko, K.A.; Kasim, K.; Suwarman, R.; Irawan, D.E. dewi-Kadita : a Python library for idealized fish schooling simulation with entropy-based diagnostics. J. Phys. Commun. 2026 , 10(6) , 065002. https://doi.org/10.1088/2399-6528/ae7177 .[16] Herho, S.H.S.; Anwar, I.P.; Khadami, F.; Ndruru, T.R.E.B.N.; Suwarman, R.; Irawan, D.E. 
+
+wave-attenuation-1d : An Idealized One-Dimensional Framework for Wave Attenuation through Coastal Vegetation using Numba-Accelerated Shallow Water Equations. J. Theor. Appl. Mech. 2026 , 56(1) , 89–102. 
+
+https://doi.org/10.55787/jtams.2026.1.AI00236 .[17] Herho, S.H.S.; Fajary, F.R.; Herho, K.E.P.; Anwar, I.P.; Suwarman, R.; Irawan, D.E. Reappraising double pendulum dynamics across multiple computational platforms. CLEI Electron. J. 2025 , 28(1) , 10. https: //doi.org/10.19153/cleiej.28.1.10 .[18] Herho, S.H.S.; Kaban, S.N.; Nugraha, C. OptionMC: a Python package for Monte Carlo pricing of European options. Int. J. Data Sci. 2025 , 6(2) , 70–84. https://doi.org/10.18517/ijods.6.2.70-84.2025 .[19] Herho, S.H.S.; Trilaksono, N.J.; Fajary, F.R.; Napitupulu, G.; Anwar, I.P.; Khadami, F.; Irawan, D.E. 
+
+kh2d-solver : a Python library for idealized two-dimensional incompressible Kelvin–Helmholtz instability. 
+
+Appl. Comput. Mech. 2025 , 19(2) , 125–156. https://doi.org/10.24132/acm.2025.1040 .[20] Hoyer, S.; Hamman, J.J. xarray: N-D Labeled Arrays and Datasets in Python. J. Open Res. Softw. 2017 ,
+
+5(1) , 10. https://doi.org/10.5334/jors.148 .[21] Hunter, J.D. Matplotlib: A 2D Graphics Environment. Comput. Sci. Eng. 2007 , 9(3) , 90–95. https: //doi.org/10.1109/MCSE.2007.55 .[22] Irawan, D.E.; Herho, S.H.S.; Pamumpuni, A.; Kartiko, R.D.; Khadami, F.; Anwar, I.P.; Sujatmiko, K.A.; Handayani, A.P.; Fajary, F.R.; Suwarman, R. An Open-Source Pseudo-Spectral Solver for Idealized Korteweg–de Vries Soliton Simulations. Water 2026 , 18(7) , 779. https://doi.org/10.3390/w18070779 .[23] Knight, P.A. The Sinkhorn–Knopp Algorithm: Convergence and Applications. SIAM J. Matrix Anal. Appl. 
+
+2008 , 30(1) , 261–275. https://doi.org/10.1137/060659624 .[24] Kozachenko, L.F.; Leonenko, N.N. Sample Estimate of the Entropy of a Random Vector. Probl. Inf. Transm. 
+
+21 1987 , 23(2) , 95–101. English translation of Problemy Peredachi Informatsii, 23(2), 9–16. [25] Kraskov, A.; St¨ ogbauer, H.; Grassberger, P. Estimating mutual information. Phys. Rev. E 2004 , 69(6) ,066138. https://doi.org/10.1103/PhysRevE.69.066138 .[26] Kullback, S.; Leibler, R.A. On Information and Sufficiency. Ann. Math. Stat. 1951 , 22(1) , 79–86. https: //doi.org/10.1214/aoms/1177729694 .[27] Lam, S.K.; Pitrou, A.; Seibert, S. Numba: A LLVM-based Python JIT compiler. In Proceedings of the Second Workshop on the LLVM Compiler Infrastructure in HPC (LLVM-HPC 2015) ; ACM: New York, NY, USA, 2015; pp. 1–6. https://doi.org/10.1145/2833157.2833162 .[28] L´ eonard, C. A survey of the Schr¨ odinger problem and some of its connections with optimal transport. 
+
+Discrete Contin. Dyn. Syst. 2014 , 34(4) , 1533–1574. https://doi.org/10.3934/dcds.2014.34.1533 .[29] Mardia, K.V.; Jupp, P.E. Directional Statistics ; Wiley Series in Probability and Statistics; John Wiley & Sons: Chichester, UK, 2000. https://doi.org/10.1002/9780470316979 .[30] Mikami, T. Monge’s problem with a quadratic cost by the zero-noise limit of h-path processes. Probab. Theory Relat. Fields 2004 , 129 , 245–260. https://doi.org/10.1007/s00440-004-0340-4 .[31] Peyr´ e, G.; Cuturi, M. Computational Optimal Transport: With Applications to Data Science. Found. Trends Mach. Learn. 2019 , 11(5–6) , 355–607. https://doi.org/10.1561/2200000073 .[32] Politis, D.N.; Romano, J.P. Large Sample Confidence Regions Based on Subsamples under Minimal As-sumptions. Ann. Stat. 1994 , 22(4) , 2031–2050. https://doi.org/10.1214/aos/1176325770 .[33] Rew, R.K.; Davis, G.P. NetCDF: an interface for scientific data access. IEEE Comput. Graph. Appl. 1990 ,
+
+10(4) , 76–82. https://doi.org/10.1109/38.56302 .[34] Schmitzer, B. Stabilized Sparse Scaling Algorithms for Entropy Regularized Transport Problems. SIAM J. Sci. Comput. 2019 , 41(3) , A1443–A1481. https://doi.org/10.1137/16M1106018 .[35] Schr¨ odinger, E. ¨Uber die Umkehrung der Naturgesetze. Sitzungsber. Preuß. Akad. Wiss., Phys.-Math. Kl. 
+
+1931 , 144–153. [36] Schr¨ odinger, E. Sur la th´ eorie relativiste de l’´ electron et l’interpr´ etation de la m´ ecanique quantique. Ann. Inst. Henri Poincar´ e 1932 , 2(4) , 269–310. [37] Scott, D.W. On optimal and data-based histograms. Biometrika 1979 , 66(3) , 605–610. https://doi.org/ 10.1093/biomet/66.3.605 .[38] Silverman, B.W. Density Estimation for Statistics and Data Analysis ; Routledge: New York, NY, 1998. 
+
+https://doi.org/10.1201/9781315140919 .[39] Sinkhorn, R. A Relationship Between Arbitrary Positive Matrices and Doubly Stochastic Matrices. Ann. Math. Stat. 1964 , 35(2) , 876–879. https://doi.org/10.1214/aoms/1177703591 .[40] Sinkhorn, R.; Knopp, P. Concerning nonnegative matrices and doubly stochastic matrices. Pac. J. Math. 
+
+1967 , 21(2) , 343–348. https://doi.org/10.2140/pjm.1967.21.343 .[41] Villani, C. Optimal Transport: Old and New ; Grundlehren der mathematischen Wissenschaften, Vol. 338; Springer: Berlin, Heidelberg, Germany, 2009. https://doi.org/10.1007/978-3-540-71050-9 .[42] Virtanen, P.; Gommers, R.; Oliphant, T.E.; Haberland, M.; Reddy, T.; Cournapeau, D.; Burovski, E.; Pe-terson, P.; Weckesser, W.; Bright, J.; van der Walt, S.J.; Brett, M.; Wilson, J.; Millman, K.J.; Mayorov, N.; Nelson, A.R.J.; Jones, E.; Kern, R.; Larson, E.; Carey, C.J.; Polat, ˙I.; Feng, Y.; Moore, E.W.; VanderPlas, J.; Laxalde, D.; Perktold, J.; Cimrman, R.; Henriksen, I.; Quintero, E.A.; Harris, C.R.; Archibald, A.M.; Ribeiro, A.H.; Pedregosa, F.; van Mulbregt, P. SciPy 1.0: fundamental algorithms for scientific computing in Python. Nat. Methods 2020 , 17 , 261–272. https://doi.org/10.1038/s41592-019-0686-2 .22
