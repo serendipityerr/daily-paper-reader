@@ -1,0 +1,3002 @@
+Title: Exponential Convergence of the Sinkhorn Algorithm for the Schrödinger Bridge with Regime Switching
+
+URL Source: https://arxiv.org/pdf/2607.19176v1
+
+Published Time: Wed, 22 Jul 2026 01:09:44 GMT
+
+Number of Pages: 36
+
+Markdown Content:
+# Exponential Convergence of the Sinkhorn Algorithm for the Schr¨ odinger Bridge with Regime Switching 
+
+## Katharina Eichinger 1, Anna Kazeykina 2, Zhenjie Ren 3, and Hecheng Wang 21ParMA, Inria and Universit´ e Paris Saclay 
+
+> 2
+
+## LMO, Universit´ e Paris-Saclay 
+
+> 3
+
+## LaMME, Universit´ e ´Evry Paris-Saclay 
+
+Abstract 
+
+This paper studies the convergence of the Sinkhorn algorithm for the Schr¨ odinger bridge problem with regime switching, as introduced in [43]. We consider a class of regime-switching stochastic systems on the hybrid state space E = Rd × { 1, . . . , m }, and construct the Sinkhorn iteration through the associated equivalent entropic optimal transport formulation. The main result of this paper is the exponential convergence of the Sinkhorn algorithm in relative entropy under compactness assumptions. Our proofs are inspired by the arguments recently developed for proving exponential convergence of the classical Schr¨ odinger problem in [5, 10]. We perform a similar analysis for the partially observed terminal setting, where only the marginal distribution of the continuous component is prescribed at the terminal time, while the discrete regime is unobserved. 
+
+Keywords: Sinkhorn algorithm; Schr¨ odinger bridge; regime-switching diffusion; entropic optimal transport; relative entropy stability; exponential convergence 
+
+# 1 Introduction 
+
+The Schr¨ odinger bridge problem, introduced by Schr¨ odinger in 1931 [30, 31], asks for the most likely stochastic evolution connecting two prescribed endpoint distributions. In modern terms, it seeks, among all path measures satisfying the endpoint marginal constraints, the one closest in relative entropy to a reference diffusion process [14]. It has become popular in recent year due to its proximity to optimal transport [22] and efficiency to compute solutions [8]. This framework also provides a flexible way to construct stochastic dynamics between probability distributions and has recently attracted substantial interest in machine learning, especially in generative modeling, where it connects diffusion-type models, stochastic control, and distribution matching [38, 9, 4]. Beyond noise-to-data generation, Schr¨ odinger bridges have been applied to image translation and restoration, as well as to other scientific problems where intermediate dynamics are inferred from marginal observations, such as single-cell trajectory inference, cell differentiation, and protein conformational changes [24, 32, 35]. However, many existing Schr¨ odinger bridge models are formulated in the classical Euclidean setting, where each sample is described only by a continuous position and follows a common stochastic evolution mechanism. This can be restrictive for heterogeneous systems. A natural extension is to attach a regime label to each sample, representing its class, condition, environment, or latent mode. The label may remain fixed or evolve over time, leading to a multi-regime formulation in which the continuous dynamics depend on the current regime and the regime itself may switch. In this paper, we consider a multi-regime version of the Schr¨ odinger bridge problem, as introduced in [43]. In contrast to the classical setting where the state variable takes values only in Euclidean space, we consider the hybrid state space E = Rd × I , where I = {1, . . . , m } is a finite set of regimes. Thus, each sample carries not only a continuous position x ∈ Rd, but also a discrete state i ∈ I . Accordingly, the Euclidean diffusion is replaced by a regime-switching diffusion [39]. Intuitively, the particle diffuses continuously within its current regime, while a Poisson jump mechanism switches the particle between different regimes; the jump changes 1arXiv:2607.19176v1 [math.PR] 21 Jul 2026 only the regime index It, without directly changing the continuous position Xt. More precisely, we consider a hybrid-state process Zt = ( Xt, I t) whose dynamics are given by 
+
+(dX t = bIt (t, X t) dt + σIt (t, X t) dW t,
+
+P(It+h = j | It = i, X t = x) = λij (t, x )h + o(h), h ↓ 0,
+
+where Wt is a Brownian motion and λij (t, x ) is the switching intensity from regime i to regime j if the current state is ( Xt, I t) = ( x, i ). Therefore, the reference process contains both the continuous diffusion mechanism within each regime and the random switching mechanism between regimes. As in the classical Schr¨ odinger bridge problem, our goal is to find the most likely path distribution under prescribed endpoint observations. Let P be the path law of the reference regime-switching diffusion. Given two endpoint marginal distributions ρ, μ ∈ P (Rd × I ), the fully observed multi-regime Schr¨ odinger bridge problem is formulated as inf 
+
+> Q≪P
+
+H(Q | P ) : Q ◦ Z−10 = ρ, Q ◦ Z−1 
+
+> T
+
+= μ , (1) where H(Q | P ) denotes the relative entropy of the path measure Q with respect to the reference path measure P . This formulation means that, among all stochastic evolutions matching the prescribed initial and terminal distributions, we select the one with minimal deviation in relative entropy from the reference dynamics. Diffusion models with regime switching have multiple applications in epidemic modeling [36], population dynamics [26], financial modeling [40], risk management [18]; the Schr¨ odinger bridge problem for such models also naturally arises in the problem of allocation of drones (see e.g. [19] for the context). One of natural applications of the mathematical problem considered in the present paper is longitudinal medical imaging and disease-progression modeling [33, 29]. In this setting, the continuous variable Xt may represent a medical image, or a high-dimensional feature extracted from medical images, while the discrete variable It represents a latent clinical state, such as disease stage, treatment status, or recovery state. Thus, an endpoint ( x, i ) encodes both the observed imaging state and the underlying clinical regime, and a multi-regime Schr¨ odinger bridge can model stochastic evolution between patient populations whose imaging distributions and clinical states change over time. Compared with a single-regime model, regime switching naturally represents disease progression, treatment response, or recovery through random transitions between clinical states, in the spirit of multistate and continuous-time hidden Markov models for disease dynamics [25, 34]. In longitudinal studies the clinical regime may be observed only intermittently, while lower-cost measure-ments such as blood pressure, heart rate, respiratory indices, or other physiological signals may be available more frequently; this motivates a setting in which the initial hybrid state is observed, but at the terminal time only the continuous component is prescribed [37]. This naturally leads to the partially observed multi-regime Schr¨ odinger bridge considered in this paper, which has not been studied in the literature up to our knowledge. Given an initial distribution ρ ∈ P (Rd × I ) and a terminal marginal distribution μp ∈ P (Rd)for the continuous component, the partially observed problem is defined by inf 
+
+> Q≪P
+
+H(Q | P ) : Q ◦ Z−10 = ρ, Q ◦ X−1 
+
+> T
+
+= μp . (2) Numerically, the equivalence between Schr¨ odinger bridges and entropic optimal transport [8] provides a natural way to solve Schr¨ odinger bridge problems through the Sinkhorn algorithm. More precisely, after reducing the dynamic problem (1) to the endpoint space and setting cij (x, y ) := − log rij (0 , x ; T, y ), where 
+
+rij (0 , x ; T, y ) is the transition density of the reference process, the static Schr¨ odinger problem is equivalent, up to an additive constant, to inf 
+
+> π∈Π( ρ,μ )
+
+(Z
+
+> (Rd×I )2
+
+c(z0, z T ) π(dz 0, dz T ) + H(π | ρ ⊗ μ)
+
+)
+
+,
+
+where Π( ρ, μ ) denotes the set of probability measures on E × E with prescribed endpoint marginals ρ and 
+
+μ. This EOT formulation is the basis for the Sinkhorn iteration studied in this paper. There is a vast literature on the analysis of Sinkhorn’s algorithm for entropic optimal transport. In this work, we restrict attention to the results most closely related to our setting. A recent contribution in 2this direction is due to [15], that establishes non-asymptotic convergence rates for Sinkhorn’s algorithm in relative entropy for a broad class of state spaces and cost functions. However, the assumptions imposed there may not be straightforward to verify in some concrete applications. We also mention the earlier work [28], which proves convergence of Sinkhorn iterates in total variation, though without an explicit convergence rate. These results are closely related to the stability theory developed in [11], that proves quantitative stability estimates for entropic optimal transport and applies them to obtain the convergence of Sinkhorn’s algorithm in Wasserstein distance. The present work is principally inspired by [5], where semiconcavity properties of the cost function and of the Sinkhorn potentials are used to prove stability of entropic plans and exponential convergence of Sinkhorn’s algorithm. This work builds in turn on [6]; see also [7, 16, 3] for closely related works on the convergence of Sinkhorn algorithm and propagation of semiconcavity. In the same context, [17] is also worth mentioning, as it provides a dynamic proof of quantitative stability results, only requiring one-side Hessian bounds for the Schro ¨dinger potentials. Compared with the aforementioned results, our model requires the analysis of semiconcavity properties for solutions of a larger coupled system of equations. Whether such properties hold in this setting is not clear and constitutes one of the main additional difficulties. The present paper draws, among other sources, on the work [10], where exponential convergence of Sinkhorn’s algorithm in total variation distance is established using Hilbert projective metric methods. We use these results as one of the building blocks for deriving stronger estimates in terms of relative entropy. The interest in Schro ¨dinger bridge problem with different regimes is relatively recent. Several related works include [12, 13], which study Schr¨ odinger bridge problems with a killing mechanism. In fact, this model can be viewed as a degenerate form of a two-regime Schr¨ odinger bridge: after particles enter one of the regimes, their evolution is completely stopped, in the sense that both the drift and the diffusion coefficient vanish. The authors derive a Sinkhorn-type algorithm which is not equivalent to the standard EOT-based Sinkhorn algorithm, and prove its convergence using Hilbert’s projective metric. The multi-regime Schr¨ odinger problem was first studied in the recent paper [43], which builds upon [41]. The paper focuses on the dynamic structure of the optimal bridge: the authors derive the related SDE, gen-erator, stochastic control formulation, and the corresponding dynamic Schr¨ odinger system (see also [42] for a further work on the regime-switching approach to the unbalanced Schr¨ odinger bridge problem). In contrast, the present paper’s contribution is more algorithmic and quantitative: we study the Sinkhorn algorithm associated with the regime-switching Schr¨ odinger bridge problem and prove its exponential convergence in relative entropy. The rest of the paper is organised as follows. In Section 2 we give a detailed description of the studied model, introduce the necessary notations and assumptions, and present the main results. Section 3 is devoted to the proofs of the two main theorems on stability of the regime-switching Schr¨ odinger bridge problem and exponential convergence of the associated Sinkhorn algorithm. Section 4 contains the proofs of results on partial terminal observations. Finally, in the Appendix we give a proof of the regularity of the transition density of the reference process in a restricted constant-coefficient case. 
+
+Acknowledgments KE, AK and ZR acknowledge the support of the Agence nationale de la recherche, through the PEPR PDE-AI project (ANR-23-PEIA-0004). AK’s research is supported by the FMJH Program Gaspard Monge for optimization and operations research and their interactions with data science. ZR’s research is supported by the Finance For Energy Market Research Center and the France 2030 grant (ANR-21-EXES-0003). 
+
+# 2 Hybrid-State Diffusion Processes and Schr¨ odinger Bridge 
+
+## 2.1 Preliminaries 
+
+Our reference dynamics is given by a hybrid-state process Zt = ( Xt, I t) taking values in the product space E := Rd × I , where I = {1, . . . , m } is a finite set of regimes. This process consists of a continuous component Xt ∈ Rd and a discrete regime component It ∈ I . The dynamics are governed by the following coupled system governed by drift bi : [0 , T ] × Rd → Rd, diffusion coefficient σi : [0 , T ] × Rd → Rd×d and jump rate λij : [0 , T ] × Rd → R+, for i, j ∈ I :31. Continuous Diffusion: For a given regime It = i, the state Xt evolves according to the SDE: 
+
+dX t = bi(t, X t)dt + σi(t, X t)dW t,
+
+where Wt is a d-dimensional Brownian motion. 2. Regime Switching: The pair ( Xt, I t) is a Markov process on Rd × I . Its discrete component It
+
+switches according to state-dependent intensities: 
+
+P(It+h = j | It = i, X t = x) = λij (t, x )h + o(h), h ↓ 0.
+
+This heuristic description can be made rigorous through the Poisson random measure construction. Following [43], let N1(dt, du ) be a Poisson random measure on [0 , T ] × R+ with intensity dt du . Its atoms are pairs ( t, u ), where t is the time of a potential switching event and u is an auxiliary mark used only to determine the type of the switch. For every ( t, x, i ), choose pairwise disjoint Borel sets ∆ ij (t, x ) ⊂ R+, j̸ = i, such that 
+
+|∆ij (t, x )| = λij (t, x ),
+
+and set ∆ ii (t, x ) = ∅. Define 
+
+α(t, x, i, u ) = X
+
+> j∈I
+
+(j − i)1∆ij (t,x )(u).
+
+Thus, α(t, x, i, u ) is the increment of the regime index caused by the mark u. More precisely, if the current regime is i and u ∈ ∆ij (t, x ), then α(t, x, i, u ) = j − i, so that the regime changes from i to j. If u belongs to none of these sets, then α(t, x, i, u ) = 0, and no switch occurs. The regime process is defined by 
+
+It = I0 +
+
+Z t
+
+> 0
+
+Z
+
+> R+
+
+α(s, X s−, I s−, u ) N1(ds, du ).
+
+The sample paths of the joint process Z = ( Zt)t∈[0 ,T ] lie in the canonical path space ΩT , defined as the product of the space of continuous functions and the space of c` adl` ag (right-continuous with left limits) functions: ΩT := D([0 , T ]; Rd × I ) = C([0 , T ]; Rd) × D([0 , T ]; I).
+
+We denote by P the path law of the process Z, which is a probability distribution on (Ω T , FT ), where FT
+
+is the canonical filtration on Ω T .The classical Schr¨ odinger Bridge Problem (SBP) aims to identify a path law that minimally deviates from the reference process P while interpolating between two given endpoint distributions. In the present hybrid-state setting with regime switching, given ρ, μ ∈ P (Rd × I ), the regime-switching Schr¨ odinger bridge problem (RS-SBP) is given by inf 
+
+> Q≪P
+
+H(Q | P ) : Q ◦ Z−10 = ρ, Q ◦ Z−1 
+
+> T
+
+= μ ,
+
+Here, H denotes the relative entropy between probability measures on the path space Ω T , more precisely, 
+
+H(Q | P ) := 
+
+Z
+
+> ΩT
+
+log 
+
+ dQ
+
+dP
+
+
+
+dQ, Q ≪ P, 
+
++∞, otherwise .
+
+With the usual argument [22], the dynamic RS-SBP is equivalent to a static entropy optimal transport problem on the endpoint space. For any admissible path measure Q ∈ P (Ω T ) with H(Q | P ) < +∞, let 
+
+π := Q ◦ (Z0, Z T )−1, P0,T := P ◦ (Z0, Z T )−1,
+
+where Zt := ( Xt, I t). The additive property of the relative entropy yields 
+
+H(Q | P ) = H(π | P0,T ) + 
+
+Z
+
+H Q(· | Z0 = z0, Z T = zT ) | P (· | Z0 = z0, Z T = zT ) π(dz 0, dz T ), (3) 4where H stands for the relative entropy between probability measures on the endpoint space ( Rd × I )2.Hence, 
+
+H(π | P0,T ) ≤ H (Q | P ),
+
+with equality if and only if Q(· | Z0 = z0, Z T = zT ) = P (· | Z0 = z0, Z T = zT ) for π-a.e. ( z0, z T ). Conversely, if π ∈ Π( ρ, μ ) is a coupling, then 
+
+Q(·) = 
+
+Z
+
+> (Rd×I )2
+
+P (· | Z0 = z0, Z T = zT )π(dz 0, dz T ) (4) provides a corresponding law on path space with H(π | P0,T ) = H(Q | P ). In particular, if there is an optimal bridge Qρ,μ on path space 
+
+Qρ,μ (· | Z0 = z0, Z T = zT ) = P (· | Z0 = z0, Z T = zT ), (5) for πρ,μ -a.e. ( z0, z T ), where πρ,μ := Qρ,μ ◦ (Z0, Z T )−1. It follows that 
+
+H(Qρ,μ | P ) = H(πρ,μ | P0,T ),
+
+and the dynamic RS-SBP is equivalent to the static problem inf  
+
+> π∈Π( ρ,μ )
+
+H(π | P0,T ), (6) where Π( ρ, μ ) denotes the set of probability measures on E × E with prescribed endpoint marginals ρ and 
+
+μ, i.e. Π( ρ, μ ) = {π ∈ P (E × E) : π(A × E) = ρ(A), π (E × B) = μ(B)}
+
+for all measurable A, B ⊂ E.It is hence sufficient to work with the static formulation since the properties can be readily translated back to the path space formulation via (4). We now recall a result of [27, Theorem 2.1] providing the classical characterization of the static regime-switching Schr¨ odinger bridge. 
+
+Assumption 2.1. Let P0,T := P ◦ (Z0, Z T )−1 be the endpoint law of the reference process. Assume that 
+
+H(ρ ⊗ μ | P0,T ) < ∞ and P0,T supp( ρ⊗μ) ≪ ρ ⊗ μ. 
+
+Define 
+
+p(z0, z T ) := 
+
+d
+
+
+
+P0,T supp( ρ⊗μ)
+
+
+
+d(ρ ⊗ μ) (z0, z T ).
+
+In componentwise notation, for z0 = ( x, i ) and zT = ( y, j ), write 
+
+pij (x, y ) := p (x, i ), (y, j ).
+
+Theorem 2.2 (Characterization of the static regime-switching Schr¨ odinger bridge, [27]) . Under Assumption 2.1 the static regime-switching Schr¨ odinger bridge problem (6) admits a unique optimal solution πρ,μ ≪ P0,T ,characterized as follows. The Radon–Nikodym derivative of the optimal measure πρ,μ with respect to the reference measure P0,T satisfies 
+
+dπ ρ,μ 
+
+dP 0,T 
+
+(z0, z T ) = ˜fi0 (x0)˜ giT (xT ) for πρ,μ -a.e. (z0, z T ) = (( x0, i 0), (xT , i T )) .
+
+where ( ˜fi)i∈I and (˜ gj )j∈I are nonnegative measurable functions, unique up to the transformation 
+
+( ˜f , ˜g) ∼ (λ ˜f , λ −1 ˜g), λ > 0,
+
+and solve the Schr¨ odinger system 
+
+
+
+1 = ˜fi(x) X
+
+> j∈I
+
+Z
+
+> Rd
+
+pij (x, y )˜ gj (y)μj (dy ), ρi-a.e. x, 
+
+1 = ˜ gj (y) X
+
+> i∈I
+
+Z
+
+> Rd
+
+pij (x, y ) ˜fi(x)ρi(dx ), μj -a.e. y. 
+
+5In particular, the optimal path measure Qρ,μ uniquely exists as well and satisfies thanks to the discussion above dQ ρ,μ 
+
+dP (( Zt)t∈[0 ,T ]) = dπ ρ,μ 
+
+dP 0,T 
+
+(Z0, Z T ) Qρ,μ -a.e. ( Zt)t∈[0 ,T ]
+
+Remark 2.3 . Note that [43] gives a result on the characterization of the optimal path measure Qρ,μ as a system of SDEs min terms of optimal drift b∗, volatility σ∗ and switching rates λ∗ of the associated process. Let the function h = ( hi)i∈I be defined by 
+
+hi(t, x ) := EP[˜ gIT (XT ) | Xt = x, I t = i] , (t, x, i ) ∈ [0 , T ] × Rd × I .
+
+Under some mild conditions on the drift b, volatility σ and switching rates λ of the reference process, the strong Markov property for the references process and regularity, positivity and harmonicity assumptions on h (see Assumptions (C), (G) and (H) of [43]), we have that the optimal triplet ( b∗, σ ∗, λ ∗) inducing the path law Qρ,μ is given by: 
+
+σ∗ 
+
+> i
+
+(t, x ) = σi(t, x ),b∗ 
+
+> i
+
+(t, x ) = bi(t, x ) + ai(t, x )∇x log hi(t, x ),λ∗ 
+
+> ij
+
+(t, x ) = λij (t, x ) hj (t, x )
+
+hi(t, x ) , j̸ = i, 
+
+where 
+
+ai(t, x ) = σi(t, x )σi(t, x )⊤
+
+and the function h satisfies the following coupled Kolmogorov backward system: 
+
+
+
+∂thi(t, x ) + bi(t, x ) · ∇ xhi(t, x ) + 12 Tr( ai(t, x )∇2
+
+> x
+
+hi(t, x )) + X 
+
+> j̸=i
+
+λij (t, x ) ( hj (t, x ) − hi(t, x )) = 0 , (t, x, i ) ∈ [0 , T ) × Rd × I ,hi(T, x ) = ˜ gi(x), x ∈ Rd, i ∈ I .
+
+Let us now draw the link to entropic optimal transport, and identify the corresponding cost function. Let ρref := P ◦ Z−10 be the initial marginal of the reference process, and denote by ρref ,i the density of its 
+
+i-th component with respect to the Lebesgue measure. From now on, we assume that the transition kernel of the reference process admits a density with respect to the Lebesgue measure 
+
+P (XT ∈ dy, I T = j | X0 = x, I 0 = i) = rij (0 , x ; T, y )dy. (7) Later on, we impose stronger conditions on the reference process to guarantee our main theorems (see Assumption 2.5), so we do not go into technical assumptions when this holds true to avoid technical overload. The reference endpoint density pij (x, y ), now understood as the density of P0,T supp( ρ⊗μ) with respect to 
+
+ρ ⊗ μ, can be decomposed as 
+
+pij (x, y ) = ρref ,i (x)rij (0 , x ; T, y )
+
+ρi(x)μj (y) .
+
+For any π ∈ Π( ρ, μ ) such that H(π | P0,T ) < ∞, writing πij (x, y ) for the density of πij with respect to 
+
+ρi ⊗ μj , we have 
+
+H(π | P0,T ) = X
+
+> i,j ∈I
+
+Z Z 
+
+log 
+
+ πij (x, y )  
+
+> ρref ,i (x)rij (0 ,x ;T,y )
+> ρi(x)μj(y)
+
+ πij (x, y ) ρi(d x)μj (d y)= X
+
+> i,j ∈I
+
+Z Z 
+
+log 
+
+ πij (x, y )
+
+ρi(x)μj (y)
+
+
+
+πij (x, y ) ρi(d x)μj (d y)
+
+− X
+
+> i,j ∈I
+
+Z Z 
+
+log rij (0 , x ; T, y ) πij (x, y ) ρi(d x)μj (d y) + constant ,
+
+6where for suitable functions fi, g j : Rd → R
+
+constant = X
+
+> i,j ∈I
+
+Z Z  fi(x) + gj (y)πij (x, y ) ρi(d x)μj (d y)= X
+
+> i∈I
+
+Z
+
+fi(x) ρi(d x) + X
+
+> j∈I
+
+Z
+
+gj (y) μj (d y).
+
+Hence the constant is independent of π, since π ∈ Π( ρ, μ ). Define the cost function by 
+
+cij (x, y ) := − log rij (0 , x ; T, y ).
+
+Then 
+
+H(π | P0,T ) = H(π | ρ ⊗ μ) + X
+
+> i,j ∈I
+
+Z Z 
+
+cij (x, y )πij (x, y ) ρi(dx )μj (dy ) + constant .
+
+Hence, the static Schr¨ odinger problem is equivalent to a standard entropic optimal transport problem with cost cij (x, y ). Finally, the factorized form of the optimal coupling can be rewritten accordingly. From Theorem 2.2, we have 
+
+πρ,μ ij (dx, dy ) = ˜fi(x)pij (x, y )˜ gj (y) ρi(dx )μj (dy ).
+
+Substituting 
+
+pij (x, y ) = ρref ,i (x)rij (0 , x ; T, y )
+
+ρi(x)μj (y) (8) and defining 
+
+fi(x) := ˜fi(x) ρref ,i (x)
+
+ρi(x) , gj (y) := ˜gj (y)
+
+μj (y) ,
+
+we obtain 
+
+πρ,μ ij (dx, dy ) = fi(x)rij (0 , x ; T, y )gj (y) ρi(dx )μj (dy ).
+
+Sinkhorn iteration. Based on the static EOT formulation with the transition kernel r as the reference kernel, the Schr¨ odinger system can be solved using the classical Sinkhorn iteration (also known as the Iterative Proportional Fitting Procedure, or IPFP). Given an arbitrary family of strictly positive initial values g0 = ( g0 
+
+> j
+
+)j∈I , the iteration is defined recursively as: 
+
+f n+1  
+
+> i
+
+(x) = 1
+
+P
+
+> j∈I
+
+R 
+
+> Rd
+
+rij (0 , x ; T, y )gnj (y) μj (dy ) , i ∈ I ,
+
+and 
+
+gn+1  
+
+> j
+
+(y) = 1
+
+P
+
+> i∈I
+
+R 
+
+> Rd
+
+rij (0 , x ; T, y )f n+1  
+
+> i
+
+(x) ρi(dx ) , j ∈ I .
+
+Accordingly, after the first half-step update, the intermediate coupling is defined as: 
+
+πn+1 ,n ij (dx, dy ) = f n+1  
+
+> i
+
+(x)rij (0 , x ; T, y )gnj (y) ρi(dx )μj (dy ), (9) and upon completing the second half-step update, the full-step coupling is defined as: 
+
+πn+1 ,n +1  
+
+> ij
+
+(dx, dy ) = f n+1  
+
+> i
+
+(x)rij (0 , x ; T, y )gn+1  
+
+> j
+
+(y) ρi(dx )μj (dy ). (10) We also introduce the corresponding intermediate marginals generated by the Sinkhorn iteration. For each n ≥ 0, define 
+
+ρn,n (dz 1) := πn,n  dz 1 × (Rd × I ), μn+1 ,n (dz 2) := πn+1 ,n  (Rd × I ) × dz 2
+
+. (11) 7Equivalently, in componentwise form, 
+
+dρ n,n i
+
+dρ i
+
+(x) = f ni (x) X
+
+> j∈I
+
+Z
+
+> Rd
+
+rij (0 , x ; T, y )gnj (y) μj (dy ), i ∈ I ,
+
+and 
+
+dμ n+1 ,n j
+
+dμ j
+
+(y) = gnj (y) X
+
+> i∈I
+
+Z
+
+> Rd
+
+rij (0 , x ; T, y )f n+1  
+
+> i
+
+(x) ρi(dx ), j ∈ I .
+
+Moreover, one has 
+
+πn,n ∈ Π( ρn,n , μ ), πn+1 ,n ∈ Π( ρ, μ n+1 ,n ).
+
+## 2.2 Notations 
+
+Notation 1. Given z = ( x, i ) ∈ Rd × I and a function f : Rd × I → R, we may equivalently view f as a family ( fi)i∈I of functions on Rd, defined by 
+
+fi(x) := f (x, i ) = f (z), x ∈ Rd, i ∈ I , z = ( x, i ).
+
+Accordingly, we shall use the notations f (z) and fi(x) interchangeably whenever z = ( x, i ). 
+
+Notation 2. Extending the above convention, for a function f : ( Rd × I )2 → R, we write 
+
+fij (x, y ) := f  (x, i ), (y, j ), x, y ∈ Rd, i, j ∈ I .
+
+Accordingly, we shall use the notations f  (x, i ), (y, j ) and fij (x, y ) interchangeably. 
+
+Notation 3. For a measure η on Rd × I , define its i-th component by 
+
+ηi(A) := η A × { i}, A ⊂ Rd Borel , i ∈ I .
+
+Its discrete marginal is denoted by ¯ η, namely ¯η(i) := ηi(Rd). (12) Whenever ¯ η(i) > 0, we write ˆ ηi for the conditional probability measure on Rd given i, defined by ˆηi(A) := ηi(A)¯η(i) . (13) Thus ηi = ¯ η(i)ˆ ηi. In particular, we use ρi, ¯ρ, ˆρi for the initial marginal and μj , ¯μ, ˆμj for the terminal marginal. 
+
+Notation for the stability estimate. In view of the static reduction of the regime-switching Schr¨ odinger bridge problem discussed above, the stability estimate will first be formulated at the endpoint level. We write 
+
+E := Rd × I .
+
+Fix a first marginal ρ ∈ P (E). For any terminal marginal η ∈ P (E), we denote by πρ,η the unique optimizer of the static entropic optimal transport problem with marginals ρ and η, associated with the cost c introduced through the reference transition kernel above. Equivalently, 
+
+πρ,η ∈ argmin 
+
+> π∈Π( ρ,η )
+
+
+
+H(π | ρ ⊗ η) + 
+
+Z
+
+> E×E
+
+c(z0, z T ) π(d z0, dzT )
+
+
+
+.
+
+In the stability theorem below, the two terminal marginals to be compared will be denoted by μ and ν, and the corresponding optimal endpoint couplings will be written as πρ,μ and πρ,ν .82.3 Main Results for the Regime Switching Schr¨ odinger Bridge 
+
+We are now ready to state the main results concerning. For this let us group up the main set of assumptions. In order to be able to tackle our problem we need a suitable version of the Talagrand’s transport inequality which classically holds for a measure μ ∈ P (Rd) with constant C > 0 if 
+
+W 22 (η, μ ) ≤ CH (η | μ), ∀ η ∈ P (Rd). (14) The remaining assumptions we impose on the marginal constraints are then as follows. 
+
+Assumption 2.4. The endpoint measures ρ, μ ∈ P (Rd) satisfy the following conditions. Let ¯μ and (ˆ μi)i∈I 
+
+be defined by (12) and (13) .1. Absolute continuity. For every i, j ∈ I with ¯ρ(i) > 0 and ¯μ(j) > 0, the conditional laws ˆρi and ˆμj
+
+are absolutely continuous with respect to the Lebesgue measure on Rd.2. Compact support. The endpoint measures ρ and μ are compactly supported on Rd × I .3. Talagrand T2 inequality at one endpoint. The measure μ satisfies the following regime-wise Talagrand T2 inequality with constant Cμ > 0
+
+W 22 (η, ˆμi) ≤ CμH(η | ˆμi), ∀ i ∈ I such that ¯μ(i) > 0, ∀ η ∈ P (Rd). (15) We additionally require some regularity on the reference process P , which we directly state as assumption on the transition density. 
+
+Assumption 2.5. Let the transition kernel of the reference process admit a density r defined by (7) . For every pair i, j ∈ I with ¯ρ(i)¯ μ(j) > 0, let the map 
+
+(x, y ) 7 −→ rij (0 , x ; T, y )
+
+be of class C2 and strictly positive on supp(ˆ ρi) × supp(ˆ μj ).
+
+As above, we denote by cij the cost function associated with the reference kernel, namely 
+
+cij (x, y ) = − log rij (0 , x ; T, y ).
+
+For later use, we introduce the global constants 
+
+M0 := max  
+
+> i,j : ¯ ρ(i)¯ μ(j)>0
+
+sup  
+
+> (x,y )∈supp( ˆ ρi)×supp(ˆ μj)
+
+|cij (x, y )|,M1 := max  
+
+> i,j : ¯ ρ(i)¯ μ(j)>0
+
+sup  
+
+> (x,y )∈supp( ˆ ρi)×supp(ˆ μj)
+
+∥∇ cij (x, y )∥,M2 := max  
+
+> i,j : ¯ ρ(i)¯ μ(j)>0
+
+sup  
+
+> (x,y )∈supp( ˆ ρi)×supp(ˆ μj)
+
+∥∇ 2cij (x, y )∥.
+
+(16) By Assumptions 2.5, all these constants are finite. Here ∇cij and ∇2cij denote respectively the full gradient and the full Hessian with respect to the variable ( x, y ). 
+
+Remark 2.6 . The constants M1 and M2 defined above control derivatives with respect to both variables x
+
+and y. This symmetric formulation is convenient, but stronger than what is needed below. More precisely, if the T2 condition in Assumption 2.4 is imposed on the terminal marginal μ, only the bounds on ∇y cij 
+
+and ∇2 
+
+> yy
+
+cij are required. If instead the T2 condition is imposed on the initial marginal ρ, then, by the transposition argument in Remark 2.14, it is enough to use the corresponding bounds on ∇xcij and ∇2
+
+> xx
+
+cij .Since we are not aiming to optimize on the constants here, we decided to keep it that way. The above assumptions are satisfied in a variety of cases as the following examples show. 9Example 2.7. Assumption 2.4 is satisfied, for instance, if one of the two endpoint families consists of uniformly strongly log-concave measures supported on compact convex sets. We state the condition for the initial marginal; the analogous condition on the terminal marginal yields the same conclusion. For each i ∈ I such that ρ(Rd × { i}) > 0, let 
+
+Ki := supp(ˆ ρi).
+
+Assume that Ki is compact and convex with nonempty interior, and that 
+
+ˆρi(d x) = 1
+
+Zi
+
+e−Vi(x)1Ki (x) d x, 
+
+where Vi ∈ C2(K◦ 
+
+> i
+
+) and Zi is the normalisation constant. Suppose that there exists κ > 0, such that 
+
+∇2Vi(x) ⪰ κI d, x ∈ K◦ 
+
+> i
+
+.
+
+Then, for every η ∈ P (Rd),
+
+W 22 (η, ˆρi) ≤ 2
+
+κ H(η | ˆρi).
+
+Hence, the family (ˆ ρi)i satisfies a Talagrand T2 inequality, with constant 2/κ .Indeed, since Ki is convex, the above Hessian bound implies the κ-displacement convexity of H( · | ˆρi).Applying this estimate along the Wasserstein geodesic from ˆρi to η, and using the nonnegativity of relative entropy, gives the stated T2 inequality. Such log-concave assumptions are standard sufficient conditions for Talagrand inequalities and arise nat-urally in the analysis of entropic optimal transport; see, for instance, [5, 7]. 
+
+Example 2.8. Assumption 2.4 is also satisfied if one of the two endpoint families has compact convex supports and admits densities uniformly bounded from above and below. More precisely, it is enough that either the following condition holds for the initial marginal, or the analogous condition holds for the terminal marginal. For the initial marginal, suppose that for each i ∈ I such that ¯ρ(i) > 0, the support Ki := supp(ˆ ρi) is compact and convex, and ˆρi admits a density qi on Ki satisfying 
+
+ˆρi(d x) = qi(x)1Ki (x) d x, 0 < m ≤ qi(x) ≤ M < ∞, x ∈ Ki,
+
+where m and M are independent of i.Then the family  ˆρi
+
+ 
+
+> i∈I
+
+satisfies a Talagrand T2 inequality. The same conclusion holds if the above assumptions are imposed instead on the terminal conditional laws  ˆμj
+
+ 
+
+> j∈I
+
+.This hypothesis is stronger than assuming that the family  ˆρi
+
+ 
+
+> i∈I
+
+satisfies a Talagrand T2 inequality. Indeed, it implies a logarithmic Sobolev inequality (LSI) and hence a Talagrand T2 inequality; cf. [2, Propo-sition 5.3 and the discussion therein] and [1, Proposition 5.1.6]. 
+
+Example 2.9. Assumption 2.5 holds in particular for constant-coefficient reference processes. Indeed, as-sume that bi(t, x ) ≡ bi, σi(t, x ) ≡ σiId, and λij (t, x ) ≡ λij for all i, j ∈ I , where σi > 0 for every i ∈ I and 
+
+λij > 0 for every i̸ = j. Then, for every T > 0, the transition density rij (0 , x ; T, y ) is strictly positive and of class C2 in (x, y ). The proof is given in Appendix A. 
+
+We are now in place to state the main stability result for the regime switching Schr¨ odinger problem. 
+
+Theorem 2.10 (Stability in relative entropy) . Let Assumptions 2.1, 2.4 and 2.5 hold for (ρ, μ ) ∈ P (Rd)2
+
+and the reference process P ∈ P (Ω T ).Let M0, M1, and M2 be defined in (16) , and set 
+
+B := max 
+
+
+
+M2 + M 21
+
+2 , 4M0
+
+
+
+.
+
+Then, for every ν ∈ P (Rd × I ) such that 
+
+H(μ | ν) + H(ν | μ) < +∞, (17) 10 one has H (Qρ,μ | Qρ,ν ) = H (πρ,μ | πρ,ν )
+
+≤ H(μ | ν) + BC μH(ν | μ) + B∥¯μ − ¯ν∥TV 
+
+≤ H(μ | ν) + BC μH(ν | μ) + B∥μ − ν∥TV .
+
+Remark 2.11 . By (17), one has μ ∼ ν. Consequently, the first two conditions in Assumption 2.4 also hold for the pair ( ρ, ν ). In particular, supp μ = supp ν. Hence, Assumption 2.5 imposed for ( ρ, μ ) also holds for (ρ, ν ), with the same constants M0, M1, and M2. The T2 condition in Assumption 2.4 need not hold for ν
+
+and is not used in the proof. 
+
+Theorem 2.12 (Exponential convergence in relative entropy) . Let Assumptions 2.1, 2.4 and 2.5 hold for 
+
+(ρ, μ ) ∈ P (Rd)2 and the reference process P ∈ P (Ω T ). Let πρ,μ be the unique optimal coupling, and let 
+
+πn+1 ,n and πn+1 ,n +1 be, respectively, the half-step and full-step couplings defined in (9) and (10) . Assume that H(πρ,μ | π1,0) < ∞, H(πρ,μ | π1,1) < ∞. Then there exist constants C > 0 and θ ∈ (0 , 1) depending on 
+
+ρ, μ, P and π1,0, π1,1 such that, for all n ≥ 0,
+
+H(πρ,μ | πn+1 ,n ) ≤ Cθ n, H(πρ,μ | πn+1 ,n +1 ) ≤ Cθ n.
+
+For a precise description of the dependence of C and θ on ρ, μ, P and the initial data see the proof of the theorem in Section 3. 
+
+Remark 2.13 . By the entropy decomposition above, each intermediate Sinkhorn coupling, in particular πn+1 ,n 
+
+and πn+1 ,n +1 , can be canonically lifted back to a path measure by keeping the reference conditional bridge 
+
+P ( · | Z0, Z T ) unchanged and replacing only the endpoint law. In particular, one obtains corresponding path measures Qn+1 ,n and Qn+1 ,n +1 such that 
+
+H(Qρ,μ | Qn+1 ,n ) = H(πρ,μ | πn+1 ,n ), H(Qρ,μ | Qn+1 ,n +1 ) = H(πρ,μ | πn+1 ,n +1 ).
+
+Moreover, since these lifted measures still have the same endpoint factorization as in Theorem 2.2, the reconstruction procedure in Theorem 2.2(ii)–(iii) applies verbatim. Therefore, the exponential convergence established in Theorem 2.12 for the marginal Sinkhorn iterates immediately yields exponential convergence of the reconstructed path measures toward the optimal Schr¨ odinger bridge. 
+
+Remark 2.14 . In the proof of Theorem 2.10 and 2.12, we treat only the case where μ satisfies the Talagrand 
+
+T2 inequality (15). Suppose instead that this condition holds for the initial measure ρ, and we vary ρ instead of μ. While the problem may not be symmetric in the marginals, it is still sufficient to flip the marginals and costs. At the level of the static EOT problem, define the transposed cost by 
+
+c⊤(w, z ) := c(z, w ), that is, c⊤
+
+> ji
+
+(y, x ) := cij (x, y ).
+
+Then, for every π ∈ Π( ρ, μ ), 
+
+H(π | ρ ⊗ μ) + 
+
+Z
+
+> E×E
+
+c(z, w ) π(d z, dw)= H(π⊤ | μ ⊗ ρ) + 
+
+Z
+
+> E×E
+
+c⊤(w, z ) π⊤(d w, dz).
+
+Consequently, transposition identifies the static EOT problem with marginals ( ρ, μ ) and cost c with the problem with marginals ( μ, ρ ) and cost c⊤. Under this identification, the two Sinkhorn updates are ex-changed. Thus, the argument for the case where the second marginal satisfies the T2 condition applies to the transposed problem when the condition is imposed on ρ.This transposition concerns only the static EOT formulation but does not yield a symmetry of the dynamic Schr¨ odinger bridge. Nevertheless, the lifted Sinkhorn iterates satisfy 
+
+H Qρ,μ | Qn+1 ,n  = H πρ,μ | πn+1 ,n  ,
+
+as detailed in Remark 2.13. Hence, their exponential convergence rate on path space is exactly the rate obtained for the static EOT iterates, so it is enough to treat the case where μ satisfies the T2 condition. 11 2.4 Main Results on the Partially Observed Problem 
+
+We now consider a partially observed variant of the regime-switching Schr¨ odinger bridge problem, in which the terminal regime is not observed. More precisely, the initial marginal is prescribed on the full hybrid space Rd × I , while at time T only the marginal distribution of the continuous component XT is prescribed. To the best of our knowledge, this partially observed problem has not been considered in the literature. Let 
+
+ρ ∈ P (Rd × I ), μp ∈ P (Rd),
+
+denote the observed marginals The partially observed regime-switching Schr¨ odinger bridge problem is defined by inf 
+
+> Q≪P
+
+H(Q | P ) : Q ◦ Z−10 = ρ, Q ◦ X−1 
+
+> T
+
+= μp .
+
+By the entropy decomposition formula, for every admissible path measure Q ≪ P , if 
+
+Q0,T := Q ◦ (Z0, Z T )−1, P0,T := P ◦ (Z0, Z T )−1,
+
+then 
+
+H(Q | P ) = H(Q0,T | P0,T ) + 
+
+Z
+
+H Q(· | z0, z T ) | P (· | z0, z T ) Q0,T (d z0, dzT ).
+
+Therefore, as before inf 
+
+> Q≪P
+
+n
+
+H(Q | P ) : Q ◦ Z−10 = ρ, Q ◦ X−1 
+
+> T
+
+= μp
+
+o
+
+= inf 
+
+> π∈P (( Rd×I )2)
+
+n
+
+H(π | P0,T ) : π ◦ Z−10 = ρ, π ◦ X−1 
+
+> T
+
+= μp
+
+o
+
+. (18) Thus the partially observed Schr¨ odinger bridge problem is reduced to a static problem with partial observation. 
+
+Assumption 2.15. Let ¯P0,T := P ◦ (Z0, X T )−1 be the projected endpoint law of the reference process. Assume that 
+
+H(ρ ⊗ μp | ¯P0,T ) < ∞ and ¯P0,T supp( ρ⊗μp) ≪ ρ ⊗ μp.
+
+Define ¯ p(z0, y ) := d 
+
+> 
+> ¯P0,T
+
+|supp( ρ⊗μp)  
+
+> 
+> d(ρ⊗μp)
+
+(z0, y ). In componentwise notation, for z0 = ( x, i ) with i ∈ I , write ¯pi(x, y ) := ¯ p(( x, i ), y ), so that ¯pi(x, y ) := 
+
+d
+
+ ¯P0,T supp( ρ⊗μp)
+
+
+
+d(ρ ⊗ μp)
+
+ (x, i ), y . (19) As in the fully observed case (8), the EOT problem with kernel ¯ p is equivalent to the EOT problem with the transition kernel ¯ r:¯ri(0 , x ; T, y )dy := P (XT ∈ dy | X0 = x, I 0 = i), i ∈ I .
+
+Then the projected transition density satisfies ¯ri(0 , x ; T, y ) = X
+
+> j∈I
+
+rij (0 , x ; T, y ). (20) For each i ∈ I, define ¯pi(x, y ) := 
+
+d
+
+ ¯P0,T supp( ρ⊗μp)
+
+
+
+d(ρ ⊗ μp)
+
+ (x, i ), y .
+
+12 Theorem 2.16 (Characterization of the optimal control under partial terminal observation) . Under As-sumption 2.15 the partially observed static regime-switching Schr¨ odinger bridge problem (18) admits a unique optimal solution πρ,μ p ≪ P0,T , characterized as follows. There exist nonnegative measurable functions ( ˜fi)i∈I 
+
+and ˜g, unique up to the transformation 
+
+( ˜f , ˜g) ∼ (λ ˜f , λ −1 ˜g), λ > 0,
+
+such that dπρ,μ p
+
+dP0,T 
+
+(z0, z T ) = ˜fi0 (x0)˜ g(xT ) for πρ,μ -a.e. (z0, z T ) = (( x0, i 0), (xT , i T )) .
+
+Moreover, ( ˜fi)i∈I and ˜g solve the projected Schr¨ odinger system 
+
+
+
+1 = ˜fi(x)
+
+Z
+
+> Rd
+
+¯pi(x, y )˜ g(y) μp(d y), ρi-a.e. x, i ∈ I ,
+
+1 = ˜ g(y) X
+
+> i∈I
+
+Z
+
+> Rd
+
+¯pi(x, y ) ˜fi(x) ρi(d x), μp-a.e. y. 
+
+Equivalently, the optimal projected endpoint coupling γρ,μ p := (id E × pr Rd )#πρ,μ p , where pr Rd (y, i ) = y,is given componentwise by 
+
+γρ,μ p 
+
+> i
+
+(d x, dy) = ˜fi(x)¯ pi(x, y )˜ g(y) ρi(d x)μp(d y), i ∈ I .
+
+Remark 2.17 . As for the fully observed case, we can give an expression for optimal ( b∗, σ ∗, λ ∗) inducing the path law Qρ,μ p . Let the function h = ( hi)i∈I be defined by 
+
+hi(t, x ) := EP [˜ g(XT ) | Xt = x, I t = i] , (t, x, i ) ∈ [0 , T ] × Rd × I .
+
+Let Assumptions (C), (G) and Assumption (H) of [43] for h be satisfied. Then the optimal control triplet (b∗, σ ∗, λ ∗) inducing the path law Qρ,μ p is given by 
+
+σ∗ 
+
+> i
+
+(t, x ) = σi(t, x ),b∗ 
+
+> i
+
+(t, x ) = bi(t, x ) + ai(t, x )∇x log hi(t, x ),λ∗ 
+
+> ij
+
+(t, x ) = λij (t, x ) hj (t, x )
+
+hi(t, x ) , j̸ = i, 
+
+where ai(t, x ) = σi(t, x )σi(t, x )⊤, and the function h satisfies 
+
+
+
+∂thi(t, x ) + bi(t, x ) · ∇ xhi(t, x ) + 12 Tr  ai(t, x )∇2
+
+> x
+
+hi(t, x )
+
++ X 
+
+> j̸=i
+
+λij (t, x ) hj (t, x ) − hi(t, x ) = 0 , (t, x, i ) ∈ [0 , T ) × Rd × I ,hi(T, x ) = ˜ g(x), x ∈ Rd, i ∈ I .
+
+Assumption 2.18. The endpoint measures ρ ∈ P (Rd × I ) and μp ∈ P (Rd) satisfy the following conditions. 1. Absolute continuity. For every i ∈ I with ¯ρ(i) > 0, the conditional law ˆρi and the measure μp are absolutely continuous with respect to Lebesgue measure on Rd.2. Compact support. The measure ρ is compactly supported on Rd × I , and μp is compactly supported on Rd.3. Talagrand T2 inequality at the observed terminal endpoint. The measure μp satisfies the Talagrand T2 inequality (14) with constant Cμp > 0.
+
+13 Assumption 2.19. Let the transition kernel of the reference process admit a density r defined by (7) . For every i ∈ I with ¯ρ(i) > 0, let the map 
+
+(x, y ) 7 −→ ¯ri(0 , x ; T, y ),
+
+defined by (20) , be of class C2 and strictly positive on 
+
+supp(ˆ ρi) × supp( μp).
+
+As above, define the projected cost by ¯ci(x, y ) := − log ¯ ri(0 , x ; T, y ).
+
+For later use, set ¯M0 := max  
+
+> i: ¯ ρ(i)>0
+
+sup 
+
+> (x,y )∈supp( ˆ ρi)×supp( μp)
+
+|¯ci(x, y )|,
+
+¯M1 := max  
+
+> i: ¯ ρ(i)>0
+
+sup 
+
+> (x,y )∈supp( ˆ ρi)×supp( μp)
+
+∥∇ ¯ci(x, y )∥,
+
+¯M2 := max  
+
+> i: ¯ ρ(i)>0
+
+sup 
+
+> (x,y )∈supp( ˆ ρi)×supp( μp)
+
+∥∇ 2 ¯ci(x, y )∥.
+
+(21) By Assumption 2.19, these constants are finite. Here ∇¯ci and ∇2 ¯ci denote the full gradient and full Hessian with respect to ( x, y ). In the static EOT formulation, it is convenient to work with the projected kernel ¯ r. Under Assump-tion 2.18, writing ρi(x) and μp(y) for the corresponding Lebesgue densities, (19) becomes ¯pi(x, y ) = ρref ,i (x)¯ ri(0 , x ; T, y )
+
+ρi(x)μp(y) .
+
+Thus, with 
+
+fi(x) := ˜fi(x) ρref ,i (x)
+
+ρi(x) , g(y) := ˜g(y)
+
+μp(y) ,
+
+the optimal projected endpoint coupling becomes 
+
+γρ,μ p 
+
+> i
+
+(d x, dy) = fi(x)¯ ri(0 , x ; T, y )g(y) ρi(d x)μp(d y), i ∈ I .
+
+Equivalently, ( fi)i∈I and g solve 
+
+
+
+1 = fi(x)
+
+Z
+
+> Rd
+
+¯ri(0 , x ; T, y )g(y) μp(d y), i ∈ I ,
+
+1 = g(y) X
+
+> i∈I
+
+Z
+
+> Rd
+
+¯ri(0 , x ; T, y )fi(x) ρi(d x).
+
+Given a strictly positive initial function g0, the projected Sinkhorn iteration is 
+
+
+
+f n+1  
+
+> i
+
+(x) = 1
+
+Z
+
+> Rd
+
+¯ri(0 , x ; T, y )gn(y) μp(d y)
+
+, i ∈ I ,gn+1 (y) = 1
+
+X
+
+> i∈I
+
+Z
+
+> Rd
+
+¯ri(0 , x ; T, y )f n+1  
+
+> i
+
+(x) ρi(d x)
+
+.
+
+(22) The associated half-step and full-step couplings are 
+
+γn+1 ,n i (d x, dy) = f n+1  
+
+> i
+
+(x)¯ ri(0 , x ; T, y )gn(y) ρi(d x)μp(d y),γn+1 ,n +1  
+
+> i
+
+(d x, dy) = f n+1  
+
+> i
+
+(x)¯ ri(0 , x ; T, y )gn+1 (y) ρi(d x)μp(d y).
+
+14 Notation for the partially observed stability estimate. Fix ρ ∈ P (Rd × I ). For any ηp ∈ P (Rd), let 
+
+γρ,η p denote the unique optimizer of the projected static EOT problem 
+
+γρ,η p ∈ argmin 
+
+> γ∈Π( ρ,η p)
+
+(
+
+H(γ | ρ ⊗ ηp) + 
+
+Z
+
+> (Rd×I )×Rd
+
+¯c(( x, i ), y ) γ(d( x, i ), dy)
+
+)
+
+,
+
+where ¯ c(( x, i ), y ) := ¯ ci(x, y ). The corresponding path-space measure is obtained by keeping the conditional law of the reference process given ( Z0, X T ) unchanged: 
+
+Qρ,η p (d ω) = P (d ω | Z0, X T ) γρ,η p (d Z0, dXT ).
+
+Equivalently, 
+
+Qρ,η p ◦ (Z0, X T )−1 = γρ,η p , Qρ,η p ( · | Z0, X T ) = P ( · | Z0, X T ).
+
+Hence, for any μp, ν p ∈ P (Rd), 
+
+H (Qρ,μ p | Qρ,ν p ) = H (γρ,μ p | γρ,ν p ) .
+
+Theorem 2.20 (Stability in relative entropy under partial terminal observation) . Let Assumptions 2.15, 2.18 and 2.19 hold for the pair (ρ, μ p). Let ¯M0, ¯M1, and ¯M2 be defined in (21) , and set 
+
+¯B := max 
+
+
+
+¯M2 + ¯M 21
+
+2 , 4 ¯M0
+
+
+
+.
+
+Then, for every νp ∈ P (Rd) such that 
+
+H(μp | νp) + H(νp | μp) < +∞,
+
+one has H (Qρ,μ p | Qρ,ν p ) = H (γρ,μ p | γρ,ν p )
+
+≤ H(μp | νp) + ¯BC μp H(νp | μp).
+
+Theorem 2.21 (Exponential convergence under partial terminal observation) . Let Assumptions 2.15, 2.18 and 2.19 hold. Let γρ,μ p be the optimal coupling of the projected static EOT problem, and let γn+1 ,n and 
+
+γn+1 ,n +1 be the half-step and full-step couplings generated by (22) . Assume that H(γρ,μ p | γ1,0) < ∞,
+
+H(γρ,μ p | γ1,1) < ∞. Then there exist constants A > 0 and θ ∈ (0 , 1) such that, for all n ≥ 0,
+
+H(γρ,μ p | γn+1 ,n ) ≤ Aθ n, H(γρ,μ p | γn+1 ,n +1 ) ≤ Aθ n.
+
+Moreover, let Qn+1 ,n and Qn+1 ,n +1 be obtained by lifting γn+1 ,n and γn+1 ,n +1 while keeping P ( · | Z0, X T )
+
+unchanged. Then 
+
+H(Qρ,μ p | Qn+1 ,n ) = H(γρ,μ p | γn+1 ,n ),
+
+H(Qρ,μ p | Qn+1 ,n +1 ) = H(γρ,μ p | γn+1 ,n +1 ).
+
+Consequently, 
+
+H(Qρ,μ p | Qn+1 ,n ) ≤ Aθ n, H(Qρ,μ p | Qn+1 ,n +1 ) ≤ Aθ n.
+
+# 3 Proofs of Theorems 2.10 and 2.12 
+
+Before entering the proof, we switch from the multiplicative Schr¨ odinger potentials used in Section 2 to their logarithmic counterparts, which are more convenient for the analysis below. Recall that the optimal coupling was written as 
+
+πρ,μ ij (dx, dy ) = fi(x)rij (0 , x ; T, y )gj (y) ρi(dx )μj (dy ). (23) where 
+
+cij (x, y ) := − log rij (0 , x ; T, y ).
+
+15 We now introduce the logarithmic potentials 
+
+φi(x) := − log fi(x), ψj (y) := − log gj (y),
+
+and similarly, for the Sinkhorn iterates, 
+
+φni (x) := − log f ni (x), ψnj (y) := − log gnj (y).
+
+With this notation, the optimal coupling can be rewritten as 
+
+πρ,μ ij (dx, dy ) = exp  −φi(x) − ψj (y) − cij (x, y )ρi(dx )μj (dy ).
+
+Likewise, the half-step and full-step Sinkhorn couplings become 
+
+πn+1 ,n ij (dx, dy ) = exp  −φn+1  
+
+> i
+
+(x) − ψnj (y) − cij (x, y )ρi(dx )μj (dy ),
+
+and 
+
+πn+1 ,n +1  
+
+> ij
+
+(dx, dy ) = exp  −φn+1  
+
+> i
+
+(x) − ψn+1  
+
+> j
+
+(y) − cij (x, y )ρi(dx )μj (dy ).
+
+In terms of these logarithmic potentials, the Sinkhorn iteration reads 
+
+φn+1  
+
+> i
+
+(x) = log 
+
+X
+
+> j∈I
+
+Z
+
+> Rd
+
+exp  −cij (x, y ) − ψnj (y) μj (d y)
+
+ , i ∈ I ,ψn+1  
+
+> j
+
+(y) = log X
+
+> i∈I
+
+Z
+
+> Rd
+
+exp  −cij (x, y ) − φn+1  
+
+> i
+
+(x) ρi(d x)
+
+!
+
+, j ∈ I .
+
+(24) Equivalently, we may write the Sinkhorn iteration directly on the product space E := Rd × I . For z =(x, i ) ∈ E and w = ( y, j ) ∈ E, set 
+
+c(z, w ) := cij (x, y ).
+
+The logarithmic Sinkhorn iteration can then be written in the compact form 
+
+φn+1 (z) = log 
+
+Z
+
+> E
+
+exp  −c(z, w ) − ψn(w) μ(dw ), z ∈ E, ψn+1 (w) = log 
+
+Z
+
+> E
+
+exp  −c(z, w ) − φn+1 (z) ρ(dz ), w ∈ E. 
+
+Both the componentwise notation and the compact notation on E will be used below, depending on which one is more convenient in each argument. To analyze the stability estimate and the properties of the Sinkhorn algorithm, we first need to study the behavior of both the optimal potentials and the potentials generated by the Sinkhorn iteration. The poten-tials are determined only up to an additive constant, whereas their oscillations are intrinsic and independent of the chosen normalization. The following lemma shows that the oscillations of both the optimal potentials and the Sinkhorn iterates are controlled by the oscillation of the cost function. For a bounded function u defined on a set A, we write osc A(u) := sup 
+
+> a,a ′∈A
+
+|u(a) − u(a′)| = sup 
+
+> a∈A
+
+u(a) − inf  
+
+> a∈A
+
+u(a).
+
+A proof of the oscillation bound for the optimal potentials is given in [27, Lemma 4.11]. Here we use the same argument and apply it to the potentials generated by the Sinkhorn iteration. 
+
+Lemma 3.1. Assume that the cost function c is bounded, with 
+
+∥c∥L∞(E×E) ≤ M. 
+
+Let (φ, ψ ) be optimal Schr¨ odinger potentials, and let (φn, ψ n)n≥0 be the Sinkhorn iterates defined above. Then the following holds: 
+
+16 1. Optimal potentials. 
+
+osc E (φ) ≤ 2M, osc E (ψ) ≤ 2M. 
+
+2. Sinkhorn iterates. For every n ≥ 0,
+
+osc E (φn+1 ) ≤ 2M, osc E (ψn+1 ) ≤ 2M. 
+
+Proof. Fix n ≥ 0, and let z1, z 2 ∈ E be such that φn+1 (z1) ≥ φn+1 (z2). Then 
+
+φn+1 (z1) − φn+1 (z2) = log 
+
+Z
+
+> E
+
+e−ψn(w)−c(z2,w ) μ(d w) − log 
+
+Z
+
+> E
+
+e−ψn(w)−c(z1,w ) μ(d w)= log 
+
+Z
+
+> E
+
+ec(z1,w )−c(z2,w )−ψn(w)−c(z1,w ) μ(d w) − log 
+
+Z
+
+> E
+
+e−ψn(w)−c(z1,w ) μ(d w)
+
+≤ sup 
+
+> w∈E
+
+ c(z1, w ) − c(z2, w )
+
+≤ sup 
+
+> w∈E
+
+c(z1, w ) − c(z2, w ) .
+
+Taking the supremum over z1, z 2 ∈ E, we obtain osc E (φn+1 ) ≤ sup 
+
+> w∈E
+
+osc E
+
+ c(·, w ) ≤ 2M. 
+
+The bound for osc E (ψn+1 ) is obtained in the same way from the other Sinkhorn update. The bounds for the optimal potentials ( φ, ψ ) are also obtained analogously from the Schr¨ odinger system. 
+
+Remark 3.2 ( C2-regularity of the potentials) . Assume moreover that c is C2 with respect to the continuous variables, and that all its first and second derivatives are bounded. By the logarithmic Sinkhorn update formula (24) and Lemma 3.1, the relevant exponential integrands and their first and second derivatives are dominated by integrable functions. Hence, by differentiation under the integral sign and the dominated convergence theorem, the Sinkhorn iterates φn, ψ n are C2 with respect to the continuous variables. The same argument applied to the limiting Schr¨ odinger system also gives the C2-regularity of the optimal potentials 
+
+φ, ψ .We follow the semiconcavity approach of Chiarini, Conforti, Greco, and Tamanini [5], who use semicon-cavity estimates for Schr¨ odinger potentials to establish stability of entropic plans and exponential convergence of Sinkhorn algorithm. We now turn to the study of stability properties of optimal couplings. The notion of semiconcavity of cost functions and potentials often turns out to be essential. We recall the definition of semiconcavity used below.A function f : Rd → R is said to be Λ-semiconcave if, for every x, y ∈ Rd,
+
+f (y) − f (x) ≤ ⟨∇ f (x), y − x⟩ + Λ2 |y − x|2.
+
+If f is C2, this condition is equivalent to the Hessian upper bound ∇2f (x) ⪯ ΛI.In the multi-regime state space E = Rd × I , a function F : E → R is said to be Λ-semiconcave if, for every regime i ∈ I , its restriction Fi(x) := F (x, i ) is Λ-semiconcave on Rd. Equivalently, when each Fi is 
+
+C2, this means that ∇2
+
+> x
+
+Fi(x) ⪯ ΛI for every x ∈ Rd and i ∈ I .
+
+Lemma 3.3. Assume that the cost function c is bounded, with ∥c∥L∞(E×E) ≤ M. Let π be the optimal coupling between ρ and μ, and let (φ, ψ ) be a pair of optimal Schr¨ odinger potentials. Assume moreover that, for every z1 ∈ E and every j ∈ I , the map 
+
+y 7 −→ c z1, (y, j ) + ψj (y)
+
+is C1 and Λ-semiconcave on Rd. Then, for μ-a.e. z2 = ( y, j ) and z′ 
+
+> 2
+
+= ( y′, j ′), one has 
+
+H π(· | z2) | π(· | z′
+
+> 2
+
+) ≤
+
+
+
+Λ2 |y − y′|2, j = j′,
+
+4M, j̸ = j′.
+
+17 Proof. By (23) and the definitions φ = − log f , ψ = − log g, and c = − log r, the optimal coupling admits the logarithmic representation. Disintegrating this representation with respect to its second marginal, we obtain that, for μ-a.e. z2 ∈ E, the conditional law of the first variable given the second one is 
+
+π(d z1 | z2) = exp  −c(z1, z 2) − φ(z1) − ψ(z2)ρ(d z1).
+
+Hence, for μ-a.e. z2, z ′ 
+
+> 2
+
+∈ E,log dπ(· | z2)dπ(· | z′
+
+> 2
+
+) (z1) = c(z1, z ′
+
+> 2
+
+) + ψ(z′
+
+> 2
+
+) − c(z1, z 2) − ψ(z2).
+
+Therefore, 
+
+H π(· | z2) | π(· | z′
+
+> 2
+
+) =
+
+Z
+
+> E
+
+c(z1, z ′
+
+> 2
+
+) + ψ(z′
+
+> 2
+
+) − c(z1, z 2) − ψ(z2)π(d z1 | z2).
+
+First suppose that j̸ = j′. Since |c| ≤ M , and since osc E (ψ) ≤ 2M by Lemma 3.1, we have 
+
+c(z1, z ′
+
+> 2
+
+) + ψ(z′
+
+> 2
+
+) − c(z1, z 2) − ψ(z2) ≤ 4M. 
+
+Thus, 
+
+H π(· | z2) | π(· | z′
+
+> 2
+
+) ≤ 4M. 
+
+Now suppose that j = j′. Write z2 = ( y, j ), z ′ 
+
+> 2
+
+= ( y′, j ). For each z1 ∈ E, define 
+
+ℓz1,j (u) := c z1, (u, j ) + ψj (u), u ∈ Rd.
+
+Then 
+
+H π(· | (y, j )) | π(· | (y′, j ))  =
+
+Z
+
+> E
+
+ℓz1,j (y′) − ℓz1,j (y)π(d z1 | (y, j )) .
+
+By Λ-semiconcavity of ℓz1,j ,
+
+ℓz1,j (y′) − ℓz1,j (y) ≤ ⟨∇ ℓz1,j (y), y ′ − y⟩ + Λ2 |y′ − y|2.
+
+Integrating with respect to π(d z1 | (y, j )), we obtain 
+
+H π(· | (y, j )) | π(· | (y′, j ))  ≤
+
+Z 
+
+> E
+
+∇ℓz1,j (y) π(d z1 | (y, j )) , y ′ − y
+
+
+
++ Λ2 |y′ − y|2.
+
+It remains to show that the linear term vanishes. The normalization identity for the conditional law gives 1 = 
+
+Z
+
+> E
+
+exp  −c(z1, (y, j )) − φ(z1) − ψj (y)ρ(d z1).
+
+Differentiating this identity with respect to y yields R 
+
+> E
+
+∇ℓz1,j (y) π(d z1 | (y, j )) = 0. Therefore, 
+
+H π(· | (y, j )) | π(· | (y′, j ))  ≤ Λ2 |y − y′|2.
+
+Combining the two cases concludes the proof. The following lemma verifies the semiconcavity condition required in the preceding lemma. 
+
+Lemma 3.4. Under Assumption 2.5, for every i, j ∈ I with ¯ρ(i)¯ ν(j) > 0, every x ∈ supp(ˆ ρi), and every 
+
+y ∈ supp(ˆ νj ), one has 
+
+∇2
+
+> y
+
+ cij (x, y ) + ψj (y) ⪯ ΛId, Λ := 2 M2 + M 21 .
+
+In particular, for every fixed i ∈ I and x ∈ supp(ˆ ρi), the map 
+
+y 7 −→ cij (x, y ) + ψj (y)
+
+is Λ-semiconcave on supp(ˆ νj ).
+
+18 Proof. Fix j ∈ I and y ∈ supp(ˆ νj ). Denote by π d( x′, i ′) | y, j  the conditional law of the first variable under π, given that the second variable is equal to ( y, j ). Note that by Assumptions 2.5 and 2.4(2) we have that ψj is twice differentiable on supp(ˆ νj ). Differentiating the logarithmic representation of ψj , we obtain 
+
+∇2 
+
+> y
+
+ψj (y) = −
+
+Z
+
+∇2 
+
+> yy
+
+ci′j (x′, y ) π d( x′, i ′) | y, j  + Cov (X′,I ′)∼π(·| y,j )
+
+ ∇y cI′j (X′, y ).
+
+Therefore, 
+
+∇2
+
+> y
+
+ cij (x, y ) + ψj (y) = ∇2 
+
+> yy
+
+cij (x, y ) −
+
+Z
+
+∇2 
+
+> yy
+
+ci′j (x′, y ) π d( x′, i ′) | y, j 
+
++ Cov (X′,I ′)∼π(·| y,j )
+
+ ∇y cI′j (X′, y ).
+
+By the definition of M2,
+
+∇2 
+
+> yy
+
+cij (x, y ) ⪯ M2Id, −
+
+Z
+
+∇2 
+
+> yy
+
+ci′j (x′, y ) π d( x′, i ′) | y, j  ⪯ M2Id.
+
+Moreover, by the definition of M1, ∇y ci′j (x′, y ) ≤ M1, hence Cov (X′,I ′)∼π(·| y,j )
+
+ ∇y cI′j (X′, y ) ⪯ M 21 Id.
+
+Combining the above estimates yields 
+
+∇2
+
+> y
+
+ cij (x, y ) + ψj (y) ⪯ (2 M2 + M 21 )Id.
+
+This proves the claim. To better compare probability distributions on the multi-regime space Rd × I , we introduce a new cost function adapted to its product structure. This cost compares points within the same regime through the usual squared Euclidean distance, while assigning a fixed unit cost to jumps between different regimes. We do not regard this function as a genuine metric, since it does not necessarily satisfy the triangle inequality. Nevertheless, it induces a natural Wasserstein-type transport cost, which will be useful in the stability estimates below. Define the cost ω on ( Rd × I )2 by 
+
+ω (x, i ), (y, j ) := |x − y|21{i=j} + 1{i̸=j}.
+
+Denote by Wω the optimal transport cost associated with the cost function ω, namely, 
+
+W 2 
+
+> ω
+
+(μ, ν ) := inf 
+
+> π∈Π( μ,ν )
+
+Z
+
+> (Rd×I )2
+
+ω(z, z ′) π(d z, dz′).
+
+For the proof of the stability estimate, we shall use the logarithmic Schr¨ odinger potentials associated with the endpoint couplings introduced in Subsection 2.2. Fix ρ ∈ P (E), and let η ∈ P (E). We denote by (φη , ψ η ) a pair of logarithmic Schr¨ odinger potentials for πρ,η , so that 
+
+πρ,η (d z1, dz2) = exp ( −c(z1, z 2) − φη (z1) − ψη (z2)) ρ(d z1)η(d z2).
+
+Lemma 3.5 (Stability) . Under the assumptions and notations of Theorem 2.10, one has 
+
+H Qρ,μ | Qρ,ν  = H πρ,μ | πρ,ν  ≤ H(μ | ν) + B W 2 
+
+> ω
+
+(μ, ν ).
+
+Proof. If H(μ | ν) = + ∞, then the claimed estimate is immediate. Hence, we may assume that 
+
+H(μ | ν) < +∞,
+
+and therefore μ ≪ ν.Denote φμ, ψμ the logarithmic Schr¨ odinger potentials corresponding to endpoints marginals ρ, μ and φν ,
+
+ψν the logarithmic Schr¨ odinger potentials corresponding to endpoints marginals ρ, ν .19 By Lemma 3.4, for every z1 = ( x, i ) ∈ supp(ˆ ρi) and every j ∈ I with ¯ ν(j) > 0, the map 
+
+y 7 −→ cij (x, y ) + ψνj (y)is Λ-semiconcave on supp(ˆ νj ) with Λ = 2 M2 + M 21 . Since |c| ≤ M0 on the relevant supports, Lemma 3.3 applied to the optimal coupling πρ,ν yields that, for every b = ( y, i ), b ′ = ( z, j ) ∈ Rd × I ,
+
+H πρ,ν (· | b) | πρ,ν (· | b′) ≤ max 
+
+ Λ2 , 4M0
+
+
+
+ω(b, b ′) = max 
+
+
+
+M2 + M 21
+
+2 , 4M0
+
+
+
+ω(b, b ′).
+
+Now let τ ∈ Π( μ, ν ) be arbitrary, and disintegrate it with respect to its first marginal: 
+
+τ (dz 2, dz ) = μ(dz 2) τ (dz | z2).
+
+Define a coupling ˜ π ∈ Π( ρ, μ ) by ˜π(dz 1, dz 2) := μ(dz 2)
+
+Z
+
+> Rd×I
+
+πρ,ν (dz 1 | z) τ (dz | z2).
+
+Its first marginal is ρ and its second marginal is μ.For η ∈ { μ, ν },
+
+πρ,η (dz 1, dz 2) = exp  −c(z1, z 2) − φη (z1) − ψη (z2) ρ(dz 1)η(dz 2).
+
+Consequently, dπ ρ,μ 
+
+dπ ρ,ν (z1, z 2) = exp  f (z1) + g(z2),
+
+where 
+
+f (z1) := φν (z1) − φμ(z1)and 
+
+g(z2) := ψν (z2) − ψμ(z2) + log dμ dν (z2).
+
+Therefore, by the EOT structure theorem, [27, Theorem 4.2(b)], applied with reference measure πρ,ν , the measure πρ,μ is the unique minimizer of 
+
+π 7 −→ H π | πρ,ν  over Π( ρ, μ ).
+
+In particular, 
+
+H πρ,μ | πρ,ν  ≤ H ˜π | πρ,ν .
+
+We now estimate the right-hand side. Since the second marginal of ˜ π is μ and the second marginal of 
+
+πρ,ν is ν, the chain rule for relative entropy gives 
+
+H ˜π | πρ,ν  = H(μ | ν) + 
+
+Z
+
+H ˜π(· | z2) | πρ,ν (· | z2) μ(dz 2).
+
+By construction, ˜π(· | z2) = 
+
+Z
+
+πρ,ν (· | z) τ (dz | z2).
+
+Using the convexity of relative entropy in its first argument, we obtain 
+
+H ˜π(· | z2) | πρ,ν (· | z2) ≤
+
+Z
+
+H πρ,ν (· | z) | πρ,ν (· | z2) τ (dz | z2).
+
+Hence, 
+
+H ˜π | πρ,ν  ≤ H(μ | ν)+
+
+Z Z 
+
+H πρ,ν (· | z) | πρ,ν (· | z2) τ (dz | z2) μ(dz 2).
+
+20 Applying the previous conditional entropy bound yields 
+
+H ˜π | πρ,ν  ≤ H(μ | ν)+ max 
+
+
+
+M2 + M 21
+
+2 , 4M0
+
+ Z 
+
+ω(z, z 2) τ (dz | z2) μ(dz 2).
+
+That is, 
+
+H ˜π | πρ,ν  ≤ H(μ | ν) + max 
+
+
+
+M2 + M 21
+
+2 , 4M0
+
+ Z 
+
+ω(z, z 2) τ (dz 2, dz ).
+
+Since τ ∈ Π( μ, ν ) was arbitrary, taking the infimum over all such couplings gives 
+
+H πρ,μ | πρ,ν  ≤ H(μ | ν) + max 
+
+
+
+M2 + M 21
+
+2 , 4M0
+
+
+
+W 2 
+
+> ω
+
+(μ, ν ).
+
+Finally, by optimality (5), both Qρ,μ and Qρ,ν have the same conditional bridge law P (· | Z0, Z T ) given the endpoints. Therefore, the chain rule for relative entropy on path space yields 
+
+H Qρ,μ | Qρ,ν  = H πρ,μ | πρ,ν 
+
++
+
+Z
+
+H P (· | z0, z T ) | P (· | z0, z T ) πρ,μ (dz 0, dz T ).
+
+The second term is zero. Thus, 
+
+H Qρ,μ | Qρ,ν  = H πρ,μ | πρ,ν .
+
+Combining this identity with the endpoint estimate above concludes the proof. In the previous theorem, we obtained a preliminary stability estimate in terms of the transportation cost 
+
+Wω . However, unlike the classical Euclidean setting, the multi-regime space Rd × I does not come with a canonical metric, and therefore the associated Wasserstein-type distance is not entirely intrinsic. The next theorem shows that, under componentwise T2 assumptions on the conditional laws, this transportation cost can be controlled by two more natural quantities, the relative entropy and the total variation distance. This provides a more convenient form of the stability estimate for the subsequent convergence analysis. 
+
+Lemma 3.6. Let μ ∈ P (Rd × I ). Assume that μ satisfies the Talagrand T2 inequality (15) with constant 
+
+Cμ > 0. Then, for every ν ∈ P (Rd × I ) such that H(ν | μ) < ∞, one has 
+
+W 2 
+
+> ω
+
+(μ, ν ) ≤ ∥ ¯μ − ¯ν∥TV + Cμ
+
+X 
+
+> i: ¯ μ(i)>0,¯ν(i)>0
+
+ ¯ν(i) ∧ ¯μ(i)H ˆνi | ˆμi
+
+
+
+≤ ∥ ¯μ − ¯ν∥TV + CμH(ν | μ).
+
+Proof. Recall that 
+
+W 2 
+
+> ω
+
+(μ, ν ) = inf 
+
+> π∈Π( μ,ν )
+
+Z
+
+ω(z, z ′) π(d z, dz′).
+
+It is therefore enough to construct a coupling between μ and ν with the required cost. We split this coupling into two parts: first, we transport as much mass as possible without changing the regime index; then, we couple the remaining mass, which necessarily has to move between different regimes. For each i ∈ I , set mi := ¯ μ(i) ∧ ¯ν(i). This is the largest amount of mass that can be coupled while remaining in regime i. For every i ∈ I such that mi > 0, let 
+
+πi ∈ Π(ˆ μi, ˆνi)be an optimal coupling for W 22 (ˆ μi, ˆνi). Thus, πi is initially a probability measure on Rd × Rd. Via the embedding (x, y ) 7 −→  (x, i ), (y, i ),
+
+21 we identify πi with a measure on ( Rd × I )2, supported on ( Rd × { i}) × (Rd × { i}). Its first and second marginals are respectively ˆ μi ⊗ δi and ˆ νi ⊗ δi, and 
+
+Z
+
+ω(z, z ′) πi(d z, dz′) = W 22 (ˆ μi, ˆνi).
+
+We define the part of the coupling which preserves the regime index by 
+
+πsame := X 
+
+> i:mi>0
+
+miπi.
+
+Its marginals are 
+
+μsame := X 
+
+> i:mi>0
+
+mi ˆμi ⊗ δi, νsame := X 
+
+> i:mi>0
+
+mi ˆνi ⊗ δi.
+
+It remains to couple the residual measures 
+
+μrem := μ − μsame , νrem := ν − νsame .
+
+Their common total mass is ∆ := 1 − X
+
+> i∈I
+
+mi = ∥¯μ − ¯ν∥TV .
+
+Moreover, for every i ∈ I , the residual masses in regime i are ¯ μ(i) − mi and ¯ ν(i) − mi, respectively. Since 
+
+mi = ¯ μ(i) ∧ ¯ν(i), at least one of these two quantities is zero. Hence, the two residual measures never charge the same regime, so any coupling of them is supported on pairs with distinct regime indices. If ∆ > 0, define 
+
+πrem := 1∆ μrem ⊗ νrem ;otherwise, set πrem := 0. Then πrem is a coupling of μrem and νrem , supported on pairs with distinct regime indices. Therefore, Z
+
+ω(z, z ′) πrem (d z, dz′) = ∆ .
+
+Finally, let π := πsame + πrem . By construction, π ∈ Π( μ, ν ). Hence, 
+
+W 2 
+
+> ω
+
+(μ, ν ) ≤
+
+Z
+
+ω(z, z ′) π(d z, dz′)= X 
+
+> i:mi>0
+
+miW 22 (ˆ μi, ˆνi) + ∥¯μ − ¯ν∥TV 
+
+≤ ∥ ¯μ − ¯ν∥TV + Cμ
+
+X 
+
+> i:mi>0
+
+miH(ˆ νi | ˆμi).
+
+Since H(ν | μ) < ∞, one has ¯ ν ≪ ¯μ. The entropy chain rule gives 
+
+H(ν | μ) = H(¯ ν | ¯μ) + X
+
+> i: ¯ ν(i)>0
+
+¯ν(i)H(ˆ νi | ˆμi).
+
+Since mi ≤ ¯ν(i) and relative entropy is nonnegative, 
+
+X 
+
+> i:mi>0
+
+miH(ˆ νi | ˆμi) ≤ H(ν | μ).
+
+Combining the preceding estimates concludes the proof. 
+
+Proof of Theorem 2.10. By Lemma 3.5, with B = max 
+
+n
+
+M2 + M 21 
+
+> 2
+
+, 4M0
+
+o
+
+we have 
+
+H(Qρ,μ | Qρ,ν ) = H(πρ,μ | πρ,ν ) ≤ H(μ | ν) + BW 2 
+
+> ω
+
+(μ, ν ).
+
+22 Moreover, Lemma 3.6 yields 
+
+W 2 
+
+> ω
+
+(μ, ν ) ≤ CμH(ν | μ) + ∥¯μ − ¯ν∥TV .
+
+Combining the two estimates yields 
+
+H(Qρ,μ | Qρ,ν ) = H(πρ,μ | πρ,ν ) ≤ H(μ | ν) + BC μH(ν | μ) + B∥¯μ − ¯ν∥TV .
+
+Finally, since ∥¯μ − ¯ν∥TV ≤ ∥ μ − ν∥TV , the last bound in the statement follows. For later convenience, we recall the following result of [10, Theorem 1.2], using notation adapted to our setting. It provides the exponential convergence of the Sinkhorn iterates in total variation. Its proof relies on the contraction properties of the Sinkhorn maps in Hilbert’s projective metric. 
+
+Theorem 3.7 (Exponential convergence of Sinkhorn iterates in total variation, [10]) . Let (E, d E ) be a Polish space, and let ρ, μ ∈ P (E). Consider the entropic optimal transport problem on E × E with cost function 
+
+c : E × E → R. Assume that there exist p > 0 and δ > 0 such that 
+
+lim 
+
+> r→∞
+
+sup x,y ∈Br c(x, y )
+
+rp = 0 
+
+and 
+
+lim 
+
+> r→∞
+
+max {ρ(E \ Br ), μ (E \ Br )}
+
+exp( −rp+δ ) = 0 ,
+
+where Br denotes the ball of radius r in E with respect to dE . Let (πn,n , π n+1 ,n )n∈N be the sequence of couplings generated by Sinkhorn algorithm. Then there exist an optimal coupling πρ,μ , a constant A > 0,and a constant κ ∈ (0 , 1) such that, for all n ∈ N,
+
+∥πn,n − πρ,μ ∥T V ≤ Aκ n, ∥πn+1 ,n − πρ,μ ∥T V ≤ Aκ n.
+
+Corollary 3.8. In our setting, E = Rd × I , the cost function c is defined on (Rd × I )2 and marginals ρ
+
+and μ have compact support. Since only the restriction of c to supp( ρ) × supp( μ) is relevant for the EOT problem, one may, without loss of generality, assume that c vanishes outside a compact subset of (Rd × I )2.Then the assumptions of Theorem 3.7 are satisfied. 
+
+Corollary 3.9. The marginals defined in (11) converge exponentially fast in total variation. More precisely, for all n ∈ N,
+
+∥ρn,n − ρ∥T V ≤ Aκ n, ∥μn+1 ,n − μ∥T V ≤ Aκ n.
+
+To handle the recursion (25) obtained in the proof of Theorem 2.12, we first record the following elemen-tary estimate. 
+
+Lemma 3.10 (Elementary recursion estimate) . Let (an)n≥0 be a sequence of nonnegative real numbers. Assume that there exist constants A, α ∈ (0 , 1) and D ≥ 0 such that, for every n ≥ 1,
+
+an ≤ Aa n−1 + Dα n.
+
+Then there exist constants C > 0 and θ ∈ (0 , 1) such that 
+
+an ≤ Cθ n, n ≥ 0.
+
+More precisely, one may take θ = A if α < A , θ = α if α > A , and any θ ∈ (A, 1) if α = A.Proof. Dividing the recursion by An, we obtain 
+
+an
+
+An ≤ an−1
+
+An−1 + D
+
+ αA
+
+n
+
+.
+
+23 Hence 
+
+an
+
+An ≤ a0 + D
+
+> n
+
+X
+
+> k=1
+
+ αA
+
+k
+
+=
+
+
+
+a0 + D αA
+
+1 −   αA
+
+n
+
+1 − αA
+
+, α < A, a0 + Dn, α = A, a0 + D αA
+
+  αA
+
+n − 1 
+
+> αA
+
+− 1 , α > A. 
+
+Consequently, 
+
+an ≤
+
+
+
+a0 + D
+
+> αA
+
+1 − αA
+
+
+
+An ≤ CA n, α < A, 
+
+(a0 + Dn )An ≤ C(A + ε)n, α = A, 0 < ε < 1 − A, a0An + D α(αn − An)
+
+α − A ≤ Cα n, α > A. 
+
+Thus an decays exponentially in all cases. 
+
+Proof of Theorem 2.12. Set 
+
+an := H(πρ,μ | πn+1 ,n ).
+
+By the entropy identities for the Sinkhorn projections, see [27, Proposition 6.5], 
+
+an − an−1 = H(πρ,μ | πn+1 ,n ) − H(πρ,μ | πn,n −1)= −H(ρ | ρn,n ) − H(μ | μn,n −1).
+
+Equivalently, 
+
+an−1 − an = H(ρ | ρn,n ) + H(μ | μn,n −1).
+
+Since πn+1 ,n = πρ,μ n+1 ,n 
+
+, applying Theorem 2.10 with ν = μn+1 ,n , we obtain 
+
+an = H(πρ,μ | πρ,μ n+1 ,n 
+
+) ≤ H(μ | μn+1 ,n ) + BC μH(μn+1 ,n | μ) + B∥μn+1 ,n − μ∥TV .
+
+where Cμ is the Talagrand constant in (15) for μ. By Sinkhorn monotonicity inequalities, see [27, Proposition 6.10], 
+
+H(μ | μn+1 ,n ) ≤ H(μ | μn,n −1),H(μn+1 ,n | μ) ≤ H(ρ | ρn,n ).
+
+Moreover, by Corollary 3.9, there exist constants ATV > 0 and κ ∈ (0 , 1) such that 
+
+∥μn+1 ,n − μ∥TV ≤ ATV κn.
+
+Therefore, with 
+
+Cst := max {1, BC μ},
+
+we obtain an ≤ Cst 
+
+ H(ρ | ρn,n ) + H(μ | μn,n −1) + BA TV κn
+
+= Cst (an−1 − an) + BA TV κn.
+
+Hence 
+
+an ≤ Cst 
+
+1 + Cst 
+
+an−1 + BA TV 
+
+1 + Cst 
+
+κn. (25) Applying Lemma 3.10 to (25), with A = Cst  
+
+> 1+ Cst
+
+, D = BA TV  
+
+> 1+ Cst
+
+, and α = κ, yields constants C > 0 and θ ∈ (0 , 1) such that 
+
+H πρ,μ | πn+1 ,n  = an ≤ Cθ n.
+
+Finally, by the entropy monotonicity along the second Sinkhorn projection, see [27, Proposition 6.5], 
+
+H πρ,μ | πn+1 ,n +1  ≤ H πρ,μ | πn+1 ,n .
+
+Therefore, 
+
+H πρ,μ | πn+1 ,n +1  ≤ Cθ n.
+
+24 4 Proofs of Theorems 2.16, 2.20 and 2.21 
+
+The partially observed Schr¨ odinger bridge problem in (2) is obtained by projecting the terminal endpoint (XT , I T ) onto its continuous component XT . The following lemma shows that this can be done in a general framework and under mild assumptions. 
+
+Lemma 4.1 (EOT with partial observations) . Let X, Y, X ′, Y ′ be Borel spaces, and let F : X → X′ and 
+
+G : Y → Y ′ be measurable maps. Define 
+
+T := F ⊗ G : X × Y → X′ × Y ′, T (x, y ) = ( F (x), G (y)) .
+
+Let R ∈ P (X × Y ) and R′ := T#R ∈ P (X′ × Y ′). Given μ ∈ P (X′) and ν ∈ P (Y ′), consider 
+
+inf H(π | R) : π ∈ P (X × Y ), T #π ∈ Π( μ, ν ) and inf  
+
+> γ∈Π( μ,ν )
+
+H(γ | R′).
+
+Assume that the right-hand problem admits a minimizer γ∗ ∈ Π( μ, ν ) and that there exist measurable functions f : X′ → R ∪ {−∞} and g : Y ′ → R ∪ {−∞} such that 
+
+dγ∗
+
+dR′ (x′, y ′) = exp  f (x′) + g(y′).
+
+Then the left-hand problem admits a minimizer π∗ ∈ P (X × Y ) satisfying T#π∗ = γ∗ and H(π∗ | R) = 
+
+H(γ∗ | R′). Moreover, π∗ admits the representation 
+
+dπ∗
+
+dR (x, y ) = exp  f (F (x)) + g(G(y)) .
+
+Proof. All Radon–Nikodym identities below are understood almost everywhere with respect to the corre-sponding reference measure, and we use the convention 0 log 0 = 0. Set 
+
+h(x′, y ′) := exp  f (x′) + g(y′).
+
+By assumption, dγ ∗
+
+dR ′ = h. 
+
+Define π∗ ∈ P (X × Y ) by 
+
+dπ ∗
+
+dR (x, y ) := h T (x, y ) = exp  f (F (x)) + g(G(y)) .
+
+Since R′ = T#R, we have for every bounded measurable function ϕ : X′ × Y ′ → R,
+
+Z
+
+ϕ(T )dπ ∗ =
+
+Z
+
+ϕ(T )h(T )dR =
+
+Z
+
+ϕhdR ′ =
+
+Z
+
+ϕdγ ∗.
+
+Therefore, 
+
+T#π∗ = γ∗ ∈ Π( μ, ν ),
+
+and thus π∗ is feasible for the left-hand problem. Now let π ∈ P (X × Y ) be any feasible competitor for the left-hand problem. Since T#π ∈ Π( μ, ν ), the optimality of γ∗ and the data-processing inequality for relative entropy yield 
+
+H(π | R) ≥ H(T#π | T#R)= H(T#π | R′)
+
+≥ H(γ∗ | R′).
+
+25 On the other hand, using again R′ = T#R, we obtain 
+
+H(π∗ | R) = 
+
+Z
+
+> X×Y
+
+h ◦ T log( h ◦ T ) dR 
+
+=
+
+Z 
+
+> X′×Y′
+
+h log h dR ′
+
+= H(γ∗ | R′).
+
+Consequently, π∗ attains the infimum in the left-hand problem and 
+
+H(π∗ | R) = H(γ∗ | R′).
+
+The asserted representation of π∗ follows directly from its definition. As in the fully observed case, the entropy decomposition (3) reduces the dynamic problem to an opti-mization over the endpoint law. We then apply Lemma 4.1 to obtain the factorization in terms of f and g,from which the remaining assertions follow. 
+
+Proof of Theorem 2.16. We apply Lemma 4.1. Set 
+
+X = Y = Rd × I , X′ = Rd × I , Y ′ = Rd.
+
+Let 
+
+F = id Rd×I , G : Rd × I → Rd, G(y, j ) = y. 
+
+Taking R = P0,T , its push-forward is 
+
+R′ := T#P0,T = P 0,T .
+
+Hence the projected static problem is inf  
+
+> γ∈Π( ρ,μ p)
+
+H(γ | P 0,T ).
+
+By the classical entropic optimal transport result ([27, Theorem 2.1]), this problem admits a unique optimizer 
+
+γρ,μ p , and there exist nonnegative Schr¨ odinger potentials ( fi)i∈I and g such that dγρ,μ p
+
+dR′ (( x, i ), y ) = fi(x)g(y).
+
+Consequently, Lemma 4.1 yields an optimizer πρ,μ p for the partially observed endpoint problem (18), satis-fying 
+
+T#πρ,μ p = γρ,μ p
+
+and dπρ,μ p
+
+dP0,T 
+
+ (x, i ), (y, j ) = fi(x)g(y).
+
+We first prove Theorem 2.21, since it follows directly by embedding the partially observed problem into a fully observed EOT problem. The proof of Theorem 2.20 uses the same embedding but requires an additional argument to obtain the sharper estimate, and is therefore postponed. 
+
+Proof of Theorem 2.21. We prove the result by embedding the partially observed EOT problem into a fully observed EOT problem on an extended state space. Under this embedding, the partially observed problem becomes a particular case of the fully observed setting, and its Sinkhorn iterates coincide with the standard Sinkhorn iterates for the extended problem. The conclusion therefore follows directly from Theorem 2.12. Our current EOT problem is defined on the following spaces 
+
+X := Rd × I , Y := Rd,
+
+26 with the cost function ¯c : ( Rd × I ) × Rd −→ R
+
+and the marginal distributions 
+
+ρ ∈ P (Rd × I ) and μp ∈ P (Rd).
+
+To reduce it to the framework of the previous theorem, we define 
+
+Xext := Rd × I , Yext := Rd × I .
+
+Next define the extended terminal marginal μext p ∈ P (Rd × I ) by 
+
+μext p (A × { 1}) := μp(A), A ⊂ Rd,
+
+and 
+
+μext p
+
+ Rd × { 2, . . . , m } := 0 .
+
+Define the extended cost 
+
+cext : Xext × Yext −→ R
+
+by 
+
+cext 
+
+ (x, i ), (y, j ) := 
+
+(
+
+¯ci(x, y ), j = 1 ,
+
+0, j̸ = 1 .
+
+The value of cext on the set {j̸ = 1 } is irrelevant for the extended EOT problem. Indeed, the extended terminal marginal μext p is concentrated on Rd × { 1}, hence every admissible coupling is supported on Xext ×
+
+ Rd × { 1} Therefore only the values of cext with j = 1 enter the objective, and the choice cext = 0 for j̸ = 1 is only a convenient convention. Let πext be an optimal coupling for the EOT problem with marginals ρ and μext p and cost cext . Since 
+
+μext p is concentrated on Rd × { 1}, πext is necessarily supported on Xext × (Rd × { 1}). It therefore induces a coupling π ∈ Π( ρ, μ p) through 
+
+π d(x, i ), dy  = πext  d(x, i ), d (y, 1) .
+
+This coupling is optimal for the partially observed EOT problem. Conversely, every optimal coupling for the partially observed problem gives rise, through this embedding, to an optimal coupling for the extended problem. Thus the partially observed EOT problem on ( Rd × I ) × Rd is exactly equivalent to the standard EOT problem on Xext × Yext = ( Rd × I ) × (Rd × I ) with marginals ρ and μext p , and with cost cext .In view of the above transformations, Theorem 2.21 follows directly as a corollary of Theorem 2.12. 
+
+Proof of Theorem 2.20. The proof continues to employ the state-space extension method introduced in Proof of Theorem 2.21. That is, the partial observation problem is treated as a full observation problem by extending the terminal marginals μp, ν p ∈ P (Rd) to the product space Rd × I , and concentrating all their mass on the first regime. Denote the resulting extensions by μext p and νext p . Their discrete marginals satisfy 
+
+μext p = νext p = (1 , 0, . . . , 0) .
+
+Consequently, 
+
+μext p − νext p TV 
+
+= 0 .
+
+This highlights a key distinction from the full observation case. In the full observation setting, Theorem 2.10 provides a stability estimate involving the Total Variation (TV) distance of the discrete marginals. However, in the current partial observation setting, this TV term vanishes automatically because both extended terminal marginals are concentrated solely on the first regime. 
+
+Remark 4.2 . Removing the TV term merely provides a more refined stability estimate and does not alter the ultimate conclusion of exponential convergence for the relative entropy. This is because, in the case of full observation, the TV term itself exhibits exponential decay—as established in Corollary 3.9. However, it should be noted that while the property of exponential convergence remains unchanged, the specific convergence rate may be affected. 27 A Proof of Regularity of the Reference Process Density 
+
+In this appendix, we justify the regularity claim used in Example 2.9. Under the constant-coefficient setting considered there, the reference process satisfies dXt = bIt dt + σIt dWt, X0 = x, I0 = i, (26) where σi > 0 for each i ∈ I . In this case, ( It)t∈[0 ,T ] is a continuous-time Markov chain on I with strictly positive constant transition rates ( λij )i,j ∈I .Recall that rij (0 , x ; T, y ) denotes the transition density of the reference process, namely, 
+
+P XT ∈ dy, I T = j | X0 = x, I 0 = i = rij (0 , x ; T, y ) d y. 
+
+We prove the following theorem. 
+
+Theorem A.1. For every T > 0 and every i, j ∈ I , the transition density 
+
+rij (0 , x ; T, y )
+
+is strictly positive and of class C2 with respect to (x, y ) on Rd × Rd.
+
+Note that the transition density rij (0 , x ; T, y ) can be seen as the density of the law of the process (26) at time T and point ( y, j ). A more precise meaning of this interpretation is given after Lemma A.2. We shall treat the reference SDE (26) by a smoothing argument on the initial distribution. Therefore, besides the transition density starting from a fixed point X0 = x, I 0 = i, we also consider the same dynamics with a more general initial distribution μ0. More precisely, we consider 
+
+(
+
+dXt = bIt dt + σIt dWt,
+
+(X0, I 0) ∼ μ0, (27) where ( X0, I 0) is independent of W , and I evolves with the same constant transition rates ( λij )i,j ∈I .For each i ∈ I , we denote by μit the i-th regime component of the law of Xt, namely 
+
+μit(A) := Pμ0 (Xt ∈ A, I t = i), A ∈ B (Rd). (28) First, we prove that the solution to the above SDE (27) admits a density with respect to the Lebesgue measure, and that this density has a bound. It is worth noting that the bound obtained here does not depend on the initial measure, nor does it require any smoothness of the initial measure. This boundedness will be used in the PDE regularity estimate in Theorems A.7 and A.9, in order to obtain improved regularity. 
+
+Lemma A.2. Consider the process defined by the SDE (27) with μ0 ∈ P (Rd). Set 
+
+a := min  
+
+> i∈I
+
+σ2 
+
+> i
+
+> 0.
+
+Then, for every t > 0 and every i ∈ I , the measure μit is absolutely continuous with respect to the Lebesgue measure. If pit denotes its density, then 
+
+0 ≤ pit(y) ≤ (2 πat )−d/ 2, y ∈ Rd, i ∈ I .
+
+Proof. Fix t > 0 and i ∈ I , and set Gt := σ(X0, (Is)0≤s≤t). Conditionally on Gt, one has 
+
+Xt = X0 +
+
+Z t
+
+> 0
+
+bIs ds +
+
+Z t
+
+> 0
+
+σIs dWs.
+
+Hence Xt is conditionally Gaussian with mean mt := X0 + R t 
+
+> 0
+
+bIs ds and covariance matrix vtId, where 
+
+vt := R t 
+
+> 0
+
+σ2 
+
+> Is
+
+ds. Since vt ≥ at , its conditional density qt satisfies 0 ≤ qt(y) ≤ (2 πat )−d/ 2 for all y ∈ Rd.28 Let A ∈ B (Rd). By the tower property, 
+
+μit(A) = Eμ0
+
+1{It=i}Pμ0 (Xt ∈ A | G t) = Eμ0
+
+
+
+1{It=i}
+
+Z
+
+> A
+
+qt(y) d y
+
+
+
+.
+
+By Fubini’s theorem, 
+
+μit(A) = 
+
+Z
+
+> A
+
+Eμ0
+
+1{It=i}qt(y) dy. 
+
+Therefore μit is absolutely continuous with density pit(y) := Eμ0 [1{It=i}qt(y)]. Moreover, 0 ≤ pit(y) ≤ (2 πat )−d/ 2, y ∈ Rd.
+
+This proves the claim. 
+
+Remark A.3 . Note that the transition density in Theorem A.1 is given by rij (0 , x ; T, y ) = pjT (y) for μ0 =
+
+δx ⊗ δi and p being the density defined by Lemma A.2. For measure-valued solutions, the evolution equation must first be interpreted in a suitable weak sense. Although the Fokker–Planck system of the regime-switching SDE holds distributionally, we shall use the dis-tributional Duhamel formulation defined below. This formulation combines the distributional and Duhamel viewpoints, and is more convenient for the uniqueness and convergence argument used later in Lemma A.11. 
+
+Proposition A.4 (Distributional Duhamel formula) . For each regime i ∈ I , define the frozen-regime gen-erator Li by 
+
+Liϕ(x) := bi · ∇ ϕ(x) + σ2
+
+> i
+
+2 ∆ϕ(x), ϕ ∈ C∞ 
+
+> c
+
+(Rd).
+
+Let (P it )t≥0 be the Markov semigroup generated by Li. For each i ∈ I , we use the component marginal μit
+
+defined in (28) for μ0 ∈ P (Rd).Then, for every t ≥ 0, every ϕ ∈ C∞ 
+
+> c
+
+(Rd), and every i ∈ I , one has 
+
+⟨μit, ϕ ⟩ = ⟨μi
+
+> 0
+
+, P it ϕ⟩ +
+
+Z t
+
+> 0
+
+− X 
+
+> j̸=i
+
+λij ⟨μis, P it−sϕ⟩ + X 
+
+> k̸=i
+
+λki ⟨μks , P it−sϕ⟩
+
+ ds. (29) 
+
+Proof. Fix t > 0, i ∈ I , and ϕ ∈ C∞ 
+
+> c
+
+(Rd). Set ui(s, x ) := P it−sϕ(x) for 0 ≤ s ≤ t. Then ui solves the backward equation ∂sui + Liui = 0 with terminal condition ui(t, ·) = ϕ.For k̸ = ℓ, let N kℓ t := P 
+
+> 0<s ≤t
+
+1{Is−=k, I s=ℓ} be the counting process of jumps from k to ℓ. Since the transition rates are constant, eN kℓ t := N kℓ t − R t 
+
+> 0
+
+λkℓ 1{Is−=k} ds is a martingale. We apply Itˆ o’s formula with jumps to Zis := 1{Is=i}ui(s, X s). The backward equation cancels the continuous diffusion part. Taking expectations, the martingale terms vanish, and the compensators of the jump counting processes give 
+
+E1{It=i}ϕ(Xt) = E1{I0=i}P it ϕ(X0)
+
++
+
+Z t
+
+> 0
+
+− X 
+
+> j̸=i
+
+λij E1{Is=i}P it−sϕ(Xs) + X 
+
+> k̸=i
+
+λki E1{Is=k}P it−sϕ(Xs) ds. 
+
+Finally, using ⟨μks , ψ ⟩ = E[1{Is=k}ψ(Xs)], this identity becomes exactly the desired distributional Duhamel formula. We next prove uniqueness for the distributional Duhamel system. This will allow us to identify any limiting measure-valued evolution obtained from the smoothed approximations. 
+
+Theorem A.5 (Uniqueness for the distributional Duhamel system) . Let T > 0. Let (μit)t∈[0 ,T ], i ∈I and 
+
+(eμit)t∈[0 ,T ], i ∈I be two families of finite nonnegative Borel measures on Rd. Assume that both families satisfy the distributional Duhamel formula (29) with the same initial data, namely 
+
+μi 
+
+> 0
+
+= eμi
+
+> 0
+
+, i ∈ I .
+
+29 Assume moreover that 
+
+sup  
+
+> t∈[0 ,T ]
+
+X
+
+> i∈I
+
+ μit(Rd) + eμit(Rd) < ∞.
+
+Then, for every t ∈ [0 , T ] and every i ∈ I ,
+
+μit = eμit.
+
+In particular, the distributional Duhamel system admits at most one solution in this class. Proof. Set ∆ it := μit − eμit. Since the two families have the same initial data, subtracting the two Duhamel formulas gives, for every admissible test function ϕ,
+
+⟨∆it, ϕ ⟩ =
+
+Z t
+
+> 0
+
+− X 
+
+> j̸=i
+
+λij ⟨∆is, P it−sϕ⟩ + X 
+
+> k̸=i
+
+λki ⟨∆ks , P it−sϕ⟩
+
+ ds. 
+
+Since P it is a Markov semigroup, it is a contraction in the sup norm. Hence, for ∥ϕ∥∞ ≤ 1, 
+
+|⟨ ∆it, ϕ ⟩| ≤ 
+
+Z t
+
+> 0
+
+X 
+
+> j̸=i
+
+λij ∥∆is∥TV + X 
+
+> k̸=i
+
+λki ∥∆ks ∥TV 
+
+ ds. 
+
+Taking the supremum over ∥ϕ∥∞ ≤ 1, we obtain 
+
+∥∆it∥TV ≤
+
+Z t
+
+> 0
+
+X 
+
+> j̸=i
+
+λij ∥∆is∥TV + X 
+
+> k̸=i
+
+λki ∥∆ks ∥TV 
+
+ ds. 
+
+Let 
+
+D(t) := X
+
+> i∈I
+
+∥∆it∥TV , Λ := max 
+
+> i∈I
+
+X 
+
+> j̸=i
+
+λij .
+
+Summing the previous inequality over i ∈ I yields 
+
+D(t) ≤ 2Λ 
+
+Z t
+
+> 0
+
+D(s) d s. 
+
+By Gronwall’s lemma, D(t) = 0 for every t ∈ [0 , T ]. Therefore ∆ it = 0 for every t ∈ [0 , T ] and every i ∈ I ,namely μit = eμit. This proves uniqueness. We next define the smoothing procedure precisely and record the PDE system satisfied by the corre-sponding densities. 
+
+Definition A.6 (Smoothed approximation of the initial Dirac mass) . Fix an initial point (x, i ) ∈ Rd × I 
+
+and let ε > 0. We define the smoothed initial distribution με 
+
+> 0
+
+∈ P (Rd × I ) by smoothing only the continuous component and keeping the initial regime fixed. More precisely, 
+
+με
+
+> 0
+
+(d z, {k}) = 1{k=i}(2 πε )−d/ 2 exp 
+
+
+
+− |z − x|2
+
+2ε
+
+
+
+dz, k ∈ I .
+
+Let (Xεt , I εt )t≥0 be the solution of the same regime-switching SDE with initial distribution με
+
+> 0
+
+, namely 
+
+(
+
+dXεt = bIεt dt + σIεt dWt,
+
+(Xε 
+
+> 0
+
+, I ε 
+
+> 0
+
+) ∼ με
+
+> 0
+
+,
+
+where (Xε 
+
+> 0
+
+, I ε 
+
+> 0
+
+) is independent of W , and Iε evolves with the same constant transition rates (λkl )k,l ∈I .For each k ∈ I , define the regime-wise marginal measure 
+
+με,k t (A) := P(Xεt ∈ A, I εt = k), A ∈ B (Rd).
+
+30 By Lemma A.2, for every t > 0, the measure με,k t admits a density pε,k t with respect to the Lebesgue measure, namely 
+
+με,k t (d z) = pε,k t (z) d z. 
+
+Moreover, 
+
+0 ≤ pε,k t (z) ≤ (2 πat )−d/ 2, t > 0, z ∈ Rd, k ∈ I .
+
+The initial data are given by 
+
+pε,k  
+
+> 0
+
+(z) = 1{k=i}(2 πε )−d/ 2 exp 
+
+
+
+− |z − x|2
+
+2ε
+
+
+
+, k ∈ I .
+
+For t > 0, the density vector pε = ( pε,k )k∈I satisfies the forward system 
+
+∂tpε,k t = −bk · ∇ pε,k t + σ2
+
+> k
+
+2 ∆pε,k t − X 
+
+> l̸=k
+
+λkl pε,k t + X 
+
+> l̸=k
+
+λlk pε,l t , k ∈ I . (30) Although pε = ( pε,k )k∈I solves a coupled forward system (30), we analyze it component by component. For each fixed k ∈ I , the k-th equation can be rewritten as the scalar parabolic equation 
+
+∂tpε,k t + bk · ∇ pε,k t − σ2
+
+> k
+
+2 ∆pε,k t = f ε,k t ,
+
+where 
+
+f ε,k t := − X
+
+> ℓ̸=k
+
+λkℓ pε,k t + X
+
+> ℓ̸=k
+
+λℓk pε,ℓ t .
+
+This reformulation allows us to bootstrap the regularity of pε. Lemma A.2 gives uniform L∞ bounds on 
+
+pε,k , hence f ε,k is uniformly bounded. Interior parabolic Lp estimates, together with the parabolic Sobolev– H¨ older embedding, yield H¨ older regularity of pε,k . Hence f ε,k is H¨ older continuous as well. Applying the Schauder estimate to the scalar equation gives C1+ α/ 2,2+ α 
+
+> loc
+
+regularity of pε,k . Doing this for each k ∈ I gives the desired regularity of pε.The following interior parabolic Lp regularity estimate is adapted from [23, Theorem 7.22]. 
+
+Theorem A.7 (Interior parabolic Lp regularity estimate) . Assume that u satisfies 
+
+∂tu + b · ∇ u − σ2
+
+2 ∆u = f in (τ − δ, T + δ) × BR,
+
+and that u is smooth. Then 
+
+∥∂tu∥Lp(( τ,T )×BR/ 2)+∥∇ u∥Lp(( τ,T )×BR/ 2)+∥D2
+
+> x
+
+u∥Lp(( τ,T )×BR/ 2) ≤ C
+
+
+
+∥f ∥Lp(( τ −δ,T +δ)×BR)+∥u∥Lp(( τ −δ,T +δ)×BR)
+
+
+
+,
+
+where b ∈ Rd and σ̸ = 0 are constants, and C = C(p, τ, T, R, δ, b, σ ).
+
+We recall the following parabolic Sobolev–H¨ older embedding, which follows from [21, Chapter II, Lemma 3.3] by taking l=1 and r=s=0. 
+
+Theorem A.8 (Parabolic Sobolev–H¨ older embedding) . Let n ≥ 1, 1 < q < ∞, q > n+2 2 , and 0 < α < 
+
+2 − n+2  
+
+> q
+
+. Then 
+
+W 2,1
+
+> q
+
+ [τ, T ] × BR
+
+ ,→ Cα,α/ 2 [τ, T ] × BR
+
+.
+
+More precisely, there exists a constant C = C(n, q, α, R, τ, T ) > 0 such that, for every 
+
+u ∈ W 2,1
+
+> q
+
+ [τ, T ] × BR
+
+,
+
+one has 
+
+∥u∥Cα,α/ 2
+
+ [τ,T ]×BR
+
+ ≤ C ∥u∥W 2,1
+
+> q
+
+ [τ,T ]×BR
+
+.
+
+31 The following interior parabolic Schauder estimate is adapted from [20, Ch. 8]. 
+
+Theorem A.9 (Interior parabolic Schauder estimate) . Let α ∈ (0 , 1) . Suppose u satisfies 
+
+∂tu + b · ∇ u − σ2
+
+2 ∆u = f in (0 , T ) × BR,
+
+where b ∈ Rn and σ > 0 are constants. If 
+
+f ∈ Cα/ 2,α ((0 , T ) × BR),
+
+then 
+
+∥u∥C 1+ α/ 2,2+ α((0 ,T )×BR/ 2) ≤ C
+
+
+
+∥f ∥Cα/ 2,α ((0 ,T )×BR) + ∥u∥L∞((0 ,T )×BR)
+
+
+
+,
+
+for some constant C = C(n, α, σ, b, R, T ).
+
+The above estimates ensure that, up to extracting a subsequence, pε admits a C1,2 limit. 
+
+Lemma A.10. Let 0 < τ < T , R > 0, and α ∈ (0 , 1) . Then there exists a constant C = C(τ, T, R, α ) > 0,independent of ε, such that for every k ∈ I ,
+
+∥pε,k ∥C1+ α/ 2, 2+ α([ τ,T ]×BR) ≤ C. 
+
+Consequently, for every sequence εn ↓ 0, there exist a subsequence, still denoted by εn, and functions (pk)k∈I 
+
+such that, for every k ∈ I ,
+
+pεn,k −→ pk in C1,2loc 
+
+ (0 , T ] × Rd.
+
+In particular, 
+
+pk ∈ C1,2 (0 , T ] × Rd, k ∈ I .
+
+Proof. Fix 0 < τ < T and R > 0. By Lemma A.2, for every t > 0, z ∈ Rd, and k ∈ I ,0 ≤ pε,k t (z) ≤ (2 πat )−d/ 2.
+
+Hence the family ( pε,k )ε> 0, k ∈I is uniformly bounded on [ τ / 2, T ] × Rd.Moreover, by Definition A.6, the vector pε = ( pε,k )k∈I solves the linear constant-coefficient forward system 
+
+∂tpε,k t = −bk · ∇ pε,k t + σ2
+
+> k
+
+2 ∆pε,k t − X 
+
+> l̸=k
+
+λkl pε,k t + X 
+
+> l̸=k
+
+λlk pε,l t , k ∈ I .
+
+The coupling terms are therefore uniformly bounded on [ τ / 2, T ] × Rd. Applying Theorems A.7, A.8 and A.9 to this system gives, for each k ∈ I , a constant C = C(τ, T, R, α ) > 0, independent of ε, such that 
+
+∥pε,k ∥C1+ α/ 2, 2+ α([ τ,T ]×BR) ≤ C. 
+
+In particular, the functions pε,k , together with their first time derivatives and first and second spatial derivatives, are uniformly bounded and equicontinuous on [ τ, T ] × BR.By the Arzel` a–Ascoli theorem, a diagonal extraction yields a subsequence, denoted by εn, and functions (pk)k∈I such that, for every k ∈ I ,
+
+pεn,k −→ pk in C1,2loc ((0 , T ] × Rd).
+
+Consequently, 
+
+pk ∈ C1,2((0 , T ] × Rd), k ∈ I .
+
+We have obtained a limit from the smoothed approximations. We now show that this limit still satisfies the distributional Duhamel formula. 32 Lemma A.11. Let (pi)i∈I be the limit obtained in the Lemma A.10, and for each t ∈ (0 , T ] define 
+
+μit(d x) := pit(x) d x, i ∈ I .
+
+Together with the prescribed initial measures (μi
+
+> 0
+
+)i∈I , the family (μit)t∈[0 ,T ], i ∈I satisfies the distributional Duhamel system. More precisely, for every t ∈ [0 , T ], every ϕ ∈ C∞ 
+
+> c
+
+(Rd), and every i ∈ I ,
+
+⟨μit, ϕ ⟩ = ⟨μi
+
+> 0
+
+, P it ϕ⟩ +
+
+Z t
+
+> 0
+
+− X 
+
+> j̸=i
+
+λij ⟨μis, P it−sϕ⟩ + X 
+
+> k̸=i
+
+λki ⟨μks , P it−sϕ⟩
+
+ ds. 
+
+Proof. For every ε > 0, the family ( με,i t )i∈I associated with the smoothed approximation satisfies the distri-butional Duhamel formula. Hence, for every t ∈ [0 , T ], every ϕ ∈ C∞ 
+
+> c
+
+(Rd), and every i ∈ I ,
+
+⟨με,i t , ϕ ⟩ = ⟨με,i  
+
+> 0
+
+, P it ϕ⟩ +
+
+Z t
+
+> 0
+
+− X 
+
+> j̸=i
+
+λij ⟨με,i s , P it−sϕ⟩ + X 
+
+> k̸=i
+
+λki ⟨με,k s , P it−sϕ⟩
+
+ ds. 
+
+Letting ε ↓ 0, the initial measures με,i  
+
+> 0
+
+converge weakly to μi
+
+> 0
+
+, while the previous lemma gives 
+
+pε,i −→ pi in C1,2loc 
+
+ (0 , T ] × Rd, i ∈ I .
+
+Since ϕ is compactly supported and P it ϕ is bounded and smooth, the initial term and the first integral term pass to the limit directly. For the last integral term, the convergence pε,k → pk, together with the uniform bounds obtained above, allows us to apply the dominated convergence theorem. We may therefore pass to the limit in the Duhamel formula, which yields the claimed identity. 
+
+Proof of Theorem A.1. Fix ( x, i ) ∈ Rd × I . Approximate μ0 = δx ⊗ δi by the smoothed initial laws με 
+
+> 0
+
+of Definition A.6. By Lemma A.2, the family of regime-wise densities {pε,k }ε> 0 is uniformly bounded. Moreover, the regularity estimates in Theorems A.7, A.8 and A.9, applied successively, imply the corresponding local equicontinuity in C1,2 (0 , T ] × Rd. Therefore, by the Arzel` a–Ascoli theorem, there exists a subsequence, still denoted by pε,k , and a limit pk ∈ C1,2 (0 , T ] × Rd, such that pε,k → pk locally in C1,2 (0 , T ] × Rd.It remains to identify this limit. For every ε > 0, the measures pε,k t (y) d y satisfy the distributional Duhamel formula (29) in Proposition A.4. Passing to the limit, the measures pkt (y) d y satisfy the same Duhamel system with initial data δx ⊗ δi by Lemma A.11. The law of the reference process started from (x, i ) also satisfies this system. Therefore, by the uniqueness result of Theorem A.5, the two measure-valued solutions coincide. Consequently, 
+
+rij (0 , x ; T, y ) = pjT (y).
+
+Thus y 7 → rij (0 , x ; T, y ) is of class C2.Since the coefficients are constant, the reference dynamics are spatially translation invariant. Hence 
+
+rij (0 , x ; T, y ) = rij (0 , 0; T, y − x),
+
+which implies that ( x, y ) 7 → rij (0 , x ; T, y ) is of class C2.It remains to prove strict positivity. Set Λ k := P 
+
+> ℓ̸=k
+
+λkℓ . If i = j, we consider the event that no regime switch occurs on [0 , T ]. This event has probability e−ΛiT > 0, and on this event 
+
+XT = x + biT + σiWT .
+
+Hence the law of XT contains a non-degenerate Gaussian contribution, which is everywhere strictly positive. Therefore rii (0 , x ; T, y ) > 0 for every y ∈ Rd.If i̸ = j, we consider the trajectories with exactly one regime switch, from i to j, occurring at some time 
+
+s ∈ (0 , T ). The corresponding contribution to the transition density is 
+
+Z T
+
+> 0
+
+e−Λisλij e−Λj (T −s)gσ2   
+
+> is+σ2
+> j(T−s)
+
+ y − x − bis − bj (T − s) ds, 
+
+where gv denotes the centered Gaussian density on Rd with covariance vI d. Since λij > 0, σi, σ j > 0, and 
+
+gv is strictly positive everywhere for every v > 0, this integral is strictly positive. Hence rij (0 , x ; T, y ) > 0for all i, j ∈ I and all x, y ∈ Rd. This proves the theorem. 33 References 
+
+[1] Dominique Bakry, Ivan Gentil, and Michel Ledoux. Analysis and Geometry of Markov Diffusion Oper-ators , volume 348 of Grundlehren der mathematischen Wissenschaften . Springer, Cham, 2013. [2] Sergey G. Bobkov and Michel Ledoux. From Brunn–Minkowski to Brascamp–Lieb and to logarithmic Sobolev inequalities. Geometric and Functional Analysis , 10(5):1028–1052, 2000. [3] Louis-Pierre Chaintron, Giovanni Conforti, and Katharina Eichinger. Propagation of weak log-concavity along generalised heat flows via Hamilton–Jacobi equations. arXiv preprint arXiv:2508.07931, 2025. [4] Tianrong Chen, Guan-Horng Liu, and Evangelos A. Theodorou. Likelihood training of Schr¨ odinger bridge using forward-backward SDEs theory. In International Conference on Learning Representations ,2022. [5] Alberto Chiarini, Giovanni Conforti, Giacomo Greco, and Luca Tamanini. A semiconcavity approach to stability of entropic plans and exponential convergence of Sinkhorn’s algorithm. arXiv preprint arXiv:2412.09235, 2024. [6] Giovanni Conforti. Weak semiconvexity estimates for Schr¨ odinger potentials and logarithmic Sobolev inequality for Schr¨ odinger bridges. Probability Theory and Related Fields , 189:1045–1071, 2024. [7] Giovanni Conforti, Alain Oliviero Durmus, and Giacomo Greco. Quantitative contraction rates for Sinkhorn algorithm: beyond bounded costs and compact marginals. arXiv preprint arXiv:2304.04451, 2023. [8] Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. Advances in neural information processing systems , 26, 2013. [9] Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet. Diffusion Schr¨ odinger bridge with applications to score-based generative modeling. In Advances in Neural Information Processing Systems , volume 34, pages 17695–17709, 2021. [10] Stephan Eckstein. Hilbert’s projective metric for functions of bounded growth and exponential conver-gence of Sinkhorn’s algorithm. Probability Theory and Related Fields , 193(1–2):585–621, 2025. [11] Stephan Eckstein and Marcel Nutz. Quantitative stability of regularized optimal transport and conver-gence of Sinkhorn’s algorithm. SIAM Journal on Mathematical Analysis , 54(6):5922–5948, 2022. [12] Asmaa Eldesoukey, Olga Movilla Miangolarra, and Tryphon T. Georgiou. An excursion onto Schr¨ odinger’s bridges: Stochastic flows with spatio-temporal marginals. IEEE Control Systems Let-ters , 8:1138–1143, 2024. [13] Asmaa Eldesoukey, Olga Movilla Miangolarra, and Tryphon T. Georgiou. Inferring evanescent stochastic dynamics from marginal distributions. Journal of Systems Science and Complexity , 38(1):129–149, 2025. [14] Hans F¨ ollmer. Random fields and diffusion processes. In ´Ecole d’ ´Et´ e de Probabilit´ es de Saint-Flour XV–XVII, 1985–87 , volume 1362 of Lecture Notes in Mathematics , pages 101–203. Springer, Berlin, 1988. [15] Promit Ghosal and Marcel Nutz. On the convergence rate of Sinkhorn’s algorithm. Mathematics of Operations Research , 51(2):1080–1096, 2025. [16] Giacomo Greco, Maxence Noble, Giovanni Conforti, and Alain Oliviero-Durmus. Non-asymptotic con-vergence bounds for Sinkhorn iterates and their gradients: a coupling approach. In Proceedings of the Thirty Sixth Conference on Learning Theory , volume 195 of Proceedings of Machine Learning Research ,pages 716–746, 2023. [17] Giacomo Greco and Luca Tamanini. Hessian stability and convergence rates for entropic and Sinkhorn potentials via semiconcavity. arXiv preprint arXiv:2504.11133, 2025. 34 [18] Wenlong Hu and Tao Pang. Risk management of guaranteed minimum benefits under a regime-switching jump-diffusion model. Numerical Algebra, Control and Optimization , 15(1):52–76, 2025. [19] Anna Kazeykina, Zhenjie Ren, Xiaozhen Wang, and Yufei Zhang. Entropic optimal transport problem with convex functional cost. arXiv preprint arXiv:2503.11843, 2025. [20] N. V. Krylov. Lectures on Elliptic and Parabolic Equations in H¨ older Spaces , volume 12 of Graduate Studies in Mathematics . American Mathematical Society, Providence, RI, 1996. [21] O. A. Ladyzhenskaya, V. A. Solonnikov, and N. N. Ural’tseva. Linear and Quasi-linear Equations of Parabolic Type , volume 23 of Translations of Mathematical Monographs . American Mathematical Society, Providence, Rhode Island, 1968. [22] Christian L´ eonard. A survey of the Schr¨ odinger problem and some of its connections with optimal transport. Discrete and Continuous Dynamical Systems - A , 34(4):1533–1574, 2014. [23] Gary M. Lieberman. Second Order Parabolic Differential Equations . World Scientific, 1996. [24] Guan-Horng Liu, Arash Vahdat, De-An Huang, Evangelos Theodorou, Weili Nie, and Anima Anand-kumar. I2SB: Image-to-image Schr¨ odinger bridge. In Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan Scarlett, editors, Proceedings of the 40th Inter-national Conference on Machine Learning , volume 202 of Proceedings of Machine Learning Research ,pages 22042–22062. PMLR, 2023. [25] Yu-Ying Liu, Shuang Li, Fuxin Li, Le Song, and James M. Rehg. Efficient learning of continuous-time hidden Markov models for disease progression. In Advances in Neural Information Processing Systems ,2015. [26] Qi Luo and Xuerong Mao. Stochastic population dynamics under regime switching. Journal of Mathe-matical Analysis and Applications , 334(1):69–84, October 2007. [27] Marcel Nutz. Introduction to entropic optimal transport, 2022. Lecture notes, version of December 5, 2022. [28] Marcel Nutz and Johannes Wiesel. Stability of Schr¨ odinger potentials and convergence of Sinkhorn’s algorithm. The Annals of Probability , 51(2):699–722, 2023. [29] Neil P. Oxtoby et al. Data-driven disease progression modeling. In Machine Learning for Brain Disor-ders . NCBI Bookshelf, 2023. [30] Erwin Schr¨ odinger. ¨Uber die umkehrung der naturgesetze. Sitzungsberichte der Preussischen Akademie der Wissenschaften , pages 144–153, 1931. [31] Erwin Schr¨ odinger. Sur la th´ eorie relativiste de l’´ electron et l’interpr´ etation de la m´ ecanique quantique. 
+
+Ann. Inst. H. Poincar´ e, 2(4):269–310, 1932. [32] Vignesh Ram Somnath, Matteo Pariset, Ya-Ping Hsieh, Maria Rodriguez Martinez, Andreas Krause, and Charlotte Bunne. Aligned diffusion Schr¨ odinger bridges. In Robin J. Evans and Ilya Shpitser, editors, Proceedings of the Thirty-Ninth Conference on Uncertainty in Artificial Intelligence , volume 216 of Proceedings of Machine Learning Research , pages 1985–1995. PMLR, 31 Jul–04 Aug 2023. [33] E. Tay et al. Shape modeling of longitudinal medical images: from diffeomorphic metric mapping to deep learning. Frontiers in Artificial Intelligence , 2025. [34] Terry M. Therneau and Fang-Shu Ou. Using multistate models with clinical trial data for a deeper understanding of complex disease processes. Clinical Trials , 2024. [35] Alexander Y. Tong, Nikolay Malkin, Kilian Fatras, Lazar Atanackovic, Yanlei Zhang, Guillaume Huguet, Guy Wolf, and Yoshua Bengio. Simulation-free Schr¨ odinger bridges via score and flow matching. In Sanjoy Dasgupta, Stephan Mandt, and Yingzhen Li, editors, Proceedings of The 27th International Conference on Artificial Intelligence and Statistics , volume 238 of Proceedings of Machine Learning Research , pages 1279–1287. PMLR, 02–04 May 2024. 35 [36] T. D. Tuong, Dang H. Nguyen, N. T. Dieu, and Ky Tran. Extinction and permanence in a stochastic SIRS model in regime-switching with general incidence rate. Nonlinear Analysis: Hybrid Systems ,34:121–130, 2019. [37] U.S. Department of Health and Human Services. Telehealth research recap: Remote patient monitoring, September 2024. Telehealth.HHS.gov research recap. [38] Gefei Wang, Yuling Jiao, Qian Xu, Yang Wang, and Can Yang. Deep generative learning via Schr¨ odinger bridge. In Marina Meila and Tong Zhang, editors, Proceedings of the 38th International Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research , pages 10794–10804. PMLR, 2021. [39] G. George Yin and Chao Zhu. Hybrid Switching Diffusions: Properties and Applications , volume 63 of 
+
+Stochastic Modelling and Applied Probability . Springer, New York, 2010. [40] Qing Zhang. Stock trading: An optimal selling rule. SIAM Journal on Control and Optimization ,40(1):64–87, 2001. [41] Andrei Zlotchevski and Linan Chen. The Schr¨ odinger bridge problem for jump diffusions. arXiv preprint arXiv:2411.13765, 2024. [42] Andrei Zlotchevski and Linan Chen. A regime-switching approach to the unbalanced Schr¨ odinger bridge problem. arXiv preprint arXiv:2512.12971, 2025. [43] Andrei Zlotchevski and Linan Chen. The Schr¨ odinger bridge problem for jump diffusions with regime switching. arXiv preprint arXiv:2511.06079, 2025. 36
