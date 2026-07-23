@@ -6,32 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-22
-- 运行时间：2026-07-22 20:16:47 UTC
+- 最新运行日期：2026-07-23
+- 运行时间：2026-07-23 20:48:14 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：3
-- 速读区：0
+- 本次总论文数：2
+- 精读区：1
+- 速读区：1
 
 ### 今日简报（AI）
-1) 今日精读2篇9分论文，总阅读3篇，聚焦几何与深度学习交叉前沿。  
-2) 最值得关注：Transformer语义空间的连续几何框架，以及子黎曼流形上的反射Schrödinger桥问题。  
-3) 建议重点研读这两篇理论的数学推导，了解几何方法对模型解释性和概率路径优化的启发。
-- 详情：[/202607/22/README](/202607/22/README)
+今日精读1篇高分论文《子黎曼流形上的反射薛定谔桥问题》，速读1篇分类器自由引导调度分析。最值得关注的是反射薛定谔桥在子黎曼几何下的理论突破（9.0分）。建议优先精读该论文，理解几何约束下的扩散模型新框架。
+- 详情：[/202607/23/README](/202607/23/README)
 
 ### 精读区论文标签
-1. [The Geometry of Semantic Space: A Continuous Geometric Framework for the Transformer Architecture](/202607/22/2607.17146v1-the-geometry-of-semantic-space-a-continuous-geometric-framework-for-the-transformer-architecture)  
+1. [Reflected Schrodinger Bridge Problem over Sub-Riemannian Manifold](/202607/23/2607.17904v3-reflected-schrodinger-bridge-problem-over-sub-riemannian-manifold)  
    标签：评分：9.0/10、query:diff-bridge
-   evidence：注意力机制作为熵最优传输下的薛定谔桥
-2. [Reflected Schrodinger Bridge Problem over Sub-Riemannian Manifold](/202607/22/2607.17904v2-reflected-schrodinger-bridge-problem-over-sub-riemannian-manifold)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：直接解决亚黎曼流形上的反射薛定谔桥问题
-3. [Exponential Convergence of the Sinkhorn Algorithm for the Schrödinger Bridge with Regime Switching](/202607/22/2607.19176v1-exponential-convergence-of-the-sinkhorn-algorithm-for-the-schrdinger-bridge-with-regime-switching)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：Sinkhorn算法在带切换的Schrödinger桥问题上的指数收敛性
+   evidence：提出并解决反射子黎曼薛定谔桥问题
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [Analytic Distribution of Classifier-Free Guidance for Schedule Design](/202607/23/2607.19725v1-analytic-distribution-of-classifier-free-guidance-for-schedule-design)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：使用路径积分表示扩散模型分布
 
 
 <div class="dpr-home-promo-card">
