@@ -1,0 +1,451 @@
+Title: Certified Parallel-in-Time Sinkhorn for Dynamic Entropic Optimal Transport
+
+URL Source: https://arxiv.org/pdf/2607.24741v1
+
+Published Time: Tue, 28 Jul 2026 02:22:08 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Certified Parallel-in-Time Sinkhorn for Dynamic Entropic Optimal Transport 
+
+## Xinyang Wen 
+
+# Abstract 
+
+Dynamic applications, including optimal-transport Flow Matching, repeatedly solve related entropic optimal trans-port problems, yet conventional distributed Sinkhorn pro-cesses frames sequentially and synchronizes after every iteration. We present TemporalSinkhorn , a parallel-in-time executor that batches future candidates and their repairs without making output accuracy speculative. A centered, row-sharded certificate accepts only a determin-istic safe prefix. The remaining candidates share packed Sinkhorn updates; an online projective forgetting rate places audit milestones, while a posteriori residual checks recover from every depth underestimate. Prediction can therefore change work placement but cannot authorize an inaccurate output. On 4 A100 GPUs, a 60-run, five-seed grid at n = 2048 shows that forgetting-guided milestones reduce wall time by 1 .15 ×–1 .47 × relative to auditing ev-ery packed iteration in five statistically resolved regime cells; one fixed-kernel shock cell is positive on average but unresolved. Against a sequential soft c-transform warm start, temporal execution is 1 .42 ×–3 .55 × faster across six synthetic streams, with zero marginal-tolerance violations. A separate held-out test shows the central systems bound-ary: one predicted milestone beats the best static grid by 1.086 × for changing kernels but loses by 0 .945 × for fixed kernels. A second held-out study finds the complementary boundary: arithmetic audit spacing beats the fixed-kernel static grid by 1 .119 × but loses to the changing-kernel predicted policy by 0 .977 ×. A frozen composition—fixed arithmetic, changing predicted—then achieves 1 .436 ×
+
+over per-iteration auditing and 1 .069 × over a universal static grid on ten new pairs, all wins. Primitive timings show that audit/update cost varies by mode and active width, motivating a controller that selects the scheduler family as well as its depth. On Flow Matching minibatch streams, temporal execution is 3 .054 ×–3 .632 × faster than sequential carry at n = 2048; a two-seed n = 4096 exten-sion gives 2 .593 ×–2 .762 ×, with no tolerance violations. A separate fixed-kernel test on an RTX 4060 Laptop GPU gives a 4 .315 × geometric-mean speedup with 3.251 MiB additional peak allocation. The RTX path amortizes ker-nel reads and launches without inter-GPU communication; the 4 A100 path supports row-sharded parallel correction, including changing kernels. These are complementary de-ployment studies, not a controlled hardware comparison. End-to-end Flow Matching integration, optimized-solver comparisons, and multi-node validation remain open. 
+
+# 1 Introduction 
+
+Many optimal transport workloads are streams rather than isolated solves. OT-based Flow Matching repeat-edly constructs minibatch couplings to obtain straighter transport paths [ 7, 13 ]; tracking and repeated alignment likewise present nearby cost matrices or marginals. En-tropic regularization makes each instance accessible to Sinkhorn scaling [ 3 ], but a row-sharded implementation still performs a length-n collective during each update. Processing W related frames one after another repeats both matrix–vector launches and collective latency. The motivation is projective forgetting: repeated positive-map updates lose sensitivity to their initial state, suggesting when another audit is likely to be useful. A related systems precedent is hybrid CPU–GPU PageRank, where iterative work is placed to match heterogeneous hardware and reduce data movement [ 5 ]. Here, forgetting schedules audits across distinct but related OT problems rather than partitioning one graph. Reusing a previous dual is helpful but incomplete. Learned and analytic warm starts can reduce the number of iterations [ 1, 10 , 13 ], yet they do not decide when a distributed output is safe, nor do they combine future lin-ear algebra into GPU-efficient matrix–matrix operations. Checking every candidate after every packed update re-stores correctness, but scalar stopping collectives can then dominate. An estimate of the forgetting rate can suppress those checks, although treating the estimate as a stopping certificate would make accuracy depend on calibration. 
+
+TemporalSinkhorn separates these concerns. It pre-dicts a window of future duals, evaluates their row normal-izers and column contributions with GEMMs or grouped batched products, and reduces one packed vector of cer-tificate scalars. The certificate accepts only the longest safe prefix. Candidates outside that prefix enter one ac-tive packed repair stream. A measured tail rate predicts useful audit times, but the executor always checks the actual residual before retiring a candidate. A permanent geometric grid remains present even when a forgetting prediction is arbitrarily wrong. This design exploits two kinds of temporal redundancy. First, packing turns repeated GEMV and small collec-tives into higher-intensity GPU work. Second, forgetting predicts where synchronization is worth paying for. The 1arXiv:2607.24741v1 [cs.DC] 27 Jul 2026 second effect is conditional. A sparse predicted milestone repays its added audit for changing kernels but not fixed kernels. Conversely, coarse arithmetic spacing saves both updates and audits on the fixed path, while it retires changing-kernel candidates too late relative to the tuned predicted policy. The executor must therefore observe or infer the compute regime and select a scheduler family, not merely predict one convergence depth. The packed executor consequently has two complemen-tary deployment paths. On a single consumer GPU with a shared kernel, GEMM amortizes kernel reads and launch latency without inter-GPU communication. On data-center GPUs, memory, grouped batched products, row sharding, and packed collectives enable parallel correction for changing kernels as well as fixed ones. We evaluate these paths separately and do not treat them as a con-trolled hardware comparison. This paper makes three contributions: 1. We derive a centered distributed certificate that turns each future candidate into one local scalar and guar-antees no false acceptance in exact arithmetic. Safety is independent of the proposer and of the estimated forgetting rate. 2. We design a parallel candidate-and-repair engine with shared active updates, packed collectives, prediction-robust geometric milestones, cost-aware arithmetic milestones, and an ordinary Sinkhorn fallback. The de-sign explicitly accounts for vector rounds, scalar audits, proposal cost, and memory. 3. We evaluate the resulting mechanisms on controlled and Flow Matching streams on one 4 ×A100 node, and separately evaluate the fixed-kernel operator on an RTX 4060 Laptop GPU. Held-out tests, cou-pling/objective/cost audits, and two complemen-tary sign reversals expose mode- and active-width-dependent failure boundaries. The strongest complete result is not a candidate-stage microbenchmark. In a 60-run closed-loop grid, online forgetting milestones beat per-iteration auditing by 1 .15 ×–1.47 × in five resolved cells and preserve the same tolerance contract. Against sequential soft c-transform, temporal execution wins all 30 paired trials. These results sup-port a systems workshop or technical-report claim. On Flow Matching minibatch streams, temporal execution is 3.054 ×–3 .632 × faster than sequential carry at n = 2048, while the separate downstream pipeline shows that OT pairing can improve path geometry. The executor and training pipeline are not yet integrated, so the current evi-dence does not establish end-to-end training acceleration. Section 2 defines the execution model. Section 3 gives the certificate, Section 4 presents the packed repair engine, and Section 6 evaluates both. Section 7 states the failure boundaries that delimit the current claim. 
+
+# 2 Background and Related Work 
+
+Entropic optimal transport. For source and target marginals at, b t ∈ Rn 
+
+> +
+
+with unit mass, the dynamic prob-lem at frame t is min  
+
+> π≥0
+
+⟨Ct, π ⟩+εt
+
+X
+
+> ij
+
+πij (log πij −1) , π1 = at, π⊤1 = bt.
+
+(1) With Kt = exp (−Ct/ε t), Sinkhorn represents the plan as 
+
+πt = diag (ut)Kt diag (vt) and alternately scales its rows and columns. This regularized formulation enabled fast matrix-scaling solvers [ 3 ]; recent work sharpens conver-gence and acceleration for individual problems [ 8, 11 ]. Our work is orthogonal: the inner update can be replaced by a faster valid backend, while we schedule related problems across time. 
+
+Projective fixed points. Sinkhorn scaling is defined only up to a positive scalar, so its natural state error is projective. Qu, Galichon, and Ugander identify the sharp local rate from the fixed-point spectrum [ 8 ]; we treat this as prior work and use measured rates only for schedul-ing. Sittoni and Tudisco analyze positive subhomogeneous fixed-point maps through nonlinear Perron–Frobenius the-ory [ 9 ]. That framework is relevant to a possible extension beyond Sinkhorn, but the present paper does not claim that it supplies a computable finite contraction neighbor-hood or a dynamic-sequence work bound. 
+
+GPU and distributed Sinkhorn. OTT-JAX provides JIT-compiled, vectorized, and accelerator-aware OT op-erators [ 4 ]. FlashSinkhorn fuses log-domain reductions and streams kernel tiles through on-chip memory to re-duce HBM traffic [ 12 ]. Federated Sinkhorn studies row-partitioned exact updates and shows that global scaling exchange becomes a bottleneck as worker count grows [ 6 ]; decentralized barycenter variants also reduce communi-cation with gossip, event triggers, and quantization [ 2]. These systems optimize one problem or one distributed it-eration. TemporalSinkhorn instead combines a tempo-ral window and reduces how often a shared repair stream must synchronize. The current PyTorch prototype is not a replacement for their optimized kernels; integration with an optimized backend remains an evaluation requirement. 
+
+Warm starts and amortization. Meta OT predicts solutions across a family of related transport problems [ 1 ]; initialization-specific analysis likewise shows that a better initial dual can reduce Sinkhorn work [ 10 ]. For large-coupling Flow Matching, Zhang et al. extend preceding potentials to new samples with a soft c-transform and shard the resulting coupling computation [ 13 ]. We use that proposal as a strong baseline and include its collective cost. A warm start answers where to begin ; our certificate and scheduler answer which candidates may retire and 
+
+when to audit the rest . We claim neither carry nor c-transform as a novel proposer. 2Predict window  
+
+> carry / soft
+> c-transform
+> Wfuture duals
+> −→
+> Packed candidate
+> GEMM / grouped BMM one packed collective
+> −→
+> Certified prefix
+> centered local scalars deterministic accept
+> −→
+> Shared repair
+> forgetting milestones residual-checked retirement
+> −→
+> Fallback
+> ordinary Sinkhorn
+
+Figure 1: TemporalSinkhorn batches temporal work while keeping correctness non-speculative. The certificate alone authorizes outputs. Forgetting controls audit placement inside a shared repair stream; a posteriori checks and ordinary Sinkhorn handle every underestimate. 
+
+Temporal coupling in applications. Minibatch OT couplings can straighten Flow Matching paths and re-duce sampling cost [ 7]. Large Sinkhorn couplings make the solver itself a substantial training component [ 13 ]. Our evaluation therefore includes streams built from Flow Matching minibatches (Section 6.6). A separate matrix-free pipeline verifies that OT pairing improves reconstruc-tion and curvature on the same target family, but the temporal executor is not yet integrated into training. The current claim is solver speedup on application-shaped inputs, not end-to-end generative-model acceleration. 
+
+Speculation and event-triggered communication. 
+
+The executor resembles speculative systems in that it generates future work before earlier frames retire, and it resembles event-triggered methods in that not every up-date synchronizes. The semantic distinction is important: incorrect prediction may waste compute, but it never com-mits an output. Unlike independent depth buckets, all live candidates share one packed update stream; otherwise vector rounds grow as the sum of bucket depths. Unlike an uncertified event trigger, a deterministic marginal bound or an actual residual controls every retirement. 
+
+# 3 Certified Temporal Windows 
+
+## 3.1 Row-sharded execution model 
+
+Source indices are partitioned into disjoint sets I1, . . . , I R.Worker r stores Kt,I r ,: and at,I r , while vt and bt are replicated. Given a proposed v, each worker enforces its rows locally, 
+
+uIr = aIr ⊘ (KIr ,:v), pr (v) = v ⊙ K⊤ 
+
+> Ir,:
+
+uIr . (2) The resulting plan has exact row marginal in exact arith-metic. Its column marginal is p(v) = P 
+
+> r
+
+pr (v), so feasi-bility reduces to ∥p(v) − b∥1 ≤ τ . Computing p(v) exactly requires a length-n all-reduce. The certificate below re-places that decision communication with one scalar per worker and candidate. 
+
+## 3.2 Centered local certificate 
+
+Let candidate 0 be a certified anchor with ∥ P 
+
+> r
+
+pr, 0 −
+
+b0∥1 ≤ B0. Choose source-mass shares αr ≥ 0 with P 
+
+> r
+
+αr = 1; the implementation uses the mass stored by worker r. For future candidate j, define 
+
+Bj = B0 +
+
+> R
+
+X
+
+> r=1
+
+∥(pr,j − pr, 0) − αr (bj − b0)∥1 . (3) 
+
+Proposition 1 (Centered certificate) . For every candi-date j, ∥ P 
+
+> r
+
+pr,j − bj ∥1 ≤ Bj .Proof. Add and subtract the anchor and distribute the known target change: 
+
+X
+
+> r
+
+pr,j − bj = X
+
+> r
+
+pr, 0 − b0
+
+!
+
++ X
+
+> r
+
+[( pr,j − pr, 0) − αr (bj − b0)] .
+
+The triangle inequality and the anchor bound give equa-tion (3). Centering matters when the target moves coherently: an uncentered drift bound charges the same target mo-tion once through p and again through b. Each worker computes its local norm without communication. A single packed all-reduce sums the R × W scalar contributions for a window of W candidates. 
+
+## 3.3 Prefix retirement and correction 
+
+The executor accepts the longest prefix whose bounds satisfy Bj ≤ τ . Prefix order preserves stream semantics even if a later candidate happens to have a smaller bound than an earlier rejected one. The suffix enters the packed correction engine of Section 4. 
+
+Theorem 2 (Per-frame accuracy) . Assume positive ker-nels and marginals, exact arithmetic, and a correction rou-tine that retires a candidate only after its actual marginal defect is at most τ . If certificate acceptance requires 
+
+Bj ≤ τ , every output has row and column marginal L1 er-ror at most τ , independently of the proposer, the estimated forgetting rate, and the milestone schedule. 
+
+3Proof. A certified candidate is row-exact by equation (2) and has column defect at most Bj ≤ τ by Theorem 1. A corrected candidate satisfies the assumed a posteriori stopping rule. The two cases cover every retired candidate. Prediction affects neither case. The current GPU paper claim is empirical FP32 cor-rectness, not a theorem about all NCCL executions. The formal executor uses FP32 tensors; a separate outward-rounding prototype uses FP64 scalar envelopes based on standard dot-product and summation bounds. A pro-duction guarantee still needs backend-specific guards for TF32, fused kernels, overflow, underflow, and collective reduction order. All evaluation tables therefore report full-vector accuracy audits in addition to certificate deci-sions. 
+
+## 3.4 Why the certificate is not the whole speedup 
+
+The certificate saves decision payload when it accepts, but difficult streams often have a near-zero safe prefix. Generating a large window would then waste work unless suffix correction is also parallel. An early fixed-W = 4 development prototype was slower than the warm baseline even though the candidate stage was faster. Its raw record is not part of the formal evidence bundle, so we do not assign it a confirmatory speedup. This negative observa-tion led to the shared repair engine: temporal packing remains useful when certification rejects most candidates because the rejected suffix can still share vector updates and audits. 
+
+# 4 Parallel Candidate and Repair Engine 
+
+## 4.1 Candidate packing 
+
+For a fixed kernel, stacking W proposed scalings turns the two matrix–vector operations in equation (2) into two matrix–matrix products. For changing kernels, the executor uses grouped or tiled batched products and does not require kernels to be identical. Certificate scalars for all future frames travel in one collective. A packed soft c-transform proposer similarly evaluates 
+
+v(0)  
+
+> t+j
+
+= bt+j ⊘ X
+
+> r
+
+K⊤ 
+
+> r,t +j
+
+ur,t , j = 1 , . . . , W, (4) with grouped products and one packed vector collective per window. Proposal cost is always included; equation (4) is optional because its iteration savings can be smaller than its communication cost. 
+
+## 4.2 One active packed stream 
+
+After certificate retirement, every live suffix candidate ad-vances through the same packed Sinkhorn update. Candi-dates can retire at different audits, and active compaction removes retired columns from later products. This is not independent bucketing. Our rejected design replayed each predicted-depth bucket from its own initial state and re-quired 451 vector rounds in a smoke case, versus 157 for q-free active compaction. Sharing milestones reduced the count to 163 while cutting scalar audits from 154 to 62. At an audit, the executor computes the actual column defect for all live candidates in one packed vector reduc-tion, retires those below τ , and continues the rest. An underestimated depth causes more work, never premature retirement. The final fallback is ordinary warm-started Sinkhorn, which also handles unsupported numerical or memory conditions. 
+
+## 4.3 Forgetting-guided milestones 
+
+Let Ft denote one gauge-fixed log-Sinkhorn map and let 
+
+ρt(v) = dH (v, F t(v)) = osc log pt(v)
+
+bt
+
+(5) be the observable projective residual. If the local tail behaves as ρk+1 ≈ qρ k with q ∈ (0 , 1), the predicted remaining depth is 
+
+bm =
+
+ log( τρ/ρ 0)log bq
+
+
+
+> +
+
+. (6) The implementation estimates bq from recent a posteriori update ratios, uses a quantile and margin, and proposes an audit near bm. Because cold transients and local slow modes have different scales, this estimate is an economic signal rather than a calibrated certificate. Every predictor milestone is unioned with a permanent geometric grid gj = g0βj . Prediction can insert an earlier useful audit but cannot remove the fallback grid. Thus arbitrary predictions preserve the base grid’s iteration-overshoot bound and add only their finite number of audits. The dense β = 2 grid is a strong prediction-free baseline; a β = 4 grid plus one raw predicted milestone is denoted β4-r0. The scalar abstraction also admits an exact joint-cost schedule. If an unknown completion depth m ≥ 1 costs one per iteration and each audit costs ρ > 0, the optimal continuous competitive ratio against an oracle that pays 
+
+m + ρ is 
+
+R∗(ρ) = 1 + 
+
+r ρ
+
+1 + ρ , (7) attained by arithmetic milestones kj = b + aj , where 
+
+a = pρ(1 + ρ) and b = R∗(1+ ρ)−ρ. Rounding milestones upward adds at most 1 /(1 + ρ) to the ratio. This theorem is useful as a cost-aware interface, but our packed executor violates its scalar constant-cost assumption: active set size changes both iteration and audit costs. We therefore retain it as an appendix design guide rather than an end-to-end claim. 44.4 Mode-aware policy composition 
+
+The audit/iteration exchange depends on the kernel execu-tor. Fixed kernels use efficient GEMMs; changing kernels use grouped/tiled updates and experience different can-didate retirement. Our first frozen synthetic controller chose β2 for the fixed path and β4 -r0 for the changing path. A separate development sweep and two new-seed blocks then replaced only the fixed branch by arithmetic spacing h = 10; the changing branch remains β4 -r0. A real deployment must replace the exact fixed/changing bit with a cost model or continuous change score and validate that selector on held-out workloads. 
+
+## 4.5 Cost and memory accounting 
+
+We report local GPU time, vector collective rounds and elements, scalar audit rounds, proposal rounds, executed candidate iterations, and peak memory. For a dense changing-kernel implementation, explicitly materializing a window costs O(W n 2/R ) memory; at n = 4096 , W = 32 it reaches about 1.0 GiB per rank before other solver state. Fixed-kernel memory is nearly independent of W .Generated-on-demand tiles or fused online kernels are therefore required for large changing-kernel windows. 
+
+# 5 Implementation 
+
+The prototype uses PyTorch 2.5.1, CUDA 12.4, and NCCL 2.21.5. Four ranks own contiguous row shards and remain inside one persistent process group for each formal suite. Keeping the group alive matters: early versions repeatedly rebuilt NCCL groups and occasionally emitted teardown errors after writing results. We exclude those versions and report only suites whose process exits, completion markers, and log scans are clean. The local consumer-GPU test uses the extracted single-worker operator with PyTorch 2.5.1 on an 8 GB RTX 4060 Laptop GPU. It has no collective communication; the measured costs are active-batch correction and residual checks with kernels and marginals already resident on the device. We report this protocol separately from the four-rank A100 runs. Fixed kernels use matrix–matrix operations for both row normalization and local column contributions. Changing kernels currently use dense stacked batched operations; this implementation exposes the correct memory boundary but is not yet fused. Active candidates are represented as columns. The scheduler compacts columns only at an audit, so all candidates between two milestones execute the same number of updates. Vector collectives carry packed n×| A| values for the active set A; scalar collectives carry residuals and certificate summaries. The online-rate estimator stores at most 64 recent ra-tios. Formal runs use an 0.8 quantile, a 0.02 margin, four observations before activation, and a permanent grid beginning at four iterations. The tolerance is 10 −3 and certificate acceptance uses 0 .9τ to leave numerical head-room. Reference audits solve selected frames to 10 −6 and reconstruct coupling, objective, and transport-cost errors. No downstream task metric exists on the synthetic path, and the result files record that absence explicitly. Every formal cell stores the runner configuration, source-script hash, software versions, timing order, counters, and accuracy audit. The present JSON schema does not serial-ize node topology, TF32 flags, or certificate-accumulation dtype; we list this reproducibility gap explicitly rather than calling the record a full hardware/numerical configu-ration. Analysis scripts verify the expected Cartesian grid, reject non-finite leaves, count tolerance violations, scan unified logs, and hash sorted raw JSON. Development and held-out seeds are disjoint for window and milestone selection. An independent-batch bridge uses OTT-JAX 0.6.0 with JAX/JAXLIB CUDA 0.10.2 on A100 GPUs. The corrected c-transform implementation dispatches matrix products and log-sum-exp separately after a fused version failed direct equivalence. The retained implementation agrees with OTT’s transform within 4 .768 × 10 −7 in the largest formal hybrid audit. The Flow Matching stream generator draws Gaussian sources and applies a piecewise-affine Brenier map to obtain targets, with an explicit correlation parameter between consecutive minibatches. The temporal solver records this as a coupling-executor evaluation and leaves its downstream metric empty. A separate matrix-free pipeline evaluates reconstruction and curvature; the two pipelines are not combined in the current implementation. 
+
+# 6 Evaluation 
+
+We ask whether joint correction reduces wall time, whether forgetting-guided check placement improves on per-iteration checking, whether the method remains com-petitive with a soft c-transform warm start, how the best check schedule depends on the kernel mode, whether the mechanism transfers across consumer and data-center GPUs, and whether it remains useful on Flow Matching minibatch streams without violating the residual toler-ance. 
+
+## 6.1 Setup and protocol 
+
+The controlled synthetic grid uses one local host with four reported NVIDIA A100-SXM4-80GB GPUs, n = 2048, 256 frames, ε = 0 .1, and target marginal tolerance 10 −3.We test fixed and changing kernels under stable, fast, and shock paths. Unless marked exploratory, each cell has five paired seeds and rotated timing order. Confidence intervals are paired nonparametric bootstrap intervals for the mean using 20,000 resamples and RNG seed 20260726; the updated analysis JSON serializes this procedure and pairs by path, mode, and seed. The raw per-run schema does not serialize host topology. 5Baselines include ordinary carry warm start, sequen-tial soft c-transform, packed repair with an audit after every iteration, prediction-free geometric milestones, the selected forgetting-guided policy, and frozen arithmetic spacing. Candidate generation, proposal collectives, cor-rection, audits, and fallback are included in wall time. The current code does not include a fused optimized external solver. The Flow Matching coupling-stream and down-stream quality experiments use the same target family but remain separate pipelines. 
+
+## 6.2 Candidate packing establishes head-room 
+
+At n = 4096, a candidate-only microbenchmark changes repeated GEMVs into GEMMs/grouped BMMs and packs 
+
+W scalar collective rounds into one. At W = 8 , 16 , 32, fixed-kernel candidate speedups are 4 .73 ×, 9.04 ×, 18 .50 ×;changing-kernel speedups are 3 .30 ×, 3.93 ×, 6.47 ×. These numbers exclude suffix repair and are not headline end-to-end results. They identify sufficient headroom for the full executor and expose the changing-kernel memory increase from 56.6 MiB at W = 1 to 1.01 GiB at W = 32. These exploratory values are preserved in the legacy mechanism report experiments/OT_PARALLEL_ SPECULATIVE_WINDOW_RESULTS.md ; its raw per-cell JSON was not carried into the formal claim-audit bun-dle. We therefore use the values only as headroom, not confirmatory evidence or a headline claim. A one-seed development sweep selected W = 32 in all six cells. That choice was used by the c-transform suite, but it was not retroactively applied to every formal suite: the closed-loop and milestone suites use W = 16 for fixed kernels and W = 8 for changing kernels. W = 64 used fewer vector rounds but ran slower than W = 32 in every development cell. Candidate/local work and compaction overhead outweighed the saved collectives. The directly certified prefix was below 1.2% in most W =32 development runs, so packed suffix repair can matter even when easy certificate acceptance is rare. 
+
+## 6.3 GPU deployment paths 
+
+A separate local test isolates the fixed-kernel operator on one NVIDIA GeForce RTX 4060 Laptop GPU. It uses an FP32 2048 × 2048 kernel, W = 32, three problem seeds, three untimed warmups, 15 synchronized timing repeti-tions, and rotated method order. Arithmetic checking with h = 10 gives per-seed speedups of 4 .459 ×, 4 .201 ×,and 4 .290 × over sequential carry, for a geometric mean of 4 .315 ×. Mean per-window time falls from 35.050 ms to 8.142 ms. Every output passes the 10 −3 marginal gate, and peak CUDA allocation increases by 3.251 MiB. The single-GPU gain is due to shared-kernel reuse: matrix–matrix products amortize kernel reads and launches that are repeated by one-problem-at-a-time matrix–vector products. It is not a distributed communi-Table 1: Paired wall speedup of online forgetting mile-stones over auditing every packed iteration. Five seeds per cell; intervals are paired bootstrap 95% confidence intervals.                                   
+
+> Kernel Path Mean 95% CI Wins fixed stable 1.289 [1.238,1.349] 5/5 fixed fast 1.468 [1.334,1.596] 5/5 fixed shock 1.259 [0.937,1.435] 4/5 changing stable 1.155 [1.102,1.203] 5/5 changing fast 1.467 [1.438,1.493] 5/5 changing shock 1.317 [1.236,1.397] 5/5 F-stable F-fast F-shock C-stable C-fast C-shock
+> 0.9
+> 1.0
+> 1.1
+> 1.2
+> 1.3
+> 1.4
+> 1.5
+> 1.6
+> 1.7
+> Speedup over per-iteration audit
+> fi xed kernel changing kernel
+
+Figure 2: The online forgetting scheduler suppresses scalar audits relative to checking after every packed update. Bars show paired mean wall-time speedup over five seeds; whiskers are paired bootstrap 95% confidence intervals. Only fixed-shock includes one timing outlier and crosses 1. cation result. The current materialized changing-kernel implementation is a negative control on the same laptop GPU: at W = 16 it is only 0 .183 ×–0 .373 × as fast as sequential carry and uses substantially more memory, so that path is disabled locally. The four-A100 system supports a different use case. Its memory capacity and NVLink/NCCL path make row-sharded active-batch correction practical for both fixed and changing kernels, and packing amortizes collective latency. The RTX test is one isolated single-GPU window, whereas the A100 tests are distributed streams; these results show complementary deployment paths, not a controlled consumer-versus-data-center hardware compar-ison. 
+
+## 6.4 Closed-loop forgetting scheduler 
+
+The formal closed-loop suite contains 60 runs: two kernel modes, three path regimes, two audit policies, and five seeds. Online forgetting uses slightly more vector rounds than per-iteration checking but reduces mean scalar audits from 229–921 to 103–183. It underpredicts individual cor-rection depths in 12–43% of candidates when aggregated as five-seed cell means (individual-run fractions range more widely), yet only four extra fallback iterations occur across all 30 online runs. This is the intended separation between an inaccurate work predictor and an accurate stopping test. Table 1 and figure 2 show five resolved positive cells. 650 100 150 200 250 300    
+
+> Scalar audit rounds
+> 320
+> 340
+> 360
+> 380
+> 400
+> 420
+> 440
+> Vector update rounds
+> 0.406s
+> 0.313s
+> 0.331s
+> fi xed-kernel shock
+> 200 400 600 800
+> Scalar audit rounds
+> 900
+> 950
+> 1000
+> 1050
+> Vector update rounds
+> 0.850s
+> 0.623s
+> 0.574s
+> changing-kernel fast
+> per iteration
+> β2 grid
+> β4 + one proposal
+
+Figure 3: Held-out milestone work exchange. Each point reports mean vector updates, scalar audits, and wall time over five seeds. One forgetting-guided milestone saves enough expensive grouped/tiled updates to beat the β = 2 grid for changing kernels (right), but not for cheap fixed-kernel GEMMs (left). F-stable F-fast F-shock C-stable C-fast C-shock 
+
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> Speedup over soft c-transform
+
+Figure 4: Temporal execution versus a sequential soft c-transform warm-start baseline on six fixed-source syn-thetic streams. Bars show paired means over five seeds; whiskers are paired bootstrap 95% confidence intervals. The result isolates the temporal executor’s contribution but does not replace an independent-batch Flow Matching evaluation. The fixed-shock mean is positive, but one timing outlier makes its interval cross one; we do not claim a reliable shock speedup for that cell. 
+
+## 6.5 Strong warm-start baseline 
+
+Zhang et al.’s soft c-transform is a stronger baseline than copying the old scaling vector [ 13 ]. On the fixed-source synthetic specialization, it reduces solver iterations in every cell but adds one vector collective per transition. Temporal execution beats the fully timed sequential c-transform in all 30 paired trials. Mean speedups range from 1 .416 × to 3 .545 ×, and all six paired intervals exclude one (Figure 4). This result shows that temporal packing is not winning only against weak carry initialization. The independent-batch OTT-JAX bridge gives a more cautious proposer result. At n = 4096 and six seeds, c-transform/carry wall speedup is 0 .9808 [0.9661,0.9914] for ε = 0 .1 and 1 .0280 [1.0218,1.0350] for ε = 0 .01. It saves no iterations in the easy regime but 7.8% in the Table 2: Flow Matching coupling-stream speedup over sequential carry. The 2048-point cells use five paired seeds; the 4096-point extension uses two.                         
+
+> Support ρSpeedup 95% CI Vector rounds 2048 03.632 [3.210,4.091] 5.342 2048 0.9 3.251 [2.727,3.939] 5.147 2048 0.99 3.054 [2.535,3.608] 4.741 4096 02.762 [2.540,3.003] 5.411 4096 0.99 2.593 [2.573,2.613] 5.202
+
+hard regime. Thus c-transform is an optional action whose benefit changes sign with difficulty. These tests use real OTT-JAX kernels, but these particular warm-start tests stop before Flow Matching training and downstream quality evaluation. 
+
+## 6.6 Flow Matching coupling streams 
+
+We next construct a stream directly from Flow Matching minibatches. Sources are standard Gaussian samples and targets are generated by a piecewise-affine Brenier map in dimension 32. Consecutive minibatches have coordinate correlation ρ ∈ { 0, 0.9, 0.99 }. The temporal executor runs on four A100 GPUs with ε = 0 .1, W = 8, the previously selected robust geometric check grid, and 128 frames at support size 2048. The baseline is sequential carry with the same stopping tolerance; construction and kernel-reduction costs are included in both timings. All 19 formal runs pass the 10 −3 marginal tolerance; the largest audited column-marginal L1 error is 8 .52 × 10 −4.The direct candidate bound accepts no prefix in this suite, so the gain comes from joint correction rather than early candidate acceptance. Thus the active-batch operator can help even when the sufficient candidate bound is too conservative. A separate matrix-free Flow Matching pipeline checks that the coupling itself is meaningful downstream. At support size 262,144, OT pairing reduces four-step recon-7Table 3: Held-out β4-r0 speedup. The same policy helps expensive changing-kernel updates and hurts cheap fixed-kernel updates. Regime Baseline Mean 95% CI Wins fixed shock per iteration 1.228 [1.206,1.262] 5/5 fixed shock β2 0.945 [0.913,0.975] 0/5 changing fast per iter. 1.480 [1.453,1.512] 5/5 changing fast β2 1.086 [1.065,1.107] 5/5 struction error by 6 .585 × [5.828,7.176] and the 50-step curvature metric by 7 .529 × [7.383,7.716] relative to in-dependent pairing, both over five paired seeds. These quality measurements do not yet use the temporal execu-tor. The remaining end-to-end experiment will insert joint correction into coupling construction and measure total training time and held-out quality under an equal-quality or equal-compute protocol. 
+
+## 6.7 When forgetting beats the best static grid 
+
+We selected the number of predicted rungs only on development seeds 20260910–20260912, recorded un-der runs/dynamic milestone rung dse 20260726/ . Aradius-four ladder repaired a coarse β = 4 grid but added hundreds of audits and lost to the tuned β = 2 grid. The declared development rule selected β4 -r0, which inserts exactly one raw predicted milestone. Five new seeds per regime then produced the sign reversal in Table 3. Figure 3 explains the wall-time sign. Relative to β2, the predicted milestone saves 121.4 vector rounds for 108 added audits on fixed shock, but saves 163.0 vector rounds for only 69.8 audits on changing fast. Fixed-kernel GEMMs are cheap, whereas changing-kernel grouped/tiled updates repay the proposal. We froze the observable rule “fixed → β2, changing →
+
+β4 -r0” and reran 30 cells on seeds 20260930–20260934. Against per-iteration checking it achieves 1.242 ×
+
+[1.168,1.295] on fixed shock and 1 .439 × [1.403,1.463] on changing fast, both 5/5 wins. Against universal β2, the changing branch retains 1 .059 × [1.014,1.096]. The fixed branch is algorithmically identical to β2; its observed 0.970 ratio is repeated-timing noise and is not a policy loss. 
+
+## 6.8 Arithmetic spacing and controller re-vision 
+
+The scalar joint-cost theorem suggests arithmetic rather than geometric audit spacing, but it does not fix the GPU stride. We selected h = 10 for fixed kernels and h = 6 for changing kernels using only seeds 20260910–20260912, then froze both choices. Five new seeds produced Table 4. Against β2, fixed h = 10 cuts mean vector rounds by 17.84%, scalar audits by 20.35%, candidate slots by 3.12%, and wall time by 10.68%. Against β4 -r0, changing Table 4: Held-out arithmetic-policy speedup. Arithmetic spacing helps the fixed path but loses to the predicted changing-path incumbent. Mode/policy Baseline Geo. mean mean 95% CI Wins fixed h = 10 per iteration 1.502 [1.408,1.628] 5/5 fixed h = 10 β2 1.119 [1.079,1.179] 5/5 changing h = 6 per iteration 1.410 [1.381,1.434] 5/5 changing h = 6 β2 1.016 [0.992,1.041] 3/5 changing h = 6 β4-r0 0.977 [0.955,0.998] 1/5 Table 5: Worst parallel error in the 60-run closed-loop grid against a tighter reference. Marginal tolerance is 10 −3.                    
+
+> Metric Maximum Column marginal L19.97 ×10 −4
+> Row marginal L19.2×10 −9
+> Coupling L12.411 ×10 −3
+> Regularized objective relative error 3.641 ×10 −4
+> Transport-cost relative error 1.636 ×10 −3
+> Tolerance violations 0 / 60
+
+h = 6 cuts audits by 16.40% but adds 6.03% vector rounds and 4.61% candidate slots, increasing wall time by 2.29%. We therefore freeze the revised controller as “fixed →
+
+h = 10, changing → β4-r0.” A second disjoint fixed-only block, seeds 20260950–20260954, confirms h = 10 over β2at 1 .089 × [1.081,1.095], 5/5 wins, and over per-iteration auditing at 1 .461 × [1.400,1.549]. Finally, we execute the complete revised controller and both baselines in one 30-cell suite on seeds 20260970– 20260974. The fixed branch achieves 1 .428 × [1.398,1.456] over per-iteration audit and 1 .099 × [1.071,1.123] over β2; the changing branch achieves 1 .444 × [1.422,1.470] and 1.039 × [1.014,1.066], respectively. All four comparisons win 5/5 pairs. Across both modes, the revised controller has arithmetic-mean paired speedup 1 .436 × [1.416,1.455] over per-iteration audit and 1 .069 × [1.043,1.095] over universal β2, with 10/10 wins. An isolated primitive profile explains why one scalar cost ratio cannot select both branches. As active width grows from 1 to 16, median audit/update wall ratio rises from 0.489 to 1.328 for the fixed executor and from 0.320 to 0.897 for the changing executor. These timings omit compaction and controller overhead, so they diagnose cost nonstationarity rather than identify the theorem’s ρ.
+
+## 6.9 Accuracy contract 
+
+Small marginal residual alone is not a downstream ac-curacy guarantee, so Table 5 separately reports plan, objective, and cost deviations. The mode-controller re-run likewise has zero violations; its worst coupling, ob-jective, and cost errors are 2 .351 × 10 −3, 4 .120 × 10 −4,and 1 .741 × 10 −3. No synthetic run has a downstream task metric. The separate Flow Matching pipeline re-ports the reconstruction and curvature results in Sec-8tion 6.6, but it does not yet measure temporal-executor training speed. The arithmetic held-out, fixed confir-mation, and revised-controller suite add 85 cells with zero violations; their worst column-marginal errors are 9.062 ×10 −4, 9 .097 ×10 −4, and 9 .026 ×10 −4, respectively. 
+
+# 7 Analysis and Failure Boundaries 
+
+Prefix fraction is not a sufficient controller signal. 
+
+Our first adaptive rule shrank the next window whenever few candidates were certified directly. It collapsed to 
+
+W = 2 and slowed a stable stream even though W =32 later won all six development cells. Near-zero prefix coverage does not imply useless speculation when the suffix shares packed repair. A window controller must price candidate work, active repair mass, vector and scalar rounds, compaction, and memory. 
+
+Forgetting has a two-scale failure mode. On 15 FP64 OTT-JAX cells, lowering ε from 0.1 to 0.05 increases the coarse normalized transient depth only 1 .19 ×–1 .27 ×,but increases normalized strict depth 27 .57 ×–86 .81 ×
+
+while the local spectral gap shrinks 96 .81 ×–554 .63 ×. The observed slow-mode contraction agrees with the fixed-point coupling spectrum to 9 .84 × 10 −6, consistent with sharp local Sinkhorn analysis [ 8]. Therefore an ε-scaled depth is useful for cold work but cannot predict a strict tail by itself. The live residual and permanent grid remain necessary. 
+
+One-step persistence can fail adversarially. A hy-brid OTT-JAX selector based on the previous correction depth makes 84/90 correct decisions on a block schedule but 0/90 on an alternating schedule. Scaling by εt−1/ε t
+
+restores 180/180 decisions in both formal schedules and gives about 1 .016 × over always-carry. It does not establish a gain over the best static c-transform action. This fail-ure shows why the real controller needs current-instance conditioning or a change detector rather than assuming persistent depth. 
+
+More predictor rungs are not monotonically better. 
+
+A radius-four proposal ladder reduces coarse-grid iteration overshoot, yet on the changing-fast path it performs 574.6 scalar audits versus 129.4 for the dense static grid. The sparse one-milestone version crosses the break-even point only for changing kernels. Accuracy never explains this difference; the audit/vector cost ratio does. Accordingly, we report the regime sign reversal and reject a universal predictor claim. 
+
+Packed c-transform is currently neutral. Packing future soft c-transforms is algebraically compatible with the window engine. A 12-cell, one-seed mechanism test shows only 0 .991 ×–1 .039 × incremental wall effect. On fixed kernels the proposal mostly adds eight rounds; on changing kernels it sometimes saves repair but carries a larger payload. We retain it as a cost-model action rather than a default component. 
+
+The consumer-GPU result is fixed-kernel only. 
+
+The RTX 4060 result shows that shared-kernel batch-ing can replace many small matrix–vector launches by a matrix–matrix operation. It does not show that all temporal OT streams benefit on consumer hardware. The current materialized changing-kernel path is slower than sequential carry and uses more memory. A tiled or fused changing-kernel implementation must be tested before that branch can be enabled locally. 
+
+A constant audit price is not a GPU cost model. 
+
+The scalar theorem prices every iteration by one and every audit by a fixed ρ. On the actual executor, the measured audit/update ratio changes by more than 2 .7× across active widths and differs between fixed and changing kernels. Moreover, changing h = 6 reduces audits but increases vector rounds and live candidate slots relative to 
+
+β4-r0. The arithmetic theorem is therefore a scheduling interface and lower-dimensional design guide, not a plug-in stride formula. Mode, width, and retirement state must enter the systems controller. 
+
+Single-node results do not prove a communication advantage. NVLink makes vector updates relatively cheap and provides no inter-node latency. A network-bound deployment could favor sparser audits, packed collectives, or the predicted milestone more strongly, but it could also expose payload and straggler costs absent here. Multi-node scaling must measure both rounds and bytes; extrapolating the present ratios is not evidence. 
+
+Flow Matching evidence is not yet end to end. 
+
+The coupling-stream experiment uses actual Flow Match-ing minibatch geometry, and a separate pipeline confirms that OT pairing improves reconstruction and curvature on the same target family. The temporal executor did not produce the couplings consumed by that downstream pipeline. The missing test must combine proposal, correc-tion, checks, fallback, coupling sampling, and training in one timing and quality protocol. 
+
+Numerical safety is bounded but incomplete. All formal suites have zero observed accuracy violations and use an acceptance margin. Our exact-arithmetic theorem and outward-rounding prototype do not yet cover every TF32 or NCCL reduction path. A production system should either execute certificate arithmetic on a controlled-precision path or add a backend-specific error envelope and fail closed when its assumptions break. 
+
+Submission status. The current artifact supports a reproducible single-node systems mechanism: temporal 9packing plus safe retirement and forgetting-guided audit placement. The Flow Matching stream and consumer-GPU tests broaden the evidence, but the paper still does not establish a general Flow Matching or Sinkhorn ac-celerator. A broader claim requires integrated training, an optimized solver backend, and at least one multi-node network experiment. 
+
+# 8 Conclusion 
+
+TemporalSinkhorn parallelizes related Sinkhorn solves across time while keeping retirement non-speculative. A centered local certificate accepts a safe prefix; a shared packed stream repairs the suffix; forgetting predicts audit placement but never substitutes for an actual residual. Formal single-node experiments show that the scheduler reduces audit overhead, beats a sequential soft c-transform baseline on controlled streams, and preserves marginal, coupling, objective, and cost accuracy. The evidence now includes both deployment paths. On Flow Matching minibatch streams, temporal execution is 3.054 ×–3 .632 × faster than sequential carry at n = 2048, and a two-seed n = 4096 extension remains positive. A separate RTX 4060 test gives a 4 .315 × fixed-kernel geometric-mean speedup. The consumer-GPU path ben-efits from shared-kernel reuse and launch amortization, whereas the 4 ×A100 path supports row-sharded parallel correction with changing kernels. The current changing-kernel laptop path is negative and remains disabled. The experiments also identify the controller’s central boundary. A sparse predicted milestone helps changing-kernel execution but hurts the best fixed static grid; arith-metic spacing has the complementary result, improving the fixed path but losing to the predicted changing-path policy. Primitive costs vary with mode and active width. The revised frozen composition therefore uses arithmetic 
+
+h = 10 only for fixed kernels and the predicted policy for changing kernels. In a direct new-seed suite it is 1 .436 ×
+
+faster than per-iteration auditing and 1 .069 × faster than universal β2. A real system must learn or model this state without peeking at solver outcomes. The next deci-sive evaluation integrates TemporalSinkhorn into Flow Matching training and measures coupling construction, audits, fallback, sampling, training time, and downstream quality, followed by optimized-solver and multi-node com-parisons. 
+
+Reproducibility. Every reported formal grid is accom-panied by runners, analyzers, configuration snapshots, raw JSON, unified logs, hashes, and exclusion notes. The paper is an author-prepared research artifact; no independent-replication claim is made. 
+
+# References 
+
+[1] Brandon Amos, Giulia Luise, Samuel Cohen, and Iev-gen Redko. Meta optimal transport. In Proceedings of the 40th International Conference on Machine Learn-ing , volume 202 of Proceedings of Machine Learning Research , pages 791–813, 2023. [2] Ali Baheri, David Millard, and Alireza Vahid. Geometry-aware decentralized sinkhorn for wasser-stein barycenters, 2025. [3] Marco Cuturi. Sinkhorn distances: Lightspeed com-putation of optimal transportation distances. In 
+
+Advances in Neural Information Processing Systems ,volume 26, 2013. [4] Marco Cuturi, Laetitia Meng-Papaxanthos, Yingtao Tian, Charlotte Bunne, Geoff Davis, and Olivier Teboul. Optimal transport tools (OTT): A JAX toolbox for all things wasserstein, 2022. [5] Abdullah Gharaibeh, Tahsin Reza, Elizeu Santos-Neto, Lauro Beltrao Costa, Scott Sallinen, and Matei Ripeanu. Efficient large-scale graph processing on hybrid CPU and GPU systems, 2013. [6] Jeremy Kulcsar, Vyacheslav Kungurtsev, Georgios Korpas, Giulio Giaconi, and William Shoosmith. Fed-erated sinkhorn, 2025. [7] Aram-Alexandre Pooladian, Heli Ben-Hamu, Car-les Domingo-Enrich, Brandon Amos, Yaron Lipman, and Ricky T. Q. Chen. Multisample flow matching: Straightening flows with minibatch couplings. In 
+
+Proceedings of the 40th International Conference on Machine Learning , volume 202 of Proceedings of Ma-chine Learning Research , pages 28100–28127, 2023. [8] Zhaonan Qu, Alfred Galichon, and Johan Ugander. On sinkhorn’s algorithm and choice modeling, 2023. [9] Pietro Sittoni and Francesco Tudisco. Subhomoge-neous deep equilibrium models. In Proceedings of the 41st International Conference on Machine Learn-ing , volume 235 of Proceedings of Machine Learning Research , pages 45794–45812, 2024. [10] James Thornton and Marco Cuturi. Rethinking ini-tialization of the sinkhorn algorithm. In Proceedings of the 26th International Conference on Artificial In-telligence and Statistics , volume 206 of Proceedings of Machine Learning Research , pages 8682–8698, 2023. [11] Zeyi Xu and Long Chen. Accelerating sinkhorn for entropy-regularized optimal transport, 2026. [12] Felix X.-F. Ye, Xingjie Li, An Yu, Ming-Ching Chang, Linsong Chu, and Davis Wertheimer. FlashSinkhorn: IO-aware entropic optimal transport on GPU, 2026. 10 [13] Stephen Zhang, Alireza Mousavi-Hosseini, Michal Klein, and Marco Cuturi. On fitting flow models with large sinkhorn couplings, 2025. 
+
+# A Additional Derivations and Pro-tocol Details 
+
+## A.1 Prediction-robust milestone union 
+
+Let G = {g0, g 1, . . . } be an increasing permanent audit grid and let P be any finite predictor-generated set. Exe-cute one cumulative correction stream and audit at the sorted union G ∪ P . If m is the first iteration at which the actual residual passes, the first passing union milestone is no later than the first passing G milestone. Thus predictor error cannot increase iteration overshoot relative to G;it can add at most |P | audits. This claim assumes the residual remains passing after first passage. The imple-mentation checks the actual residual at every retirement and retains the ordinary solver fallback. 
+
+## A.2 Optimal scalar audit schedule 
+
+We state the simplified theorem used to motivate cost-aware milestones. The unknown completion depth is m ∈
+
+[1 , ∞), cumulative iteration cost is one, and each audit costs ρ > 0. A schedule k0 < k 1 < · · · pays kj + ρ(j + 1) at the first kj ≥ m; the offline oracle pays m + ρ.
+
+Theorem 3 (Continuous joint-cost optimum) . The opti-mal deterministic competitive ratio is 
+
+R∗(ρ) = 1 + 
+
+r ρ
+
+1 + ρ .
+
+It is attained by kj = b + aj with a = pρ(1 + ρ) and 
+
+b = R∗(ρ)(1 + ρ) − ρ. The integer schedule obtained by rounding upward and deleting duplicate milestones has ratio at most R∗(ρ) + 1 /(1 + ρ).Proof sketch. Milestones below one can never pass be-cause m ≥ 1; deleting them preserves all stopping depths and removes audits, so take k0 ≥ 1. For the first interval, the worst cost ratio is ( k0 + ρ)/(1 + ρ). For j ≥ 1, letting 
+
+m approach kj−1 from above gives the necessary ratio (kj + ρ(j + 1)) /(kj−1 + ρ). Equalizing these constraints at a candidate ratio R yields a linear recurrence. At 
+
+R = 1 + pρ/ (1 + ρ) , its exponential coefficient vanishes and the arithmetic schedule above satisfies every interval with equality. For any smaller R, the recurrence’s negative exponential coefficient eventually forces an upper bound on some kj below zero, contradicting an unbounded in-creasing schedule. Rounding adds less than one unit of iteration cost, whose ratio to m + ρ is at most 1 /(1 + ρ). Duplicate rounded milestones may be deleted; charging their original indices only makes this upper bound more conservative. Table 6: Selected suites supporting the headline systems comparisons. Development sweeps and diagnostic formal suites are omitted. Accuracy suites report zero tolerance violations; integrity metadata varies by backend.                                              
+
+> Suite Cases Seeds Comparison Closed-loop online forgetting 60 20260740–44 online/per-iter. Soft c-transform baseline 30 20260770–74 temporal/c-transform Sparse milestone held-out 30 20260920–24 β4-r0/ β2Mode-controller held-out v2 30 20260930–34 mode-aware/base Arithmetic-spacing held-out 40 20260940–44 h= 10 /6/base Fixed h= 10 confirmation 15 20260950–54 arithmetic/ β2Revised mode controller 30 20260970–74 revised/base Packed primitive profile 820260960 mode/width RTX fixed-kernel operator 320260727–29 batched/carry Flow Matching coupling stream 19 20261200–04 temporal/carry Flow Matching downstream bridge 45 20261110–14 OT/independent OTT-JAX independent batches 12 20260790–95 c-transform/carry OTT-JAX scaled hybrid 24 (72 runs) 20260830–41 hybrid/static
+
+The scalar result has an exact but restricted packed extension. For fixed candidate count N , let candidate i
+
+retire at common-audit index ji and price the executor by X
+
+> i
+
+{kji + ρ(ji + 1) }.
+
+Relative to P
+
+> i
+
+(mi + ρ), this ratio is a positive weighted average of the scalar ratios, so the same arithmetic sched-ule is minimax; setting all mi equal gives the matching lower bound. This covers candidate-iteration slots and active-candidate audit payload. It does not cover fixed latency paid once per packed update or audit round. Those terms depend on the maxi-mum executed depth and the number of common audits, respectively, and can change the best spacing as local GEMM shape, collective payload, and compaction vary. The systems controller therefore measures them. A tar-geted audit against online bidding, contract scheduling, costly verification, scheduling with testing, and stochastic inspection found no exact collision but does not consti-tute novelty clearance; the theorem is not presented as a standalone contribution here. 
+
+## A.3 Formal experiment inventory A.4 Mode-controller provenance bound-ary 
+
+The v2 mode-controller raw-JSON hash root, split only for typesetting, is d4f02290c9b3e44b97db004d4473cd17 b7e761b14731392a863941f2b1c21048 . Its unified log contains no traceback or NCCL error marker and the 
+
+SUITE COMPLETE marker is present. An earlier full run wrote all metrics but emitted a final NCCL tear-down marker; it is excluded rather than pooled. The fixed/changing selector bit is an input configuration prop-erty in this synthetic executor, not a value inferred from correction outcomes. The revised controller’s clean 30-cell raw-JSON root is 7c1810ee7c9221f9289fbbe14eaeca7d cf0ca508f31017f719b66475f6251633 . Its selector remains the same synthetic input property, with only the fixed branch changed to arithmetic h = 10. 11 A.5 Accuracy interpretation 
+
+For a reconstructed plan π, we separately audit row and column marginal L1, coupling L1 against a tighter reference, relative regularized objective error, and rela-tive transport-cost error. None of these is a proxy for Flow Matching sample quality. The separate downstream pipeline reports curvature and reconstruction, but it does not use the temporal executor. An integrated experiment must report the task’s own quality metric together with total coupling and training time. 12
