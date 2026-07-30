@@ -6,29 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-29
-- 运行时间：2026-07-29 20:43:02 UTC
+- 最新运行日期：2026-07-30
+- 运行时间：2026-07-30 21:27:26 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：0
-- 速读区：2
+- 本次总论文数：3
+- 精读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今天浏览了2篇扩散模型理论论文，探索微分方程模拟与采样泛化分析。
-值得关注《Mimicking diffusion processes with differential equations》（7分）的建模思路，以及《From Score Learning to Discretized Sampling》（6分）对泛化分析的贡献。
-下一步建议优先精读评分最高的微分方程方法，并扩展其与现有采样框架的对比。
-- 详情：[/202607/29/README](/202607/29/README)
+今日精选3篇研究，精读2篇均获8分高分，聚焦生成式语义通信与源定位问题。最值得关注《Low-Latency Generative Semantic Communication》与《Learning Backward Transport for Source Localization》，前者在低延迟通信有突破，后者创新后向传输框架。建议优先精读这两篇高分论文，速读可拓展对非梯度流图学习方法的理解。
+- 详情：[/202607/30/README](/202607/30/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Low-Latency Generative Semantic Communication via Channel-Realization Flow Matching](/202607/30/2607.24876v1-low-latency-generative-semantic-communication-via-channel-realization-flow-matching)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：桥式流匹配连接信道与语义状态
+2. [Learning Backward Transport for Source Localization](/202607/30/2607.26892v1-learning-backward-transport-for-source-localization)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：利用施罗德桥公式结合反向传播和朗之万动力学进行源定位
 
 ### 速读区论文标签
-1. [Mimicking diffusion processes with differential equations](/202607/29/2607.25685v1-mimicking-diffusion-processes-with-differential-equations)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：研究概率流ODE，为用于Schrodinger桥的基于分数的扩散模型提供理论基础
-2. [From Score Learning to Discretized Sampling: An End-to-End Generalization Analysis of Diffusion Models](/202607/29/2607.23226v1-from-score-learning-to-discretized-sampling-an-end-to-end-generalization-analysis-of-diffusion-models)  
+1. [Flow Map Learning via Nongradient Vector Flow](/202607/30/2607.26398v1-flow-map-learning-via-nongradient-vector-flow)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：基于得分的扩散模型泛化分析，为解决薛定谔桥问题的得分匹配方法提供理论基础
+   evidence：学习扩散模型的ODE流映射，与生成建模中的随机桥相关
 
 
 <div class="dpr-home-promo-card">
