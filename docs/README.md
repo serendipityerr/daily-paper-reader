@@ -6,29 +6,35 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-30
-- 运行时间：2026-07-30 21:27:26 UTC
+- 最新运行日期：2026-07-31
+- 运行时间：2026-07-31 20:20:26 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：2
-- 速读区：1
+- 本次总论文数：5
+- 精读区：1
+- 速读区：4
 
 ### 今日简报（AI）
-今日精选3篇研究，精读2篇均获8分高分，聚焦生成式语义通信与源定位问题。最值得关注《Low-Latency Generative Semantic Communication》与《Learning Backward Transport for Source Localization》，前者在低延迟通信有突破，后者创新后向传输框架。建议优先精读这两篇高分论文，速读可拓展对非梯度流图学习方法的理解。
-- 详情：[/202607/30/README](/202607/30/README)
+今日精读随机动力系统几何方法，速读场码与扩散采样相关论文。最值得关注的是高分的《Geometric Methods for Stochastic Dynamical Systems》，几何框架值得深挖。建议普通读者优先精读这篇，其余速读扫盲即可。
+- 详情：[/202607/31/README](/202607/31/README)
 
 ### 精读区论文标签
-1. [Low-Latency Generative Semantic Communication via Channel-Realization Flow Matching](/202607/30/2607.24876v1-low-latency-generative-semantic-communication-via-channel-realization-flow-matching)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：桥式流匹配连接信道与语义状态
-2. [Learning Backward Transport for Source Localization](/202607/30/2607.26892v1-learning-backward-transport-for-source-localization)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：利用施罗德桥公式结合反向传播和朗之万动力学进行源定位
+1. [Geometric Methods for Stochastic Dynamical Systems](/202607/31/2607.27237v1-geometric-methods-for-stochastic-dynamical-systems)  
+   标签：评分：9.0/10、query:diff-bridge
+   evidence：将边界分布间的转移重述为Schrodinger桥，以最小化相对熵定义最优路径
 
 ### 速读区论文标签
-1. [Flow Map Learning via Nongradient Vector Flow](/202607/30/2607.26398v1-flow-map-learning-via-nongradient-vector-flow)  
+1. [Field Codes for Distributed Coupling Samplers and Certified Empirical Transport](/202607/31/2607.27078v1-field-codes-for-distributed-coupling-samplers-and-certified-empirical-transport)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：最优输运耦合采样与可认证经验输运，直接支持桥构造中的最优输运
+2. [Field Codes for Distributed Coupling Samplers and Certified Empirical Transport](/202607/31/2607.27078v2-field-codes-for-distributed-coupling-samplers-and-certified-empirical-transport)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：最优输运耦合采样与可认证经验输运，直接支持桥构造中的最优输运
+3. [Denoising growth complexity: Data geometry and certified schedules for diffusion sampling](/202607/31/2607.26285v1-denoising-growth-complexity-data-geometry-and-certified-schedules-for-diffusion-sampling)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：学习扩散模型的ODE流映射，与生成建模中的随机桥相关
+   evidence：扩散采样理论与去噪增长复杂度，与随机桥生成模型相关
+4. [Amortized Moment Matching for Visual Generation](/202607/31/2607.26860v1-amortized-moment-matching-for-visual-generation)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：基于摊销矩匹配的扩散模型训练，用于视觉生成
 
 
 <div class="dpr-home-promo-card">
