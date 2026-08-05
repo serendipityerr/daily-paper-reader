@@ -1,0 +1,1651 @@
+Title: Scalable Dynamic Optimal Transport via Distributed Linearized ADMM
+
+URL Source: https://arxiv.org/pdf/2607.26407v1
+
+Published Time: Thu, 30 Jul 2026 00:22:03 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+Scalable Dynamic Optimal Transport via Distributed Linearized ADMM 
+
+Hari Dahal ∗ , Rongjie Lai † , and Yangyang Xu ∗
+
+Abstract. In this paper, we address two fundamental challenges in the numerical solution of dynamic opti-mal transport (OT) problems. The first challenge arises when the initial and/or terminal densities approach zero and no positive lower bound is available. In this regime, conventional methods may become unstable or computationally inefficient, since the Lipschitz constant of the objective can scale like the reciprocal of the cube of the density. As a result, near-zero regions may lead to slow convergence or even divergence. The second challenge concerns the substantial memory cost of the dynamic formulation, whose discretization over fine spatial and temporal grids requires storing vari-ables across the entire space-time domain. This storage burden quickly becomes prohibitive as the grid is refined or the spatial dimension increases. To overcome the first difficulty, we reformulate the classical discretized dynamic OT problem so that the resulting objective admits an exact proximal mapping. When combined with a linearized alternating direction method of multipliers (LADMM), this reformulation yields an efficient and robust algorithm that remains stable even in challenging settings where the density may vanish. To reduce the memory burden, we further introduce a dis-tributed formulation in which the optimization variables are partitioned across multiple agents. This design substantially lowers the storage requirement for each agent and can also lead to computational acceleration. We validate the proposed framework through numerical experiments in one- and two-dimensional spatial settings under varying levels of difficulty. The results demonstrate the stability, robustness, and scalability of the proposed method in comparison with conventional approaches. 
+
+Key words. Dynamic optimal transport, linearized ADMM, image mapping, distributed computation. 
+
+MSC codes. 90C25, 49M27, 65Y05, 90C06 
+
+1. Introduction. Optimal transport (OT) provides a principled framework for comparing and transforming probability distributions and has become an important tool in applications across a wide range of fields, including economics [7, 9, 12, 17], image processing [13, 14, 35], machine learning and generative AI [1, 27, 39, 2, 41], probability theory [38], and partial differential equations [10, 24, 8]. Comprehensive treatments of OT and its applications can be found in [43, 44, 42, 36]. The foundations of OT can be traced back to the Monge mapping problem, introduced by Gaspard Monge in 1781. Monge’s original formulation arose from a practical problem: to find the optimal way to transport a pile of material from one location to another by minimizing the cost of transportation. In a more modern framework, Monge’s problem was generalized to probability measures by Leonid Kantorovich in 1942 [25], leading to what is now known as the Monge-Kantorovich (MK) problem. In this paper, we focus on the Benamou–Brenier formulation of OT given below [4, 5, 33, 32, 37]: min 
+
+> (ρ, m)∈S (ρ0,ρ1)
+
+Z 10
+
+Z
+
+> Ω
+
+F (ρ(t, x), m(t, x))d xdt. (1.1) 
+
+> ∗
+
+Department of Mathematical Sciences, Rensselaer Polytechnic Institute, Troy, NY 12180, (harida-hal156@gmail.com, xuy21@rpi.edu). 
+
+> †
+
+Department of Mathematics, Purdue University, West Lafayette, IN 47907, (lairj@purdue.edu). 
+
+1arXiv:2607.26407v1 [math.OC] 29 Jul 2026 Here, Ω ⊂ RD, ρ(t, x) denotes the density field, and m(t, x) := ρ(t, x)v(t, x) is the flux field associated with the velocity field v(t, x). The dynamic cost function F : R+ × RD → R := 
+
+R ∪ {∞} is defined as [4] 
+
+F (b, a) = 
+
+
+
+∥a∥2
+
+2b if b > 0,
+
+0 if b = 0 , a = 0,
+
++∞ if b = 0 , a̸ = 0.
+
+(1.2) The admissible set S(ρ0, ρ1) consists of all density–momentum pairs satisfying the continuity equation, the no-flux boundary condition, and the prescribed initial and terminal densities: 
+
+S(ρ0, ρ1) := (ρ, m) | ∂tρ + div xm = 0 ,(1.3) 
+
+m · n = 0 for x ∈ ∂Ω, ρ (0 , ·) = ρ0, ρ (1 , ·) = ρ1 ,
+
+where n denotes the outward unit normal vector on ∂Ω. This dynamic formulation has been widely used in scientific computing, image processing, fluid mechanics, machine learning, and related areas, due to its close connection with PDE-constrained optimization and its ability to describe the full transport path between two distributions. Several prominent approaches for solving Problem (1.1) include the augmented Lagrangian method (ALM) [5], the fast iterative soft-thresholding algorithm (FISTA) [50], and G-prox [23]. In the regime where the initial and/or terminal densities approach zero, FISTA may exhibit very slow convergence due to the large local Lipschitz constant of the gradient of the dynamic OT energy. The primal subproblems arising in G-prox for discretizations of Problem (1.1) generally do not admit closed-form solutions. Therefore, they must either be solved approximately or handled by an additional iterative solver, which can increase the overall computational cost. Moreover, both G-prox and ALM are infeasible methods in the sense that their iterates do not necessarily satisfy the mass-conservation constraint at each iteration. As a result, they may require many iterations and thus are inefficient to reduce feasibility violations to a low tolerance. Besides the lack of efficient and robust algorithms for handling the above mentioned chal-lenging case, another difficulty arises from the fine-grid discretization of the density and flux fields, which requires storing very high-dimension variables over the entire space–time domain. More precisely, as the spatial grid is refined, the number of time steps increases, or the spatial dimension grows, this storage requirement quickly becomes prohibitive. These limitations/challenges motivate the development of an efficient numerical method for dynamic OT that should be not only stable with respect to near-zero densities but also scalable in memory and computation. To achieve this goal, we develop an exact-proximal linearized alternating direction method of multipliers (LADMM) for the discretized dynamic OT problem. The key idea is to reformulate the classical discretized formulation by introducing auxiliary variables, so that the subproblem involving the dynamic OT energy admits an exact proximal mapping. This exact-proximal update avoids the instability associated with gradient-based updates near zero densities. Meanwhile, the algorithm preserves the mass-conservation constraint throughout the iterations, by performing explicit projection steps. To further reduce the memory burden, we introduce a distributed formulation of the proposed method. In 
+
+> 2
+
+this formulation, the optimization variables are partitioned across multiple agents, so that each agent only stores and updates a portion of the full space–time variables. This substantially reduces the per-agent storage requirement and naturally enables parallel computation. The main contributions of this paper are summarized as follows: 1. We propose an exact-proximal based LADMM for the discretized dynamic OT prob-lem. By reformulating the problem so that the proximal mapping of the dynamic OT energy can be computed exactly, the proposed method avoids gradient-based up-dates that become unstable when the density approaches zero. This addresses a key limitation of projected gradient and existing primal–dual methods whose convergence may deteriorate due to the large local gradient Lipschitz constant of the dynamic OT objective. 2. To handle very large-scale OT problems, we further develop a distributed implementa-tion of the proposed LADMM method by partitioning the space–time variables across multiple agents. This reduces the memory requirement for each agent and enables parallel computation. 3. We validate the proposed framework through extensive numerical experiments in one-and two-dimensional spatial settings under varying levels of difficulty and/or a dis-tributed setting. The results demonstrate that the proposed LADMM exhibits signifi-cantly higher numerical robustness and efficiency than existing methods in challenging regimes involving near-zero densities. For the case with distributed computing, our method is able to achieve high speed up, with over 6x speed up by using 12 CPU cores. 
+
+1.1. Related work. Many numerical approaches have been developed for solving the dy-namic OT problem (1.1). The augmented Lagrangian method of Benamou and Brenier [5] pioneered the numerical solution of the dynamic formulation and has inspired many sub-sequent variants [32, 35]. ALM can often converge, but it can struggle with reducing the feasibility. Projected gradient-type methods form another important class of algorithms. Yu et al. [50] proposed a fast iterative soft-thresholding algorithm (FISTA) for mean-field planning prob-lems, of which (1.1) is a special case. Such methods can be efficient when the objective has a moderate gradient Lipschitz constant, but they become less effective in the presence of near-zero densities because of the large local curvature of the kinetic energy. In particular, since the local gradient Lipschitz constant can scale on the order of 1 /ρ 3, projected gradient methods may require very small step sizes when ρ approaches zero, leading to degraded convergence. Primal–dual methods provide a third class of approaches. Jacobs et al. [23] proposed the G-prox method for large-scale optimal transport problems. Related primal–dual formulations for dynamic OT have also been studied by Henry et al. [20], where the Helmholtz–Hodge decomposition [19] is used to enforce divergence-free constraints during the iteration. These methods require a substantial number of iterations to reduce constraint violations, as it is not based on an exact projection step. In addition to the above optimization-based approaches, several learning-based methods have recently been proposed for dynamic OT and related flow problems [40, 22, 16, 45, 21]. There has also been growing interest in dynamic OT on discrete surfaces and geometric do-mains [28, 15, 49]. These directions are complementary to the present work, which focuses on 
+
+> 3
+
+robust and scalable optimization methods for the Eulerian dynamic formulation (1.1). Distributed and parallel methods for OT have been studied in several related settings. For entropic OT, Bonafini and Schmitzer [6] developed a domain decomposition algorithm based on the earlier domain decomposition framework of Benamou [3]. Wang et al. [46] proposed a decentralized entropic OT method for privacy-preserving distributed distribution comparison, using a mini-batch randomized block-coordinate descent algorithm to minimize a decentralized dual formulation. Li et al. [29] developed a parallel primal–dual algorithm for computing the Earth Mover’s Distance by reformulating the problem as an L1-type minimization problem with an additional quadratic regularization term. However, these methods primarily address the static Monge–Kantorovich problem, entropic OT, or related variants motivated by specific applications. They do not directly solve the dynamic OT formulation (1.1) considered in this work. 
+
+1.2. Notations. We define R+ := {a ∈ R | a ≥ 0} and [ N ] := {1, 2, . . . , N }. ∂Ω denotes the boundary of the set Ω. Mj denotes the entry of M specified by the index vector j and 
+
+ed denotes a vector with 1 in the d-th entry and 0 everywhere else. For a linear operator A,its norm is defined as ∥A∥∗ := sup ∥x∥=1 ∥A(x)∥, where ∥ · ∥ denotes the Euclidean norm. The 
+
+d-mode product [26] of a tensor X ∈ Rn0×n1×... ×nD with a matrix U ∈ Rˆn×nd is denoted by 
+
+X × d U with entries given by (X × d U)i0··· id−1ji d+1 ··· iD =
+
+> nd
+
+X
+
+> id=0
+
+xi0i1··· iD uji d .
+
+We use ⟨· , ·⟩ for standard Euclidean inner product. For any positive number ∆, we denote 
+
+⟨x, y ⟩∆ = ∆ ⟨x, y ⟩. Also, we define ∥x∥2∆ = ⟨x, x ⟩∆.
+
+2. Proposed Algorithm. In this section, we give the LADMM for Problem (1.1) with detailed derivations for its updates. We begin by presenting a discretized formulation of Problem (1.1). Then, we derive the proximal mapping of F defined in (1.2), which plays a key role in enabling more robust and stable performance of our algorithm. Finally, we present the complete LADMM algorithm. 
+
+2.1. Discretization. We follow the staggered grid used by Yu et al. [50] to build a dis-cretized version of Problem (1.1). Suppose that Ω = [0 , 1] D. We consider a uniform grid with n0 segments on the time interval [0 , 1] and nd segments on the d-th space dimension for 
+
+d = 1 , . . . , D . The mesh size on each dimension is ∆ d = 1 
+
+> nd
+
+for d = 0 , 1, . . . , D . In addition, for each d = 0 , 1, . . . , D , we denote 
+
+Jd := 
+
+ 32 , 52 , . . . , n d − 12
+
+
+
+,Jd := (1 , 2, . . . , n d),
+
+Jd := J0 × J1 × · · · × Jd−1 × Jd × Jd+1 × · · · × JD,
+
+J := J0 × J1 × · · · × JD,
+
+bJd := (1 , 2, . . . , n d − 1) ,
+
+> 4
+
+bJd := J0 × J1 × · · · × Jd−1 × bJd × Jd+1 × · · · × JD,
+
+Vd := Rn0×n1×...n d−1×(nd−1) ×nd+1 ×... ×nD ,
+
+V := Rn0×n1×... ×nD .
+
+Also, we denote M0 and M respectively as the discretization of ρ and m on grid points. Let 
+
+bx = ( t, x). Then we define (2.1) 
+
+M0 ∈ V0 with ( M0)j = ρ(bxj+ 12 ed ), ∀ j ∈ ˆJ0,Md ∈ Vd with ( Md)j = m(bxj+ 12 ed ), ∀ j ∈ ˆJd, ∀ d = 1 , 2, . . . , D, 
+
+M := ( M1, . . . , M D) ∈ V1 × V2 × . . . VD.𝑡 = 0
+
+𝑖 0 = 1
+
+2
+
+𝑡 = 1
+
+𝑖 0 = 𝑛 0 + 1
+
+2
+
+𝑥 = 0
+
+𝑖 1 = 1
+
+2
+
+𝑥 = 1
+
+𝑖 1 = 𝑛 1 + 1
+
+2
+
+𝑥 
+
+𝑡 
+
+Fixed 
+
+Variables    
+
+> 𝐽 0
+> 𝐽 1
+> ҧ
+> 𝐽
+> Figure 1. Illustration of the decomposition of the time and spatial domain for D= 1 .
+
+For better understanding of our notations, we use the case of D = 1 to explain them. The index sets J0 and J1 correspond to the filled red and blue triangles in Figure 1, respectively. The function ρ is defined on J0, while m is defined on J1. Since M0 and M represent ρ and 
+
+m at discretized points, we observe that they are defined on two staggered grids; that is, the red and blue triangles represent distinct spatial locations. When computing the objective in Problem (1.1), we will evaluate the numerator and denominator at the same spatial locations. For this purpose, the averaged variables fM0 and fM that we introduce in the next subsection are defined on the central grid represented by the index set J, corresponding to the green points in Figure 1. 
+
+> 5
+
+Objective value:. To discretize the objective, we define average operators as: (2.2) for each d = 0 , 1, . . . , D, let Avg d : Vd −→ V, M d −→ Avg d(Md)such that for all j = ( j0, j 1, . . . , j D) ∈ J,
+
+(Avg d(Md)) j := 
+
+ 
+
+> 12
+
+(Md)j, for jd = 1 , 
+
+> 12
+
+(( Md)j−ed + ( Md)j) , for jd = 2 , 3, . . . , n d − 1, 
+
+> 12
+
+(Md)j−ed , for jd = nd,
+
+and let Avg : V1 × . . . × VD → VD, M → (Avg 1(M1), . . . , Avg D(MD)) ,
+
+where the averaged values at jd = 1 and jd = nd are 12 (Md)j and 12 (Md)j−ed , respectively because of the boundary condition m · n = 0 in Problem (1.1). The adjoint operators of the average operators defined in (2.2) are given by (2.3) for each d = 0 , 1, . . . , D, Avg ∗ 
+
+> d
+
+: V −→ Vd, cMd −→ Avg ∗
+
+> d
+
+( cMd),
+
+such that for all j = ( j0, j 1, . . . , j D) ∈ bJ
+
+Avg ∗
+
+> d
+
+( cMd)j := 12
+
+
+
+( cMd)j + ( cMd)j+ed
+
+
+
+and Avg ∗ : VD → V1 × . . . × VD, cM → (Avg ∗
+
+> 1
+
+( cM1), . . . , Avg ∗
+
+> D
+
+( cMD)) .
+
+Also, we let bavg ∈ V contain density boundary values: for any j = ( j0, j 1, . . . , j D) ∈ J,(bavg )j := 
+
+ 
+
+> 12
+
+ρ0(xˆj), for j0 = 1 ,
+
+0, for j0 = 2 , 3, . . . , n 0 − 1 
+
+> 12
+
+ρ1(xˆj), for j0 = n0,
+
+(2.4) where ˆj = ( j1, . . . , j D) takes the last D entries of j. Using the above operators, we define 
+
+fM0, fM ∈ V as 
+
+fM0 := Avg 0(M0) + bavg , fM := Avg( M),(2.5) and approximate the objective value of (1.1) by 
+
+f ( fM0, fM) := 
+
+> D
+
+Y
+
+> d=0
+
+∆d
+
+! X
+
+j∈J
+
+∥fMj∥2
+
+2( fM0)j
+
+.(2.6) 
+
+Constraints:. We use finite difference method to discretize the PDE constraints in (1.1). We first define the following operators for discretizing partial derivatives: (2.7) for each d = 0 , 1, . . . , D, let Pd : Vd → V, M d → P d(Md),
+
+such that for all j = ( j0, j 1, . . . , j D) ∈ J,
+
+(Pd(Md)) j := 
+
+ 
+
+> 1∆d
+
+(Md)j, for jd = 1  
+
+> 1∆d
+
+(( Md)j − (Md)j−ed ) , for jd = 2 , 3, . . . n d − 1
+
+− 1∆d (Md)j−ed , for jd = nd,,
+
+and let P : V1 × . . . × VD → VD, M →  P1(M1), . . . , PD(MD).
+
+> 6
+
+Just like in the definition of the average operators in (2.2), the boundary values of M are already included in (2.7). The adjoint operators of the partial derivative operators in (2.7) are given by (2.8) for each d = 0 , 1, . . . , D, P∗ 
+
+> d
+
+: V → Vd, cMd → P ∗ 
+
+> d
+
+( cMd),
+
+such that for all j = ( j0, j 1, . . . , j D) ∈ bJd,
+
+(P∗ 
+
+> d
+
+( cMd)) j := 1∆d
+
+
+
+( cMd)j − ( cMd)j+ed
+
+
+
+,
+
+and P∗ : VD → V1 × . . . × VD, P →  P∗ 
+
+> 1
+
+(P1), . . . , P∗
+
+> D
+
+(PD).
+
+Second, we let b ∈ V contain the M0 boundary conditions: for all j = ( j0, j 1, . . . , j D) ∈ J,
+
+bj := 
+
+
+
+− 1∆0 ρ0(xˆj), for j0 = 1 ,
+
+0, for j0 = 2 , 3, . . . , n 0 − 1 
+
+> 1∆0
+
+ρ1(xˆj), for j0 = n0,
+
+(2.9) where ˆj = ( j1, . . . , j D) takes the last D entries of j. With these notations, the PDE constraint set in Problem (1.1) can be approximated by 
+
+C := 
+
+(
+
+(M0, M)
+
+> D
+
+X
+
+> i=0
+
+PdMd + b = 0
+
+)
+
+.(2.10) Now we obtain the discretized version of Problem (1.1) as follows: (2.11) min  
+
+> (M0,M)∈C
+
+f (Avg 0(M0) + bavg , Avg( M)) ,
+
+where M0 and M, defined in (2.1), are the discretized counterparts of ρ and m, respectively. The function f is defined in (2.6), the averaging operators Avg 0 and Avg are given in (2.2), 
+
+bavg is defined in (2.4), and the set C is defined in (2.10). 
+
+2.2. Proximal Mapping of F . Note that the cost function F defined in (1.2) is differen-tiable. However, its gradient is not (globally) Lipschitz continuous. Even locally, its gradient Lipschitz constant can be extremely large, in particular when b is close to 0. When b > 0, we have the Hessian matrix of F as ∇2F (b, a) = 
+
+" ∥a∥2
+
+> b3
+> a⊤
+> b2
+
+− a 
+
+> b2
+> 1
+> b
+
+I
+
+#
+
+. Thus ∥∇ 2F (b, a)∥ = Θ 
+
+ ∥a∥2
+
+> b3
+
+
+
+.Since the Lipschitz constant of ∇F for b > 0 is roughly the norm of its Hessian, it can become arbitrarily large as b approaches zero. Consequently, if either ρ0 or ρ1 in (1.1) takes values close to zero, the (local) gradient Lipschitz constant becomes large, leading to tiny step sizes in the update of gradient-type methods for guaranteed convergence. To address the issue caused by the exploding gradient Lipschitz constant, we do not perform gradient update by using ∇F but instead use its proximal mapping which is provided by the lemma below. We defer its proof in the appendix. 
+
+> 7
+
+Lemma 2.1. The proximal mapping of function F (1.2) with parameter γ > 0 is 
+
+(2.12) Prox F,γ (ˆ ρ, ˆm) := arg min 
+
+> ρ, m
+
+F (ρ, m) + 12γ
+
+ (ρ − ˆρ)2 + ∥m − ˆm∥2 ,
+
+=
+
+
+
+(0 , 0), if bρ ≤ 0, ∥ bm∥2 ≤ − 2γ bρ, 
+
+
+
+ρ, bm ρρ + γ
+
+
+
+, otherwise .
+
+Here ρ is the unique real-number solution of the cubic equation 
+
+ρ3 + (2 γ − bρ)ρ2 + ( γ2 − 2γ bρ)ρ − 12 γ∥ bm∥2 − γ2 bρ = 0 .
+
+Remark 2.2. The proximal mapping of the function F , defined in Lemma 2.1, plays a central role in the superior performance of our proposed LADMM. In contrast, many existing methods for solving Problem (1.1), including ALM [5], FISTA [50], and G-prox [23], do not explicitly utilize this proximal mapping. 
+
+2.3. Linearized ADMM. In this subsection, we derive LADMM updates to solve Problem (2.11). We employ a variable-splitting technique by introducing auxiliary variables M and 
+
+M0 corresponding to the averaged quantities of M and M0, respectively. These auxiliary variables enable the use of the exact proximal mapping described in Lemma 2.1. With these variables, Problem (2.11) can be reformulated as (2.13) min 
+
+> M0,M,(M0,M)∈C
+
+f (M0, M)s.t. Avg( M) − M = 0, Avg 0(M0) + bavg − M0 = 0 .
+
+Note that we intentionally retain the mass-conservation constraint ( M0, M) ∈ C in the formu-lation and will preserve it at each iteration of our algorithm by performing an exact projection. The AL function of (2.13) is defined as 
+
+Lβ (M0, M, M 0, M; Π, Λ) = f (M0, M) + ⟨Π, Avg( M) − M⟩∆
+
++ β
+
+2 ∥Avg( M) − M∥2∆ + ⟨Λ, Avg 0(M0) + bavg − M0⟩∆
+
++ β
+
+2 ∥Avg 0(M0) + bavg − M0∥2∆,(2.14) where Λ and Π are the dual variables corresponding to the averaged M0 and M constraints respectively, and ∆ = QDd=0 ∆d. With the AL function, the LADMM iterative updates can be written as follows: for each k ≥ 0, (M0
+
+> k+1
+
+, Mk+1 ) = arg min  
+
+> (M0,M)
+
+Lβk (M0, M, M k 
+
+> 0
+
+, Mk; Πk, Λk),(2.15) (M k+1 0 , Mk+1 ) = arg min 
+
+> (M0,M)∈C
+
+12 ∥M − Mk+ 12 ∥2 + 12 ∥M0 − M k+ 12 
+
+> 0
+
+∥2,(2.16) 
+
+> 8
+
+(Πk+1 , Λk+1 ) = ( Πk, Λk) + βk
+
+
+
+Avg( Mk+1 ) − Mk+1 ,
+
+Avg 0(M k+1 0 ) + bavg − M0
+
+> k+1
+
+
+
+.(2.17) Here, we use LADMM [31, 11, 34, 30, 48] instead of standard ADMM to update ( M k+1 0 , Mk+1 ), since the corresponding ADMM subproblem does not admit a closed-form solution. More pre-cisely, (2.16) is obtained by linearizing Lβk (·, ·, M k+1 0 , Mk+1 ; Π k, Λk) at ( M k 
+
+> 0
+
+, Mk) and adding a proximal term. Since the terms involving M0 and M are independent and the gradient Lip-schitz constants satisfy ∥Avg ∗
+
+> 0
+
+Avg 0∥∗ = cos 
+
+ π
+
+> 2n0
+
+
+
+≤ 1 and ∥Avg ∗Avg ∥∗ = QDi=1 cos 
+
+ π
+
+> 2ni
+
+
+
+≤ 1,
+
+we set (2.18) 
+
+M k+ 12 
+
+> 0
+
+= M k 
+
+> 0
+
+− 1
+
+βk
+
+Avg ∗
+
+> 0
+
+ Λk + βk (Avg 0(M k 
+
+> 0
+
+) + bavg − M0
+
+> k+1
+
+),
+
+Mk+ 12 = Mk − 1
+
+βk
+
+Avg ∗ Πk + βk Avg( Mk) − Mk+1 .
+
+The ( M 0, M)-update in (2.15) can be implemented by utilizing the proximal mapping in Lemma 2.1. The projection subproblem in (2.16) can be rewritten as (2.19) min 
+
+> M0,M
+
+12 ∥M0 − M k+ 12 
+
+> 0
+
+∥2 + 12 ∥M − Mk+ 12 ∥2,
+
+s.t. P0M0 + PM + b = 0,
+
+where P0 and P are defined in (2.7). Let ϕ ∈ V be the multiplier to the linear constraint. To find the optimal solution of (2.19), we form the KKT system as follows 
+
+M0 − M k+ 12 
+
+> 0
+
++ P∗ 
+
+> 0
+
+ϕ = 0,(2.20) 
+
+M − Mk+ 12 + P∗ϕ = 0,(2.21) 
+
+P0M0 + PM + b = 0.(2.22) Substituting M0 = M k+ 12 
+
+> 0
+
+− P ∗ 
+
+> 0
+
+ϕ and M = Mk+ 12 − P ∗ϕ from equations (2.20) and (2.21), respectively, to (2.22) yields 
+
+P0P∗ 
+
+> 0
+
+ϕ + PP ∗ϕ = P0M k+ 12 
+
+> 0
+
++ PMk+ 12 + b. (2.23) This is essentially a Poisson equation, which can be efficiently computed using the fast cosine transform, in a manner similar to the projection step in [50]. Using discretization matrices to represent the operators P0 and P results in the equation 
+
+> D
+
+X
+
+> d=0
+
+ϕ ×d Ad = C := P0M k+ 12 
+
+> 0
+
++ PMk+ 12 + b, (2.24) where ×d represents the tensor multiplication [26] in the xd direction for d > 0 and ×0
+
+represents the tensor multiplication in the t direction, and Ad is the matrix representation (that is given below for the case of D = 1) of PdP∗ 
+
+> d
+
+, for all d = 0 , 1, 2, . . . , D . An efficient way to solve (2.24) is by using the eigendecomposition of matrices Ad for all d = 0 , 1, . . . , D .With the above derivations, we give the pseudocode of our method in Algorithm 2.1. 
+
+> 9
+
+Algorithm 2.1 LADMM for dynamic OT 
+
+Require: ρ0, ρ1 
+
+> 1:
+
+Initialization: M 0
+
+> d
+
+(j) = 0 for j ∈ ˆJd, for all d = 0 , 1, . . . , D . 
+
+> 2:
+
+for k = 0 , 1, 2, . . . do  
+
+> 3:
+
+Pick βk > 0 and update ( M 0, M) by 
+
+
+
+M0
+
+> k+1
+
+, Mk+1 
+
+= Prox  
+
+> F, 1
+> βk
+> 
+
+
+
+Avg 0(M k 
+
+> 0
+
+) + bavg − Λk
+
+βk
+
+, Avg( Mk) − Πk
+
+βk
+
+
+
+. 
+
+> 4:
+
+Let ( M k+ 12 
+
+> 0
+
+, M k+ 12 ) be defined in (2.18) and solve the following equation for ϕk+1 :
+
+P0P∗ 
+
+> 0
+
+ϕk+1 + PP ∗ϕk+1 = P0M k+ 12 
+
+> 0
+
++ PMk+ 12 + b.  
+
+> 5:
+
+Update ( M0, M) by 
+
+M k+1 0 = M k+ 12 
+
+> 0
+
+− P ∗ 
+
+> 0
+
+ϕk+1 , Mk+1 = Mk+ 12 − P ∗ϕk+1 . 
+
+> 6:
+
+Update multipliers by 
+
+Πk+1 = Πk + βk
+
+
+
+Avg( Mk+1 ) − Mk+1 
+
+,
+
+Λk+1 = Λ k + βk
+
+
+
+Avg 0(M k+1 0 ) + bavg − M0
+
+> k+1
+
+
+
+. 
+
+> 7:
+
+end for 
+
+Remark 2.3. (Explicit solution of the equation in (2.24)) To explain how to solve (2.24), we start from the case of D = 1. In this case, (2.24) becomes the Sylvester equation 
+
+A0ϕ + ϕA 1 = C, (2.25) where A0 and A1 are tri-diagonal positive semi-definite matrices: 
+
+A0 = 1∆20
+
+
+
+1 −1 0 · · · 0
+
+−1 2 −1 . . . ...0 −1 2 . . . 0... . . . . . . . . . −10 · · · 0 −1 1
+
+
+
+> n0×n0
+
+, A1 = 1∆21
+
+
+
+1 −1 0 · · · 0
+
+−1 2 −1 . . . ...0 −1 2 . . . 0... . . . . . . . . . −10 · · · 0 −1 1
+
+
+
+> n1×n1
+
+,
+
+(2.26) with ∆ 0 = 1 
+
+> n0
+
+and ∆ 1 = 1 
+
+> n1
+
+representing the grid spacings along the t- and x1- directions, respectively. Let A0 = U Σ0U ⊤ and A1 = V Σ1V ⊤ be their eigen-decompositions. Then Σ0U ⊤ϕV + U ⊤ϕV Σ1 = U ⊤CV, 
+
+> 10
+
+which indicates (in an entry-wise manner) (Σ 0)i(U ⊤ϕV )i,j + ( U ⊤ϕV )i,j (Σ 1)j = ( U ⊤CV )i,j , ∀ (i, j ).
+
+Hence, (U ⊤ϕV )i,j = (U ⊤CV )i,j 
+
+(Σ 0)i + (Σ 1)j
+
+, ∀ (i, j ).(2.27) We can obtain U ⊤ϕV via (2.27) by computing the eigenvalues and eigenvectors of A0 and 
+
+A1 in (2.25) once at the beginning of the algorithm and reusing them for each update. The matrix A0 (similar for A1) is well-studied in literature, and its eigenvalues and egivenvectors are given by (2.28) (Σ 0)i = 4 n20 sin 2
+
+ (i − 1) π
+
+2n0
+
+
+
+, ∀i ∈ [n0],U (1)  
+
+> j
+
+= 1
+
+√n0
+
+, U (i) 
+
+> j
+
+=
+
+r 2
+
+n0
+
+cos 
+
+ 
+
+j − 12
+
+ (i − 1) πn0
+
+
+
+, ∀j ∈ [n0], ∀i ∈ [n0] \ { 1}.
+
+Here U (i) is the i-th eigenvector corresponding to eigenvalue (Σ 0)i and the set {U (i)}i∈[n0]
+
+forms an orthonormal basis. Note that Σ 1 and V can be obtained by replacing n0 with n1 in (2.28). Therefore, we can recover ϕ from U ⊤ϕV efficiently. In a general case of D ≥ 1, we let Ad = UdΣdU ⊤ 
+
+> d
+
+be the eigendecomposition for each d =0, 1, . . . , D . Then in analogy to (2.27), we have from (2.24) that for any index ( i0, i 1, . . . , i D), 
+
+
+
+ϕ ×0 U ⊤ 
+
+> 0
+
+×1 U ⊤ 
+
+> 1
+
+×2 · · · × D U ⊤
+
+> D
+
+
+
+> i0,i 1,...,i D
+
+=
+
+ C ×0 U ⊤ 
+
+> 0
+
+×1 U ⊤ 
+
+> 1
+
+×2 · · · × D U ⊤
+
+> D
+
+
+
+> i0,i 1,...,i D
+
+(Σ 0)i0 + (Σ 1)i1 + · · · + (Σ D)iD
+
+.
+
+(2.29) With ϕ ×0 U ⊤ 
+
+> 0
+
+×1 U ⊤ 
+
+> 1
+
+×2 · · · × D U ⊤ 
+
+> D
+
+, we can easily obtain ϕ by multiplying Ud to the d-th mode for all d = 0 , 1, . . . , D .The convergence result of LADMM has been established in the literature. We have the following theorem directly from Theorem 4.3 of [18] or Theorem 2.13 of [47]. 
+
+Theorem 2.4. Let   M k 
+
+> 0
+
+, Mk, M k 
+
+> 0
+
+, Mk 
+
+> k≥0
+
+be the sequence generated from Algorithm 2.1 with βk = β, ∀ k ≥ 0 for some β > 0. Define 
+
+ M erg ,K  
+
+> 0
+
+, Merg ,K , M erg ,K  
+
+> 0
+
+, Merg ,K  = 1
+
+K + 1 
+
+> K
+
+X
+
+> k=0
+
+ M k 
+
+> 0
+
+, Mk, M k 
+
+> 0
+
+, Mk.
+
+Then (M erg ,K  
+
+> 0
+
+, Merg ,K ) ∈ C and 
+
+f (M erg ,K  
+
+> 0
+
+, Merg ,K ) − f ∗ + Avg 0(M erg ,K  
+
+> 0
+
+) + bavg − M erg ,K 
+
+> 0
+
++ Avg( Merg ,K ) − Merg ,K = O
+
+ 1
+
+K
+
+
+
+,
+
+where f ∗ denotes the optimal objective value of (2.13) , and C is defined in (2.10) .
+
+> 11
+
+3. Distributed implementation. The variables M0 and M scale with the total number of grid points QDi=0 ni, thus the storage requirement increases exponentially with the spatial dimension, D. To address this challenge, we propose solving (2.13) by using multiple agents, where one agent may correspond to a GPU, or a CPU core. The distributed computation not only alleviates memory constraints but also enables significant computational speedup through parallel execution. By distributing the workload across multiple agents, the method allows many computations to be carried out in parallel, thereby reducing overall runtime. This parallel structure improves scalability and makes the approach particularly well-suited for large-scale problems. Below we discuss how the subproblems appearing in Algorithm 2.1 can be solved across multiple agents and detail the communication requirements of the algorithm. 
+
+3.1. Distributed Implementation of (M 0, M) and Multiplier Updates. Suppose that 
+
+N agents are available. We partition the variables M0, M, M 0, M, Π, and Λ across the agents by decomposing the computational grid along the x1-dimension, i.e., the first spatial dimension. For simplicity of communication, we adopt a domain-decomposition strategy in this work. We note, however, that other decomposition strategies are also possible within the proposed framework. It is illustrated in Figure 2 for the case of D = 1. Under this domain decomposition, we describe how the primal and dual updates in (2.15), (2.16), and (2.17) can be implemented in a distributed manner across multiple agents. 𝑥 = 0                            
+
+> 𝑖 1=1
+> 2
+> 𝑡 =0
+> 𝑖 0=1
+> 2
+> 𝑡 =1
+> 𝑖 0=𝑛 0+1
+> 2
+> Fixed
+> Variables
+> 𝐽 0
+> 𝐽 1
+> 𝐽
+> Agent 1 Agent 3 Agent 2 Agent 4
+> 𝑥 =1
+> 𝑖 1=𝑛 1+1
+> 2
+> Figure 2. Illustration of the domain decomposition for the case D= 1 ,N= 4 , n 0= 5 , n 1= 10 , where the domain is vertically decomposed along the spatial dimension.
+
+According to our domain decomposition, each agent i holds the following variables: (M0)i, Mi, (M 0)i, Mi, Πi, Λi.(3.1) 
+
+> 12
+
+The variables on the shared boundary are always kept by the left agent. Hence these local variables do not overlap on the shared boundary and their concatenation will become exactly the entire variables M0, M, M 0, M, Π, and Λ. To update (( M 0)i, Mi) in (2.15) by agent i locally, it suffices for agent i to receive entries of Mki−1 at the shared x1-boundary between agents i − 1 and i (thus not the entire Mki−1). Similarly, for the dual update to ( Πi, Λi) in (2.17), agent i only needs to receive entries of Mk+1  
+
+> i−1
+
+at the shared x1-boundary between agents i − 1 and i. The intermediate terms 
+
+M k+ 12 
+
+> 0
+
+and Mk+ 12 defined in (2.18) for agent i can be constructed by receiving entries of 
+
+Πki−1, Mk+1  
+
+> i−1
+
+, Mki−1 from agent i − 1 and entries of Πki+1 , Mk+1  
+
+> i+1
+
+, Mki+1 from agent i + 1, only at the shared x1-boundary. This exchange of boundary information ensures that the operators Avg 0, Avg ∗
+
+> 0
+
+, Avg , and Avg ∗ are computed exactly. 
+
+3.2. Distributed Implementation of (M0, M)-Updates. We next turn to the projection step in (2.16), which requires solving (2.24). In contrast to the ( M 0, M) and multiplier updates, this step involves more communication and requires a more careful treatment. 
+
+3.2.1. Distributed Implementation for Sylvester equation (2.25) . We first look at the case where D = 1 in thorough detail, and the idea will follow similarly for D > 1. When 
+
+D = 1, solving the projection problem (2.16) comes down to solving the Sylvester equation (2.25), whose solution ϕ can be computed by using (2.27). To compute ϕ from (2.27) in a distributed way, we partition C and ϕ by the columns corresponding to the grid decomposition and partition V by the rows; see Figure 3 for illus-tration. Let Ci and ϕi be the column blocks of C and ϕ and Vi be the row block of V held by agent i for each i. In addition, each agent can do the multiplication by U and U ⊤ from the left. Notice that they do not need to store U because the multiplication operation by U
+
+(resp. U ⊤) can be realized by a discrete cosine (resp. inverse discrete cosine) transformation. Below, we explain in detail how to implement the multiplication CV in a distributed way with the partition of C and V described above, such that each agent i can obtain the i-th column block, denoted as ( CV )i, of CV . Let Ci,k and Vi,k be the i-th row and k-th column block of C and V respectively. Then the i-th row and j-th column block of CV will be (CV )i,j = PNk=1 Ci,k Vk,j . Since Ci,k and Vk,j are held by agent k, to obtain ( CV )i,j by agent 
+
+j, it needs to receive the product Ci,k Vk,j from all agents k̸ = j and then to perform the summation. Figure 3 illustrates the case of N = 4 and the message sent from agent 4 to all other agents. After forming the column block ( CV )i, the agent i can obtain U ⊤(CV )i by performing an inverse discrete cosine transformation to have the i-th column block of U ⊤CV , denoted by ( U ⊤CV )i. Then we can easily obtain the i-th column block of the matrix R, whose (a, b )-th entry, denoted as R[a, b ], is (U ⊤CV )[ a,b ](Σ 0)a+(Σ 1)b . From (2.27), it follows U ⊤ϕV = R and thus ϕ = U RV ⊤. To obtain ϕ in a distributed way, we use the same way of distributed implementation as we do for computing U ⊤CV . This is illustrated in Figure 4, and we do not repeat the details. With the i-th column block ϕ (denoted by ϕi), as shown in Figure 3, agent i can easily perform the update ( M k+1 0 )i = ( M k+ 12 
+
+> 0
+
+)i − P ∗ 
+
+> 0
+
+ϕi locally without any more communication and Mk+1  
+
+> i
+
+= ( Mk+ 12 )i − P ∗ϕi by receiving entries of ϕi+1 from agent i + 1 at     
+
+> 13 Agent 1 Agent 2 Agent 3 Agent 4
+> =Send to 1, for
+> =
+> =
+> =
+> Send to 2, for
+> Send to 3, for
+> Keep with 4, for
+> Multiply each
+
+Figure 3. Illustration of partition of C, V , and ϕ for N = 4 , and communication using blocks of C and V
+
+at agent 4. Partition of C and V is depicted in the first row, partition of ϕ is depicted in the second column of the second row, and communication using the last column block of C and last row block of V is depicted in the first column of the second row. 
+
+the shared boundary. 
+
+3.2.2. Generalization to D > 1. When D > 1, both C and ϕ are ( D +1)-way tensors. We still partition C along the first space dimension x1, as illustrated in the left picture of Figure 5, and we shard ϕ in the same manner. In analogy to the case of D = 1 described in Section 3.2.1, we partition U1 by rows, and for all d̸ = 1, each agent i can perform the multiplication of Ud
+
+to the i-th block of C along the d-th mode by the discrete cosine transformation. The idea is the same as that for the case of D = 1 and illustrated in the right picture of Figure 5 for the case of D = 2. We do not repeat it here. 
+
+4. Numerical Experiments. We present numerical experiments for solving (2.11). In the nondistributed setting, we compare the proposed method, LADMM, with several existing approaches, including FISTA [50], G-prox [23], and ALM [4, 5]. For brevity, we denote these 
+
+14 Agent 1  Agent 2  Agent 3  Agent 4  
+
+> =Send to 1, for
+> =
+> =
+> =
+> Send to 2, for
+> Send to 3, for
+> Keep with 4, for
+> Multiply each
+
+Figure 4. Illustration of computation and communication using blocks of R and V ⊤ at agent 4 for N = 4 .Partition of R and V ⊤ is depicted in the first row and communication using the last column block of R and last row block of V ⊤ is depicted in the second row. 
+
+methods by “F”, “G”, and “A”, respectively, and use “L” to refer to the proposed LADMM. We also test the proposed method in a distributed setting. All experiments are performed either in one- (i.e., D = 1) or two-dimensional (i.e., D = 2) spatial settings. 
+
+4.1. Parameter setting. For the proposed LADMM, we only need to tune the penalty parameter, and we choose it by 
+
+βk = β0, ∀ k ≤ 1000 , βk = β0k, ∀ k > 1000 ,(4.1) where β0 is selected via a grid search over the set {10 −5, 10 −4, 10 −3, 10 −2, 10 −1, 1, 10 }. We update β linearly after 1000 iterations. This choice is motivated by numerical observations 
+
+15 Figure 5. Left: illustration of partition of C along the first spatial dimension for N = 4 and D = 2 . Right: illustration of how the eige-matrices U , V , and W act on a block of C.
+
+that the dual residual decreases more rapidly than the primal residual in the beginning. The linear update strategy balances this decreasing rate, resulting in improved overall convergence behavior. FISTA [50] performs projected gradient updates by line search. Following the setting in its code, we set its initial estimate of gradient Lipschitz constant to L0 = 10 and the increase rate η = 1 .2 for the line-search of each update with an upper bound Lmax = 10 5.ALM [5] reformulates the objective in (1.1) using a Legendre transform and solves its dual problem. The penalty parameter r of ALM [5] is selected via grid search over the set 
+
+{10 −3, 10 −2, 10 −1, 1, 10 , 10 2, 10 3} for all numerical experiments. For G-prox [23], its primal proximal parameter τp is chosen through grid search over 10 −5, 10 −4, 10 −3, 10 −2, 10 −1, 1 ,while the dual proximal parameter is set to τd = 1 
+
+> τp
+
+. We observe that G-prox with τp > 1can diverge in some experiments. This behavior is likely attributable to the fact that the corresponding subproblem involves computing the proximal mapping of the function 
+
+h(M0, M) := ∥Avg( M)∥2
+
+2 Avg 0(M0) + bavg 
+
+ ,(4.2) which does not admit a closed-form solution. Hence, the proximal mapping is obtained only approximately. Consequently, we restrict our grid search to values of τp ≤ 1. For all experiments, we initialize the primal and dual variables with the same settings: 
+
+M0 = 0, M 00 = 0 , Λ0 = 0 , Π0 = 0, ϕ0 = 0 ,(4.3) where ϕ is the dual variable for ALM and G-prox. The stopping condition for ALM [5], G-prox [23], and FISTA [50] is given by max μkDX
+
+> i=0
+
+∥M k+1  
+
+> i
+
+− M ki ∥,
+
+> D
+
+X
+
+> i=0
+
+PiM k+1  
+
+> i
+
++ b
+
+!
+
+≤ 10 −4,(4.4) 
+
+> 16
+
+where 
+
+μk = βk, for LADMM and ALM ,μk = 1 , for FISTA, and G-prox .
+
+Along with the condition in (4.4), LADMM further needs the condition max 
+
+
+
+∥Avg( Mk) − Mk∥, ∥Avg 0(M k 
+
+> 0
+
+) + bavg − M k 
+
+> 0
+
+∥
+
+
+
+≤ 10 −4.(4.5) The first quantity in the stopping condition (4.4) measures the dual error bound and the second term measures the primal error. In all tables reported in this section, we present the quantities Iter , Time (s), Obj proj , and Pres . Here, Iter denotes the total number of iterations required for the algorithm to terminate, while Time (s) represents the total computational time reported in seconds. The quantity Obj proj denotes the objective value obtained after projecting the final iterate ( M K 
+
+> 0
+
+, M K ) onto the constraint set C defined in (1.3). Obj proj (10 −2) simply means that values are reported after scaling by 10 −2 (e.g., 0 .0556 is shown as 5 .56). Finally, 
+
+Pres denotes the primal residual, i.e., the second term on the left-hand side of (4.4). Throughout the numerical experiments, gμ, Σ(·) denotes the Gaussian density function with mean μ and covariance matrix Σ. 
+
+4.2. Numerical results in a nondistributed setting. In this subsection, we test the algo-rithms in a nondistributed setting. For the one-dimensional spatial setting, we consider three different types of ρ0 and ρ1 in Sections 4.2.1, 4.2.2, and 4.2.3. For the two-dimensional spatial setting, the numerical comparison is presented in Section 4.2.4. 
+
+4.2.1. Unnormalized ρ0 and ρ1 with an Added Positive Constant. In the first experi-ment, we generate ρ0 and ρ1 by (4.6) (ρ0)i = g1/3,0.1
+
+ in1
+
+
+
++ κ, (ρ1)i = g2/3,0.1
+
+ in1
+
+
+
++ κ, for all i = 0 , 1, . . . , n 1.
+
+The parameter κ ∈ { 0.1, 0.01 } in (4.6) is introduced to prevent the density from becoming too close to zero, as is commonly done in existing methods. 
+
+Table 1 
+
+Comparison of FISTA [50], ALM [5], G-prox [23], and LADMM in 1D space with ρ0, ρ1 in (4.6) , κ =0.1, and the number of time steps is 64 . The best performance is highlighted in bold.                                                                    
+
+> n1Iter Time (s) Obj proj (10 −2)Pres
+> AFGLAFGLAFGLAFGL256 1074 843 1986 490 10 14 14 55.24025 5.23701 5.23702 5.23700 2.5E-5 5.7E-13 3.3E-6 6.1E-11 512 2119 839 2228 569 26 27 30 85.24036 5.23714 5.23715 5.23714 7.8E-6 2.1E-12 7.8E-6 1.3E-10 1024 3834 839 2434 849 103 46 54 28 5.24037 5.23718 5.23718 5.23717 9.9E-5 8.7E-12 1.9E-5 5.1E-10 2048 7014 839 2910 636 378 90 139 44 5.24040 5.23719 5.23719 5.23718 9.9E-5 4.3E-11 9.9E-5 5.0E-09 4096 9300 838 5644 671 1160 262 620 82 5.48069 5.23719 5.23719 5.23718 1.5E-4 1.5E-10 9.9E-5 1.0E-09
+
+For both values of κ reported in Tables 1 and 2, LADMM consistently outperforms the competing methods in terms of computational time and objective value. 
+
+17 Table 2 
+
+Comparison of FISTA [50], ALM [5], G-prox [23], and LADMM in 1D space with ρ0, ρ1 in (4.6) , κ =0.01 , and the number of time steps is 64 . The best performance is highlighted in bold.                                                                           
+
+> n1Iter Time (s) Obj proj (10 −2)Pres
+> AFGLAFGLAFGLAFGL256 2103 1624 1950 1002 15 36 14 75.52368 5.50488 5.50469 5.50467 1.2E-5 1.60E-12 3.4E-6 2.3E-12 512 2446 1777 2187 1001 29 109 33 13 5.50496 5.50496 5.50472 5.50471 7.5E-6 4.65E-12 6.2E-6 6.1E-12
+> 1024 2673 1782 2389 856 60 185 71 22 5.50497 5.50497 5.50473 5.50472 1.3E-5 1.84E-11 3.8E-5 5.5E-11
+> 2048 2921 1783 2584 1001 145 449 121 66 5.50498 5.50498 5.50473 5.50473 7.3E-5 9.16E-11 7.6E-5 1.4E-10
+> 4096 4249 1783 2780 1002 471 1185 295 133 5.50498 5.50498 5.50473 5.50472 9.9E-5 4.99E-10 5.3E-5 9.8E-10
+
+4.2.2. Normalized ρ0 and ρ1 with Added Positive Constant. In this experiment, we generate ρ0 and ρ1 by (4.7) (˜ ρ0)i = g1/3,0.1
+
+ in1
+
+
+
++ 0 .1, (˜ ρ1)i = g2/3,0.1
+
+ in1
+
+
+
++ 0 .1, for all i = 0 , 1, . . . , n 1,
+
+ρ0 = ˜ρ0
+
+∥˜ρ0∥1
+
+, ρ1 = ˜ρ1
+
+∥˜ρ1∥1
+
+.
+
+The results by three compared methods are presented in Table 3. We observe that G-prox satisfies the stopping criteria before reaching the maximum number of iterations for smaller grid sizes, i.e., n1 ≤ 512 while it does not for n1 > 512. When n1 ≤ 2048, we see that the performance between ALM and LADMM is comparable as ALM is better in terms of total iterations but LADMM is better in terms of the objective value and primal residual. For 
+
+n1 = 4096, we can see clearly that LADMM dominates in all reported metrics. 
+
+Table 3 
+
+Comparison of ALM [5], G-prox [23], and LADMM in 1D space with ρ0, ρ1 setting in (4.7) 
+
+and the number of time steps = 64 . The best performance is highlighted in bold.                                                         
+
+> n1Iter Time (s) Obj proj Pres
+> AGLAGLAGLAGL256 175 5427 304 1.2 27.2 3.1 1.86057E-4 1.86046E-4 1.86045E-4 9.9E-5 9.9E-5 1.1E-13
+> 512 261 9315 276 3.5 82.9 4.2 9.30438E-5 9.30255E-5 9.30254E-5 9.9E-5 9.9E-5 1.5E-13
+> 1024 205 1E4 248 5.6 201.1 6.4 4.65221E-5 4.65137E-5 4.65130E-5 9.9E-5 3.6E-4 2.4E-13
+> 2048 148 1E4 222 8.8 342.3 12.6 2.32583E-5 2.32626E-5 2.32566E-5 9.9E-5 6.9E-4 4.7E-13
+> 4096 210 1E4 198 26.5 732.7 22.9 1.16585E-5 1.16529E-5 1.16283E-5 9.9E-5 8.2E-3 6.3E-13
+
+Remark 4.1. With κ = 0 .1 and κ = 0 .01 in (4.6), the gradient Lipschitz constant of (1.2) is on the order of 10 3 and 10 6, respectively. In the ρ0, ρ1 setting in (4.7) and (4.8), the minimum density value is on the order of 10 −8, which leads to extremely large gradient Lipschitz constant of (1.2). In this regime, FISTA fails to converge due to a lower bound on the stepsize imposed by the line search procedure. For this reason, FISTA is omitted from the remaining tables. 
+
+4.2.3. Unnormalized ρ0 and ρ1 with No Added Positive Constant. In this experiment, we set ρ0 and ρ1 as follows: (4.8) (ρ0)i = g 13 , 0.1
+
+ in1
+
+
+
+, (ρ1)i = g 23 , 0.1
+
+ in1
+
+
+
+, for all i = 0 , 1, . . . , n 1.
+
+18 Compared to the previous numerical experiments, this setting represents the most challenging case, as we do not add any positive constant to keep the densities uniformly bounded away from zero. We see that the smallest initial and terminal density values are around 10 −10 .For ALM, we set r = 1, and for G-prox, ( τd, τ p) = (1 , 1), both selected via empirical tuning. We first obtain a numerical approximation of the minimum objective value for the discretized problem; we call it obj ∗
+
+> num
+
+. To calculate the optimal objective value, we set the stopping tolerance to 10 −8 and maximum iterations to 3 ×10 4 and report the results in Table 4. From Table 4, we observe that LADMM achieves the lowest objective value and the lowest constraint violation for all values of n1. We also note that G-prox and ALM fail to reach the stopping tolerance 10 −8 within the maximum number of iterations in all tested values of n1.
+
+Table 4 
+
+Comparison of ALM [5], G-prox [23], and LADMM in 1D space with ρ0, ρ1 setting in (4.8) and the number of time steps is 64 to find the “optimal” objective value. The best performance is highlighted in bold.                                                          
+
+> n1Iter Obj proj (10 −2)|Obj −Obj proj |Pres
+> AGLAGLAGAGL256 3E4 3E4 10739 5.54576 5.54301 5.54298 4E-14 6E-8 3.02E-8 2.43E-2 2.44E-13
+> 512 3E4 3E4 15553 5.54601 5.54340 5.54300 4E-11 3E-6 8.12E-9 1.76 1.13E-13
+> 1024 3E4 3E4 14050 5.54614 5.54395 5.54302 4E-10 9E-6 2.06E-8 4.61 2.27E-13
+> 2048 3E4 3E4 16176 5.54620 5.54379 5.54313 1E-11 7E-6 1.05E-7 7.35 4.54E-13
+> 4096 3E4 3E4 15766 5.54623 5.54353 5.54301 1E-8 1E-6 9.20E-5 12.2 1.05E-12
+
+We use the best objective values obtained by LADMM in the 7-th column of Table 4 as obj ∗ 
+
+> num
+
+to calculate |obj − obj ∗
+
+> num
+
+| and report it in Table 5, where we set the stopping tolerace to 10 −4 and maximum number of iterations to 10 4. From Table 5, we see that G-prox and ALM both struggle with the setting of initial and terminal densities in (4.8). In fact, G-prox fails to satisfy the stopping condition within the maximum iteration number with all values of n1 while ALM fails for n1 > 1024. 
+
+Table 5 
+
+Comparison of ALM [5], G-prox [23], and LADMM in 1D space with ρ0, ρ1 setting in (4.8) and the number of time steps is 64 . The best performance is highlighted in bold.                                                                  
+
+> n1Iter Time (s) |obj −obj ∗
+> num |Pres
+> AGLAGLAGLAGL256 2563 1E4 1029 17.91 66.88 11.98 3.24E-5 3.96E-7 5.12E-9 9.85E-5 2.08 5.68E-14
+> 512 5020 1E4 1060 53.93 133.09 20.37 7.15E-5 3.99E-7 8.76E-9 9.97E-5 0.27 1.14E-13
+> 1024 9477 1E4 1051 218.58 241.52 28.92 7.36E-5 4.11E-7 5.44E-8 9.99E-5 10.17 2.27E-13
+> 2048 1E4 1E4 1067 484.20 488.09 74.75 8.82E-5 8.84E-6 7.17E-8 4.20E-4 3.68 4.55E-13
+> 4096 1E4 1E4 1066 1001.90 955.28 149.22 8.89E-5 9.12E-6 8.14E-8 7.15E-4 16.40 9.09E-13
+
+In Figure 6, at every iteration, we report the objective difference defined by obj k 
+
+> diff
+
+= obj ∗ 
+
+> num
+
+− obj k ,(4.9) where obj k is the objective value at the k-th iteration and obj ∗ 
+
+> num
+
+is the lowest objective value reported in the 7-th column of Table 4. In Figure 7, we report the primal residual by ALM and G-prox. We omit the primal residual for LADMM because it is a projection based method and its primal residual is always between the order of 10 −10 to 10 −13 .
+
+19 0 5000 10000 
+
+> Outer iteration number
+> 10 -10
+> 10 -5
+> 10 0
+> Objective difference  ALM
+> LADMM
+> G-prox
+
+n1 = 512 0 5000 10000  
+
+> Outer iteration number
+> 10 -8
+> 10 -6
+> 10 -4
+> 10 -2
+> 10 0
+> Objective difference  ALM
+> LADMM
+> G-prox
+
+n1 = 1024 0 5000 10000 
+
+> Outer iteration number
+> 10 -8
+> 10 -6
+> 10 -4
+> 10 -2
+> 10 0
+> Objective difference  ALM
+> LADMM
+> G-prox
+
+n1 = 2048 0 5000 10000  
+
+> Outer iteration number
+> 10 -8
+> 10 -6
+> 10 -4
+> 10 -2
+> 10 0
+> Objective difference  ALM
+> LADMM
+> G-prox
+
+n1 = 4096 
+
+Figure 6. Objective difference vs. iteration number for ALM [5], G-prox [23], and LADMM with ρ0, ρ1
+
+setting in (4.8) , n1 ∈ { 512 , 1024 , 2048 , 4096 }, and the number of time steps set to 64. 
+
+4.2.4. Two dimensional spatial domain. In this set of numerical experiments, we consider a two-dimensional spatial domain, i.e., D = 2. The initial and terminal densities defined in this subsection are therefore matrices. We first use synthetic data with the initial and terminal densities given as follows: for all 
+
+i = 0 , 1, . . . , n 1 and j = 0 , 1, . . . , n 2,(4.10) (ρ0)i,j = g[1 /3,2/3] ,[0 .1,0;0 ,0.1] 
+
+ in1
+
+, jn2
+
+
+
+,
+
+(ρ1)i,j = g[2 /3,1/3] ,[0 .1,0;0 ,0.1] 
+
+ in1
+
+, jn2
+
+
+
+,
+
+where n1 = 256 and n2 = 256. The density setting in (4.10) is similar to the one-dimensional setting in (4.8). Since no positive constant is added to ensure that the densities are bounded away from zero, this constitutes a challenging instance of problem (2.13). The results by three compared methods are presented in Table 6. We observe that LADMM outperforms both ALM and G-prox across all reported metrics. Second, to demonstrate the performance of our method on more complex distributions, 
+
+20 0 5000 10000 
+
+> Outer iteration number
+> 10 -4
+> 10 -2
+> 10 0
+> 10 2
+> 10 4
+> Constraint violation  ALM
+> G-prox
+
+n1 = 512 0 5000 10000  
+
+> Outer iteration number
+> 10 -4
+> 10 -2
+> 10 0
+> 10 2
+> 10 4
+> Constraint violation  ALM
+> G-prox
+
+n1 = 1024 0 5000 10000 
+
+> Outer iteration number
+> 10 -4
+> 10 -2
+> 10 0
+> 10 2
+> 10 4
+> Constraint violation  ALM
+> G-prox
+
+n1 = 2048 0 5000 10000  
+
+> Outer iteration number
+> 10 -4
+> 10 -2
+> 10 0
+> 10 2
+> 10 4
+> Constraint violation  ALM
+> G-prox
+
+n1 = 4096 
+
+Figure 7. Constraint violation vs. iteration number for ALM [5] and G-prox [23] with ρ0, ρ1 setting in 
+
+(4.8) , n1 ∈ { 512 , 1024 , 2048 , 4096 }, and the number of time steps set to 64. 
+
+Table 6 
+
+Comparison of ALM [5], G-prox [23], and LADMM in 2D space with ρ0, ρ1 defined in (4.10) , n1 =256 , n 2 = 256 , and the number of time steps set to 64. The best performance is highlighted in bold. 
+
+Iter Time (s) Obj proj Pres 
+
+ALM 5564 4413 0.12136 9.23E-04 LADMM 1787 3298 0.10911 5.19E-13 
+
+G-prox 1E4 6686 14.6445 48.4 
+
+we apply it to image data, where the image intensity is interpreted as a probability density. In this experiment, we want to map initial and terminal densities represented by grayscale images, given by the ones at t0 = 0 and t5 = 1 in Figure 8. More specifically, let Im 0 and Im 1 ∈ Rn1×n2 denote the pixel values of the leftmost and rightmost images in Figure 8. The initial and terminal densities are defined by (ρ0)i,j = 10 4 (Im 0)i,j 
+
+∥Im 0∥1
+
++ 0 .1, (ρ1)i,j = 10 4 (Im 1)i,j 
+
+∥Im 1∥1
+
++ 0 .1, ∀(i, j ),(4.11) where ∥ · ∥ 1 denotes the sum of the absolute values of all entries. For all compared methods, 
+
+21 we set the stopping tolerance to 10 −6, the maximum number of iterations to 10 4, and n0 =20 , n 1 = n2 = 256. The results are presented in Table 7. The snapshots of evolution at intermediate times by LADMM are shown in Figure 8. From Table 7, we can see again that the performance of LADMM is better than both G-prox and ALM with respect to all the reported metrics. 
+
+t0 = 0 t1 = 0 .2 t2 = 0 .4 t3 = 0 .6 t4 = 0 .8 t5 = 1 20                        
+
+> 40
+> 60
+> 80
+> 100
+> 120
+> 140
+> Figure 8. Evolution of images by LADMM with n0= 20 , n 1=n2= 256 ,β0= 10 −4at times t=0,0.2,0.6,0.8,1from left to right.
+> Table 7
+> Comparison of ALM [5], G-prox [23], and LADMM in 2D space with ρ0,ρ1defined in (4.11) ,n1=256 , n 2= 256 , and the number of time steps set to 20. The best performance is highlighted in bold.
+
+Iter Time (s) Obj proj Pres 
+
+ALM 1E4 16850 3.53E-2 1.11E-03 LADMM 6536 11786 3.32E-2 6.11E-11 
+
+G-prox 1E4 16751 1.10143 3.52 
+
+4.3. Numerical results in a distributed setting. In this subsection, we solve (2.13) in a distributed setting. Similar to Section 4.2, we conduct experiments in the setting of both one-and two-dimensional spatial domain. 
+
+4.3.1. 1D spatial domain. In this setting, we set the initial and terminal densities by (4.8). The experiment is performed for different numbers of agents ranging from 1 to 12. We present the results with two different gridsize settings: n0 = 1024 , n 1 = 32768 and n0 =512 , n 1 = 65536. The results are presented in Figure 9. LADMM converges to the same level of accuracy within 1060 iterations for both gridsize settings. From Figure 9, we observe that LADMM achieves close to 7 × speedup when scaling from 1 to 12 agents while reducing the storage burden by distributing the variables across multiple agents. 
+
+4.3.2. 2D spatial domain. In this experiment, we examine the evolution of densities when the initial and terminal densities are represented by grayscale images. We consider the mapping between images of a chalice and a glass, i.e., the leftmost and rightmost images in Figure 10. 1 The density setting follows the setting in (4.11). The snapshots of intermediate evolution at different times are presented in Figure 10. Furthermore, this experiment is run with varying number of agents from 1 to 12 (the result presented in Figure 10 is run with N = 12). The corresponding running times for different numbers of agents are presented in Figure 11, from which we observe that LADMM achieves about 6 × speedup when scaling from 1 to 12 agents.                
+
+> 1The images used for ρ0and ρ1in Figure 10 are modified from https://www.metmuseum.org/art/collection.
+> 22 14663 14928
+> 8870 9021
+> 4581 4671
+> 2743 2807
+> 2261 2290 2117 2167
+> Number of agents
+> 124810 12
+> Time (in seconds)
+> 0
+> 2000
+> 4000
+> 6000
+> 8000
+> 10000
+> 12000
+> 14000
+> 16000
+> (n 0, n 1) = (1024, 32768)
+> (n 0, n 1) = (512, 65536)
+
+Figure 9. Time taken vs. the number of agents by LADMM with dentity setting (4.8) , N ∈{1, 2, 4, 8, 10 , 12 }, β0 = 10 −4, and (n0, n 1) = (1024 , 32768) and (n0, n 1) = (512 , 65536) represented by blue and red respectively. 
+
+t0 = 0 t1 = 0 .2 t2 = 0 .4 t3 = 0 .6 t4 = 0 .8 t5 = 1 5
+
+> 10
+> 15
+> 20
+> 25
+
+Figure 10. Evolution of images by LADMM with n0 = 20 , n 1 = n2 = 784 , β 0 = 10 −4 at times t =0, 0.2, 0.4, 0.6, 0.8, 1 from left to right. 15800 
+
+8518 
+
+4418 
+
+3116 3025 2921 
+
+Number of agents 
+
+1 2 4 8 10 12 
+
+> Time (in seconds)
+
+0
+
+2000 
+
+4000 
+
+6000 
+
+8000 
+
+10000 
+
+12000 
+
+14000 
+
+16000 
+
+18000 
+
+Figure 11. Time taken vs. the number of agents for LADMM during image mapping in Figure 10 with 
+
+n0 = 20 , n 1 = 784 , n 2 = 784 , β0 = 10 −4, and N ∈ { 1, 2, 4, 8, 10 , 12 }. Total iteration taken is 1090 .
+
+23 5. Conclusion. We have proposed an LADMM algorithm with an exact proximal mapping for solving the dynamic optimal transport problem (1.1) in both nondistributed and distrib-uted settings. The proposed approach improves upon existing methods in two key aspects. First, it provides a robust and efficient solver for problems in which the initial and/or terminal densities approach zero, a regime where existing methods often suffer from slow convergence or instability. Second, it improves storage and computational efficiency through a distributed formulation that partitions the space–time variables across multiple agents. We have conducted extensive numerical experiments in one- and two-dimensional spatial settings, considering both nondistributed and distributed implementations and varying levels of problem difficulty. The results demonstrate that the proposed method consistently outper-forms existing approaches in terms of accuracy, computational time, and iteration count. In several challenging cases, our method successfully solves problem instances for which compet-ing methods fail to converge. In the distributed setting, the proposed method achieves a 6 ×
+
+speedup when scaling from 1 to 12 agents, illustrating its potential for large-scale dynamic OT computations. 
+
+REFERENCES 
+
+[1] J. Altschuler, J. Niles-Weed, and P. Rigollet , Near-linear time approximation algorithms for op-timal transport via sinkhorn iteration , Advances in neural information processing systems, 30 (2017). [2] M. Arjovsky, S. Chintala, and L. Bottou , Wasserstein generative adversarial networks , in Interna-tional conference on machine learning, PMLR, 2017, pp. 214–223. [3] J.-D. Benamou , A domain decomposition method for the polar factorization of vector-valued mappings ,SIAM journal on numerical analysis, 32 (1995), pp. 1808–1838. [4] J.-D. Benamou and Y. Brenier , A numerical method for the optimal time-continuous mass transport problem and related problems , Contemporary mathematics, 226 (1999), pp. 1–12. [5] J.-D. Benamou and Y. Brenier , A computational fluid mechanics solution to the monge-kantorovich mass transfer problem , Numerische Mathematik, 84 (2000), pp. 375–393. [6] M. Bonafini and B. Schmitzer , Domain decomposition for entropy regularized optimal transport , Nu-merische Mathematik, 149 (2021), pp. 819–870. [7] G. Buttazzo, E. Oudet, and E. Stepanov , Optimal transportation problems with free dirichlet re-gions , in Variational Methods for Discontinuous Structures: International Workshop at Villa Erba (Cernobbio), Italy, July 2001, Springer, 2002, pp. 41–65. [8] C. Canc` es and C. Guichard , Numerical analysis of a robust free energy diminishing finite volume scheme for parabolic equations with gradient structure , Foundations of Computational Mathematics, 17 (2017), pp. 1525–1584. [9] G. Carlier and F. Santambrogio , A variational model for urban planning with traffic congestion ,ESAIM: Control, Optimisation and Calculus of Variations, 11 (2005), pp. 595–613. [10] J. A. Carrillo and J. S. Moll , Numerical simulation of diffusive and aggregation phenomena in nonlinear continuity equations by evolving diffeomorphisms , SIAM Journal on Scientific Computing, 31 (2010), pp. 4305–4329. [11] R. H. Chan, M. Tao, and X. Yuan , Linearized alternating direction method of multipliers for con-strained linear least-squares problem , East Asian Journal on Applied Mathematics, 2 (2012), pp. 326– 341. [12] P.-A. Chiappori, R. J. McCann, and L. P. Nesheim , Hedonic price equilibria, stable matching, and optimal transport: equivalence, topology, and uniqueness , Economic Theory, 42 (2010), pp. 317–354. [13] L. Chizat , Unbalanced optimal transport: Models, numerical methods, applications , PhD thesis, Univer-sit´ e Paris sciences et lettres, 2017. [14] L. Chizat, G. Peyr´ e, B. Schmitzer, and F.-X. Vialard , An interpolating distance between optimal 
+
+24 transport and fisher–rao metrics , Foundations of Computational Mathematics, 18 (2018), pp. 1–44. [15] G. Dong, H. Guo, C. Jiang, and Z. Shi , Gradient enhanced admm algorithm for dynamic optimal transport on surfaces , Journal of Computational Physics, 527 (2025), p. 113805. [16] J. Fan, S. Liu, S. Ma, H.-M. Zhou, and Y. Chen , Neural monge map estimation and its applications ,Transactions on Machine Learning Research, (2023). [17] A. Galichon , Optimal transport methods in economics , Princeton University Press, 2018. [18] X. Gao and S.-Z. Zhang , First-order algorithms for convex optimization with nonseparable objective and coupled constraints , Journal of the Operations Research Society of China, 5 (2017), pp. 131–159. [19] V. Girault and P.-A. Raviart , Finite element methods for Navier-Stokes equations: theory and algo-rithms , vol. 5, Springer Science & Business Media, 2012. [20] M. Henry, E. Maitre, and V. Perrier , Primal-dual formulation of the dynamic optimal transport using helmholtz-hodge decomposition , HAL, (2019). [21] H. Huang and R. Lai , Unsupervised solution operator learning for mean-field games , Journal of Com-putational Physics, 537 (2025), p. 114057. [22] H. Huang, J. Yu, J. Chen, and R. Lai , Bridging mean-field games and normalizing flows with trajectory regularization , Journal of Computational Physics, 487 (2023), p. 112155. [23] M. Jacobs, F. L´ eger, W. Li, and S. Osher , Solving large-scale optimization problems with a conver-gence rate independent of grid size , SIAM Journal on Numerical Analysis, 57 (2019), pp. 1100–1123. [24] R. Jordan, D. Kinderlehrer, and F. Otto , The variational formulation of the fokker–planck equation ,SIAM journal on mathematical analysis, 29 (1998), pp. 1–17. [25] L. Kantorovich , On the transfer of masses (in russian) , in Doklady Akademii Nauk, vol. 37, 1942, p. 227. [26] T. G. Kolda and B. W. Bader , Tensor decompositions and applications , SIAM review, 51 (2009), pp. 455–500. [27] S. Kolouri, S. R. Park, M. Thorpe, D. Slepcev, and G. K. Rohde , Optimal mass transport: Signal processing and machine-learning applications , IEEE signal processing magazine, 34 (2017), pp. 43–59. [28] H. Lavenant, S. Claici, E. Chien, and J. Solomon , Dynamical optimal transport on discrete surfaces ,ACM Transactions on Graphics (TOG), 37 (2018), pp. 1–16. [29] W. Li, E. K. Ryu, S. Osher, W. Yin, and W. Gangbo , A parallel method for earth mover’s distance ,Journal of Scientific Computing, 75 (2018), pp. 182–197. [30] T. Lin, S. Ma, and S. Zhang , An extragradient-based alternating direction method for convex minimiza-tion , Foundations of Computational Mathematics, 17 (2017), pp. 35–59. [31] Z. Lin, R. Liu, and Z. Su , Linearized alternating direction method with adaptive penalty for low-rank representation , Advances in neural information processing systems, 24 (2011). [32] D. Lombardi and E. Maitre , Eulerian models and algorithms for unbalanced optimal transport , ESAIM: Mathematical Modelling and Numerical Analysis, 49 (2015), pp. 1717–1744. [33] J. Maas, M. Rumpf, C. Sch¨ onlieb, and S. Simon , A generalized model for optimal transport of images including dissipation and density modulation , ESAIM: Mathematical Modelling and Numerical Analysis, 49 (2015), pp. 1745–1769. [34] Y. Ouyang, Y. Chen, G. Lan, and E. Pasiliao Jr , An accelerated linearized alternating direction method of multipliers , SIAM Journal on Imaging Sciences, 8 (2015), pp. 644–681. [35] N. Papadakis, G. Peyr´ e, and E. Oudet , Optimal transport with proximal splitting , SIAM Journal on Imaging Sciences, 7 (2014), pp. 212–238. [36] G. Peyr´ e and M. Cuturi , Computational optimal transport: With applications to data science , Now Foundations and Trends, 2019. [37] B. Piccoli and F. Rossi , Generalized wasserstein distance and its application to transport equations with source , Archive for Rational Mechanics and Analysis, 211 (2014), pp. 335–358. [38] S. T. Rachev and L. R¨ uschendorf , Mass Transportation Problems: Volume 1: Theory , Springer Science & Business Media, 2006. [39] Y. Rubner, C. Tomasi, and L. J. Guibas , A metric for distributions with applications to image databases , in Sixth international conference on computer vision (IEEE Cat. No. 98CH36271), IEEE, 1998, pp. 59–66. [40] L. Ruthotto, S. J. Osher, W. Li, L. Nurbekyan, and S. W. Fung , A machine learning framework for solving high-dimensional mean field game and mean field control problems , Proceedings of the 
+
+25 National Academy of Sciences, 117 (2020), pp. 9183–9193. [41] T. Salimans, H. Zhang, A. Radford, and D. Metaxas , Improving gans using optimal transport ,arXiv preprint arXiv:1803.05573, (2018). [42] F. Santambrogio , Optimal Transport for applied mathematicians, progress in nonlinear differential equa-tions and their applications , Birkh¨ auser Basel, 2015. [43] C. Villani , Topics in optimal transportation , vol. 58, American Mathematical Soc., 2021. [44] C. Villani et al. , Optimal transport: old and new , vol. 338, Springer, 2009. [45] W. Wan, Y. Zhang, C. Bao, B. Dong, and Z. Shi , A scalable deep learning approach for solving high-dimensional dynamic optimal transport , SIAM Journal on Scientific Computing, 45 (2023), pp. B544– B563. [46] X. Wang, H. Xu, and M. Yang , Decentralized entropic optimal transport for privacy-preserving distrib-uted distribution comparison , arXiv preprint arXiv:2301.12065, (2023). [47] Y. Xu , Accelerated first-order primal-dual proximal methods for linearly constrained composite convex programming , SIAM Journal on Optimization, 27 (2017), pp. 1459–1484. [48] Z.-Z. Yang and Z. Yang , Fast linearized alternating direction method of multipliers for the augmented 
+
+ℓ1-regularized problem , Signal, Image and Video Processing, 9 (2015), pp. 1601–1612. [49] J. Yu, R. Lai, W. Li, and S. Osher , Computational mean-field games on manifolds , Journal of Com-putational Physics, 484 (2023), p. 112070. [50] J. Yu, R. Lai, W. Li, and S. Osher , A fast proximal gradient method and convergence analysis for dynamic mean field planning , Mathematics of Computation, 93 (2024), pp. 603–642. 
+
+Appendix A. proof of Lemma 2.1. 
+
+Proof. We first show that the lower-level set is closed for any α ≥ 0 to guarantee lower semicontinuity (l.s.c) of F . Define the lower level set of F as 
+
+Lα = {(ρ, m) | F (ρ, m) ≤ α}.
+
+We treat α = 0 and α > 0 cases separately and have 
+
+Lα =
+
+(ρ, 0) | ρ ≥ 0 , if α = 0 ,
+
+{(0 , 0)} ∪ (ρ, m) | ∥m∥2 
+
+> 2ρ
+
+≤ α, ρ > 0, , if α > 0.
+
+It is easy to see that for both cases of α, the lower level set is closed and hence the proximal mapping of F is well defined as Prox F,γ (bρ, bm) = arg min 
+
+> ρ, m
+
+F (ρ, m) + 12γ
+
+(ρ − bρ)2 + ∥m − bm∥2 .(A.1) We let ( ρ, m) be the solution of (A.1). Then, using the optimality condition, we get 
+
+0 ∈ ∂F (ρ, m) + 1
+
+γ
+
+ ρ − bρ
+
+m − bm
+
+
+
+.(A.2) From the definition of F in (1.2), we see that when ρ = 0, then m = 0. Suppose ξ ∈ ∂F (0 , 0), where ξ is a subgradient of F at (0 , 0). Since F is convex and lower semicontinuous, its subdifferential at (0 , 0) is characterized as follows. 
+
+F (ρ, m) ≥ F (0 , 0) + 
+
+
+
+ξ,
+
+ ρ
+
+m
+
+ 
+
+, ∀(ρ, m) ∈ dom( F ),
+
+26 ⇔ ∥m∥2
+
+2ρ ≥ ρξ 1 + ξ⊤ 
+
+> 2
+
+m, ∀ρ > 0, ∀m ∈ RD,
+
+⇔ ∥ m∥2 ≥ 2ρ2ξ1 + 2 ρξ⊤ 
+
+> 2
+
+m, ∀ρ > 0, ∀m ∈ RD,(A.3) where ξ1 is the first component of ξ and ξ2 is the rest. We present the following two claims. Claim 1: ξ1 ≤ 0. This can be proved by contradiction. If ξ1 > 0, the condition (A.3) is violated at m = 0, ρ > 0. Claim 2: ∥ξ2∥2 ≤ − 2ξ1. This can be shown by looking at (A.3). We have, 
+
+∥m∥2 − 2ρξ⊤ 
+
+> 2
+
+m − 2ρ2ξ1 ≥ 0, ∀m ∈ RD,(A.4) which indicates 4ρ2∥ξ2∥2 + 8 ρ2ξ1 ≤ 0 ⇐⇒ ∥ ξ2∥2 ≤ − 2ξ1.
+
+Combining Claims 1 and 2, we get 
+
+∂F (0 , 0) = {(ξ1, ξ2) | ξ1 ≤ 0, ∥ξ2∥2 ≤ − 2ξ1}.(A.5) Hence from (A.2) and (A.5), we have that (0 , 0) is an optimal point if and only if ∥ bm∥2 ≤ − 2bρ.When ρ > 0, F is differentiable, and 
+
+∇F (ρ, m) = 
+
+"
+
+− ∥m∥2
+
+> 2ρ2
+> m
+> ρ
+
+#
+
+.(A.6) Together from (A.2) and (A.6), we get 
+
+0 =
+
+− ∥m∥2
+
+> 2ρ2
+> m
+> ρ
+
+ + 1
+
+γ
+
+" ρ − bρ
+
+m − bm
+
+#
+
+.
+
+Solving the above system for ρ and m, we get 
+
+ρ3 + (2 γ − bρ)ρ2 + ( γ2 − 2γ bρ)ρ − 12 γ∥ bm∥2 − γ2 bρ = 0 ,(A.7) 
+
+m = bmρρ + γ .(A.8) Thus, we can solve the cubic equation in (A.7) to get ρ and plug its value in (A.8) to get m.This completes the proof.
