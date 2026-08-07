@@ -7,28 +7,28 @@
 
 ## 每次日报
 - 最新运行日期：2026-08-07
-- 运行时间：2026-08-07 01:36:25 UTC
+- 运行时间：2026-08-07 20:13:22 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：0
+- 本次总论文数：3
+- 精读区：1
 - 速读区：2
 
 ### 今日简报（AI）
-今日速读2篇论文，聚焦计算数学与采样算法，暂无精读。
-值得关注方向：固定支撑双熵Wasserstein重心的牛顿法，以及扩散精确模拟对对数凹采样的改进。
-建议后续精读其中一篇，优先关注与自身研究相关的算法细节。
+今日阅读3篇论文，其中精读1篇、速读2篇。最值得关注的是《Potential Matching Optimal Transport》（8.0分），聚焦连续归一化流实现精确p-Wasserstein动力学。下一步可优先深入该文的方法细节，并兼顾速读两篇中的采样与流匹配改进思路。
 - 详情：[/202608/07/README](/202608/07/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Potential Matching Optimal Transport: Continuous Normalizing Flows for Exact $p$-Wasserstein Dynamics](/202608/07/2608.05666v1-potential-matching-optimal-transport-continuous-normalizing-flows-for-exact-p-wasserstein-dynamics)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：用直线桥路径连接端点的最优传输方法
 
 ### 速读区论文标签
-1. [Newton Method for Fixed-Support Doubly Entropic Wasserstein Barycenter](/202608/07/2607.29109v1-newton-method-for-fixed-support-doubly-entropic-wasserstein-barycenter)  
+1. [Exact simulation of diffusions and improved algorithms for log-concave sampling](/202608/07/2608.05022v1-exact-simulation-of-diffusions-and-improved-algorithms-for-log-concave-sampling)  
+   标签：评分：7.0/10、query:diff-bridge
+   evidence：基于路径空间拒绝采样与Girsanov定理的扩散过程精确模拟，是扩散过程路径积分的一种实现
+2. [Discretization and Statistical Consistency of Functional Flow Matching](/202608/07/2608.04531v1-discretization-and-statistical-consistency-of-functional-flow-matching)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：针对熵正则化最优输运重心的牛顿法，熵最优输运是薛定谔桥数学核心
-2. [Exact simulation of diffusions and improved algorithms for log-concave sampling](/202608/07/2608.05022v1-exact-simulation-of-diffusions-and-improved-algorithms-for-log-concave-sampling)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：通过路径空间拒绝采样与Girsanov密度比实现扩散的精确模拟
+   evidence：函数流匹配中的群体叠加路径与Wasserstein界，与扩散桥中的最优输运相关
 
 
 <div class="dpr-home-promo-card">

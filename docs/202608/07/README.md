@@ -1,21 +1,19 @@
 # 日报 · 2026-08-07
 
-- 生成时间：2026-08-07 01:36:25 UTC
-- 当次推荐总数：2
-- 精读区：0
+- 生成时间：2026-08-07 20:13:22 UTC
+- 当次推荐总数：3
+- 精读区：1
 - 速读区：2
 
 ## 今日简报（AI）
-今日速读2篇论文，均获6.0分，无精读；主题集中于熵正则Wasserstein重心与扩散过程精确模拟。  
-值得关注的方向：固定支撑双熵Wasserstein重心的牛顿法，以及对数凹采样的扩散模拟改进算法。  
-建议后续从这两篇中等分数论文中选一篇精读，并延伸追踪同类近期工作。
+今日精读1篇、速读2篇，共3篇论文，聚焦最优传输与采样方法。最值得关注的是《Potential Matching Optimal Transport》提出的连续标准化流精确p-Wasserstein动力学，以及扩散模拟与函数流匹配的改进。建议普通读者优先从精读论文入手，理解生成模型中的最优传输新思路。
 
 ## 精读区
-- 本次无精读推荐。
+1. [Potential Matching Optimal Transport: Continuous Normalizing Flows for Exact $p$-Wasserstein Dynamics](/202608/07/2608.05666v1-potential-matching-optimal-transport-continuous-normalizing-flows-for-exact-p-wasserstein-dynamics) （8.0/10）
 
 ## 速读区
-1. [Newton Method for Fixed-Support Doubly Entropic Wasserstein Barycenter](/202608/07/2607.29109v1-newton-method-for-fixed-support-doubly-entropic-wasserstein-barycenter) （6.0/10）
-2. [Exact simulation of diffusions and improved algorithms for log-concave sampling](/202608/07/2608.05022v1-exact-simulation-of-diffusions-and-improved-algorithms-for-log-concave-sampling) （6.0/10）
+1. [Exact simulation of diffusions and improved algorithms for log-concave sampling](/202608/07/2608.05022v1-exact-simulation-of-diffusions-and-improved-algorithms-for-log-concave-sampling) （7.0/10）
+2. [Discretization and Statistical Consistency of Functional Flow Matching](/202608/07/2608.04531v1-discretization-and-statistical-consistency-of-functional-flow-matching) （6.0/10）
 
 ---
 使用键盘方向键可在日报/论文之间快速切换。
