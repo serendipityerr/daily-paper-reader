@@ -1,0 +1,3883 @@
+Title: Newton Method for Fixed-Support Doubly Entropic Wasserstein Barycenter
+
+URL Source: https://arxiv.org/pdf/2607.29109v1
+
+Published Time: Mon, 03 Aug 2026 00:32:27 GMT
+
+Number of Pages: 34
+
+Markdown Content:
+# Newton Method for Fixed-Support Doubly Entropic Wasserstein Barycenter 
+
+Jianting Pan 1, Sirong Dai 1, Lei Yang 2, Yaomin Wang 1, Ji’an Li 1, Ming Yan 1
+
+> 1
+
+The Chinese University of Hong Kong, Shenzhen 
+
+> 2
+
+Sun Yat-sen University 
+
+## Abstract 
+
+We study the fixed-support doubly regularized Wasserstein barycenter problem. Using the semi-dual formulation of entropic optimal transport, we reformulate the problem as a smooth, unconstrained, convex optimization problem in the dual variables. We then derive explicit expressions for the gradient and Hessian and develop an exact Newton method for high-accuracy barycenter computation. To improve scalability, we propose a sparse Newton variant that sparsifies the trans-port probability matrices, thereby reducing the cost of Hessian-vector products. We establish theoretical results for the proposed methods, including Hessian ap-proximation bounds and convergence results. Experiments on synthetic and real datasets show that the sparse Newton method converges faster than representative state-of-the-art solvers. 
+
+## 1 Introduction 
+
+The Wasserstein barycenter problem seeks a representative probability measure that minimizes the weighted sum of Wasserstein distances to a collection of input probability measures. Since its introduction in [ 1 ], Wasserstein barycenters have become a fundamental tool for averaging and interpolating probability distributions while preserving underlying geometry. They have found applications in economics [ 6 , 7 ], physics [ 5, 9], statistics [ 2 , 4 ], image processing [ 19 ], computer graphics [22], and machine learning. In the discrete setting, the Wasserstein barycenter problem can be formulated as: 
+
+min 
+
+> v∈∆n
+> K
+
+X
+
+> k=1
+
+wk min   
+
+> Xk∈Ωk(v)
+
+⟨Ck, X k⟩, where Ωk(v) := {Xk ∈ Rn×m 
+
+> +
+
+| Xk1 = v, X ⊤ 
+
+> k
+
+1 = μk}, (1) where Ck ∈ Rn×m 
+
+> +
+
+is the ground cost matrix, {μk}Kk=1 are K discrete probability measures with 
+
+μk ∈ ∆m, and wk > 0 are prescribed weights satisfying PKk=1 wk = 1 . The set ∆n := {μ ∈
+
+Rn 
+
+> +
+
+| Pni=1 μi = 1 } denotes the probability simplex. The goal is to compute a barycenter v ∈ ∆n
+
+supported on a fixed set of n points. Although (1) is a linear programming formulation, directly solving it becomes computationally demanding for large-scale problems due to the high dimensionality of the transport plans and the coupling induced by the shared barycenter variable [15]. To improve computational tractability, we consider the doubly regularized entropic Wasserstein barycenter (WB) problem studied in [ 8 ] under the fixed-support settings, which incorporates both an inner entropic regularization and an outer Kullback-Leibler (KL) regularization: 
+
+min 
+
+> v∈∆n
+
+F (v) := 
+
+> K
+
+X
+
+> k=1
+
+wk OT k,η (v, μk) + τ KL (v, π), (2) 
+
+> Preprint. arXiv:2607.29109v1 [math.OC] 31 Jul 2026
+
+where η > 0 is the inner entropic regularization parameter, τ > 0 controls the outer regularization, and π ∈ ∆n is a prescribed measure. For each k, the entropic transport cost is defined by OT k,η (v, μk) := min    
+
+> Xk∈Ωk(v)
+
+⟨Ck, X k⟩ + η KL (Xk, vμ ⊤ 
+
+> k
+
+), (3) where KL (·, ·) denotes the generalized Kullback-Leibler divergence extended to matrices. We refer to the unique minimizer of (2) as the (η, τ )-barycenter. The uniqueness follows from the strict convexity introduced by the outer KL regularization when τ > 0 and π having full support [24]. The formulation (2) unifies several regularized barycenter models in the literature. Inner-regularized barycenters with (η, 0) are known to exhibit a shrinking bias [ 20 ], while the choice (η, η ), considered in [ 3 , 10 , 11 , 13 , 15 ], leads to barycenters with a blurring bias. More recently, the choice (η, η/ 2) 
+
+has attracted attention [ 8, 24 ]: for smooth densities, it yields an approximation bias of order η2,whereas τ = η gives a larger bias of order η [ 8]. Therefore, small regularization parameters are important for accurately approximating unregularized Wasserstein barycenters and preserving sharp geometric structures. However, in this regime, first-order solvers such as Sinkhorn-type and Bregman projection methods often require many iterations to reach high accuracy [ 10 , 18 , 24 ]. This motivates the development of second-order methods for the doubly regularized barycenter problem (2). In this paper, we develop Newton-type algorithms to solve the doubly regularized Wasserstein barycenter problem (2) . We first introduce an exact Newton method that exploits the smoothness of the regularized objective and achieves fast local convergence. However, computing the Newton direction can be expensive for large-scale instances, as it requires solving a large linear system involving dense operations with the transport probability matrices. To address this bottleneck, we propose a sparsification strategy applied directly to these matrices. For small entropic regularization parameters, the transport probabilities are typically concentrated on a small set of dominant entries, while the remaining entries contribute negligibly. Retaining only these dominant entries reduces the cost of Hessian-vector products while preserving the main curvature information in Newton updates. The resulting algorithm combines the high accuracy of second-order methods with improved scalability for large-scale barycenter computation. We establish convergence guarantees for both algorithms and demonstrate their empirical advantages over representative state-of-the-art methods. 
+
+Contributions. Our main contributions are summarized as follows: • Newton Methods and Sparsification: We develop an exact Newton method, NWB, for the doubly regularized Wasserstein barycenter problem and a sparse variant, SNWB, that sparsifies the transport probability matrices to reduce the cost of Hessian-vector products. • Theoretical Analysis: We establish structural and spectral properties of the exact and ‘sparse’ Hessians, derive approximation error bounds, and prove convergence results, includ-ing local quadratic convergence under suitable conditions. Proofs of all theoretical results are deferred to Appendix B. • Numerical Experiments: We evaluate the proposed methods on synthetic and real bench-mark problems. The results show that NWB and SNWB compare favorably with the state-of-the-art solvers, with SNWB providing substantial acceleration in many cases. 
+
+Notation. For a vector x ∈ Rn, we denote its i-th entry by xi. For a block vector y =[y⊤ 
+
+> 1
+
+, . . . , y⊤ 
+
+> K
+
+]⊤ ∈ RmK , where yk ∈ Rm, we denote the i-th entry of the k-th block by [yk]i.We denote [K] := {1, . . . , K } and 1n and 0n as the n-dimensional vectors of all ones and all zeros, respectively. We use λ+min (·) and λmax (·) to represent the smallest positive and largest eigenvalues of real symmetric matrices, respectively. For a matrix A ∈ Rm×n, let Ai· be the vector of the i-th row of A. The kernel of the matrix A is defined as ker (A) := {x ∈ Rn | Ax = 0m}. We denote ∥ · ∥ p as the ℓp norm of a vector or ℓp induced norm of a matrix. For simplicity, we use ∥ · ∥ to denote the Euclidean norm of a vector or the ℓ2 induced norm of a matrix. 
+
+## 2 Background 
+
+In this section, we briefly review the dual formulation of entropic optimal transport (EOT) in Sec-tion 2.1 and analytically derive the unconstrained reformulation of the doubly regularized Wasserstein barycenter problem (2) in Section 2.2. 22.1 Entropic Optimal Transport 
+
+For a fixed barycenter candidate v ∈ ∆n and a target measure μk ∈ ∆m, the EOT problem (3) admits a standard dual formulation [ 18 ]. Introducing dual variables αk ∈ Rn and βk ∈ Rm associated with the marginal constraints, the two-dual formulation is 
+
+max   
+
+> αk∈Rn,βk∈Rm
+
+⟨αk, v⟩ + ⟨βk, μk⟩ + η − η
+
+> n
+
+X
+
+> i=1
+> m
+
+X
+
+> j=1
+
+vi[μk]j exp 
+
+ [αk]i + [ βk]j − [Ck]ij 
+
+η
+
+
+
+. (4) For a fixed βk, by the first-order optimality condition, the optimal αk that maximizes the objective in (4) is given by: 
+
+[αk(βk)] i := −η log 
+
+
+
+> m
+
+X
+
+> j=1
+
+[μk]j exp 
+
+ [βk]j − [Ck]ij 
+
+η
+
+ , ∀ i ∈ [n]. (5) Substituting αk(βk) into the two-dual formulation (4) yields the semi-dual problem: OT k,η (v, μk) = max   
+
+> βk∈Rm
+
+⟨αk(βk), v⟩ + ⟨βk, μk⟩. (6) Thus, EOT can be evaluated by maximizing an unconstrained, smooth, concave function. Let 
+
+β⋆k be an optimal solution of (6) . The corresponding optimal transport plan can be recovered as 
+
+X⋆k = diag (v) Pk(β⋆k), where Pk(βk) is a row-stochastic matrix ( Pk(βk)1m = 1n) with entries: 
+
+[Pk(βk)] ij = [μk]j exp (([ βk]j − [Ck]ij )/η )
+
+Pml=1 [μk]l exp (([ βk]l − [Ck]il )/η ) . (7) 
+
+2.2 Formulation of the Doubly Entropic Wasserstein Barycenter Problem 
+
+Substituting the semi-dual representation (6) into the doubly entropic Wasserstein barycenter prob-lem (2) leads to the following min-max formulation: 
+
+min 
+
+> v∈∆n
+
+max  
+
+> β1,..., βK∈Rm
+> K
+
+X
+
+> k=1
+
+wk (⟨αk(βk), v⟩ + ⟨βk, μk⟩) + τ KL (v, π). (8) Since the objective is continuous jointly in v and {βk}Kk=1 , strictly convex in v ∈ ∆n, and concave in 
+
+{βk}Kk=1 , we can invoke the minimax theorem [ 21 ]. The compactness of the simplex ∆n guarantees that we can safely interchange the order of minimization and maximization. Grouping the terms involving v yields the inner minimization problem: 
+
+min 
+
+> v∈∆n
+
+⟨Φ( β), v⟩ + τ KL (v, π), (9) where β = [ β⊤ 
+
+> 1
+
+, . . . , β⊤ 
+
+> K
+
+]⊤ and Φ( β) = PKk=1 wkαk(βk). Clearly, this inner problem admits a closed-form solution given fixed β:
+
+[v(β)] i = πi exp ( −[Φ( β)] i/τ )
+
+Pnl=1 πl exp ( −[Φ( β)] l/τ ) , ∀i ∈ [n]. (10) Substituting this back into the problem (8), we obtain the following unconstrained problem: 
+
+min 
+
+> β∈RmK
+
+L(β) := −
+
+> K
+
+X
+
+> k=1
+
+wk⟨βk, μk⟩ + τ log 
+
+> n
+
+X
+
+> i=1
+
+πi exp ( −[Φ( β)] i/τ )
+
+!
+
+. (11) The above objective L(β) is smooth and convex, providing an unconstrained formulation that enables scalable, second-order optimization methods. 
+
+## 3 The Exact Newton Method 
+
+We now develop an exact Newton method for problem (11) . We first derive the gradient and Hessian of the dual objective in Section 3.1, and then present the algorithm in Section 3.2. 33.1 Gradient and Hessian 
+
+For notational simplicity, throughout this section, we write v = v(β) and Pk = Pk(βk), as defined in (10) and (7) , respectively. With this notation, the gradient of g := ∇L (β) with respect to the k-th block variable βk takes the simple form: 
+
+gk := ∇kL(β) = wk(( Pk)⊤v − μk). (12) Thus, each gradient block measures the discrepancy between the transported marginal (Pk)⊤v and the prescribed target marginal μk. At optimality, this marginal discrepancy vanishes for every k.Let H := ∇2L(β) and denote its (k, r )-th block by Hkr := ∇2 
+
+> kr
+
+L(β). Define γk := P ⊤ 
+
+> k
+
+v. Then the diagonal and off-diagonal blocks of H are 
+
+Hkk = w2
+
+> k
+
+τ
+
+ (Pk)⊤diag (v) Pk − γk(γk)⊤ + wk
+
+η
+
+ diag (γk) − (Pk)⊤diag (v) Pk
+
+ , (13) 
+
+Hkr = wkwr
+
+τ
+
+ (Pk)⊤diag (v) Pr − γk(γr )⊤ for k̸ = r. (14) The Hessian consists of two types of curvature contributions. The terms scaled by 1/τ describe the global coupling induced by the barycenter variable, while the terms scaled by 1/η appear only in the diagonal blocks and correspond to the local curvature of the individual entropic transport problems. The block-wise representation also makes explicit an invariance of the dual formulation: adding a constant to any dual block does not change the induced transport plan. Consequently, the Hessian is singular along block-wise constant directions. The following proposition characterizes this structure. 
+
+Proposition 3.1. The Hessian matrix H is symmetric and positive semidefinite. Moreover, its kernel is exactly the K-dimensional subspace of block-wise constant vectors, namely, ker (H) = 
+
+n
+
+d = ( d⊤ 
+
+> 1
+
+, . . . , d⊤ 
+
+> K
+
+)⊤ ∈ RmK | dk = ck1m, c k ∈ R, ∀k ∈ [K]
+
+o
+
+. (15) 
+
+Furthermore, the gradient g is orthogonal to this kernel, i.e., ∇L (β) ∈ ker (H)⊥. Consequently, the Newton system is consistent. 
+
+Proposition 3.1 shows that the only singular directions of H are the block-wise constant shifts of the dual variables. Since ∇L (β) ∈ ker (H)⊥, the Newton direction can be computed within ker (H)⊥.The next result gives spectral bounds for the Hessian on this restricted subspace. 
+
+Proposition 3.2. We obtain the following properties of the Hessian matrix H.
+
+λ+min (H) ≥ mηn min  
+
+> k
+
+(wkp2
+
+> k
+
+), λmax (H) ≤ (max  
+
+> k
+
+wk)
+
+ 12η + 1
+
+τ
+
+
+
+, (16) 
+
+where pk = min j [Pk]i⋆j for i⋆ ∈ arg max i[v]i.
+
+These bounds make explicit how the conditioning of the restricted Newton system depends on the regularization parameters, the barycentric weights, and the transport probability matrices. These properties ensure that H is well-conditioned on ker (H)⊥. Together, the gradient and Hessian formulas provide the basis for an exact Newton method and also reveal the structure exploited by the sparse Newton method in Section 4. 
+
+3.2 The Proposed Algorithm 
+
+We now present the Newton method for the Wasserstein barycenters (NWB), summarized in Algo-rithm 1. The method applies a regularized Newton iteration to the smooth unconstrained formula-tion (11), and recovers the barycenter variable through the closed-form relation (10). The algorithm is initialized by any first-order barycenter solver, such as IBP [ 3] for (η, η )-barycenters or EDSWB [ 24 ] for (η, η/ 2) -barycenters. This preliminary stage provides a coarse approximation of the dual variable, denoted by β0, which serves as a warm start for the subsequent Newton iterations. At each iteration t, the algorithm computes the semi-dual potentials {αtk}Kk=1 , the barycenter mass vec-tor vt, the transport probability matrices {P tk}Kk=1 , and the induced transported marginals {γtk}Kk=1 .4Algorithm 1 Newton method for Wasserstein Barycenter (NWB)  
+
+> 1:
+
+Input: w ∈ ∆K , η, τ > 0, {μk}Kk=1 ∈ ∆m, {Ck}Kk=1 ∈ Rn×m 
+
+> +
+
+. 
+
+> 2:
+
+Use a first-order solver, such as IBP [ 3] or EDSWB [ 24 ], to obtain an initial dual variable 
+
+β0 = [( β01)⊤, . . . , (β0 
+
+> K
+
+)⊤]⊤ ∈ RmK . 
+
+> 3:
+
+Normalize each block by β0 
+
+> k
+
+← β0 
+
+> k
+
+− ( 1 
+
+> m
+
+1⊤
+
+> m
+
+β0
+
+> k
+
+)1m for k ∈ [K]. 
+
+> 4:
+
+for t = 0 , 1, ..., T do  
+
+> 5:
+
+Calculate [αtk]i ← − η log 
+
+Pmj=1 [μk]j exp  ([ βtk]j − [Ck]ij )/η 
+
+for k ∈ [K]. 
+
+> 6:
+
+Construct the weighted sum Φt ← P 
+
+> k
+
+wkαtk. 
+
+> 7:
+
+Compute barycenter mass v by vti ← πi exp( −Φti /τ )P     
+
+> lπlexp( −Φtl/τ )
+
+for i ∈ [n]. 
+
+> 8:
+
+Compute P tk by [P tk]ij ← [μk ]j exp (([ βtk ]j −[Ck ]ij )/η )  
+
+> Pml=1 [μk]lexp
+
+(([ βtk ]l−[Ck ]il )/η ) for k ∈ [K]. 
+
+> 9:
+
+Compute the marginal γtk ← (P tk)⊤vt for k ∈ [K]. 
+
+> 10:
+
+Calculate the gradient gt ← ∇L (βt). 
+
+> 11:
+
+Construct the Hessian matrix Ht. 
+
+> 12:
+
+Compute ∆βt ← − (Ht + ∥gt∥I)−1gt by the conjugate gradient.  
+
+> 13:
+
+Select a stepsize st by Armijo backtracking.  
+
+> 14:
+
+Update βt+1 ← βt + st∆βt. 
+
+> 15:
+
+end for  
+
+> 16:
+
+Output: vT .These quantities are then used to compute the gradient by (12) . The Hessian matrix itself is not formed explicitly. Instead, we use the block expressions in (13) and (14) to define an implicit linear operator z 7 → Htz, which is sufficient for the conjugate gradient solver to compute the Newton direction. To improve numerical stability, we solve a shifted Newton system 
+
+∆βt = −  Ht + ∥gt∥I−1 gt.
+
+The shift vanishes as the iterates approach a stationary point, so the method gradually recovers the exact Newton direction in the local convergence regime. Similar regularization mechanisms have been adopted in recent Newton-type methods for large-scale optimization [ 23 , 25 , 17 ]. A stepsize is then selected by Armijo backtracking to ensure sufficient descent of the objective. 
+
+## 4 The Sparse Newton Method 
+
+In this section, we introduce a sparsification strategy to accelerate the computation of Newton directions. We first describe the construction of sparse transport probability matrices in Section 4.1, and then present the resulting sparse Newton algorithm in Section 4.2. 
+
+4.1 Sparsification Strategy 
+
+The Newton method in Algorithm 1 requires solving the linear system (H + ∥g∥I)(∆ β) = −g
+
+using the conjugate gradient (CG), where the main cost of each iteration comes from Hessian-vector products involving the transport probability matrices {Pk}Kk=1 . For large-scale problems, treating these matrices as dense can be computationally expensive. Our sparsification strategy is motivated by the structure of entropic transport. When η is small, the transport plans and the corresponding probability matrices typically contain many near-zero entries, with most mass carried by a few dominant entries. Since the Hessian structure in (13) -(14) is governed by these matrices, replacing Pk with a normalized sparse approximation can reduce the cost of Hessian-vector products while retaining the main curvature information. For each k, we construct Pk,ρ by thresholding small entries of Pk and renormalizing each row. The row indexed by i⋆ ∈ arg max i∈[n] vi is kept unchanged to preserve the spectral lower bound used in the analysis. The procedure is summarized in Algorithm 2. Given the sparsified probability matrices {Pk,ρ }Kk=1 , we define γk,ρ = ( Pk,ρ )⊤v and construct Hρ
+
+by replacing Pk and γk in (13) -(14) with Pk,ρ and γk,ρ . As in Section 3.2, Hρ need not be formed 5Algorithm 2 Sparsifying the transport probability matrices  
+
+> 1:
+
+Input: {Pk}Kk=1 , threshold parameter ρ ≥ 0, i⋆ ∈ arg max i∈[n] vi. 
+
+> 2:
+
+for k = 1 , 2, ..., K do  
+
+> 3:
+
+Construct the sparsified matrix Pk,ρ by setting 
+
+[Pk,ρ ]ij ← [Pk]ij 1{[Pk ]ij ≥ρ}
+
+Pml=1 [Pk]il 1{[Pk ]il ≥ρ}
+
+∀i̸ = i⋆, [Pk,ρ ]i⋆· ← [Pk]i⋆·. 
+
+> 4:
+
+end for  
+
+> 5:
+
+Output: {Pk,ρ }Kk=1 .
+
+Algorithm 3 Sparse Newton method for Wasserstein Barycenter (SNWB)  
+
+> 1:
+
+Input: w ∈ ∆K , η, τ > 0, {μk}Kk=1 ∈ ∆m, {Ck}Kk=1 ∈ Rn×m 
+
+> +
+
+, Cρ > 0. 
+
+> 2:
+
+Follow the warm-start procedure in Algorithm 1 to construct the initial dual variable β0. 
+
+> 3:
+
+for t = 0 , 1, ..., T do  
+
+> 4:
+
+Perform Steps 5-10 in Algorithm 1 to calculate the gradient gt, vt and {P tk}k∈[K]. 
+
+> 5:
+
+Update ρ ← Cρ∥gt∥. 
+
+> 6:
+
+Construct {Pk,ρ }k∈[K] by Algorithm 2 and compute γtk ← (Pk,ρ )⊤vt. 
+
+> 7:
+
+Construct the sparse Hessian Htρ using (19).  
+
+> 8:
+
+Compute ∆βt ← − (Htρ + ∥gt∥I)−1gt by the conjugate gradient.  
+
+> 9:
+
+Update βt+1 by Steps 13-14 in Algorithm 1.  
+
+> 10:
+
+end for  
+
+> 11:
+
+Output: vT .explicitly; the sparse matrices {Pk,ρ }Kk=1 are sufficient for efficient Hessian-vector products. The block-wise expression of Hρ is given in (19). The next results show that this construction preserves the singular structure of the exact Hessian and provides a controlled approximation error. 
+
+Proposition 4.1. The sparsified Hessian Hρ has the same kernel as the exact Hessian H, namely, ker (Hρ) = ker (H). Moreover, Hρ satisfies the same positive semidefiniteness and spectral-type properties as those stated in Propositions 3.1 and 3.2. 
+
+Theorem 4.2. For any ρ ≥ 0, we have 
+
+∥H − Hρ∥ ≤ 8mnρ (max  
+
+> k
+
+wk)
+
+ 1
+
+τ + 1
+
+η
+
+
+
+.
+
+Proposition 4.1 shows that sparsification preserves the kernel structure of the exact Hessian, while Theorem 4.2 bounds the induced perturbation. The error scales linearly with the threshold ρ, providing a direct trade-off between computational efficiency and second-order accuracy. 
+
+4.2 The Proposed Algorithm 
+
+Algorithm 3 summarizes the sparse Newton method for the WB problem (2) . It follows the same framework as NWB, including the first-order warm start, barycenter update, and Armijo line search. Its main difference is in the Newton direction: instead of using the exact Hessian Ht, SNWB uses a ‘sparse’ approximation Htρ constructed from the sparsified transport probability matrices {P tk,ρ }Kk=1 .At each iteration, the sparsification threshold is chosen adaptively as ρt = Cρ∥gt∥, where Cρ > 0
+
+is a prescribed parameter. This choice makes the approximation more aggressive when the iterate is far from optimal and gradually reduces the sparsification error as the gradient norm decreases. Consequently, the ‘sparse’ Hessian becomes increasingly accurate when the iterate approaches the solution, which is important for preserving the local behavior of the Newton method. 65 Theoretical Analysis 
+
+This section establishes the convergence of the proposed Newton-type methods. The analysis covers both NWB (Algorithm 1), corresponding to ρ = 0 , and SNWB (Algorithm 3), corresponding to 
+
+ρ > 0. Since the gradient is orthogonal to the kernel space of H, all convergence statements are formulated on the restricted subspace orthogonal to its kernel. We first show that the iterates remain in the restricted subspace once the initial point is chosen from it. 
+
+Lemma 5.1. For any ρ ≥ 0, let {βt}t≥0 be the sequence generated by Algorithm 1 or 3 with 
+
+β0 ∈ ker (Hρ)⊥, then βt ∈ ker (Hρ)⊥ for ∀t ∈ [T ].
+
+Building upon this invariant property, which ensures the sequence is perpetually confined to the orthogonal complement of the kernel, we are now positioned to establish the global convergence of both algorithms within this restricted subspace. 
+
+Theorem 5.2. Let {βt}t≥0 be the sequence generated by Algorithm 1 or 3 with initial point β0 ∈
+
+ker (Hρ)⊥. Then we have ∥gt∥ → 0 as t → ∞ and βt → β⋆, where β⋆ is the unique minimizer of 
+
+L(β) in the restricted subspace ker (Hρ)⊥.
+
+While Theorem 5.2 guarantees that the iterates asymptotically approach the unique optimal solution from any valid starting point, characterizing the algorithm’s asymptotic efficiency requires analyzing its local behavior. The following theorem formally addresses this by demonstrating that, once the iterates enter a sufficiently small neighborhood of the optimum, the proposed methods attain a strict local quadratic rate of convergence. 
+
+Theorem 5.3. Let {βt}t≥0 be generated by Algorithm 1 or 3 and let β⋆ denote the unique optimal solution of L(β) over the restricted subspace ker( Hρ)⊥. If the Armijo parameter satisfies σ ∈
+
+(0 , 1/2) , when the iterates βt are sufficiently close to β⋆ and the Armijo line search accepts st = 1 ,there exists a constant M > 0 such that 
+
+∥βt+1 − β⋆∥ ≤ M ∥βt − β⋆∥2.
+
+Finally, we provide an explicit bound on the number of iterations required to enter the pure Newton phase, where st = 1 is accepted, and local quadratic convergence holds. 
+
+Proposition 5.4. Assume m = n, η = O(τ ) and the barycentric weights satisfy wk = Θ(1 /K ).For a given regularization parameter η > 0, the number of iterations required for the exact Newton method to transition into the region of pure quadratic convergence is bounded by 
+
+O
+
+ K3
+
+η + nη K
+
+
+
+exp 
+
+ ∆
+
+η
+
+ 
+
+,
+
+where ∆ is a problem-dependent constant. 
+
+This complexity bound depends entirely on the intrinsic problem parameters, indicating that the algorithm guarantees a transition into a phase of rapid, quadratic convergence after a finite number of damped iterations. 
+
+## 6 Numerical Experiments 
+
+This section presents numerical experiments on synthetic and real datasets to assess the performance of the proposed algorithms. Unless otherwise specified, we consider the regularization setting 
+
+τ = η and compare against three representative fixed-support Wasserstein barycenter solvers: IBP [ 3], FastIBP [ 15 ], and SmWB [ 11 ]. The experiments are implemented in Python 3.12 and run on a MacBook Pro with macOS 13.0, an Apple M2 Pro processor, and 16 GB of RAM. In implementation, we take Cρ = 10 5 · η√nm . Additional experiments, including ablation studies on η
+
+and the sparsification level, as well as results for the setting τ = η/ 2, are reported in Appendix C. 
+
+6.1 Synthetic Data 
+
+We first examine the qualitative behavior of the proposed methods on the classical nested ellipses benchmark [ 10 ]. The dataset consists of K = 5 discrete probability measures represented as grayscale 7SmWB 
+
+> time = 18.94 s FastIBP
+> time = 62.11 s IBP
+> time = 17.10 s NWB
+> time = 72.78 s SNWB
+> time = 14.09 s
+
+Figure 1: Nested ellipses benchmark on a 40 × 40 pixel grid. Top: Dataset of 5 nested ellipses. Bottom: Barycenters computed by different methods. SmWB 
+
+> time = 96.32 s FastIBP
+> time = 479.12 s IBP
+> time = 125.14 s NWB
+> time = 237.41 s SNWB
+> time = 85.03 s
+
+Figure 2: Nested ellipses benchmark on a 64 × 64 pixel grid. Top: Dataset of 5 nested ellipses. Bottom: Barycenters computed by different methods. images on 40 × 40 and 64 × 64 pixel grids. Each image contains a pair of nested ellipses with randomly generated centers, orientations, and axis lengths. The ground cost is defined as the squared Euclidean distance between pixel locations. Unless otherwise specified, we use uniform weights 
+
+wk = 1 /5 for k ∈ [5] and set η = τ = 10 −3.Figures 1 and 2 compare the barycenters computed by different methods under the two grid resolutions. The proposed NWB and SNWB produce barycenters that preserve the nested elliptical structure with clear contours and limited background artifacts. In contrast, SmWB exhibits noticeable background noise, whereas first-order methods yield slightly more diffuse barycenters. Although the dense NWB method achieves high-quality solutions, its full Hessian computations incur additional costs. SNWB alleviates this bottleneck by leveraging Hessian sparsification, resulting in a substantial reduction in runtime while maintaining comparable barycenter quality. These results suggest that the sparse Newton strategy improves scalability without compromising the geometric fidelity of the computed barycenter. Additional synthetic numerical experiments are provided in Appendix C.2. 
+
+6.2 Real Data 
+
+We next evaluate the proposed methods on real image datasets with meaningful spatial structures. We consider MNIST [ 14 ] and Fashion-MNIST [ 26 ], two standard benchmarks consisting of grayscale images of handwritten digits and fashion products, respectively. For each dataset, we randomly select K = 10 images from a prescribed class and resize each image to a 70 × 70 pixel grid. Each image is vectorized and normalized into a probability vector μk, and the cost matrix is constructed using the squared Euclidean distances between pixel locations. We use uniform weights wk = 1 /10 for k ∈ [10] . The regularization parameters are set to η = τ = 7 × 10 −4
+
+8Selected digits Selected digits Selected digits Selected digits Ground truth vGround truth vGround truth vGround truth v0 2000 4000                      
+
+> Time (s)
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+> Convergence
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 02000 4000
+> Time (s)
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+> Convergence
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 02000 4000
+> Time (s)
+> 10 8
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+> Convergence
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 02000 4000
+> Time (s)
+> 10 10
+> 10 8
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+> Convergence
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB
+
+Figure 3: Qualitative and quantitative performance evaluation on MNIST and Fashion-MNIST benchmarks. From top to bottom, the rows report the selected input samples, the corresponding ground-truth barycenter v⋆, and the convergence curves of different methods. for MNIST and η = τ = 8 × 10 −4 for Fashion-MNIST. To assess convergence accuracy, we compute a high-precision reference solution v⋆ using SNWB with a stopping criterion ∥g∥ < 10 −7.Figure 3 reports the results on MNIST and Fashion-MNIST, respectively. The dense NWB method converges faster than FastIBP and the L-BFGS-B-based SmWB method, demonstrating the benefits of using second-order information. However, inverting the full Hessian remains expensive, making it slower than IBP in some cases. By contrast, SNWB substantially reduces the cost of the Newton updates through Hessian sparsification and achieves the fastest convergence among the tested methods. These results confirm that the proposed sparsification strategy improves computational efficiency while preserving the accuracy and stability of the Newton framework. Additional comparisons using other measures are reported in Appendix C.1. 
+
+## 7 Conclusion 
+
+We studied the fixed-support doubly entropic Wasserstein barycenter problem and reformulated it as a smooth, unconstrained, convex optimization problem via the semi-dual representation of entropic optimal transport. Based on explicit gradient and Hessian formulas, we developed an exact Newton method (Algorithm 1) and its sparse variant (Algorithm 3) that sparsifies the transport probability matrices to accelerate Hessian-vector products. Theoretical analysis establishes structural properties, approximation bounds, and convergence results for the proposed methods. Numerical experiments on synthetic and real datasets show that SNWB achieves faster convergence than representative state-of-the-art solvers while maintaining high solution accuracy. Limitations of the proposed methods and possible directions for future work are discussed in Appendix A. 9References 
+
+[1] Martial Agueh and Guillaume Carlier. Barycenters in the wasserstein space. SIAM Journal on Mathematical Analysis , 43(2):904–924, 2011. [2] Federico Bassetti, Antonella Bodini, and Eugenio Regazzini. On minimum kantorovich distance estimators. Statistics & probability letters , 76(12):1298–1302, 2006. [3] Jean-David Benamou, Guillaume Carlier, Marco Cuturi, Luca Nenna, and Gabriel Peyré. Itera-tive bregman projections for regularized transportation problems. SIAM Journal on Scientific Computing , 37(2):A1111–A1138, 2015. [4] Emmanuel Boissard, Thibaut Le Gouic, and Jean-Michel Loubes. Distribution’s template estimate with wasserstein metrics. Bernoulli , pages 740–759, 2015. [5] Giuseppe Buttazzo, Luigi De Pascale, and Paola Gori-Giorgi. Optimal-transport formulation of electronic density-functional theory. Physical Review A—Atomic, Molecular, and Optical Physics , 85(6):062502, 2012. [6] Guillaume Carlier and Ivar Ekeland. Matching for teams. Economic theory , 42(2):397–418, 2010. [7] Pierre-André Chiappori, Robert J McCann, and Lars P Nesheim. Hedonic price equilibria, stable matching, and optimal transport: equivalence, topology, and uniqueness. Economic Theory , 42(2):317–354, 2010. [8] Lénaïc Chizat. Doubly regularized entropic wasserstein barycenter: L. chizat. Foundations of Computational Mathematics , pages 1–38, 2025. [9] Codina Cotar, Gero Friesecke, and Claudia Klüppelberg. Density functional theory and opti-mal transportation with coulomb cost. Communications on Pure and Applied Mathematics ,66(4):548–599, 2013. [10] Marco Cuturi and Arnaud Doucet. Fast computation of wasserstein barycenters. In International conference on machine learning , pages 685–693. PMLR, 2014. [11] Marco Cuturi and Gabriel Peyré. Semidual regularized optimal transport. SIAM Review ,60(4):941–965, 2018. [12] Roger A. Horn and Charles R. Johnson. Matrix Analysis . Cambridge University Press, 2 edition, 2012. [13] Alexey Kroshnin, Nazarii Tupitsa, Darina Dvinskikh, Pavel Dvurechensky, Alexander Gasnikov, and Cesar Uribe. On the complexity of approximating wasserstein barycenters. In International conference on machine learning , pages 3530–3540. PMLR, 2019. [14] Yann LeCun, Léon Bottou, Yoshua Bengio, and Patrick Haffner. Gradient-based learning applied to document recognition. Proceedings of the IEEE , 86(11):2278–2324, 2002. [15] Tianyi Lin, Nhat Ho, Xi Chen, Marco Cuturi, and Michael Jordan. Fixed-support wasserstein barycenters: Computational hardness and fast algorithm. Advances in neural information processing systems , 33:5368–5380, 2020. [16] Yurii Nesterov et al. Lectures on convex optimization , volume 137. Springer, 2018. [17] Jianting Pan, Ji’an Li, and Ming Yan. Inexact bregman sparse newton method for efficient optimal transport. arXiv preprint arXiv:2603.07156 , 2026. [18] Gabriel Peyré and Marco Cuturi. Computational optimal transport: With applications to data science . Now Foundations and Trends, 2019. [19] Julien Rabin, Gabriel Peyré, Julie Delon, and Marc Bernot. Wasserstein barycenter and its application to texture mixing. In International conference on scale space and variational methods in computer vision , pages 435–446. Springer, 2011. 10 [20] Philippe Rigollet and Jonathan Weed. Entropic optimal transport is maximum-likelihood deconvolution. Comptes Rendus. Mathématique , 356(11-12):1228–1235, 2018. [21] R Tyrrell Rockafellar. Convex Analysis , volume 28. Princeton University Press, 1997. [22] Justin Solomon, Fernando De Goes, Gabriel Peyré, Marco Cuturi, Adrian Butscher, Andy Nguyen, Tao Du, and Leonidas Guibas. Convolutional wasserstein distances: Efficient optimal transportation on geometric domains. ACM Transactions on Graphics (ToG) , 34(4):1–11, 2015. [23] Zihao Tang and Yixuan Qiu. Safe and sparse Newton method for entropic-regularized optimal transport. Advances in Neural Information Processing Systems , 37:129914–129943, 2024. [24] Tomas Vaskevicius and Lénaïc Chizat. Computational guarantees for doubly entropic wasser-stein barycenters. Advances in Neural Information Processing Systems , 36:12363–12388, 2023. [25] Chenrui Wang and Yixuan Qiu. The sparse-plus-low-rank quasi-Newton method for entropic-regularized optimal transport. In Forty-second International Conference on Machine Learning ,2025. [26] Han Xiao, Kashif Rasul, and Roland Vollgraf. Fashion-MNIST: a novel image dataset for benchmarking machine learning algorithms. arXiv preprint arXiv:1708.07747 , 2017. [27] Lei Yang, Jia Li, Defeng Sun, and Kim-Chuan Toh. A fast globally linearly convergent algorithm for the computation of wasserstein barycenters. Journal of Machine Learning Research , 22(21):1–37, 2021. 11 A Limitations 
+
+The proposed methods have two main limitations. First, the conditioning of the Newton system depends on the transport probability matrices; when some entries become very small, the system may be ill-conditioned and require more conjugate gradient iterations. Second, the efficiency of SNWB relies on the quality of the sparse approximation. If the transport probability matrices remain dense, sparsification may provide limited computational savings. Developing effective preconditioners and adaptive sparsification rules is therefore an important direction for future work. 
+
+## B Proofs of Theoretical Results 
+
+This section details the proofs of the theoretical results. To facilitate the subsequent analysis, we first introduce a block-wise decomposition of the ‘sparsified’ Hessian matrix Hρ.Given the sparsified transport probability matrices {Pk,ρ }k∈[K], we define the corresponding marginal vectors as: 
+
+γk,ρ = ( Pk,ρ )⊤v, (17) and introduce the auxiliary block matrices Mkr,ρ and Nkk,ρ such that: 
+
+Mkr,ρ = ( Pk,ρ )⊤diag (v)Pr,ρ − γk,ρ (γr,ρ )⊤, Nkk,ρ = diag (γk,ρ ) − (Pk,ρ )⊤diag (v)Pk,ρ . (18) Using these components, the (k, r )-th block of the ‘sparsified’ Hessian matrix Hρ, originally defined in (13) and (14), can be concisely rewritten as: 
+
+Hkr,ρ = wkwr
+
+τ Mkr,ρ + wk
+
+η Nkk,ρ 1{k=r}. (19) As a special case, when ρ = 0 , the sparsification step leaves the transport probability matrices unchanged, i.e., Pk,ρ = Pk for all k ∈ [K]. Consequently, 
+
+Nkk,ρ = Nkk , Mkr,ρ = Mkr , Hρ = H, 
+
+and the ‘sparsified’ Hessian reduces to the exact Hessian. 
+
+B.1 Structural and Spectral Properties of the Sparsified Hessian Matrix 
+
+In this subsection, we characterize the kernel space and establish bounds on the eigenvalues of the ‘sparsified’ Hessian matrix Hρ, including ρ = 0 and ρ ≥ 0. Consequently, the theoretical results derived here encompass the properties of the exact Hessian as a special case, allowing us to recover the standard propositions (e.g., Proposition 3.1, 3.2, and 4.1). 
+
+Theorem B.1. For any ρ ≥ 0, the sparsified Hessian matrix Hρ is symmetric and positive semidefinite. Moreover, its kernel is exactly the K-dimensional subspace of block-wise constant vectors, namely, 
+
+ker( Hρ) = 
+
+n
+
+d = ( d⊤ 
+
+> 1
+
+, . . . , d⊤ 
+
+> K
+
+)⊤ ∈ RmK | dk = ck1m, c k ∈ R, ∀k ∈ [K]
+
+o
+
+. (20) 
+
+Furthermore, the gradient g is strictly orthogonal to this kernel, i.e., ∇L (β) ∈ ker( Hρ)⊥. Conse-quently, the associated Newton system is consistent. Proof. By definition, each block Hkk,ρ is symmetric and H⊤ 
+
+> kr,ρ
+
+= Hrk,ρ ; therefore, the full matrix 
+
+Hρ is symmetric. For any arbitrary vector d = [ d⊤ 
+
+> 1
+
+, d⊤ 
+
+> 2
+
+, . . . , d⊤ 
+
+> K
+
+]⊤ ∈ RmK , the quadratic form evaluates to: 
+
+Q = d⊤Hρd =
+
+> K
+
+X
+
+> k=1
+> K
+
+X
+
+> r=1
+
+(dk)⊤Hkr,ρ dr =
+
+> K
+
+X
+
+> k=1
+
+wk
+
+η (dk)⊤Nkk,ρ dk
+
+| {z }
+
+> Qη
+
++
+
+> K
+
+X
+
+> k=1
+> K
+
+X
+
+> r=1
+
+wkwr
+
+τ (dk)⊤Mkr,ρ dr
+
+| {z }
+
+> Qτ
+
+.
+
+12 We first analyze the term Qη . Define Wk,ρ = P ⊤
+
+> k,ρ
+
+diag (v)Pk,ρ . Because Pk,ρ is row-stochastic (Pk,ρ 1m = 1n), we have Wk,ρ 1m = P ⊤
+
+> k,ρ
+
+v = γk,ρ . Therefore, Nkk,ρ = diag (Wk,ρ 1m) − Wk,ρ . It follows that: 
+
+Qη =
+
+> K
+
+X
+
+> k=1
+
+wk
+
+η d⊤ 
+
+> k
+
+Nkk,ρ dk =
+
+> K
+
+X
+
+> k=1
+
+wk
+
+2η
+
+> m
+
+X
+
+> j=1
+> m
+
+X
+
+> l=1
+
+[Wk,ρ ]jl ([ dk]j − [dk]l)2 ≥ 0.
+
+Since all entries of v are strictly positive, and by the sparsification rule there exists an index i⋆ such that [Pk,ρ ]i⋆j > 0 for all j ∈ [m], it follows from the definition of Wk,ρ that [Wk,ρ ]ij > 0 for all 
+
+i, j ∈ [m]. Thus, Qη = 0 if and only if dk = ck1m for some constants ck ∈ R.Next, we evaluate Qτ . By the definition of Mkr,ρ , we obtain: 
+
+Qτ = 1
+
+τ
+
+> K
+
+X
+
+> k=1
+
+(wkPk,ρ dk)⊤ diag (v) − vv ⊤ KX
+
+> r=1
+
+(wr Pr,ρ dr ):= 1
+
+τ
+
+
+
+> n
+
+X
+
+> i=1
+
+viy2 
+
+> i
+
+−
+
+> n
+
+X
+
+> i=1
+
+viyi
+
+!2 ≥ 0,
+
+(21) where we define y = PKk=1 wkPk,ρ dk in the second equality. The final inequality holds due to the Cauchy-Schwarz inequality, noting that v ∈ ∆n. Since all entries of v are strictly positive, equality holds if and only if y is a constant vector; i.e., there exists c0 ∈ R such that yi = c0 for all i ∈ [n]. In particular, if dk = ck1m for all k, then: 
+
+yi =
+
+> K
+
+X
+
+> k=1
+
+wkmX
+
+> j=1
+
+[Pk,ρ ]ij ck =
+
+> K
+
+X
+
+> k=1
+
+wkck
+
+
+
+> m
+
+X
+
+> j=1
+
+[Pk,ρ ]ij 
+
+ =
+
+> K
+
+X
+
+> k=1
+
+wkck, ∀i ∈ [n],
+
+which implies there exists a constant c0 := PKk=1 wkck such that yi = c0 for all i, yielding Qτ = 0 .Since Qη = 0 holds if and only if every block dk is constant, and such vectors simultaneously satisfy 
+
+Qτ = 0 , the kernel of Hρ is precisely given by (20). It remains to show that the gradient is orthogonal to this kernel space. Take any d ∈ ker( Hρ). Then 
+
+dk = ck1m for some constants ck ∈ R. Hence, 
+
+⟨gk, dk⟩ = ck⟨gk, 1m⟩ = ckwk⟨(Pk,ρ )⊤v − μk, 1m⟩ = 0 , ∀k ∈ [K],
+
+where the final equality holds because v⊤Pk,ρ 1m = v⊤1n = 1 and μ⊤ 
+
+> k
+
+1m = 1 . Summing over 
+
+k = 1 , . . . , K yields ⟨g, d⟩ = 0 . This completes the proof. 
+
+Theorem B.2. For any ρ ≥ 0, the minimum strictly positive eigenvalue and the maximum eigenvalue of the sparsified Hessian matrix Hρ satisfy the following bounds: 
+
+λ+min (Hρ) ≥ mηn min  
+
+> k
+
+(wkp2
+
+> k
+
+), λmax (Hρ) ≤ (max  
+
+> k
+
+wk)
+
+ 12η + 1
+
+τ
+
+
+
+, (22) 
+
+where pk = min j [Pk,ρ ]i⋆j with i⋆ ∈ arg max i[v]i.Proof. For any arbitrary vector d = [ d⊤ 
+
+> 1
+
+, d⊤ 
+
+> 2
+
+, . . . , d⊤ 
+
+> K
+
+]⊤ ∈ RmK , following the derivation in Theorem B.1, the quadratic form is Q = d⊤Hρd = Qη + Qτ . Since Qτ ≥ 0, we can safely bound 
+
+Q from below by Qη :
+
+Q ≥ Qη =
+
+> K
+
+X
+
+> k=1
+
+wk
+
+η (dk)⊤Nkk,ρ dk.
+
+Expanding the local variance block yields: 
+
+(dk)⊤Nkk,ρ dk = 12
+
+> n
+
+X
+
+> i=1
+
+vimX
+
+> j=1
+> m
+
+X
+
+> l=1
+
+[Pk,ρ ]ij [Pk,ρ ]il ([ dk]j − [dk]l)2.
+
+13 For i⋆ ∈ arg max i[v]i, it is guaranteed that vi⋆ ≥ 1/n . By defining pk = min j [Pk,ρ ]i⋆j and isolating the i⋆ term, we obtain: 
+
+(dk)⊤Nkk,ρ dk ≥ 12n
+
+> m
+
+X
+
+> j=1
+> m
+
+X
+
+> l=1
+
+[Pk,ρ ]i⋆j [Pk,ρ ]i⋆l([ dk]j − [dk]l)2 ≥ p2
+
+> k
+
+2n
+
+> m
+
+X
+
+> j=1
+> m
+
+X
+
+> l=1
+
+([ dk]j − [dk]l)2.
+
+For d ∈ ker( Hρ)⊥, the vector must be orthogonal to each block-wise constant basis vector, implying 
+
+1⊤
+
+> m
+
+dk = 0 for all k ∈ [K]. This zero-mean property yields the geometric identity P
+
+> j,l
+
+([ dk]j −
+
+[dk]l)2 = 2 m∥dk∥2 (see, e.g., [17, Lemma B.1]). Substituting this relation gives: 
+
+(dk)⊤Nkk,ρ dk ≥ p2
+
+> k
+
+2n (2 m∥dk∥2) = mp 2
+
+> k
+
+n ∥dk∥2.
+
+Reinserting this into the bound for Qη provides the global lower bound: 
+
+Q ≥
+
+> K
+
+X
+
+> k=1
+
+wk
+
+ηmp 2
+
+> k
+
+n ∥dk∥2 ≥ mηn min  
+
+> k
+
+(wkp2
+
+> k
+
+)∥d∥2.
+
+To establish the upper bound, we evaluate Qη and Qτ individually. For Qη , we have: 
+
+(dk)⊤Nkk,ρ dk = 12
+
+> n
+
+X
+
+> i=1
+
+vimX
+
+> j=1
+
+X 
+
+> l̸=j
+
+[Pk,ρ ]ij [Pk,ρ ]il ([ dk]j − [dk]l)2
+
+≤
+
+> n
+
+X
+
+> i=1
+
+vimX
+
+> j=1
+
+X 
+
+> l̸=j
+
+[Pk,ρ ]ij [Pk,ρ ]il ([ dk]2 
+
+> j
+
++ [ dk]2 
+
+> l
+
+)= 2 
+
+> n
+
+X
+
+> i=1
+
+vimX
+
+> j=1
+
+[dk]2 
+
+> j
+
+[Pk,ρ ]ij 
+
+X 
+
+> l̸=j
+
+[Pk,ρ ]il 
+
+
+
+= 2 
+
+> n
+
+X
+
+> i=1
+
+vimX
+
+> j=1
+
+[dk]2 
+
+> j
+
+[Pk,ρ ]ij (1 − [Pk,ρ ]ij )
+
+≤ 2
+
+> n
+
+X
+
+> i=1
+
+vimX
+
+> j=1
+
+[dk]2
+
+> j
+
+ 14
+
+
+
+= 12 ∥dk∥2,
+
+where the first inequality utilizes (a − b)2 ≤ 2( a2 + b2) and the final inequality relies on the fact that 
+
+x(1 − x) ≤ 1/4 for x ∈ [0 , 1] . Thus, Qη ≤ PKk=1  
+
+> wk
+> 2η
+
+∥dk∥2.For Qτ , revisiting Equation (21) and omitting the non-positive squared term yields: 
+
+Qτ ≤ 1
+
+τ
+
+> K
+
+X
+
+> k=1
+
+(wkPk,ρ dk)⊤diag (v)
+
+> K
+
+X
+
+> r=1
+
+(wr Pr,ρ dr )= 1
+
+τ
+
+> n
+
+X
+
+> i=1
+
+vi
+
+
+
+> K
+
+X
+
+> k=1
+
+wkmX
+
+> j=1
+
+[Pk,ρ ]ij [dk]j
+
+
+
+> 2
+
+≤ 1
+
+τ
+
+> n
+
+X
+
+> i=1
+
+viKX
+
+> k=1
+
+wkmX
+
+> j=1
+
+[Pk,ρ ]ij [dk]2
+
+> j
+
+≤
+
+> K
+
+X
+
+> k=1
+
+wk
+
+τ ∥dk∥2.
+
+The second inequality follows from applying Jensen’s inequality to the convex combination (since 
+
+PKk=1 wk
+
+Pmj=1 [Pk,ρ ]ij = 1 ). The final inequality holds because Pni=1 vi[Pk,ρ ]ij = [ γk,ρ ]j ≤ 1 for all j, k . Summing these individual bounds yields the final upper bound on the spectrum: 
+
+Q ≤
+
+> K
+
+X
+
+> k=1
+
+wk
+
+ 12η + 1
+
+τ
+
+
+
+∥dk∥2 ≤ (max  
+
+> k
+
+wk)
+
+ 12η + 1
+
+τ
+
+
+
+∥d∥2.
+
+This successfully proves the upper bound. 14 B.2 Proof of Theorem 4.2 
+
+To establish the overarching error bound for the sparsified Hessian, we first introduce two supporting lemmas that characterize the spectral norms of the constituent matrices. 
+
+Lemma B.3. For any row-stochastic matrix P ∈ Rn×m 
+
+> +
+
+(i.e., satisfying P 1m = 1n), its spectral norm satisfies ∥P ∥2 ≤ √n.Proof. By the definition of matrix norms, we have: 
+
+∥P ∥∞ = max 
+
+> im
+
+X
+
+> j=1
+
+|Pij | = 1 , and ∥P ∥1 = max 
+
+> jn
+
+X
+
+> i=1
+
+|Pij | ≤ n. 
+
+Applying the standard norm inequality ∥P ∥2 ≤ p∥P ∥∞∥P ∥1, we immediately obtain ∥P ∥2 ≤√n.
+
+Lemma B.4. Let A be a symmetric block matrix composed of K × K blocks, where the (k, r )-th block is denoted as Akr . Then its spectral norm is bounded by: 
+
+∥A∥2 ≤ max 
+
+> kK
+
+X
+
+> r=1
+
+∥Akr ∥2.
+
+Proof. Consider a partitioned vector x = [ x⊤ 
+
+> 1
+
+, . . . , x⊤ 
+
+> K
+
+]⊤ such that ∥x∥2 = 1 . The k-th block of the product Ax satisfies ∥(Ax)k∥2 ≤ PKr=1 ∥Akr ∥2∥xr ∥2. We construct a K × K non-negative matrix M with entries Mkr = ∥Akr ∥2, and a vector y ∈ RK with entries yr = ∥xr ∥2. By definition, 
+
+∥y∥2 = 1 . It follows that ∥Ax∥2 ≤ ∥ M y∥2. Consequently, we have: 
+
+∥A∥2 = sup 
+
+> ∥x∥2=1
+
+∥Ax∥2 ≤ sup 
+
+> ∥x∥2=1
+
+∥M y∥2 = sup 
+
+> y∈S +
+
+∥M y∥2 = ∥M ∥2,
+
+where S+ = {y ∈ RK | y ≥ 0, ∥y∥2 = 1 }, and the final equality holds by the Perron-Frobenius theorem for non-negative matrices. Furthermore, because A is block symmetric, M is symmetric. Therefore, ∥M ∥1 = ∥M ∥∞, yielding: 
+
+∥M ∥2 ≤ p∥M ∥1∥M ∥∞ ≤ ∥ M ∥∞ = max 
+
+> kK
+
+X
+
+> r=1
+
+∥Akr ∥2.
+
+Combining these inequalities completes the proof. 
+
+Proof of Theorem 4.2. We systematically decompose the block matrices and bound the approximation error for each term. Note that we use ∥ · ∥ to denote the spectral norm ∥ · ∥ 2 unless otherwise specified. 
+
+Step 1: Bound the truncation error of Pk. Let Ek = Pk − Pk,ρ denote the sparsification error matrix. Based on the bounds derived in [17, Lemma B.2], we have: 
+
+∥Ek∥∞ ≤ 2mρ, ∥Ek∥1 ≤ 2mnρ, and ∥Ek∥ ≤ 2m√nρ ∀k ∈ [K].
+
+Step 2: Bound the block-wise errors Nkk and Mkr .
+
+• Error of the local variance block Nkk : Recall that Nkk,ρ = diag (γk,ρ ) −
+
+(Pk,ρ )⊤diag (v)Pk,ρ . By the triangle inequality, the approximation error satisfies: 
+
+∥Nkk − Nkk,ρ ∥ = ∥(diag (γk) − (Pk)⊤diag (v)Pk) − (diag (γk,ρ ) − (Pk,ρ )⊤diag (v)Pk,ρ )∥≤ ∥ diag (γk) − diag (γk,ρ )∥ + ∥(Pk,ρ )⊤diag (v)Pk,ρ − (Pk)⊤diag (v)Pk∥.
+
+We bound each term individually. For the diagonal matrix, we utilize the property that its spectral norm equals its infinity norm: 
+
+∥diag (γk) − diag (γk,ρ )∥ = ∥γk − γk,ρ ∥∞
+
+= ∥(Pk)⊤v − (Pk,ρ )⊤v∥∞
+
+≤ ∥ P ⊤ 
+
+> k
+
+− P ⊤
+
+> k,ρ
+
+∥∞∥v∥∞
+
+= ∥Ek∥1∥v∥∞
+
+≤ 2mnρ. 
+
+15 For the cross term, standard algebraic manipulation yields: 
+
+∥(Pk,ρ )⊤diag (v)Pk,ρ − (Pk)⊤diag (v)Pk∥ = ∥ − (Pk,ρ )⊤diag (v)Ek − (Ek)⊤diag (v)Pk∥≤ ∥ (Pk,ρ )⊤diag (v)Ek∥ + ∥(Ek)⊤diag (v)Pk∥≤ ∥ Pk,ρ ∥∥ v∥∞∥Ek∥ + ∥Ek∥∥ v∥∞∥Pk∥≤ √n · 1 · (2 m√nρ ) + (2 m√nρ ) · 1 · √n
+
+= 4 mnρ, 
+
+where we used the inequality ∥v∥∞ ≤ 1. Combining these bounds, the error for the Nkk 
+
+block is: 
+
+∥Nkk − Nkk,ρ ∥ ≤ 6mnρ. 
+
+• Error of the cross-covariance block Mkr : Recall that Mkr,ρ = ( Pk,ρ )⊤diag (v)Pr,ρ −
+
+γk,ρ (γr,ρ )⊤. Applying the triangle inequality gives: 
+
+∥Mkr − Mkr,ρ ∥ = ∥(( Pk)⊤diag (v)Pr − γk(γr )⊤) − (( Pk,ρ )⊤diag (v)Pr,ρ − γk,ρ (γr,ρ )⊤)∥≤ ∥ γk(γr )⊤ − γk,ρ (γr,ρ )⊤∥ + ∥P ⊤ 
+
+> k
+
+diag (v)Pr − P ⊤
+
+> k,ρ
+
+diag (v)Pr,ρ ∥.
+
+We bound the rank-one term as follows: 
+
+∥γk(γr )⊤ − γk,ρ (γr,ρ )⊤∥ = ∥(Pk)⊤vv ⊤Pr − (Pk,ρ )⊤vv ⊤Pr,ρ ∥
+
+= ∥(Pk)⊤vv ⊤Er + ( Ek)⊤vv ⊤Pr,ρ ∥≤ ∥ Pk∥∥ vv ⊤∥∥ Er ∥ + ∥Ek∥∥ vv ⊤∥∥ Pr,ρ ∥≤ 4mnρ, 
+
+where we applied Lemma B.3 and noted that ∥vv ⊤∥2 ≤ ∥ v∥22 ≤ 1 (since v ∈ ∆n). Similarly, the remaining matrix term is bounded by: 
+
+∥P ⊤ 
+
+> k
+
+diag (v)Pr − P ⊤
+
+> k,ρ
+
+diag (v)Pr,ρ ∥ = ∥P ⊤ 
+
+> k
+
+diag (v)Er + E⊤ 
+
+> k
+
+diag (v)Pr,ρ ∥≤ ∥ Pk∥∥ v∥∞∥Er ∥ + ∥Ek∥∥ v∥∞∥Pr,ρ ∥≤ 4mnρ. 
+
+Combining these inequalities, the bound for the cross-covariance block is: 
+
+∥Mkr − Mkr,ρ ∥ ≤ 8mnρ. 
+
+Step 3: Establish the global Hessian error bound. 
+
+Based on Lemma B.4, we synthesize the block-wise errors. Relaxing the coefficient 6mnρ ≤ 8mnρ 
+
+to facilitate a cleaner algebraic factorization, we obtain: 
+
+∥H − Hρ∥2 ≤ max 
+
+> kK
+
+X
+
+> r=1
+
+∥(H − Hρ)kr ∥2
+
+≤ max 
+
+> kK
+
+X
+
+> r=1
+
+ wkwr
+
+τ ∥Mkr − Mkr,ρ ∥ + wk
+
+η ∥Nkk − Nkk,ρ ∥1{k=r}
+
+
+
+≤ max 
+
+> kK
+
+X
+
+> r=1
+
+ wkwr
+
+τ 8mnρ + wk
+
+η 6mnρ 1{k=r}
+
+
+
+≤ 8mnρ max 
+
+> kK
+
+X
+
+> r=1
+
+ wkwr
+
+τ + wk
+
+η 1{k=r}
+
+
+
+= 8 mnρ (max  
+
+> k
+
+wk)
+
+ 1
+
+τ + 1
+
+η
+
+
+
+,
+
+where the final equality follows from the fact that PKr=1 wr = 1 . This completes the proof. 16 B.3 Proof of Lemma 5.1 
+
+Proof. Let {uk}Kk=1 denote an orthogonal basis for ker( Hρ), where each basis vector uk ∈ RmK 
+
+is constructed such that its k-th block (of size m) is the all-ones vector 1m, and all remaining 
+
+K − 1 blocks are strictly zero vectors 0m. Based on the characterization of the kernel space in (20) ,establishing that βt ∈ ker( Hρ)⊥ is mathematically equivalent to proving that u⊤ 
+
+> k
+
+βt = 0 for all 
+
+k ∈ [K].We proceed by mathematical induction. The base case holds trivially at t = 0 by our initialization assumption. Assume that at a given iteration t, the iterate satisfies u⊤ 
+
+> k
+
+βt = 0 for all k ∈ [K]. By Theorem B.1, the gradient lies in the orthogonal complement of the kernel, meaning gt ∈ ker( Hρ)⊥.Thus, u⊤ 
+
+> k
+
+gt = 0 for all k ∈ [K].Recall that the regularized Newton direction ∆βt is obtained by solving the linear system: 
+
+ Htρ + ∥gt∥I∆βt = −gt.
+
+Multiplying both sides from the left by u⊤ 
+
+> k
+
+yields: 
+
+u⊤ 
+
+> k
+
+Htρ∆βt + ∥gt∥(u⊤ 
+
+> k
+
+∆βt) = −u⊤ 
+
+> k
+
+gt = 0 .
+
+Because uk ∈ ker( Htρ) and Htρ is symmetric, we have u⊤ 
+
+> k
+
+Htρ = 0⊤ 
+
+> mK
+
+. Consequently, the first term vanishes. Assuming ∥gt∥ > 0 (otherwise the algorithm has converged, yielding ∆βt = 0), it strictly follows that u⊤ 
+
+> k
+
+∆βt = 0 for all k ∈ [K].Therefore, for any accepted step size st, the subsequent iterate satisfies: 
+
+u⊤ 
+
+> k
+
+βt+1 = u⊤ 
+
+> k
+
+(βt + st∆βt) = 0 .
+
+Since this equality holds for every k ∈ [K], we conclude that βt+1 ∈ ker( Hρ)⊥. This completes the induction. 
+
+B.4 Proof of Theorem 5.2 Lemma B.5. The sublevel set S(β0) := {β | L (β) ≤ L (β0), β ∈ ker( Hρ)⊥} is bounded, closed, and convex. Furthermore, the objective function L(β) is bounded below and admits a unique minimizer β⋆ ∈ S(β0) on the restricted subspace ker( Hρ)⊥.Proof. First, it is evident that L(β) is continuously differentiable. According to Theorem B.1, the sparsified Hessian matrix Hρ is strictly positive definite on the restricted subspace ker( Hρ)⊥. This property guarantees that L(β) is strictly convex on this subspace. Consequently, the sublevel set 
+
+Sc := {β | L (β) ≤ c, β ∈ ker( Hρ)⊥} is closed and convex. We now prove that L(β) is coercive when restricted to the subspace ker( Hρ)⊥. Specifically, we aim to show that as ∥β∥ → ∞ subject to β ∈ ker( Hρ)⊥, the objective value satisfies L(β) → ∞ .Recall the definition of the objective function: 
+
+L(β) = −
+
+> K
+
+X
+
+> k=1
+
+wk⟨βk, μk⟩ + τ log 
+
+> n
+
+X
+
+> i=1
+
+πi exp ( −[Φ( β)] i/τ )
+
+!
+
+,
+
+where Φ( β) = PKk=1 wkαk(βk).
+
+Step 1: Lower bound via Jensen’s inequality. Since f (x) = log( x) is a concave function, we can apply Jensen’s inequality to the log-sum-exp term. Noting that π ∈ ∆n defines a valid probability distribution, we obtain: 
+
+τ log 
+
+> n
+
+X
+
+> i=1
+
+πi exp( −[Φ( β)] i/τ )
+
+!
+
+≥ τ
+
+> n
+
+X
+
+> i=1
+
+πi
+
+
+
+− [Φ( β)] i
+
+τ
+
+
+
+= −
+
+> n
+
+X
+
+> i=1
+
+πi[Φ( β)] i
+
+= −
+
+> K
+
+X
+
+> k=1
+
+wknX
+
+> i=1
+
+πi[αk(βk)] i.
+
+17 Substituting this relation back into L(β), we establish the lower bound: 
+
+L(β) ≥
+
+> K
+
+X
+
+> k=1
+
+wk
+
+"
+
+−⟨ βk, μk⟩ − 
+
+> n
+
+X
+
+> i=1
+
+πi[αk(βk)] i
+
+#
+
+.
+
+Step 2: Bound the dual potentials. Note that [αk(βk)] i =
+
+−η log 
+
+Pmj=1 [μk]j exp 
+
+ [βk ]j −[Ck ]ij 
+
+> η
+
+ 
+
+. The summation inside the logarithm is strictly bounded below by its maximum term. Let βk, max = max j [βk]j and let j⋆ denote the index where this maximum is achieved. We then have: 
+
+−[αk(βk)] i = η log 
+
+
+
+> m
+
+X
+
+> j=1
+
+[μk]j exp 
+
+ [βk]j − [Ck]ij 
+
+η
+
+
+
+≥ η log 
+
+
+
+[μk]j⋆ exp 
+
+ βk, max − [Ck]ij ⋆
+
+η
+
+ 
+
+= βk, max − [Ck]ij ⋆ + η log[ μk]j⋆
+
+≥ βk, max − Cmax + η log μmin ,
+
+where Cmax = max k,i,j [Ck]ij and μmin = min k,j [μk]j > 0.Substituting this bound back, and utilizing the property that Pni=1 πi = 1 , we obtain: 
+
+L(β) ≥
+
+> K
+
+X
+
+> k=1
+
+wk (βk, max − ⟨ βk, μk⟩) − Cmax + η log μmin .
+
+Step 3: Exploit the subspace restriction. We now analyze the term βk, max − ⟨ βk, μk⟩. Given that 
+
+μk ∈ ∆m (its components sum to 1), we can rewrite this difference as: 
+
+βk, max − ⟨ βk, μk⟩ =
+
+> m
+
+X
+
+> j=1
+
+[μk]j (βk, max − [βk]j ).
+
+Because βk, max − [βk]j ≥ 0 for all j, we can safely bound this summation from below using the minimum marginal weight μmin :
+
+> m
+
+X
+
+> j=1
+
+[μk]j (βk, max − [βk]j ) ≥ μmin 
+
+> m
+
+X
+
+> j=1
+
+(βk, max − [βk]j ) = μmin 
+
+mβ k, max −
+
+> m
+
+X
+
+> j=1
+
+[βk]j
+
+ .
+
+Crucially, because β is restricted to the orthogonal complement of the kernel, β ∈ ker( Hρ)⊥, the block-wise sum must vanish: Pmj=1 [βk]j = 0 for all k ∈ [K]. Thus, the inequality simplifies to: 
+
+βk, max − ⟨ βk, μk⟩ ≥ mμ min βk, max .
+
+Step 4: Relate βk, max to the vector norm. Because the components of βk sum to zero, the magnitude of the most negative component is bounded by the positive components. Specifically, letting βk, min := min j [βk]j , we have −βk, min ≤ (m − 1) βk, max . Therefore, for any index j,
+
+|[βk]j | ≤ (m − 1) βk, max . This relationship allows us to bound the Euclidean norm of the block: 
+
+∥βk∥2 ≤ m (( m − 1) βk, max )2 =⇒ βk, max ≥ 1
+
+√m(m − 1) ∥βk∥.
+
+Step 5: Final coercivity bound. Combining the derived bounds, we arrive at the following inequality: 
+
+L(β) ≥
+
+ mμ min 
+
+√m(m − 1) min  
+
+> k
+
+wk
+
+ KX
+
+> k=1
+
+∥βk∥ − Cconst ,
+
+where Cconst = Cmax − η log μmin .18 Let c = √mμ min  
+
+> m−1
+
+min k wk > 0. Since the sum of the block norms upper bounds the total Euclidean norm, PKk=1 ∥βk∥ ≥ ∥ β∥, we deduce: 
+
+L(β) ≥ c∥β∥ − Cconst .
+
+Because c > 0, it strictly follows that L(β) → ∞ as ∥β∥ → ∞ within the subspace ker( Hρ)⊥,confirming that L(β) is coercive on ker( Hρ)⊥.As a continuous and coercive function defined on a closed subspace, its sublevel set S(β0) is guaranteed to be bounded and closed. Furthermore, because L(β) is strictly convex on ker( Hρ)⊥, it admits a unique global minimizer β⋆ ∈ S(β0). Consequently, L(β) possesses a finite lower bound on S(β0), which completes the proof. 
+
+Lemma B.6. For any ρ ≥ 0, there exists a uniform constant C > 0 such that λ+min (Hρ) ≥ C for all 
+
+β ∈ S(β0).Proof. By Lemma B.5, the restricted sublevel set S(β0) is bounded and closed, so it’s a compact set. Recall from Theorem B.2 that the smallest strictly positive eigenvalue of Hρ is bounded below by: 
+
+λ+min (Hρ) ≥ mηn min  
+
+> k
+
+(wkp2
+
+> k
+
+),
+
+where pk = min j [Pk,ρ ]i⋆j for some index i⋆ ∈ arg max i[v]i.According to the sparsification rule, the elements of the i⋆-th row of Pk,ρ are preserved exactly from the unsparsified transport probability matrix Pk; that is, [Pk,ρ ]i⋆j = [ Pk]i⋆j for all j ∈ [m]. By definition, the entries of Pk are compositions of exponential functions, ensuring they are strictly positive and continuous with respect to β. Consequently, pk is bounded from below by the global minimum of the matrix entries: 
+
+pk ≥ min  
+
+> i,j
+
+[Pk(β)] ij > 0.
+
+Because S(β0) is compact and the mapping β 7 → min i,j [Pk(β)] ij is strictly positive and continuous, this mapping attains a strictly positive minimum over S(β0). Therefore, the term min k(wkp2
+
+> k
+
+) is uniformly bounded away from zero across the entire sublevel set. We conclude that there exists a uniform constant C > 0 such that λ+min (Hρ) ≥ C for all β ∈ S(β0).
+
+Lemma B.7. Let {βt}t∈[T ] be the sequence generated by Algorithm 1 or 3 satisfying β0 ∈ ker( Hρ)⊥.Let ∆βt be the update direction for L and suppose the step size st is chosen via Armijo backtracking. Then the following holds: (i) ∆βt is a strictly descent direction for L(β).(ii) The backtracking terminates finitely with a step size st bounded strictly away from zero by: 
+
+st ≥ smin := min 
+
+
+
+1, c 2(1 − σ)C2
+
+L(L + Gmax )
+
+
+
+> 0, (23) 
+
+where C is the uniform lower bound established in Lemma B.6, L := (max k wk)( 12η + 1 
+
+> τ
+
+),
+
+c ∈ (0 , 1) is the contraction factor, σ ∈ (0 , 1) is the sufficient decrease parameter, and 
+
+Gmax := 2 
+
+qPKk=1 w2
+
+> k
+
+.Proof. (i) To verify that the update provides a descent direction, we evaluate its inner product with the gradient gt:
+
+(gt)⊤∆βt = −(gt)⊤(Htρ + ∥gt∥I)−1gt < 0.
+
+This strict inequality holds because Theorem B.1 guarantees that Htρ is positive semidefinite. Conse-quently, the shifted matrix (Htρ + ∥gt∥I) is strictly positive definite whenever ∥gt∦ = 0 . Thus, ∆βt
+
+is a strictly descent direction. 19 (ii) By Theorem B.2, the maximum eigenvalue of the Hessian is globally bounded by λmax (Htρ) ≤
+
+(max k wk)( 12η + 1 
+
+> τ
+
+) = L. This implies that the gradient ∇L (β) is uniformly L-Lipschitz continuous. Applying the standard quadratic upper bound for functions with Lipschitz continuous gradients, we have: 
+
+L(βt + s∆βt) ≤ L (βt) + s(gt)⊤∆βt + L
+
+2 s2∥∆βt∥2.
+
+For the Armijo sufficient decrease condition L(βt + s∆βt) ≤ L (βt) + σs (gt)⊤∆βt to hold, it is sufficient that: 
+
+s(gt)⊤∆βt + L
+
+2 s2∥∆βt∥2 ≤ σs (gt)⊤∆βt.
+
+Dividing by s > 0 and rearranging the terms reveals that any step size s ∈ (0 , ¯st] is acceptable, where: 
+
+¯st := 2(1 − σ)( −(gt)⊤∆βt)
+
+L∥∆βt∥2 .
+
+We now bound the numerator and denominator of ¯st separately. For the numerator, we obtain the lower bound: 
+
+−(gt)⊤∆βt = ( gt)⊤(Htρ + ∥gt∥I)−1gt ≥ 1
+
+λmax (Htρ) + ∥gt∥ ∥gt∥2 ≥ 1
+
+L + ∥gt∥ ∥gt∥2.
+
+For the denominator, we must bound the norm of the update direction ∥∆βt∥. Because Htρ is symmetric and positive semidefinite, the space RmK admits an orthogonal decomposition into 
+
+ker( Htρ) and its orthogonal complement ker( Htρ)⊥. By Theorem B.1, the gradient satisfies gt ∈
+
+ker( Htρ)⊥. Consequently, the action of the inverse operator (Htρ +∥gt∥I)−1 on gt is entirely confined to the invariant subspace ker( Htρ)⊥.On this restricted subspace, the eigenvalues of Htρ are strictly positive and bounded below by 
+
+λ+min (Htρ). Applying the Rayleigh quotient theorem [ 12 ] to the shifted inverse operator on this subspace yields the exact spectral norm bound: 
+
+sup 
+
+> d∈ker( Hρ)⊥
+
+∥(Htρ + ∥gt∥I)−1d∥∥d∥ = 1
+
+λ+min (Htρ) + ∥gt∥ .
+
+Since the Armijo line search ensures that all iterates {βt}t∈[T ] remain within the sublevel set S(β0),Lemma B.6 provides the uniform lower bound λ+min (Htρ) ≥ C > 0. This yields the following upper bound for the denominator: 
+
+∥∆βt∥ ≤ 1
+
+λ+min (Htρ) + ∥gt∥ ∥gt∥ ≤ 1
+
+C + ∥gt∥ ∥gt∥ ≤ 1
+
+C ∥gt∥.
+
+Substituting these two bounds back into the expression for ¯st produces: 
+
+¯st ≥ 2(1 − σ) ∥gt∥2
+
+> L+∥gt∥
+
+L ∥gt∥2
+
+> C2
+
+= 2(1 − σ)C2
+
+L(L + ∥gt∥) .
+
+Finally, recall from (12) that ∇kL(β) = wk(( Pk)⊤v − μk). Because (Pk)⊤v and μk are both valid probability vectors (non-negative and summing to 1), the maximum Euclidean distance between them is strictly bounded by ∥(Pk)⊤v − μk∥ ≤ 2. Consequently, the total gradient norm admits the global upper bound ∥gt∥ =
+
+qPKk=1 w2
+
+> k
+
+∥(Pk)⊤v − μk∥2 ≤ 2
+
+qPKk=1 w2 
+
+> k
+
+= Gmax .Replacing ∥gt∥ with its maximum bound Gmax , we obtain a uniform lower bound for the theoretical acceptable step size: 
+
+¯st ≥ 2(1 − σ)C2
+
+L(L + Gmax ) .
+
+20 Because the backtracking procedure iteratively shrinks the step size by a factor of c ∈ (0 , 1) starting from 1, the final accepted step size st must be strictly larger than c¯st (unless the full Newton step 
+
+st = 1 is immediately accepted). We thus conclude: 
+
+st ≥ min 
+
+
+
+1, c 2(1 − σ)C2
+
+L(L + Gmax )
+
+
+
+> 0.
+
+Now we are ready to prove the convergence. 
+
+Proof of Theorem 5.2. (i) From Lemma B.7, the Armijo backtracking line search guarantees that the sequence of step sizes st is bounded below by a uniform constant smin > 0. Furthermore, it satisfies the sufficient decrease condition: 
+
+L(βt+1 ) − L (βt) ≤ σs t(gt)⊤∆βt.
+
+From the proof of Lemma B.7, we established the following lower bound on the directional derivative: 
+
+−(gt)⊤∆βt = ( gt)⊤(Htρ + ∥gt∥I)−1gt ≥ 1
+
+L + ∥gt∥ ∥gt∥2 ≥ 1
+
+L + Gmax 
+
+∥gt∥2.
+
+Substituting this bound into the Armijo condition yields: 
+
+L(βt+1 ) − L (βt) ≤ − σs min 
+
+1
+
+L + Gmax 
+
+∥gt∥2.
+
+This inequality demonstrates that the sequence of objective values {L (βt)}t≥0 is monotonically decreasing. Combined with Lemma 5.1, which ensures that βt ∈ ker( Hρ)⊥ for all t, it strictly follows that the entire sequence of iterates {βt}t≥0 remains confined within the initial sublevel set 
+
+S(β0).By Lemma B.5, L(β) is bounded below on S(β0). Let L denote this global minimum. Summing the sufficient decrease inequality over the first T iterations yields a telescoping sum: 
+
+> T
+
+X
+
+> t=0
+
+∥gt∥2 ≤ L + Gmax 
+
+σs min 
+
+(L(β0) − L (βT +1 )) ≤ L + Gmax 
+
+σs min 
+
+(L(β0) − L ) < ∞.
+
+Taking the limit as T → ∞ , we obtain the convergent infinite series P∞ 
+
+> t=0
+
+∥gt∥2 < ∞. Therefore, we conclude that ∥gt∥ → 0 as t → ∞ .(ii) Let β⋆ be the unique optimal solution in the restricted subspace ker( Hρ)⊥, the existence of which is guaranteed by Lemma B.5. The first-order optimality condition requires that the projected gradient vanishes, meaning the full gradient must be orthogonal to the subspace: ∇L (β⋆) ∈ ker( Hρ).However, from the exact gradient formula (12) , the block-wise sum always satisfies 1⊤
+
+> m
+
+∇kL(β⋆) = 0 ,strictly placing ∇L (β⋆) ∈ ker( Hρ)⊥. Then we conclude ∇L (β⋆) = 0mK .From Lemma B.6, there exists a uniform lower bound C > 0 such that the smallest strictly positive eigenvalue satisfies λ+min (H) ≥ C for all β ∈ S(β0) (noting that the exact Hessian corresponds to ρ = 0 ). Consequently, the objective function L(β) is strongly convex with parameter C on the restricted subspace within S(β0). This strong convexity condition provides a direct bound relating the norm of the gradient to the distance to the optimum: 
+
+∥gt∥ = ∥∇L (βt) − ∇L (β⋆)∥ ≥ C∥βt − β⋆∥.
+
+Since we established in part (i) that ∥gt∥ → 0 as t → ∞ , it immediately follows from this strong convexity bound that ∥βt − β⋆∥ → 0. Thus, the sequence of iterates globally converges to the unique optimal solution: βt → β⋆.21 B.5 Proof of Theorem 5.3 
+
+We first show the globally Lipschitz continuity of the exact Hessian H(β).
+
+Lemma B.8. The exact Hessian H(β) of the objective function L(β) is globally Lipschitz continuous over RmK . Specifically, with Wmax = max k wk, the global Lipschitz constant LH is: 
+
+LH := 6 Wmax 
+
+η2 + 10 Wmax 
+
+ητ + 6
+
+τ 2 . (24) 
+
+Proof. To establish global Lipschitz continuity, we evaluate the spectral norm of the third derivative tensor. Recall that for a scalar-valued multivariate function f (β), its directional derivative along a vector u is defined as ∇uf (β) = ⟨∇ f (β), u⟩ = lim ϵ→0 f (β+ϵu)−f (β) 
+
+> ϵ
+
+. By treating the quadratic form Q(β) := y⊤H(β)y as a scalar field parameterized by β, establishing Lipschitz continuity of the Hessian is mathematically equivalent to showing that for any arbitrary, fixed vectors y, u ∈ RmK ,the third-order directional derivative of the objective is bounded by a uniform constant LH :
+
+|∇ u(y⊤H(β)y)| ≤ LH ∥y∥2∥u∥, ∀ β ∈ RmK .
+
+Step 1: Notation and deterministic operators. To streamline the algebra, we define a deterministic weighted sum operator Sk,i : Rm → R, which represents the inner product with the i-th row of the transport probability matrix Pk:
+
+Sk,i (x) = 
+
+> m
+
+X
+
+> j=1
+
+[Pk]ij xj .
+
+Because the rows of Pk are discrete probability distributions (i.e., [Pk]ij > 0 and Pmj=1 [Pk]ij = 1 ), the operator Sk,i computes a convex combination. Therefore, its magnitude is universally bounded by the infinity norm, and consequently the Euclidean norm, of the input vector: 
+
+|Sk,i (x)| ≤ ∥ x∥∞ ≤ ∥ x∥. (25) We also define an aggregated block operator Ri(x) = PKk=1 wkSk,i (xk). By applying the Cauchy-Schwarz inequality and noting that PKk=1 wk = 1 , its magnitude is globally bounded by: 
+
+|Ri(x)| ≤ 
+
+> K
+
+X
+
+> k=1
+
+wk∥xk∥ ≤ 
+
+> K
+
+X
+
+> k=1
+
+wk
+
+!1/2 KX
+
+> k=1
+
+wk∥xk∥2
+
+!1/2
+
+≤ pWmax ∥x∥ ≤ ∥ x∥. (26) Using these operators, the exact quadratic form Q(β) := y⊤H(β)y decomposes into Qη (β) and 
+
+Qτ (β) components based on the block definitions of the Hessian established in Theorem B.1: 
+
+Qη (β) = 
+
+> K
+
+X
+
+> k=1
+
+wk
+
+η
+
+> n
+
+X
+
+> i=1
+
+vi
+
+h
+
+Sk,i (y2
+
+> k
+
+) − (Sk,i (yk)) 2i
+
+, (27) 
+
+Qτ (β) = 1
+
+τ
+
+" nX
+
+> i=1
+
+vi(Ri(y)) 2 −
+
+ nX
+
+> i=1
+
+viRi(y)
+
+2
+
+#
+
+, (28) where y2 
+
+> k
+
+denotes the Hadamard (element-wise) square of the vector yk. Here, Qη (β) and Qτ (β)
+
+are explicitly written as functions of β to emphasize that the subsequent directional derivatives are taken with respect to β, while y and u remain arbitrary, fixed vectors. Let ¯R(y) = Pni=1 viRi(y)
+
+denote the weighted average of Ri(y). Because the barycenter weight vector satisfies v ∈ ∆n, we trivially have | ¯R(y)| ≤ max i |Ri(y)| ≤ ∥ y∥.
+
+Step 2: Derivation of fundamental directional derivatives. Before differentiating the quadratic forms, we explicitly calculate the directional derivatives of the fundamental softmax weights. For the transport probability matrix, its entries are defined as: 
+
+[Pk]ij = [μk]j exp(([ βk]j − [Ck]ij )/η )[zk]i
+
+, where [zk]i =
+
+> m
+
+X
+
+> l=1
+
+[μk]l exp 
+
+ [βk]l − [Ck]il 
+
+η
+
+
+
+.
+
+22 Taking the logarithm yields: 
+
+ln[ Pk]ij = ln[ μk]j + [βk]j − [Ck]ij 
+
+η − ln[ zk]i.
+
+Differentiating both sides along the direction u eliminates the constant target marginal term ln[ μk]j :
+
+∇u ln[ zk]i = 1[zk]imX
+
+> l=1
+
+[μk]l exp 
+
+ [βk]l − [Ck]il 
+
+η
+
+ [uk]l
+
+η = 1
+
+η
+
+> m
+
+X
+
+> l=1
+
+[Pk]il [uk]l = 1
+
+η Sk,i (uk),
+
+∇u[Pk]ij = [ Pk]ij ∇u(ln[ Pk]ij ) = 1
+
+η [Pk]ij 
+
+
+
+[uk]j − Sk,i (uk)
+
+
+
+. (29) Similarly, the barycenter weights are defined as vi = πi exp( −Φi/τ )/˜z, where Φi =
+
+−η PKk=1 wk ln[ zk]i and the normalization constant is ˜z = Pnl=1 πl exp( −Φl/τ ). The directional derivative of the potential is algebraically derived as ∇uΦi = −η PKk=1 wk( 1 
+
+> η
+
+Sk,i (uk)) = −Ri(u).Differentiating the logarithm of vi yields: 
+
+∇u ln ˜ z = 1˜z
+
+> n
+
+X
+
+> l=1
+
+πl exp( −Φl/τ )
+
+
+
+− ∇uΦl
+
+τ
+
+
+
+= 1
+
+τ
+
+> n
+
+X
+
+> l=1
+
+vlRl(u) = 1
+
+τ ¯R(u),
+
+∇uvi = vi∇u(ln vi) = 1
+
+τ vi
+
+
+
+Ri(u) − ¯R(u)
+
+
+
+. (30) Using the bounds from (26), we establish the absolute magnitude bound: |∇ uvi| ≤ 2 
+
+> τ
+
+vi∥u∥.
+
+Step 3: Bounding the local component ∇uQη (y). Differentiating (27) with respect to β along the direction u generates two distinct summation terms: one from differentiating vi (Part A), and one from differentiating the bracketed operation (Part B). 
+
+Part A (Differentiating vi): The bracketed term satisfies 0 ≤ Sk,i (y2
+
+> k
+
+) − (Sk,i (yk)) 2 ≤ Sk,i (y2
+
+> k
+
+) ≤∥y2
+
+> k
+
+∥∞ ≤ ∥ yk∥2. Multiplying this by the bound for |∇ uvi|, we obtain: 
+
+> K
+
+X
+
+> k=1
+
+wk
+
+η
+
+> n
+
+X
+
+> i=1
+
+|∇ uvi|∥ yk∥2 ≤ 2
+
+ητ ∥u∥
+
+> K
+
+X
+
+> k=1
+
+wk∥yk∥2 ≤ 2Wmax 
+
+ητ ∥y∥2∥u∥.
+
+Part B (Differentiating the Bracket): Let Bk,i = Sk,i (y2
+
+> k
+
+) − (Sk,i (yk)) 2. By the linearity of the operator, ∇uSk,i (x) = P 
+
+> j
+
+(∇u[Pk]ij )xj . Applying (29) , we have an explicit formula for the derivative of the operator: 
+
+∇uSk,i (x) = 1
+
+η
+
+h
+
+Sk,i (x ⊙ uk) − Sk,i (x)Sk,i (uk)
+
+i
+
+,
+
+where ⊙ denotes the Hadamard product. Differentiating Bk,i yields: 
+
+∇uBk,i = 1
+
+η
+
+h
+
+Sk,i (y2 
+
+> k
+
+⊙uk)−Sk,i (y2
+
+> k
+
+)Sk,i (uk)−2Sk,i (yk) Sk,i (yk ⊙uk)−Sk,i (yk)Sk,i (uk)i
+
+.
+
+Because |Sk,i (y2 
+
+> k
+
+⊙uk)| ≤ ∥ y2 
+
+> k
+
+⊙uk∥∞ ≤ ∥ yk∥2∥uk∥ and |Sk,i (yk ⊙uk)| ≤ ∥ yk∥∥ uk∥, applying the triangle inequality bounds the entire bracket strictly: 
+
+|∇ uBk,i | ≤ 1
+
+η
+
+h
+
+∥yk∥2∥uk∥ + ∥yk∥2∥uk∥ + 2 ∥yk∥ ∥yk∥∥ uk∥ + ∥yk∥∥ uk∥i
+
+= 6
+
+η ∥yk∥2∥uk∥.
+
+Summing this strictly positive bound over i (where Pni=1 vi = 1 ) and k gives: 
+
+> K
+
+X
+
+> k=1
+
+wk
+
+η
+
+6
+
+η ∥yk∥2∥uk∥ ≤ 6Wmax 
+
+η2 ∥u∥
+
+> K
+
+X
+
+> k=1
+
+∥yk∥2 ≤ 6Wmax 
+
+η2 ∥y∥2∥u∥.
+
+Combining Parts A and B, the absolute bound for the local component is: 
+
+|∇ uQη (y)| ≤ 
+
+ 2Wmax 
+
+ητ + 6Wmax 
+
+η2
+
+
+
+∥y∥2∥u∥. (31) 23 Step 4: Bounding the global component ∇uQτ (y). We differentiate (28) , expanding the terms as: 
+
+∇uQτ (y) = 1
+
+τ
+
+> n
+
+X
+
+> i=1
+
+(∇uvi)Ri(y)2 − 2 ¯R(y)Ri(y) + 2
+
+τ
+
+> n
+
+X
+
+> i=1
+
+vi
+
+ Ri(y) − ¯R(y)∇uRi(y).
+
+Part C (Terms with ∇uvi): Because |Ri(y)| ≤ ∥ y∥ and | ¯R(y)| ≤ ∥ y∥, the bracketed expression is algebraically bounded by |Ri(y)2 − 2 ¯R(y)Ri(y)| ≤ 3∥y∥2. Substituting the bound for |∇ uvi|
+
+yields: 
+
+1
+
+τ
+
+> n
+
+X
+
+> i=1
+
+ 2
+
+τ vi∥u∥
+
+  3∥y∥2 = 6
+
+τ 2 ∥y∥2∥u∥.
+
+Part D (Terms with ∇uRi): By the linearity of the operator Ri, we have ∇uRi(y) =P 
+
+> k
+
+wk∇uSk,i (yk). Based on our previous derivation for the operator derivative, |∇ uSk,i (yk)| ≤  
+
+> 2
+> η
+
+∥yk∥∥ uk∥. Therefore, |∇ uRi(y)| ≤ 2Wmax  
+
+> η
+
+∥y∥∥ u∥. The leading term satisfies |Ri(y) − ¯R(y)| ≤ 
+
+2∥y∥. Multiplying these elements together bounds Part D: 
+
+2
+
+τ
+
+> n
+
+X
+
+> i=1
+
+vi
+
+
+
+2∥y∥
+
+  2Wmax 
+
+η ∥y∥∥ u∥
+
+
+
+= 8Wmax 
+
+ητ ∥y∥2∥u∥.
+
+Combining Parts C and D, the absolute bound for the global component is: 
+
+|∇ uQτ (y)| ≤ 
+
+ 6
+
+τ 2 + 8Wmax 
+
+ητ 
+
+
+
+∥y∥2∥u∥. (32) 
+
+Step 5: Final synthesis. By the triangle inequality, the total directional derivative is bounded by |∇ uQ(y)| ≤ |∇ uQη (y)| + |∇ uQτ (y)|. Summing the bounds from equations (31) and (32) establishes the global maximum spectral norm, strictly confirming the global Lipschitz constant LH :
+
+sup 
+
+> ∥y∥=1 ,∥u∥=1
+
+|∇ u(y⊤H(β)y)| ≤ 6 Wmax 
+
+η2 + 10 Wmax 
+
+ητ + 6
+
+τ 2 =: LH .
+
+This explicitly establishes the global Lipschitz continuity of the exact Hessian matrix ∇2L(β).Having established globally Lipschitz continuity of the exact Hessian and the global convergence of the sequence generated by Algorithm 1 and 3 in Theorem 5.2, we now turn our attention to its local convergence behavior. A critical requirement for Newton-type methods to achieve their characteristic rapid convergence rates near the optimum is that the line search mechanism must not prematurely truncate the updates. The following lemma guarantees that after a sufficient number of iterations, the Armijo backtracking procedure naturally accepts the full Newton step ( st = 1 ) without premature truncation. 
+
+Lemma B.9. Let {βt}t≥0 be the sequence generated by Algorithm 1 or 3. If the Armijo parameter satisfies σ ∈ (0 , 1/2) , then for sufficiently large t, the Armijo line search condition is strictly satisfied with the full Newton step; that is, st = 1 is eventually accepted. Proof. Since the exact Hessian H(β) is globally Lipschitz continuous with the constant LH in Lemma B.8, applying the standard second-order Taylor expansion bound for functions with Lipschitz continuous Hessians (e.g., [16, Lemma 1.2.4]), we have: 
+
+L(βt + ∆ βt) − L (βt) − (gt)⊤∆βt − 12 (∆ βt)⊤Ht∆βt ≤ LH
+
+6 ∥∆βt∥3.
+
+To demonstrate that the full step st = 1 is accepted, we define the Armijo difference DArmijo and must show that DArmijo ≤ 0:
+
+DArmijo := L(βt + ∆ βt) − L (βt) − σ(gt)⊤∆βt
+
+≤ (1 − σ)( gt)⊤∆βt + 12 (∆ βt)⊤Ht∆βt + LH
+
+6 ∥∆βt∥3.
+
+24 Recall the regularized Newton system from Algorithm 1 or 3: (Htρ +∥gt∥I)∆ βt = −gt. Multiplying both sides from the left by (∆ βt)⊤ yields: 
+
+(gt)⊤∆βt = −(∆ βt)⊤Htρ∆βt − ∥ gt∥∥ ∆βt∥2.
+
+Substituting this relation into the bound for DArmijo , we obtain: 
+
+DArmijo ≤ − (1 − σ)  (∆ βt)⊤Htρ∆βt + ∥gt∥∥ ∆βt∥2 + 12 (∆ βt)⊤Ht∆βt + LH
+
+6 ∥∆βt∥3
+
+= 12 (∆ βt)⊤(Ht − Htρ)∆ βt −
+
+ 12 − σ
+
+
+
+(∆ βt)⊤Htρ∆βt
+
+− (1 − σ)∥gt∥∥ ∆βt∥2 + LH
+
+6 ∥∆βt∥3. (33) We now systematically bound each term in this inequality. First, from Theorem 4.2 and the algorithmic updating rule ρ = Cρ∥gt∥, the Hessian approximation error is bounded by: 
+
+∥Ht − Htρ∥ ≤ 8mnρ 
+
+
+
+max  
+
+> k
+
+wk
+
+  1
+
+τ + 1
+
+η
+
+
+
+= CE ∥gt∥,
+
+where CE := 8 mnC ρ(max k wk)( 1 
+
+> τ
+
++ 1 
+
+> η
+
+) is a strictly positive constant. Thus, the first term is bounded above by 12 CE ∥gt∥∥ ∆βt∥2.Second, from Lemma B.6, we established the existence of a uniform lower bound C > 0 such that 
+
+λ+min (Hρ) ≥ C for any β ∈ S(β0). Since the entire sequence of iterates {βt}t≥0 remains confined to S(β0) and natively resides in ker( Hρ)⊥, we have the quadratic lower bound (∆ βt)⊤Htρ∆βt ≥
+
+C∥∆βt∥2. Furthermore, the proof of Lemma B.7 provides the norm bound ∥∆βt∥ ≤ 1 
+
+> C
+
+∥gt∥.Substituting these structural bounds back into the inequality for DArmijo yields: 
+
+DArmijo ≤ 12 CE ∥gt∥∥ ∆βt∥2 −
+
+ 12 − σ
+
+
+
+C∥∆βt∥2 − (1 − σ)∥gt∥∥ ∆βt∥2 + LH
+
+6C ∥gt∥∥ ∆βt∥2
+
+=
+
+ CE
+
+2 − (1 − σ) + LH
+
+6C
+
+
+
+∥gt∥ − 
+
+ 12 − σ
+
+
+
+C
+
+
+
+∥∆βt∥2
+
+Because ∥gt∥ → 0 as t → ∞, the coefficient enclosed in the square brackets approaches 
+
+−   12 − σ C. Given that the Armijo parameter is restricted to σ ∈ (0 , 1/2) and the uniform lower bound satisfies C > 0, this asymptotic limit is strictly negative. Therefore, for all sufficiently large t,the term in the brackets becomes strictly less than zero, implying DArmijo ≤ 0. This guarantees that the Armijo sufficient decrease condition is strictly satisfied with st = 1 , completing the proof. We now show the local quadratic convergence of the proposed algorithms. 
+
+Proof of Theorem 5.3. From Lemma B.8, the exact Hessian H(β) is globally Lipschitz continuous with the constant LH , we have the following bound in the neighborhood of the optimum: 
+
+∥gt − g⋆ − Ht(βt − β⋆)∥ ≤ LH
+
+2 ∥βt − β⋆∥2,
+
+where g⋆ = ∇L (β⋆).By Theorem B.2, the maximum eigenvalue of the exact Hessian is globally bounded by L =(max k wk)( 12η + 1 
+
+> τ
+
+). This implies that the gradient is L-Lipschitz continuous. Since the first-order optimality condition yields g⋆ = 0mK , we obtain the error bound: 
+
+∥gt∥ = ∥gt − g⋆∥ ≤ L∥βt − β⋆∥.
+
+For notational convenience, let Btρ = Htρ + ∥gt∥I denote the regularized sparsified Hessian utilized in Algorithm 1 or 3. Assuming the iterates are sufficiently close to the optimum such that the full 25 Newton step st = 1 is accepted, we evaluate the distance to the optimum at the subsequent step: 
+
+∥βt+1 − β⋆∥ = ∥βt + ∆ βt − β⋆∥
+
+= ∥βt − (Btρ)−1gt − β⋆∥
+
+= ∥(Btρ)−1[Btρ(βt − β⋆) − gt]∥.
+
+By Lemma 5.1, we know that βt, β⋆, gt ∈ ker( Hρ)⊥ and it follows that Btρ(βt − β⋆) − gt ∈
+
+ker( Hρ)⊥. As established in the proof of Lemma B.7, the restricted spectral norm of (Btρ)−1 on this invariant subspace yields the following bound: 
+
+∥(Btρ)−1[Btρ(βt − β⋆) − gt]∥ ≤ 1
+
+λ+min (Htρ) + ∥gt∥ ∥Btρ(βt − β⋆) − gt∥ ≤ 1
+
+C ∥Btρ(βt − β⋆) − gt∥.
+
+By injecting the optimality condition g⋆ = 0mK , we can algebraically rewrite the inner norm term as: 
+
+∥Btρ(βt − β⋆) − gt∥ = ∥gt − g⋆ − Ht(βt − β⋆) + ( Ht − Btρ)( βt − β⋆)∥.
+
+Next, we bound the approximation error between the exact Hessian Ht and the shifted sparsified Hessian Btρ. Using the algorithmic updating rule ρ = Cρ∥gt∥ and the structural error bound from Theorem 4.2, we have ∥Ht − Htρ∥ ≤ CE ∥gt∥, where CE = 8 mnC ρ(max k wk)( 1 
+
+> τ
+
++ 1 
+
+> η
+
+). Therefore: 
+
+∥Ht − Btρ∥ = ∥Ht − (Htρ + ∥gt∥I)∥≤ ∥ Ht − Htρ∥ + ∥gt∥≤ CE ∥gt∥ + ∥gt∥
+
+= ( CE + 1) ∥gt∥≤ (CE + 1) L∥βt − β⋆∥.
+
+Applying the triangle inequality to the decomposed norm and substituting all derived bounds back into the fundamental inequality for ∥βt+1 − β⋆∥, we obtain: 
+
+∥βt+1 − β⋆∥ ≤ 1
+
+C
+
+ ∥gt − g⋆ − Ht(βt − β⋆)∥ + ∥Ht − Btρ∥ · ∥ βt − β⋆∥
+
+≤ 1
+
+C
+
+ LH
+
+2 ∥βt − β⋆∥2 + ( CE + 1) L∥βt − β⋆∥2
+
+
+
+= 1
+
+C
+
+ LH
+
+2 + ( CE + 1) L
+
+
+
+∥βt − β⋆∥2.
+
+By defining the uniform constant M = 1
+
+> C
+
+  LH 
+
+> 2
+
++ ( CE + 1) L, we obtain the final bound ∥βt+1 −
+
+β⋆∥ ≤ M ∥βt − β⋆∥2. This successfully demonstrates that the iterates achieve local quadratic convergence. 
+
+B.6 Proof of Proposition 5.4 
+
+We give a more formal theorem to prove the proposition 5.4. 
+
+Theorem B.10. Let {βt}t≥0 be generated by Algorithm 1 or 3, the Armijo parameter satisfies 
+
+σ ∈ (0 , 1/2) and let L := L(β⋆) be the global minimum. Define CA := CE 
+
+> 2
+
+− (1 − σ) + LH 
+
+> 6C
+
+.If CA ≤ 0, then the Armijo line search accepts the full Newton step, i.e., st = 1 , for all t ≥ 0.If CA > 0, define 
+
+ϵphase := min {ϵNewton , ϵ contract } , where ϵNewton := 
+
+  12 − σ CCA
+
+, ϵcontract := C2
+
+LM .
+
+Then, once ∥gt∥ ≤ ϵphase , all subsequent iterations accept the full Newton step and enter the local quadratic convergence regime. Moreover, the number of iterations before this phase is reached is bounded by 
+
+Tglobal ≤
+
+$   L(β0) − L (L + Gmax )
+
+σs min ϵ2phase 
+
+%
+
+.
+
+26 Proof. To guarantee that the algorithm permanently transitions into the pure Newton phase, it is sufficient to reach a state where the full Newton step ( st = 1 ) is unconditionally accepted and the subsequent gradient norm does not increase ( ∥gt+1 ∥ ≤ ∥ gt∥). This ensures that once the iterates enter this local convergence region, they will not escape back into the global phase where the backtracking line search is required. First, we revisit the condition for accepting the full Newton step. In the proof of Lemma B.9, we established that the Armijo condition is naturally satisfied for st = 1 when the difference DArmijo ≤ 0.We demonstrated this is algebraically guaranteed when: 
+
+CA∥gt∥ − 
+
+ 12 − σ
+
+
+
+C ≤ 0.
+
+This leads to two distinct cases. If CA ≤ 0, the inequality holds trivially for any valid gradient norm because the subtracted term is strictly positive ( σ < 1/2 and C > 0). In this scenario, the Armijo condition never truncates the step, and the algorithm executes pure Newton steps globally from t = 0 .Conversely, if CA > 0, isolating ∥gt∥ yields the explicit finite threshold ϵNewton . Thus, whenever 
+
+∥gt∥ ≤ ϵNewton , the full step st = 1 is guaranteed to be accepted. Second, we determine the non-increasing gradient threshold. From Theorem 5.3, a full Newton step yields the local quadratic bound ∥βt+1 − β⋆∥ ≤ M ∥βt − β⋆∥2. Using the L-Lipschitz continuity of the gradient and the strong convexity parameter C on the restricted subspace, we relate this distance bound back to the gradient norm: 
+
+∥gt+1 ∥ ≤ L∥βt+1 − β⋆∥ ≤ LM ∥βt − β⋆∥2 ≤ LM C2 ∥gt∥2.
+
+For the sequence of gradient norms to be non-increasing (i.e., ∥gt+1 ∥ ≤ ∥ gt∥), it is sufficient that the coefficient satisfies LM C2 ∥gt∥ ≤ 1, which algebraically reduces to ∥gt∥ ≤ C2 
+
+> LM
+
+=: ϵcontract .Therefore, assuming CA > 0, if an iterate satisfies the joint condition ∥gt∥ ≤ min( ϵNewton , ϵ contract ) =: 
+
+ϵphase , the algorithm accepts the full step st = 1 and ensures that ∥gt+1 ∥ ≤ ∥ gt∥ ≤ ϵphase . By mathematical induction, all subsequent iterations will remain bounded by this threshold, executing pure Newton steps indefinitely. Consequently, to mathematically bound the maximum number of iterations Tglobal prior to this permanent transition, we analyze the worst-case trajectory where the iterates have not yet satisfied this joint sufficient condition, meaning ∥gt∥ > ϵ phase .We now recall the uniform sufficient decrease condition established in the proof of Theorem 5.2: 
+
+L(βt) − L (βt+1 ) ≥ σs min 
+
+1
+
+L + Gmax 
+
+∥gt∥2.
+
+Coupling this with the condition ∥gt∥ > ϵ phase , the objective function is guaranteed to decrease by a strictly bounded minimum amount at every step prior to the guaranteed phase transition: 
+
+L(βt) − L (βt+1 ) > σs min 
+
+L + Gmax 
+
+ϵ2 
+
+> phase
+
+=: ∆ min .
+
+Because the objective function evaluates to L(β0) at initialization and is bounded globally from below by L, the cumulative decrease over the first Tglobal iterations cannot exceed L(β0) − L .Summing the functional decreases over these initial global iterations yields: 
+
+Tglobal · ∆min ≤
+
+> Tglobal −1
+
+X
+
+> t=0
+
+(L(βt) − L (βt+1 )) ≤ L (β0) − L .
+
+Rearranging this inequality for Tglobal and substituting the definition of ∆min yields the final bound on the number of iterations required to guarantee reaching the permanent quadratic phase: 
+
+Tglobal ≤ L(β0) − L 
+
+∆min 
+
+= (L(β0) − L )( L + Gmax )
+
+σs min ϵ2
+
+> phase
+
+.
+
+Taking the floor of this bound completes the proof. 27 We now utilize the established theorem to explicitly derive the asymptotic iteration complexity for the exact Newton method, proving Proposition 5.4. 
+
+Proof of Proposition 5.4. To evaluate the theoretical bound Tglobal ≤ O 
+
+ L+Gmax 
+
+> smin ϵ2
+> phase
+
+
+
+, we establish the asymptotic order of the core parameters. Assume the barycentric weights satisfy wk = Θ(1 /K ), implying that no single target distribution dominates the barycenter. Thus, both Wmax and Wmin are Θ(1 /K ). This strictly bounds the maximum gradient norm: Gmax = 2 pP  
+
+> k
+
+w2 
+
+> k
+
+= O(1 /√K) = O(1) .Setting m = n and assuming the outer regularization scales proportionally to the inner regularization, 
+
+τ = Θ( η), the gradient and Hessian Lipschitz constants scale as: 
+
+L = Wmax 
+
+ 12η + 1
+
+τ
+
+
+
+= O
+
+ 1
+
+ηK 
+
+
+
+.LH = 6 Wmax 
+
+η2 + 10 Wmax 
+
+ητ + 6
+
+τ 2 = O
+
+ 1
+
+η2
+
+
+
+.
+
+Notice that the 6/τ 2 term in LH is independent of K, making it the dominant term asymptotically. Because L → ∞ as η → 0, the gradient bound is dominated, yielding (L + Gmax ) = O(L).Furthermore, since the target distributions μk are fixed prescribed inputs, their minimum positive entry is an O(1) constant. Thus, the minimum transport probability strictly scales with the maximum exponent variation ∆:
+
+pmin ≥ min  
+
+> i,j
+
+[Pk,ρ ]ij = O
+
+
+
+exp 
+
+
+
+− ∆
+
+η
+
+ 
+
+.
+
+This establishes the strong convexity parameter C = 1 
+
+> η
+
+min k(wkp2
+
+> k
+
+) = O
+
+ p2min 
+
+> ηK
+
+
+
+.For the sparse variant, the algorithmic sparsification threshold is defined as Cρ = Θ   ηn1.5
+
+. The resulting Hessian approximation error CE evaluates to: 
+
+CE = 8 n2CρWmax 
+
+ 1
+
+τ + 1
+
+η
+
+
+
+= O
+
+ n2
+
+η
+
+ ηn1.5
+
+ 1
+
+K
+
+
+
+= O
+
+ √nK
+
+
+
+.
+
+This approximation error inflates the intermediate contraction constant M :
+
+M = O
+
+ LH + CE LC
+
+
+
+= O
+
+ ηK p2min 
+
+ 1
+
+η2 +
+
+√nηK 2
+
+ 
+
+= O
+
+ K2 + √nη ηKp 2min 
+
+
+
+.
+
+The binding threshold for entering the local quadratic phase is governed by ϵcontract (which strictly dominates ϵNewton as pmin → 0): 
+
+ϵphase = ϵcontract = C2
+
+LM = O
+
+ p4min /(η2K2) 
+
+> 1
+> ηK
+
+· K2+√nη ηKp 2min 
+
+ = O
+
+ p6min 
+
+K2 + √nη 
+
+
+
+.
+
+Additionally, utilizing (L + Gmax ) = O(L), the minimum acceptable step size scales as: 
+
+smin = O
+
+ C2
+
+L2
+
+
+
+= O
+
+ p4min /(η2K2)1/(η2K2)
+
+
+
+= O  p4min 
+
+ .
+
+Substituting these explicit rates into the global iteration bound yields: 
+
+Tglobal = O Lsmin ϵ2
+
+> phase
+
+!
+
+= O
+
+ 1/(ηK )
+
+p4min · p12 min 
+
+> (K2+√nη )2
+
+ = O
+
+ (K2 + √nη )2
+
+ηKp 16 min 
+
+
+
+.
+
+To simplify the asymptotic notation, we apply the standard quadratic inequality (a + b)2 ≤ 2( a2 + b2)
+
+to decompose the squared summation, explicitly isolating the exact Newton complexity from the sparsification penalty: 
+
+Tglobal = O
+
+ K4 + nη 2
+
+ηKp 16 min 
+
+
+
+= O
+
+ K3
+
+η + nη K
+
+ 1
+
+p16 min 
+
+
+
+.
+
+28 0 1000   
+
+> Time (s)
+> 10 4
+> 10 2
+> 10 0
+> Residual
+> Convergence
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB
+
+(a) Digit “2” 0 1000    
+
+> Time (s)
+> 10 4
+> 10 2
+> 10 0
+> Residual
+> Convergence
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB
+
+(b) Digit “5” 0 1000    
+
+> Time (s)
+> 10 4
+> 10 2
+> 10 0
+> Residual
+> Convergence
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB
+
+(c) Item “Sneaker” 0 1000    
+
+> Time (s)
+> 10 4
+> 10 2
+> 10 0
+> Residual
+> Convergence
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB
+
+(d) Item “Bag” 
+
+Figure 4: Residual convergence on MNIST and Fashion-MNIST datasets. The corresponding input images are shown in Figure 3. Inserting the exponential decay rate of pmin , we conclude that the number of iterations sufficient to guarantee entry into the purely quadratic convergence phase is strictly bounded by: 
+
+Tglobal = O
+
+ K3
+
+η + nη K
+
+
+
+exp 
+
+ ∆
+
+η
+
+ 
+
+.
+
+## C Additional Experiment Details 
+
+C.1 Additional Convergence Comparison on Real Data 
+
+In this subsection, we present an additional comparison on the MNIST and Fashion-MNIST datasets using the residual as the convergence metric. Specifically, we define the residual by Residual := max  
+
+> k
+
+∥Xk1 − v∥ + max  
+
+> k
+
+∥X⊤ 
+
+> k
+
+1 − μk∥.
+
+This quantity measures the violation of the marginal constraints and therefore provides a direct indicator of how close the current iterate is to satisfying the optimality conditions. Figure 4 shows the decay of the residual with respect to runtime on four representative real-data instances. The results indicate that SNWB consistently reduces the residual faster than the competing methods. Compared with NWB, SNWB attains a similar or faster convergence rate while requir-ing noticeably less computational time, which highlights the practical advantage of the proposed sparsification strategy. 
+
+C.2 Additional Synthetic Experiments 
+
+We further evaluate the proposed methods on synthetic Wasserstein barycenter instances following the experimental settings in [ 15 , 27 ]. Each instance consists of K discrete probability distributions in a three-dimensional space, with each distribution supported on n points. The datasets are generated as follows. For each input distribution, the support points are sampled independently from a five-component Gaussian mixture model. The corresponding probability weights {μk}Kk=1 are sampled from the uniform distribution on (0 , 1) and then normalized to have unit sum. To construct the fixed support of the barycenter, we aggregate all support points from the K
+
+input distributions and apply K-means clustering to the pooled point cloud. The resulting n centroids are used as the barycenter support points. For each k, the cost matrix Ck is defined by the squared Euclidean distances between the barycenter support points and the support points of the k-th input distribution. The barycentric weights {wk}Kk=1 are also sampled from the uniform distribution on 
+
+(0 , 1) and normalized so that PKk=1 wk = 1 . In all experiments in this subsection, we set τ = η.The experimental results are shown in Figures 5 and 6. Overall, NWB and SNWB consistently achieve faster convergence than the baseline methods across different choices of the regularization parameter. When η is relatively large, NWB can be slightly more efficient than SNWB, since the transport probability matrices are less sparse and the benefit of sparsification is less pronounced. As η
+
+29 0 2 4 6 8 10 
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+K = 6, m = 500, = 0.01    
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 020 40 60
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+K = 6, m = 1000, = 0.01      
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 050 100 150 200 250
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+K = 6, m = 2000, = 0.01      
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 0246810
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+K = 8, m = 500, = 0.01    
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 020 40 60
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+K = 8, m = 1000, = 0.01      
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 050 100 150 200 250
+
+Time (s)    
+
+> 10 7
+> 10 5
+> 10 3
+> v v 2
+
+K = 8, m = 2000, = 0.01 
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB
+
+Figure 5: Performance of different algorithms on synthetic data under η = τ = 10 −2. Top: K = 6 .Bottom: K = 8 .0 10 20 30 
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+K = 6, m = 500, = 0.0005     
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 050 100 150 200
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+K = 6, m = 1000, = 0.0005      
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 0100 200 300 400 500
+
+Time (s)   
+
+> 10 5
+> 10 3
+> v v 2
+
+K = 6, m = 2000, = 0.0005    
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 010 20 30
+
+Time (s)   
+
+> 10 5
+> 10 3
+> v v 2
+
+K = 8, m = 500, = 0.0005     
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 050 100 150 200
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+K = 8, m = 1000, = 0.0005      
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB 0100 200 300 400 500
+
+Time (s)   
+
+> 10 5
+> 10 3
+> v v 2
+
+K = 8, m = 2000, = 0.0005 
+
+> FastIBP
+> IBP
+> SmWB
+> NWB
+> SNWB
+
+Figure 6: Performance of different algorithms on synthetic data under η = τ = 5 × 10 −4. Top: 
+
+K = 6 . Bottom: K = 8 .decreases, the transport plans become more concentrated, and the computational advantage of SNWB becomes increasingly evident. These results support the effectiveness of the proposed sparse Newton strategy, particularly in the small-regularization regime. 
+
+C.3 Ablation Study of η
+
+We next examine the influence of the regularization parameter on the performance of NWB and SNWB. In this study, we set τ = η and vary η on both the synthetic dataset and the MNIST dataset with K = 6 . The synthetic instances are generated following the procedure described in Appendix C.2. The results are reported in Figure 7. Overall, SNWB exhibits a clear advantage over NWB when the regularization parameter is small, particularly for η = τ = 10 −3 and η = τ = 5 × 10 −4. This behavior is consistent with the fact that smaller regularization parameters typically lead to more concentrated transport probability matrices, making the sparse approximation used in SNWB more effective. In contrast, when η is relatively large, the transport probability matrices are denser, and the benefit of sparsification becomes less pronounced. We further examine the effect of the sparsity level in Appendix C.4. In addition, both NWB and SNWB generally require more time to reach the 30 0 20 40 60 80 
+
+Time (s)    
+
+> 10 7
+> 10 5
+> 10 3
+> Gradient Norm
+
+Synthetic: m=1000          
+
+> NWB ( = 5e-04)
+> SNWB ( = 5e-04)
+> NWB ( = 1e-03)
+> SNWB ( = 1e-03)
+> NWB ( = 5e-03)
+> SNWB ( = 5e-03) 050 100 150
+
+Time (s)    
+
+> 10 7
+> 10 5
+> 10 3
+> Gradient Norm
+
+Synthetic: m=1500           
+
+> NWB ( = 5e-04)
+> SNWB ( = 5e-04)
+> NWB ( = 1e-03)
+> SNWB ( = 1e-03)
+> NWB ( = 5e-03)
+> SNWB ( = 5e-03) 1000 1500 2000 2500 3000
+
+Number of points 
+
+> 10 2
+> Time (s)
+
+Synthetic           
+
+> NWB ( = 5e-04)
+> NWB ( = 1e-03)
+> NWB ( = 5e-03)
+> SNWB ( = 5e-04)
+> SNWB ( = 1e-03)
+> SNWB ( = 5e-03) 02468
+
+Time (s)    
+
+> 10 5
+> 10 3
+> 10 1
+> Gradient Norm
+
+MNIST: digits=[1], m=400          
+
+> NWB ( = 5e-04)
+> SNWB ( = 5e-04)
+> NWB ( = 1e-03)
+> SNWB ( = 1e-03)
+> NWB ( = 5e-03)
+> SNWB ( = 5e-03) 050 100 150
+
+Time (s)    
+
+> 10 5
+> 10 3
+> 10 1
+> Gradient Norm
+
+MNIST: digits=[1], m=900          
+
+> NWB ( = 5e-04)
+> SNWB ( = 5e-04)
+> NWB ( = 1e-03)
+> SNWB ( = 1e-03)
+> NWB ( = 5e-03)
+> SNWB ( = 5e-03) 20 30 40 50
+
+Grid size 
+
+> 10 1
+> 10 2
+> Time (s)
+
+MNIST       
+
+> NWB ( = 5e-04)
+> NWB ( = 1e-03)
+> NWB ( = 5e-03)
+> SNWB ( = 5e-04)
+> SNWB ( = 1e-03)
+> SNWB ( = 5e-03)
+
+Figure 7: Effect of the regularization parameter η = τ on NWB and SNWB. Top: synthetic dataset. Bottom: MNIST dataset. The left and middle panels show convergence in terms of the gradient norm over runtime for different values of η. The right panels report the runtime required to reach 
+
+∥g∥ < 10 −7 as the problem size increases. For MNIST, m = ( grid size )2.prescribed tolerance as η decreases, reflecting the increased numerical difficulty of the problem in the small-regularization regime. 
+
+C.4 Ablation Study of Sparsity Level 
+
+We further examine the effect of the sparsification level on the performance of SNWB. The exper-iments are conducted on both the synthetic instances described in Appendix C.2 and the MNIST dataset. The purpose of this study is to assess how the sparsification parameter affects the trade-off between computational efficiency and the accuracy of the sparse Hessian approximation. Recall that in Algorithm 3, the sparsification threshold is chosen as ρ = Cρ∥g∥. We compare several choices of Cρ, including Cρ = 0 , which corresponds to the dense NWB method, and two families of sparsification parameters: 
+
+Cρ = S · ηnm , Cρ = S · η
+
+√nm , S ∈ { 10 3, 10 4, 10 5}.
+
+Figure 8 compares the convergence behavior under different sparsification levels. On MNIST, introducing sparsity leads to a substantial reduction in runtime, and the acceleration is robust across a wide range of Cρ values. This suggests that the transport probability matrices in these image-based barycenter problems are highly localized and can be accurately represented by sparse approximations. On the synthetic datasets, the advantage of sparsification is less pronounced, reflecting the denser structure of the corresponding transport probability matrices. Nevertheless, a suitable choice of the sparsification parameter, such as Cρ = 10 5 · η/ (√nm ), still achieves the fastest convergence in the reported settings. Table 1 provides a more detailed comparison of the optimization statistics. Across different sparsifica-tion levels, the average number of CG iterations, the total number of iterations, and the final gradient norms remain comparable to those of the dense baseline. This indicates that the sparse Hessian approximation preserves the essential curvature information needed for stable Newton updates. The differences in runtime are largely explained by the average proportion of nonzero entries, denoted by ¯pnz . For MNIST, ¯pnz is approximately 0.01 , which leads to significant computational savings. In contrast, the synthetic datasets have a much larger proportion of nonzero entries, typically above 
+
+0.20 , and therefore yield more moderate speedups. These results show that the proposed sparsifica-tion strategy is particularly effective when the transport structure is naturally localized, while still remaining competitive in denser settings. 31 0 25 50 75 100 
+
+Time (s)    
+
+> 10 7
+> 10 5
+> 10 3
+> Gradient Norm
+
+Synthetic: K = 6, m = 1500                 
+
+> C= 0
+> C= 10 4·/( √
+> n m )
+> C= 10 5·/( √
+> n m )
+> C= 10 4·/( nm )
+> C= 10 5·/( nm )050 100 150
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> Gradient Norm
+
+Synthetic: K = 6, m = 2000                
+
+> C= 0
+> C= 10 4·/( √
+> n m )
+> C= 10 5·/( √
+> n m )
+> C= 10 4·/( nm )
+> C= 10 5·/( nm )0200 400
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> Gradient Norm
+
+Synthetic: K = 6, m = 2500                  
+
+> C= 0
+> C= 10 4·/( √
+> n m )
+> C= 10 5·/( √
+> n m )
+> C= 10 4·/( nm )
+> C= 10 5·/( nm )020 40 60 80
+
+Time (s)    
+
+> 10 5
+> 10 3
+> 10 1
+> Gradient Norm
+
+MNIST: K = 6, m = 900                  
+
+> C= 0
+> C= 10 4·/( √
+> n m )
+> C= 10 5·/( √
+> n m )
+> C= 10 4·/( nm )
+> C= 10 5·/( nm )020 40 60 80
+
+Time (s)    
+
+> 10 5
+> 10 3
+> 10 1
+> Gradient Norm
+
+MNIST: K = 6, m = 1600                 
+
+> C= 0
+> C= 10 4·/( √
+> n m )
+> C= 10 5·/( √
+> n m )
+> C= 10 4·/( nm )
+> C= 10 5·/( nm )0100 200 300
+
+Time (s)    
+
+> 10 5
+> 10 3
+> 10 1
+> Gradient Norm
+
+MNIST: K = 6, m = 2500              
+
+> C= 0
+> C= 10 4·/( √
+> n m )
+> C= 10 5·/( √
+> n m )
+> C= 10 4·/( nm )
+> C= 10 5·/( nm )
+
+Figure 8: Effect of the sparsification parameter Cρ on SNWB under η = τ = 5 × 10 −4 on the synthetic dataset (Top) and the MNIST dataset (Bottom). Here, Cρ = 0 corresponds to the dense NWB method. Table 1: Performance comparison under different sparsification parameter choices with η = τ =5 × 10 −4.Synthetic: K = 6 
+
+Size m = 1000 Size m = 2000 
+
+Sparsification S AveCG ¯pnz Ite GradNorm Time (s) AveCG ¯pnz Ite GradNorm Time (s) 
+
+Cρ = 0 - 422 - 26 6.18E-08 55.25 441 - 24 7.08E-08 167.34 
+
+Cρ = S ηnm 
+
+10 3 421 0.25 26 6.19E-08 38.89 441 0.25 24 7.09E-08 172.15 
+
+10 4 421 0.24 26 7.48E-08 37.68 440 0.25 24 7.11E-08 174.88 
+
+10 5 420 0.23 26 5.02E-08 35.42 443 0.24 24 8.1E-08 187.89 
+
+Cρ = S η√nm 
+
+10 3 419 0.23 26 6.37E-08 38.11 441 0.24 24 7.22E-08 164.74 
+
+10 4 420 0.22 27 5.67E-08 38.06 437 0.23 25 2.59E-08 172.08 
+
+10 5 432 0.20 25 8.34E-08 32.77 476 0.21 21 8.43E-08 126.71 
+
+MNIST: K = 6 
+
+Size m = 400 Size m = 1600 
+
+Sparsification S AveCG ¯pnz Ite GradNorm Time (s) AveCG ¯pnz Ite GradNorm Time (s) 
+
+Cρ = 0 - 1220 - 19 8.9E-07 9.42 776 - 12 8.1E-07 82.54 
+
+Cρ = S ηnm 
+
+10 3 1257 0.02 21 8.4E-07 4.38 778 0.01 12 8.1E-07 14.31 
+
+10 4 1085 0.01 19 6.08E-07 3.44 776 0.01 12 8.1E-07 15.51 
+
+10 5 1099 0.01 19 7.67E-07 3.42 777 0.01 12 8.14E-07 15.70 
+
+Cρ = S η√nm 
+
+10 3 1326 0.01 20 6.87E-07 4.30 778 0.01 12 8.11E-07 15.17 
+
+10 4 1252 0.01 20 7.77E-07 4.05 780 0.01 12 8.3E-07 15.47 
+
+10 5 1001 0.01 18 9.49E-07 2.95 916 0.01 13 8.47E-07 15.41 Bold values indicate the most favorable results. “AveCG” denotes the average number of CG iterations in finding a Newton direction, “ ¯pnz ” denotes the average proportion of nonzeros in {Pk}Kk=1 , “Ite” denotes the total number of iterations and “GradNorm” denotes the final gradient norm ∥g∥.
+
+C.5 More Experiments under τ = η/ 2
+
+We also evaluate the proposed methods under the regularization setting τ = η/ 2, which has been shown to provide improved approximation properties for smooth densities [ 8 , 24 ]. In this setting, we compare NWB and SNWB with EDSWB [ 24 ], a representative first-order solver designed for this choice of regularization parameters. Following the experimental protocols in Sections 6.1 and 6.2, we repeat the nested ellipses and MNIST experiments with τ = η/ 2. The results are shown in Figures 9 and 10. Across both synthetic and real datasets, SNWB achieves the fastest convergence among the compared methods. In the nested ellipses benchmark, SNWB produces barycenters with visual quality comparable to NWB 32 while requiring substantially less runtime. On MNIST, SNWB reaches the high-accuracy reference solution much faster than both NWB and EDSWB. These results further confirm that the proposed sparse Newton strategy remains effective beyond the setting τ = η.EDSWB 
+
+> time = 24.92 s NWB
+> time = 97.11 s SNWB
+> time = 14.16 s
+
+(a) 40 × 40 pixel grids EDSWB  
+
+> time = 169.43 s NWB
+> time = 306.66 s SNWB
+> time = 89.90 s
+
+(b) 64 × 64 pixel grids 
+
+Figure 9: Nested ellipse benchmark under τ = η/ 2 = 5 × 10 −4 with 40 × 40 pixel grids (a) and 
+
+64 ×64 pixel grids (b). The input measures are the same as those used in Figures 1 and 2, respectively. 33 Selected digits Ground truth v0 1000 2000 
+
+Time (s)    
+
+> 10 5
+> 10 3
+> 10 1
+> v v 2
+
+Convergence 
+
+> EDSWB
+> NWB
+> SNWB
+
+Selected digits Ground truth v0 1000 2000 
+
+Time (s)    
+
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+Convergence 
+
+> EDSWB
+> NWB
+> SNWB
+
+Selected digits Ground truth v0 1000 2000 
+
+Time (s)      
+
+> 10 9
+> 10 7
+> 10 5
+> 10 3
+> 10 1
+> v v 2
+
+Convergence 
+
+> EDSWB
+> NWB
+> SNWB
+
+Selected digits Ground truth v0 1000 2000 
+
+Time (s)      
+
+> 10 10
+> 10 8
+> 10 6
+> 10 4
+> 10 2
+> v v 2
+
+Convergence 
+
+> EDSWB
+> NWB
+> SNWB
+
+Figure 10: Qualitative and quantitative performance evaluation on MNIST and Fashion-MNIST benchmarks under τ = η/ 2 = 7 × 10 −4. From top to bottom, the rows report the selected input samples, the corresponding ground-truth barycenter v⋆, and the convergence curves of different methods. 34

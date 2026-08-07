@@ -1,0 +1,4902 @@
+Title: Exact simulation of diffusions and improved algorithms for log-concave sampling
+
+URL Source: https://arxiv.org/pdf/2608.05022v1
+
+Published Time: Thu, 06 Aug 2026 01:13:47 GMT
+
+Number of Pages: 49
+
+Markdown Content:
+# Exact simulation of diffusions and improved algorithms for log-concave sampling 
+
+## Fan Chen 
+
+MIT 
+
+fanchen@mit.edu 
+
+## Sinho Chewi 
+
+Yale University 
+
+sinho.chewi@yale.edu 
+
+## Alexander Rakhlin 
+
+MIT 
+
+rakhlin@mit.edu 
+
+## Matthew S. Zhang 
+
+MIT 
+
+shuns436@mit.edu 
+
+## August 6, 2026 
+
+Abstract 
+
+We study exact simulation of diffusions via rejection sampling on path space using unbiased estimators of the density ratio obtained from Girsanov’s theorem. When applied to the underdamped Langevin diffusion, it yields an algorithm for sampling from a strongly log-concave and log-smooth distribution with condition number κ, in dimension d, to accuracy ε in Rényi divergence, in eO(κ2/3d1/3 polylog (1 /ε )) queries. Under a third derivative bound, the dimension dependence improves to d1/5. This improves substantially over the prior state-of-the-art complexity of eO(κd 1/2 polylog (1 /ε )) for the Metropolis-adjusted Langevin algorithm, and over the d1/4 dimension dependence of Metropolized Hamiltonian Monte Carlo under the same third derivative bound. We also present applications to the mirror Langevin diffusion, and for obtaining Fisher information bounds in the non-log-concave case. 
+
+# 1 Introduction 
+
+Drawing samples efficiently from a high-dimensional distribution π ∝ exp (−V ) over Rd is a core algorithmic task that underlies Bayesian inference, machine learning, and scientific computing. Recent progress in the field has largely been driven by deep and fruitful connections with optimization (Jordan et al., 1998; Wibisono, 2018; Chewi, 2026), which have inspired new algorithms and increasingly refined convergence guarantees. These developments point toward a broader goal: just as optimization is built upon a mature theory of complexity, with convex functions as the canonical benchmark class, we seek an analogous theory for sampling, with log-concave distributions playing the corresponding role. To fix the ideas, suppose that V is well-conditioned: 0 ≺ αI ⪯ ∇ 2V ⪯ βI . In a standard setting, the goal of sampling is to design an algorithm which uses first-order queries to V and outputs a random variable whose law is ε-close to π in, say, total variation distance. We want to quantify the number of queries in terms of the dimension d, the condition number κ, and the target accuracy ε. Despite the fundamental nature of this question, the optimal complexity remains unknown. In this paper, we develop new algorithms for this problem that significantly improve upon the state-of-the-art in several important ways. To contextualize our results, we first review the literature. 
+
+## 1.1 Background 
+
+Toward acceleration for sampling. For the analogous problem of smooth convex optimization, one of the most celebrated results is the existence of accelerated methods, as first shown in Nesterov (1983). Namely, in the well-conditioned setting, whereas the iteration complexity of gradient descent—with constant step size, see Altschuler and Parrilo (2025) for recent developments—incurs linear dependence Ω( κ) on the condition number, there are accelerated methods which achieve O(√κ) dependence, a square root speed-up. In sampling, and in continuous time, the analogue of gradient descent is the Langevin diffusion (LD), and the analogue of Nesterov’s accelerated gradient method is the kinetic or underdamped Langevin diffusion (ULD); 1arXiv:2608.05022v1 [cs.DS] 5 Aug 2026 see Section 2.1. Although the analogies are formally clear, especially in light of the continuous-time Nesterov ODEs derived in Su et al. (2016), proving the sharp accelerated convergence of ( ULD ) was a longstanding open problem until the breakthrough work of Cao et al. (2023). Subsequently, Eberle and Lörler (2026b) cast their result into the framework of second-order lifts, which relates the acceleration question to classical work in the Markov chain literature on non-reversible lifts (Chen et al., 1999; Diaconis et al., 2000). In this context, the square root speed-up is interpreted as a diffusive-to-ballistic speed-up. The original result of Cao et al. (2023) was indeed accelerated but only gave exponential decay in L2, which incurs poor dependence on the initialization. Even more recently, this issue was resolved through the work of Lu (2026), which established accelerated convergence in relative entropy. See Section 1.3 for further discussion. These encouraging developments suggest that the moment is opportune for realizing acceleration in sampling. However, translating the continuous-time accelerated rates into algorithmic gains is a challenging question in and of itself. Thus far, the only progress in this direction has been the work of Altschuler et al. (2026). Via the framework of shifted composition developed in Altschuler and Chewi (2025, 2026), and combined with the result of Lu (2026), it implies that a certain discretization of ( ULD ) achieves a complexity of eO(κ5/6d1/3/ε 2/3).This result achieves sublinear o(κ) dependence 1, but the approach of direct discretization seems inherently limited: for example, as discussed next, it yields a low-accuracy poly(1 /ε ) guarantee. 
+
+High-accuracy vs. low-accuracy sampling. Unlike in the setting of optimization, discretization incurs bias: the stationary distribution of a diffusion is generally not preserved by discretization. Controlling the asymptotic bias generally requires choosing the step size as a function of ε, eventually incurring poly (1 /ε )
+
+iteration complexity. Typically, this is addressed by incorporating a Metropolis–Hastings filter (Metropolis et al., 1953; Hastings, 1970). Doing so, however, introduces new considerations, such as implementation of the filter—which necessitates “simple” proposal kernels—and control of the acceptance probability. Applying the filter to the Euler–Maruyama discretization of the Langevin diffusion yields the Metropolis-adjusted Langevin algorithm (MALA), whose mixing time is eO(κd 1/2 polylog (1 /ε )) from a warm start (Chewi et al., 2021; Wu et al., 2022). In Altschuler and Chewi (2024), it was shown how to algorithmically obtain such a warm start with comparable complexity, leading to an overall eO(κd 1/2 polylog (1 /ε )) guarantee. This rate is matched by a piecewise deterministic Markov process called the zigzag sampler (Lu and Wang, 2022b), and also via the proximal sampler algorithm of Lee et al. (2021) which reduces sampling to a sequence of localized distributions, which in turn can be implemented via approximate rejection sampling (Fan et al., 2023; Chen et al., 2026a). This is the current state-of-the-art complexity for high-accuracy samplers. In particular, despite the improved dependence on ε, the complexity is worse in terms of both d and κ.Since MALA is obtained by correcting a discretization of the Langevin diffusion, it is natural to expect that faster algorithms arise by replacing LD with ( ULD ). This is closely related to the Metropolized Hamiltonian Monte Carlo (MHMC) algorithm, which is one of the most widely used samplers in practice; indeed, MHMC and its adaptive variants are the workhorse implementations of Markov chain Monte Carlo in many popular software packages such as Stan and TensorFlow. However, satisfactory guarantees for MHMC have only been established under a higher-order smoothness assumption. Namely, assume that ∇2V is βH-Lipschitz in the Frobenius norm, and write κH := β2/3 
+
+> H
+
+/α for the associated condition number. Then, the mixing time result of Chen et al. (2026c) together with the algorithmic warm start result of Zhang et al. (2026) yield a sampler with complexity eO(( κ + κH) d1/4 polylog(1 /ε )) in this setting. 
+
+Concurrent work. The concurrent work of Lu and Luo (2026) obtains eO(κ1/2d2 polylog (1 /ε )) complexity for the bouncy particle sampler. In particular, the dependence on κ is fully accelerated, albeit with a worsened dimension dependence. Moreover, due to the obstruction presented in Monmarché and Wang (2026), it is not possible to improve the dimension dependence by establishing a stronger entropic decay. Nevertheless, it is a promising future direction to further study piecewise deterministic Markov processes and to compare their complexity guarantees with the ones we have obtained here.          
+
+> 1We note that, similarly to the existence of cutting-plane methods in optimization, there are samplers for general log-concave distributions which incur poly (d, log κ, log (1 /ε )) dependence (see, e.g., Kook, 2026). Hence, a more precise formulation of the acceleration question is to achieve √κdependence simultaneously with “good” (e.g., sublinear) dimension dependence.
+
+21.2 Contributions 
+
+In this paper, we propose new algorithms for sampling based on a different approach. Rather than correcting a discrete-time step via a Metropolis–Hastings filter, we correct the law of an entire continuous-time path via rejection sampling. Namely, given a reference path measure P, we propose a tractable path measure Q. We then correct this measure using the density ratio formula supplied by Girsanov’s theorem. In principle, this yields an exact unbiased scheme for generating sample paths from P. However, the Girsanov reweighting factor is a functional of the entire path, so this is not immediately implementable. Our principal observation is that it is nevertheless possible to build an unbiased estimator of the density ratio using O(1) queries—provided that the simulation time is chosen appropriately—which suffices for accurate simulation. The mechanism shares broad similarities with the first-order rejection sampling (FORS) method introduced recently in Chen et al. (2026a,b). We also note that the idea of exact simulation of diffusions was considered in prior works such as Beskos and Roberts (2005); see Section 1.3 for more discussion. However, to our knowledge, we are the first to apply this idea in a multi-dimensional context, and to obtain explicit complexity guarantees which improve upon the state-of-the-art. We apply this scheme to the underdamped Langevin diffusion, which is defined by the SDE 
+
+dXt = Pt dt , dPt =  −γP t − ∇ V (Xt) dt + p2γ dBt . (ULD )Note that the SDE is posed in phase space, where x denotes the position coordinate and p the momentum coordinate. As shown recently in Lu (2026), the law of this SDE converges at an accelerated rate in KL divergence—and even Rényi divergences, see Li and Lu (2026)—to its stationary distribution, which we again denote by π in an abuse of notation. Explicitly, π(x, p ) ∝ exp (−V (x) − ∥ p∥2/2) , so that the position marginal is our distribution of interest. By various proposals and carefully analyzing the variance of the density ratio estimators, we arrive at the following results. First, in the case where we only assume two-sided bounds on ∇2V , we use the exponential Euler discretization as a proposal to obtain: 
+
+Result 1: Assuming 0 ≺ αI ⪯ ∇ 2V ⪯ βI , with κ := β/α , there is an algorithm that achieves 
+
+Rq (· ∥ π) ≤ ε using eOq (κ2/3d1/3 polylog(1 /ε )) queries in expectation. Our result improves upon both the κ5/6 condition number dependence of Altschuler et al. (2026), and also the d1/2 dimension dependence of all known high-accuracy samplers. Thus, our guarantee is simultaneously 
+
+state-of-the-art with respect to all parameters, at least among algorithms with O(d) dimension dependence (see Footnote 1). Under a third-order derivative bound, we use a more sophisticated proposal that makes Hessian-vector queries. 
+
+Result 2: Assuming 0 ≺ αI ⪯ ∇ 2V ⪯ βI and that ∇2V is βH-Lipschitz in the Frobenius norm, with κ := β/α and κH := β2/3 
+
+> H
+
+/α , there is an algorithm that achieves Rq (· ∥ π) ≤ ε using 
+
+eOq
+
+   κ1/2 + κ3/5 
+
+> H
+
+d1/5 + κ1/3(κH + κ3/11  
+
+> H
+
+)d2/11 polylog(1 /ε ) queries in expectation. When κH = O(1) , the dimension dependence of our algorithm is d1/5. In particular, this provably outperforms the previous state-of-the-art, MHMC, which by dimensional scaling arguments incurs d1/4 complexity even for Gaussian targets. On the other hand, our algorithm is adaptive in the sense that κH = 0 for Gaussians, in which case only the κ1/2 term survives. This yields a eOq (κ1/2 polylog (d, 1/ε )) guarantee for sampling from Gaussians, which is near-optimal over this class (Chewi et al., 2023a). Finally, we also highlight two additional applications of potential interest. 31. If we instead assume that V is relatively convex, Lipschitz, and smooth with respect to a self-concordant mirror map ϕ, we can apply the diffusion rejection schema above to the mirror Langevin diffusion (Chewi et al., 2020), assuming exact simulation of the mirror Brownian motion. This gives an algorithm which operates in the same setting and under the same assumptions of Ahn and Chewi (2021), but improves their low-accuracy complexity guarantee to a high-accuracy one. See Section 5. 2. Assuming that V is β-smooth but possibly non-convex, the sampling analogue of approximate first-order stationarity is to generate a sample with small relative Fisher information: FI (· ∥ π) ≤ ε2.Recently, Chewi and Wibisono (2026) used the proximal sampler to reduce this task to high-accuracy 
+
+log-concave sampling. As we have improved the complexity of the latter, this leads to a new state-of-the-art eO(βd 1/3K0/ε 2) complexity bound for the former, where K0 is the initial KL divergence to π.Here, the improvement is dimensional: d1/2 → d1/3. See Section 6. Overall, we believe that these results are surprising, and amply demonstrate the power of this algorithmic framework. It is an interesting avenue for future research to develop further applications via this methodology, such as the simulation of general SDEs, and moreover for testing these methods numerically. 
+
+## 1.3 Related work 
+
+Log-concave sampling. The problem of sampling from distributions over Rd using Markov chains has an extensive history, see Brooks et al. (2011). More recent literature centers on the non-asymptotic complexity of such schemes in high dimensions following an optimization-inspired query complexity model. See Chewi (2026) for a general exposition and for further references to the literature. 
+
+Accelerated hypocoercive convergence. The study of convergence rates for degenerate processes, including ( ULD ) as a model case, is known as hypocoercivity ; see the monograph Villani (2009). The first sharp rate was established in L2 in Cao et al. (2023), building on the space-time approach of Albritton et al. (2024). This result was cast in the language of second-order lifts in Eberle and Lörler (2026b), and there have been many subsequent extensions (e.g., Lu and Wang, 2022a; Brigati, 2023; Eberle and Lörler, 2026a; Eberle et al., 2025; Lehec, 2025; Fan et al., 2026). The first sharp rate in entropy was given recently in Lu (2026) and extended to hypocoercive hypercontractivity (Li and Lu, 2026), to non-linear equations (Monmarché, 2026), and to PDMPs (Monmarché and Wang, 2026). Recently, Mitra et al. (2026) gave a different approach to acceleration for randomized Hamiltonian Monte Carlo. 
+
+High-accuracy sampling. MALA has had a long history of study, with limiting arguments suggesting the dimensional scaling d1/3 at stationarity—at least under higher-order smoothness (Roberts and Rosenthal, 1998). Within recent literature, the non-asymptotic d1/2 complexity was obtained in a line of works (Dwivedi et al., 2019; Chen et al., 2020; Lee et al., 2020; Chewi et al., 2021; Wu et al., 2022; Chen and Gatmiry, 2023), culminating in the algorithmic warm start result of Altschuler and Chewi (2024). On the other hand Chewi et al. (2021) showed that under bounds on ∇2V alone, the d1/2 complexity for MALA is tight. Another route to d1/2 high-accuracy sampling is via the proximal sampler (Lee et al., 2021), together with approximate rejection sampling (Fan et al., 2023). In Chen et al. (2026a), it was shown that this guarantee can be achieved using queries to ∇V alone (and not to V itself), and that this is robust to noise in the stochastic gradients (Chen et al., 2026b). The first-order rejection sampling mechanism introduced in these two works provides the basis of the present approach of this paper. In another direction, we note that the 
+
+d1/2 high-accuracy guarantee can also be extended to composite sampling (Liu and Chewi, 2026). As for MHMC, Beskos et al. (2013) gave a scaling limit with d1/4 dependence at stationarity. Non-asymptotically, a d11 /12 rate was proven in Chen et al. (2020), while the d1/4 rate was proven in Chen et al. (2026c), both from a warm start. An algorithmic warm start was obtained in Zhang et al. (2026). These works all required ∇3V to be appropriately bounded, and we also adopt that assumption here for our 
+
+d1/5 high-accuracy sampler. 
+
+Mirror Langevin. The mirror Langevin algorithm has been studied in numerous prior works (Zhang et al., 2020; Chewi et al., 2020; Ahn and Chewi, 2021; Jiang, 2021; Li et al., 2022; Gatmiry and Vempala, 2022). In 4our work, we most closely follow the analysis of Ahn and Chewi (2021). A Metropolis-adjusted version of mirror Langevin was proposed in Srinivasan et al. (2024), yielding a high-accuracy algorithm; we defer a comparison to Section 5. 
+
+Fisher information complexity. The study of relative Fisher information bounds as approximate first-order stationarity was initiated in Balasubramanian et al. (2022). The algorithmic upper bound was recently improved in Chewi and Wibisono (2026) via a reduction to high-accuracy log-concave sampling. We also mention that lower bounds for this problem were studied in Chewi et al. (2023b). 
+
+Exact simulation of diffusions. The pioneering work of Wagner (1988) proposed a method of exactly 
+
+simulating one-dimensional SDEs through rejection sampling, utilizing Girsanov’s theorem which expresses the log-density as an integral. Extensions of this idea have been studied in follow-up work on simulating SDEs (e.g., Wagner, 1988; Beskos and Roberts, 2005; Beskos et al., 2006; Papaspiliopoulos, 2011; Gonçalves et al., 2023) and also Markov chain Monte Carlo (Gonçalves et al., 2017; Vats et al., 2022; Kakkad and Vats, 2026, etc.). In this work, we revisit this idea and apply it to the underdamped Langevin diffusion through the framework of Chen et al. (2026a,b). 
+
+## 1.4 AI usage 
+
+The main idea of the algorithm and its analysis were developed by the authors, building upon the prior works Chen et al. (2026a,b). LLM tools were used to check for errors, provide the implementation details in Appendix A, and to prepare parts of this manuscript. 
+
+# 2 Preliminaries 
+
+We collect the notation and analytic preliminaries that will be used throughout. We write points in phase space as z = ( x, p ) ∈ Z := Rd × Rd. The position target is μV (dx ) ∝ e−V (x) dx , and the invariant distribution of the underdamped Langevin dynamics is 
+
+π(dx, dp ) := μV (dx ) ⊗ N(0 , I )( dp ) .
+
+When a divergence is applied to position marginals, π refers to μV ; when it is applied to phase-space distributions, π denotes the product law above. This convention keeps the notation light. We assume that V is twice continuously differentiable and β-smooth in the sense that 
+
+−βI ⪯ ∇ 2V (x) ⪯ βI , ∀x ∈ Rd .
+
+Isoperimetric conditions. Definition 1 (Poincaré) . A distribution π satisfies a Poincaré inequality (PI) with constant C if for all compactly supported and smooth test functions h : Rd → R,
+
+Var X∼π (h(X)) ≤ C EX∼π [∥∇ h(X)∥2] .
+
+We let CPI (π) be the smallest constant C such that π satisfies PI with constant C.
+
+Definition 2 (Log-Sobolev) . A distribution π satisfies a log-Sobolev inequality (LSI) with constant C if for all compactly supported and smooth test functions h : Rd → R,
+
+Ent X∼π (h2(X)) := EX∼π
+
+h
+
+h2(X) log h2(X)
+
+EX∼π [h2(X)] 
+
+i
+
+≤ 2C EX∼π [∥∇ h(X)∥2] .
+
+We let CLSI (π) be the smallest constant C such that π satisfies LSI with constant C.
+
+5It is well known (e.g., Bakry et al., 2014) that if π is α-strongly log-concave (SLC), i.e., − log π is α-strongly convex, then it satisfies LSI with constant 1/α , and if π satisfies LSI with constant 1/α , then it satisfies PI with constant 1/α . These represent meaningful enlargements of the class of SLC measures that still permit tractable sampling. For example, unlike SLC, LSI is robust to bounded perturbations of the log-density; unlike LSI, PI can capture measures without sub-Gaussian tails (e.g., the two-sided exponential). See Chewi (2026) for further background in the context of sampling. 
+
+Oracles. Definition 3 (First-order oracle) . Given input x, the oracle returns ∇f (x).
+
+Definition 4 (Generalized first-order oracle) . Given input (x, v ), the oracle returns (∇f (x), ∇2f (x) v).
+
+Note that the generalized first-order oracle can be implemented to arbitrary accuracy via finite differences using the first-order oracle. 
+
+Notation. For any function f : Rd → R such that Zf := R 
+
+> Rd
+
+e−f (x)dx < +∞, we define μf to be the distribution over Rd with density μf (x) = 1 
+
+> Zf
+
+e−f (x).For ν ≪ μ, let Rλ(ν ∥ μ) := 1 
+
+> λ−1
+
+log Eμ[( dν dμ )λ] denote the Rényi divergence of order λ > 1, and let Rλ(ν ∥ μ) :=max {Rλ(ν ∥ μ), Rλ(μ ∥ ν)} denote the corresponding symmetrized divergence. In addition, for λ ≥ 1, we define 
+
+Dλ(ν ∥ μ) := Eμ
+
+( dν dμ )λ − 1 , ¯Dλ(ν ∥ μ) = max {Dλ(ν ∥ μ), Dλ(μ ∥ ν)} .
+
+We further consider the divergences 
+
+DTV (ν, μ ) := sup 
+
+> A
+
+|ν(A) − μ(A)| , DKL (ν ∥ μ) := Eν
+
+h
+
+log dν
+
+dμ
+
+i
+
+, Dχ2 (ν ∥ μ) := Eμ
+
+h dν
+
+dμ − 1
+
+2i
+
+.
+
+In Section 6, we will also make use of the relative Fisher information FI (ν ∥ μ) := Eν
+
+∥∇ log(d ν/ dμ)∥2.For an interval I = [ a, b ], define Clip I (u) := max {a, min {b, u }} . For B > 0, we abbreviate Clip B (u) :=
+
+Clip [−B,B ](u) and define τB (u) := ( |u| − B)+.
+
+## 2.1 Underdamped Langevin dynamics 
+
+We will use the kinetic, or underdamped, Langevin diffusion on Z with friction parameter γ > 0, given in ( ULD ). The measure π = μV ⊗ N(0 , I ) is invariant for this diffusion. For any distribution ν over Z, we define PT ν to be the distribution of (XT , P T ) under ( ULD ) with (X0, P 0) ∼ ν.We make use of the following results, due to Li and Lu (2026); Cao et al. (2023) respectively. 
+
+Theorem 2.1 (Accelerated Rényi decay) . Assume that μV is log-concave and satisfies LSI with constant 
+
+1/α . There are universal constants c, C > 0 such that, if γ ≍ √α, for every q > 1 and every phase-space law 
+
+ν ≪ π,
+
+Rq
+
+ Ptν ∥ π ≤ Cq exp( −cγt ) Rq (ν ∥ π) , t ≥ C/γ . 
+
+Consequently, for K ≳ (T γ )−1 log( qRq (ν ∥ π)/δ ),
+
+Rq
+
+ (PT )K ν ∥ π ≤ δ . 
+
+Theorem 2.2 (Accelerated L2 decay) . Assume that μV is log-concave and satisfies PI with constant 1/α .There are universal constants c, C > 0 such that, if γ ≍ √α, then for every phase-space law ν ≪ π,
+
+Dχ2
+
+ Ptν ∥ π ≤ C exp( −cγt ) Dχ2 (ν ∥ π) , t ≥ 0 .
+
+62.2 FORS 
+
+In this work, we use first-order rejection sampling (FORS) (Chen et al., 2026a) to simulate diffusion processes. Consider a proposal distribution Q over a continuous-time stochastic process Z = ( Zt)t∈[0 ,T ]. Given a tilt function w(Z), the goal of Algorithm 1 is to produce a sample from P⋆, defined via dP⋆ 
+
+> dQ
+
+(Z) ∝ ew⋆(Z), without access to the value of w⋆(Z). Specifically, in our instantiation, we always construct a function W (ξ; Z)
+
+depending on only O(1) entries of Z such that w⋆(Z) ≈ Eξ∼Ξ[W (ξ; Z)] .
+
+Algorithm 1 First-order rejection sampling (FORS) 
+
+Input: Parameter B > 0, proposal distribution Q, estimator function W , and sampling distribution Ξ for the auxiliary variable ξ.
+
+for i = 1 , 2, 3, . . . do 
+
+Sample J ∼ Poisson (2 B).Sample ξ1, · · · , ξ J ∼ Ξ.Sample (W (ξ1; Z), · · · , W (ξJ ; Z), Z T ) following Z ∼ Q.Output ZT with probability QJj=1 Clip [0 ,1] ( B+W (ξj ;Z)2B ).
+
+end for 
+
+The following guarantee is from Chen et al. (2026a). 
+
+Theorem 2.3 (FORS guarantee) . Algorithm 1 outputs a random point ZT whose distribution bp is the marginal of bP such that 
+
+d bP
+
+dQ ∝ e bw(Z) , bw(Z) := Eξ∼Ξ Clip B (W (ξ; Z)) .
+
+The number of queries through W is bounded, with probability at least 1 − δ, by 3Be 2B log(2 /δ ).
+
+Remark 1. Note that in Algorithm 1, if W (ξ; ·) depends on only O(1) coordinates, then, with high probability, we need to sample only a set T of O(B) coordinates of Z. In particular, after sorting T , the problem reduces to sampling from the transition kernel Q(Zt+h = · | Zt) for certain given pairs (t, h ). This may be easier than constructing an entire trajectory Z, as in the setting of Section 4. 
+
+Error analysis. The following lemma controls the error of the FORS kernel in terms of exponential moments. 
+
+Lemma 2.4 (Error of FORS) . Suppose that q ≥ 2, P⋆ is a path measure such that dP⋆ 
+
+> dQ
+
+∝ ew⋆(Z), and let p⋆
+
+be the marginal of ZT under P⋆. Then 
+
+(1 + ¯Dq
+
+ p⋆ ∥ bp)2 ≤ EP⋆ exp(4 q |w⋆(Z) − w(Z)|) · EZ∼P⋆,ξ ∼Ξ exp(4 q τ B (W (ξ; Z))) ,
+
+where we denote w(Z) := Eξ∼Ξ W (ξ; Z). If w⋆ = w, then the sharper bound 
+
+1 + ¯Dq
+
+ p⋆ ∥ bp ≤ EZ∼P⋆,ξ ∼Ξ exp(2 q τ B (W (ξ; Z))) 
+
+holds. 
+
+Proof. Applying Lemma B.9 on path space with common base Q, f = −w⋆, and g = − bw, and then applying data processing, 
+
+¯Dq
+
+ p⋆ ∥ bp ≤ ¯Dq
+
+ P⋆ ∥ bP ≤ EP⋆ exp(2 q |w⋆(Z) − bw(Z)|) − 1 ,
+
+where we recall bw(Z) := Eξ∼Ξ Clip B (W (ξ; Z)) . Then, we can decompose 
+
+|w⋆(Z) − bw(Z)| ≤ | w⋆(Z) − w(Z)| + |Eξ∼Ξ Clip B (W (ξ; Z)) − Eξ∼Ξ W (ξ; Z)|≤ | w⋆(Z) − w(Z)| + Eξ∼Ξ τB (W (ξ; Z)) .
+
+The desired upper bound then follows from Jensen’s and the Cauchy–Schwarz inequalities. If w⋆ = w, the same argument without Cauchy–Schwarz gives the sharper bound. 73 ULD without additional smoothness 
+
+In this section, we describe a simple proposal which nevertheless suffices to establish Result 1. This also elucidates the mechanism of the diffusion sampling approach, which will lay the foundation for the more complicated proposal in Section 4. 
+
+## 3.1 Proposal 
+
+Fix any starting point z = ( x, p ). Consider the following exponential Euler proposal with X0 = x and P0 = p:
+
+dXt = Pt dt, dPt = −(∇V (X0) + γP t) d t + p2γ dBt . (1) Let Q := Qz be the law of Z = ( Xt, P t)t∈[0 ,T ]. Let μ(x) = 1√2γ (∇V (x) − ∇ V (x0)) . By Girsanov’s theorem (under mild assumptions on T ; see Remark 2), there exists a probability distribution P := Pz defined via 
+
+dP
+
+dQ = exp 
+
+
+
+−
+
+Z T
+
+> 0
+
+⟨μ(Xt), dBt⟩ − 12
+
+Z T
+
+> 0
+
+∥μ(Xt)∥2 dt
+
+
+
+,
+
+such that the process Bt = Bt +R t 
+
+> 0
+
+μ(Xs) d s is a Brownian motion under P, and the process Z = ( Xt, P t)t∈[0 ,T ]
+
+satisfies 
+
+dXt = Pt dt, dPt = −(∇V (Xt) + γP t) d t + p2γ dBt .
+
+According to the FORS framework, we need to design an unbiased estimator for log dP 
+
+> dQ
+
+. We can obtain an unbiased estimator for the second integral 12
+
+R T 
+
+> 0
+
+∥μ(Xt)∥2 dt simply by evaluating the integrand at a random time in [0 , T ], so we focus on the first term I := R T 
+
+> 0
+
+⟨μ(Xt), dBt⟩. Consider an integer N ≥ 1 and let h = TN .Note that 
+
+I ≈ 
+
+> N−1
+
+X
+
+> j=0
+
+⟨μ(Xjh ), B (j+1) h − Bjh ⟩ =
+
+> N
+
+X
+
+> j=1
+
+⟨BT − Bjh , μ (Xjh ) − μ(X(j−1) h)⟩
+
+= TN
+
+> N
+
+X
+
+> j=1
+
+
+
+BT − Bjh , ∇V (Xjh ) − ∇ V (X(j−1) h)
+
+√2γ h 
+
+
+
+.
+
+Then, we can consider the following estimator. In the FORS construction, take Ξ = Unif ([0 , T ]) and write its draw as t. For any t ∈ [( j − 1) h, jh ), we set 
+
+−W (t; Z) = T
+
+√2γ h ⟨BT − Bjh , ∇V (Xjh ) − ∇ V (X(j−1) h)⟩ + T
+
+2 ∥μ(Xt)∥2 .
+
+With this estimator, FORS reweights the exponential Euler proposal using a discretized approximation to the exact ULD path law; the resulting error is analyzed below. 
+
+## 3.2 Analysis 
+
+Let T and bT denote the exact and FORS-corrected transition kernels, respectively: Tz and bTz are the marginal distributions of ZT under Pz and bPz . We denote R(z) := ∥p∥2 + β−1 ∥∇ V (x)∥2 + d for z = ( x, p ). The key step of the analysis is to analyze the following Rényi error. 
+
+Proposition 3.1 (Rényi errors of FORS) . Suppose that q ≥ 2, δ ∈ (0 , 12 ], B ∈ [1 , 2] , and γT ≤ 1. Furthermore, suppose that 
+
+T 3 ≤ γCβ 2R(z) ( q + log(1 /δ )) , T 2 ≤ 1
+
+Cβ (q + log(1 /δ )) , (2) 8and 
+
+h = TN ≤ δγ CqβR (z)  d−1/2 + βT 2 . (3) 
+
+Then, ¯Dq
+
+ bTz ∥ Tz
+
+ ≤ δ.
+
+This allows us to establish the following guarantees, which provide eO(d1/3) query complexity bounds in the strongly convex and smooth setting. 
+
+Theorem 3.2 (High-accuracy simulation of ULD) . Suppose that V is convex and β-smooth. Let δ ∈ (0 , 12 ]
+
+and p ∈ (0 , 1] . The following guarantees hold. 
+
+(i) Suppose that μV satisfies PI with constant 1/α , and let γ ≍ √α and κ := β/α . Set ∆2 := d + R2(ν ∥ π).If K ∈ N satisfies 
+
+K ≳ 1
+
+T γ 
+
+ R2(ν ∥ π) + log(1 /δ ) and 1
+
+T γ ≫ κ2/3∆1/32 log 2/3(K/δ ) ,
+
+then the output distribution bν of FORS satisfies 
+
+R3/2
+
+ bν ∥ π ≤ δ . 
+
+(ii) Suppose that μV satisfies LSI with constant 1/α , let γ ≍ √α and κ := β/α , and let q ≥ 2. Set 
+
+∆q := d + R2q (ν ∥ π). If K ∈ N satisfies 
+
+K ≳ 1
+
+T γ log 
+
+ q∆q
+
+δ
+
+
+
+and 1
+
+T γ ≫ κ2/3∆1/3
+
+> q
+
+ q + log( Kq/δ )2/3 ,
+
+then the output distribution bν of FORS satisfies 
+
+Rq
+
+ bν ∥ π ≤ δ . 
+
+In both cases, with probability at least 1 − p, the number of first-order queries is bounded by O(K + log (1 /p )) ,with a universal implicit constant. 
+
+The proof is presented in Appendix C. The exponential Euler proposal, although simple, is fundamentally limited; see Appendix C.4. This motivates the more refined proposal developed in Section 4. 
+
+# 4 ULD with additional smoothness 
+
+In this section, we describe a refined proposal which better takes advantage of higher-order smoothness, allowing us to achieve Result 2. 
+
+## 4.1 Proposal 
+
+The proposal in Section 3 is based on replacing the non-linear term ∇V (Xt) in ( ULD ) with ∇V (X0). A higher-order approximation is obtained by replacing ∇V (Xt) with, say, ∇V (X0) + ∇2V (X0) ( Xt − X0).A downside of this proposal is that implementing it requires expensive matrix operations (e.g., matrix exponentials) involving ∇2V (X0). Thus, we present an alternative higher-order proposal which is inspired by Picard iteration. Fix an integer L ≥ 1 and a starting point z = ( x, p ). Let Q be the distribution of the following linearized SDE: 
+
+dXℓt = P ℓt dt, dP ℓt = −(∇V (X0) + ∇2V (X0)( Xℓ−1 
+
+> t
+
+− X0) + γP ℓt ) d t + p2γ dBt , (4) 9with (X0 
+
+> t
+
+, P 0 
+
+> t
+
+) ≡ (x, 0) , Xℓ 
+
+> 0
+
+= x, P ℓ 
+
+> 0
+
+= p for ℓ ≥ 1, and (Xt, P t) = ( XLt , P Lt ). Note that Eq. (1) corresponds to 
+
+L = 1 .Appendix A.1 gives an explicit implementation of the refined ULD proposal which only uses the generalized first-order oracle (Definition 4). 
+
+FORS instantiation. Let 
+
+μt = 1
+
+√2γ
+
+∇V (Xt) − ∇ V (X0) − ∇ 2V (X0) ( XL−1 
+
+> t
+
+− X0) .
+
+Then, the ULD path measure P satisfies 
+
+dP
+
+dQ = exp 
+
+
+
+−
+
+Z T
+
+> 0
+
+⟨μt, dBt⟩ − 12
+
+Z T
+
+> 0
+
+∥μt∥2 dt
+
+
+
+,
+
+such that the process Bt = Bt + R t 
+
+> 0
+
+μs ds is a Brownian motion under P.We write the stochastic integral term as 
+
+I := 
+
+Z T
+
+> 0
+
+⟨μt, dBt⟩ =
+
+Z T
+
+> 0
+
+⟨∂tμt, B T − Bt⟩ dt , 
+
+where 
+
+∂tμt = 1
+
+√2γ
+
+∇2V (Xt) Pt − ∇ 2V (X0) P L−1
+
+> t
+
+ .
+
+Therefore, we can use the following estimator: 
+
+W (t; Z) := −T ⟨∂tμt, B T − Bt⟩ − T
+
+2 ∥μt∥2 .
+
+The Girsanov density is justified by an argument similar to Remark 2. 
+
+## 4.2 Analysis 
+
+We introduce the following standard assumption (Zhang et al., 2026). 
+
+Assumption 1 (Lipschitz Hessian under Frobenius norm) . V is three times continuously differentiable, and there is a constant βH > 0 such that, for all x, y ∈ Rd,
+
+∥∇ 2V (x) − ∇ 2V (y)∥F ≤ βH ∥x − y∥ .
+
+Equivalently, the third derivative tensor satisfies ∥∇ 3V (x)∥{1,2},{3} ≤ βH for any x ∈ Rd, where 
+
+∥T ∥{1,2},{3} := sup  
+
+> ∥A∥F≤1,∥u∥≤ 1
+> d
+
+X
+
+> i,j,k =1
+
+Tijk Aij uk .
+
+We define κH = CLSI β2/3 
+
+> H
+
+. Similar to prior analyses such as Zhang et al. (2026), we first present an error bound under a ∆-warm initialization. This is due to the use of change-of-measure arguments in order to apply the refined probabilistic tail inequalities implied by Assumption 1. 
+
+Theorem 4.1 (Simulation of ULD under higher-order smoothness) . Suppose that V is convex and β-smooth, that π satisfies PI with constant 1/α and γ ≍ √α, and that Assumption 1 holds. Suppose that initial distribution ν satisfies R2(ν ∥ π) ≤ ∆, q ≥ 2 is a constant, K, L ∈ N, U ≥ 1, δ ∈ (0 , 12 ], and ∆ ≥ 1. Define 
+
+ι = log( Kκd ∆/δ ) and ed = d + ∆ . If K ≤ UγT and 
+
+1
+
+T γ ≫ κ3/5 
+
+> H
+
+(d1/5 + ∆ 2/5) ι1/3 + κ 12 + 14L−1 ( ed ι 3) 14L−1 + κ 12 ι1/2 (5) 
+
++ κ 311 κ 311  
+
+> H
+
+ed 211 ι 111 + κ 13 κ 12 
+
+> H
+
+ed 16 U 13 ι + min 
+
+n
+
+κ 35 ed 15 ι 25 , κ 17 κ 37 
+
+> H
+
+( ed∆) 17 ι 27
+
+o
+
+,
+
+then running FORS as in Theorem B.11 for K iterations gives a distribution bν with Rq
+
+ bν ∥ PKT ν ≤ δ.
+
+10 Note that due to the ∆2/5 term, the overall dimension dependence is d1/5 only under a “crude” warm start 
+
+∆ = O(√d). Similarly to Zhang et al. (2026), we are able to show that FORS itself can produce this crude warm start (see Proposition D.6). A two-stage analysis then yields the following query complexity bound starting from a general initial distribution with O(d log κ) Rényi divergence, which can be achieved in the strongly log-concave case with a suitable Gaussian initialization. 
+
+Theorem 4.2 (Simulation of ULD from a cold start) . Suppose that V is convex and β-smooth, that π satisfies LSI with constant 1/α and γ ≍ √α, and that Assumption 1 holds. Let Rw(ν ∥ π) = O(d log κ) for a constant 
+
+w ≥ 52 . Then, using 
+
+eO
+
+ κ1/2 + κ3/5 
+
+> H
+
+d1/5 + κ1/3 (κH + κ3/11  
+
+> H
+
+) d2/11  log 2(1 /δ )
+
+
+
+queries, we can generate a sample from a distribution bν with Rw−1/2
+
+ bν ∥ π ≤ δ2.
+
+The proof is presented in Appendix D.3. We remark that by using this result to implement the RGO in the proximal sampler and using the convergence under PI in Chen et al. (2022), it would yield a high-accuracy sampler in the PI setting with dimension dependence d6/5, although we omit the details for brevity. With this approach, it also seems possible to further improve the dimension dependence under additional smoothness, namely bounds on ∇kV (k ≥ 3). We leave this as an open question. 
+
+# 5 Mirror Langevin 
+
+Consider a mirror map ϕ : X → R ∪ {∞} . Assume that ϕ is Legendre, so that ∇ϕ and ∇ϕ⋆ are inverse maps on the interiors of their domains. Let ϕ⋆ be the dual, set X ⋆ := int ( dom ϕ⋆), and let T = ∇ϕ⋆ : X ⋆ → X . We let ∥·∥ x denote the ∇2ϕ(x)-weighted norm at x, and ∥·∥ x, ∗ be the dual norm, i.e., the (∇2ϕ(x)) −1 weighted norm. The mirror Langevin diffusion can be written as follows: 
+
+dYt = −∇ V (T (Yt)) d t + √2 ∇T (Yt)−1/2 dBt . (6) Throughout this section, Yt denotes the dual process, Xt := T (Yt) denotes its primal image, and νt := Law (Xt).All divergences from π are taken between primal laws. 
+
+## 5.1 Proposal 
+
+Let P be the measure corresponding to the process (6) above. As the proposal, we consider the measure Q
+
+which describes the law of 
+
+dYt = √2 ∇T (Yt)−1/2 dBt .
+
+This proposal is the so-called mirror Brownian motion, and the assumption that it can be exactly simulated was used in Ahn and Chewi (2021). We will adopt this assumption in the present work. Fix a step length h > 0 and regard both path measures over the interval [0 , h ]. Now, define μt = 
+
+> 1√2
+
+∇T (Yt)1/2 ∇V (T (Yt)) . By Girsanov’s theorem, we have 
+
+dP
+
+dQ = exp 
+
+
+
+−
+
+Z h
+
+> 0
+
+⟨μt, dBt⟩ − 12
+
+Z h
+
+> 0
+
+∥μt∥2 dt
+
+
+
+.
+
+To produce an estimator for R h 
+
+> 0
+
+⟨μt, dBt⟩, first consider the generator of the proposal: 
+
+(Lf )( y) := tr  ∇T (y)−1 ∇2f (y) .
+
+11 We apply Itô’s formula to f (Y ) = V (T (Y )) :
+
+df (Yt) = 2 ⟨μt, dBt⟩ + Lf (Yt) d t . 
+
+Thus, 
+
+Z h
+
+> 0
+
+⟨μt, dBt⟩ = 12
+
+
+
+f (Yh) − f (Y0) −
+
+Z h
+
+> 0
+
+Lf (Yt) d t
+
+
+
+.
+
+The natural estimator for the Girsanov tilt factor is to take t ∼ unif[0 , h ] and then use 
+
+W (t, Y ) = − 12
+
+ f (Yh) − f (Y0) + h
+
+2
+
+ Lf (Yt) − ∥ μt∥2 .
+
+It is clearly unbiased. We will need to show that it has a bounded subexponential norm (which should scale with d even when T is the identity, because |∆V | ≤ dβ ). By the assumptions and argument of Ahn and Chewi (2021), we should be able to show that |⟨∇ 2f (Yt), ∇T (Yt)−1⟩| ≤ O(d), which in turn implies that 
+
+|f (Yh) − f (Y0)| ≤ O(hd ) in subexponential norm. It then suffices to choose h ≪ 1 
+
+> d
+
+to ensure the high-accuracy guarantee of FORS. The generator term causes Hessians of f to appear. If we do not want a Hessian oracle, we can apply the finite-difference machinery as with ULD: we aim to simulate an ultrafine discretization of ULD, replacing ULD here with the standard mirror Langevin discretization. 
+
+## 5.2 Analysis 
+
+Assumption 2 (Ahn–Chewi) . Suppose that ϕ is Mϕ-self-concordant: for all x ∈ X and u, v, w ∈ Rd,
+
+|∇ 3ϕ(x)[ u, v, w ]| ≤ 2Mϕ ∥u∥x ∥v∥x ∥w∥x .
+
+Furthermore, assume V is convex and β-smooth relative to ϕ, and L-relatively Lipschitz, meaning in particular that 
+
+sup 
+
+> x∈X
+
+∥∇ V (x)∥x, ∗ ≤ L. 
+
+We now quote the following continuous-time result from Chewi et al. (2020). 
+
+Lemma 5.1 (Adapted from (Chewi et al., 2020, Theorem 1)) . If, in addition to convexity, we assume that 
+
+V is α-strongly convex relative to ϕ, i.e., ∇2V ⪰ α∇2ϕ, and if Yt solves (6) and νt = Law( T (Yt)) , then 
+
+Dχ2 (νt ∥ π) ≤ e−2αt Dχ2 (ν0 ∥ π) .
+
+Proof. This is Chewi et al. (2020, Theorem 1), specialized to the relative strong convexity parameter α.Their dissipation calculation gives 
+
+ddt Dχ2
+
+ νt ∥ π ≤ − 2αD χ2 (νt ∥ π) .
+
+The claim follows from Grönwall’s inequality. As remarked in Ahn and Chewi (2021) and subsequent works, one might hope for exponential convergence in Rényi divergences via an analogue of the log-Sobolev inequality. Unfortunately, such an inequality will not hold generally, even under the strong relative convexity assumptions. An alternative convergence bound controls the DKL divergence in terms of the initial Bregman divergence, defined as follows. 12 Definition 5. The ϕ-Bregman divergence between two points is given by 
+
+Dϕ(x ∥ y) = ϕ(x) − ϕ(y) − ⟨∇ ϕ(y), x − y⟩ ,
+
+and the ϕ-Bregman transport cost is 
+
+Breg ϕ(μ ∥ ν) = inf  
+
+> γ∈Γ( μ,ν )
+
+E(x,y )∼γ Dϕ(x ∥ y) ,
+
+where Γ( μ, ν ) is as usual the set of admissible couplings between the two measures. 
+
+We now state the following infinitesimal version of (Ahn and Chewi, 2021). 
+
+Lemma 5.2. Suppose that νt is the law of an iterate following the mirror Langevin diffusion in continuous time, that π ∝ exp (−V ) is the stationary measure in primal coordinates, and that V is α-strongly convex relative to ϕ. Then, 
+
+DKL (νt ∥ π) ≤ − ∂tBreg ϕ(π ∥ νt) − αBreg ϕ(π ∥ νt) ,
+
+for all t ≥ 0. Integrating, we obtain the bounds 
+
+DKL (νT ∥ π) ≤ Breg ϕ(π ∥ ν0)
+
+T , if α = 0 , DKL (νT ∥ π) ≤ αBreg ϕ(π ∥ ν0)
+
+eαT − 1 , if α > 0.
+
+The proof is presented in Appendix E.2. Putting this together, we obtain our final result for this section. 
+
+Theorem 5.3. Suppose that Assumption 2 holds and that, additionally, V is α-strongly convex relative to 
+
+ϕ. Set ¯d := ( β + 2 LM ϕ) d + L2, and let bν denote the output of the FORS-corrected mirror Langevin process started at ν0. Assume also that the null mirror diffusion can be sampled at every finite collection of requested times and that the quantities within the estimator W can be evaluated exactly. If α > 0, then, with probability 
+
+1 − ζ, the query complexity required to obtain R3/2
+
+ bν ∥ π ≤ ε2 is 
+
+Nquery = eO
+
+ ¯dα polylog( ε−2, D χ2 (ν0 ∥ π), ζ −1)
+
+
+
+.
+
+Alternatively, if α > 0, a measure bν obtained using a procedure similar to the one above satisfies DTV 
+
+ bν, π 2
+
+≤ ε2, with query complexity bounded, with probability 1 − ζ, by 
+
+Nquery = eO
+
+ ¯dα polylog( ε−2, Breg ϕ(π ∥ ν0), ζ −1)
+
+
+
+,
+
+where ¯d is defined as above. If α ≡ 0, then the complexity is instead linear in the initialization: 
+
+Nquery = eO
+
+ ¯d Breg ϕ(π ∥ ν0)
+
+ε2 polylog( ζ−1)
+
+
+
+,
+
+The FORS parameters—the step size, clipping parameter, and number of iterations—are given in the proof below. 
+
+The proof is presented in Appendix E.3. We briefly compare against the result of Srinivasan et al. (2024), which obtains a polylogarithmic ε-dependence under similar assumptions based on a simple Metropolization of a mirror Langevin discretization. They do not assume access to an exact simulator for the null potential mirror diffusion. Their dimension dependence is d3, whereas we improve this to near-linear in our setting. Finally, their ε-dependence remains polylogarithmic in the α = 0 setting, whereas we incur polynomial dependence. 13 6 Fisher information bounds for non-log-concave sampling 
+
+The complexity of non-convex optimization is often measured in terms of the number of queries to reach an approximate stationary point. Analogously, as put forth in Balasubramanian et al. (2022), we can view a measure μ with small FI (μ ∥ π) as a notion of approximate first-order stationarity for sampling, and thereby develop a quantitative theory for non-log-concave sampling. Recently, the work of Chewi and Wibisono (2026) reduced the problem of obtaining Fisher information guarantees to high-accuracy log-concave sampling. Namely, they relied on the following assumption. 
+
+Assumption 3. There exists a sampling algorithm Alg with the following property: for any 1-strongly log-concave and 3-log-smooth distribution π with mode at the origin and any tolerance δ > 0, the algorithm returns a sample with distribution bπ such that R3
+
+ bπ ∥ π ≤ δ2.
+
+They also assumed access to a proximal oracle for f .
+
+Definition 6. The proximal oracle for a function f with step size h outputs the minimizer: 
+
+prox f,h (x) = arg min 
+
+> y∈Rd
+
+f (y) + 12h ∥y − x∥2 .
+
+When f is β-smooth and we take h = 12β , then the computation of prox f,h is a strongly convex optimization problem, so this is not a restrictive assumption. They established the following theorem. 
+
+Theorem 6.1 (Adapted from Chewi and Wibisono (2026, Theorem 2)) . Suppose that the target distribution 
+
+π ∝ exp (−V ) is β-smooth. Suppose that we have access to an initial distribution μ0 with KL 0 = DKL (μ0 ∥ π)
+
+and ∆0 = R2(μ0 ∥ π). Under Assumption 3, there exists an algorithm that returns a sample from bπ with 
+
+FI (bπ ∥ π) ≤ ε2, using O(β KL 0/ε 2) queries each to the proximal oracle with step size 12β and to Alg . Each call to Alg is made with a tolerance δRGO satisfying 
+
+δ−1RGO = poly  1 + ∆ 0, β/ε 2, d .
+
+The reduction uses the smoothed approximate RGO and returns an iterate from the proximal sampler. 
+
+Since we have improved the complexity of high-accuracy log-concave sampling, this reduction can be combined directly with the bounds in Theorem 3.2 to give the following new state-of-the-art Fisher information guarantee for non-log-concave sampling. 
+
+Theorem 6.2. Suppose that the target distribution π ∝ exp (−V ) is β-smooth. Suppose that we have access to an initial distribution μ0 with KL 0 = DKL (μ0 ∥ π) and ∆0 = R2(μ0 ∥ π). Let M ≥ 1 denote the number of approximate RGO calls prescribed by Theorem 6.1, so that M = O(1 + β KL 0/ε 2). Then, there is an algorithm that returns a sample from bπ with 
+
+FI (bπ ∥ π) ≤ ε2
+
+using 
+
+eO
+
+
+
+M
+
+
+
+d1/3 + log( M/p )
+
+ 
+
+first-order oracle calls with probability 1 − p for p ∈ (0 , 1] , and M calls to the proximal oracle. The eO(·)
+
+notation hides polylogarithmic factors in d, β, 1 + ∆ 0, KL 0, and 1/ε .
+
+The proof is presented in Appendix F. If the additional Hessian Lipschitz condition in Assumption 1 is available for the RGO subproblems, one can replace the use of Theorem 3.2 in the preceding paragraph by Theorem 4.2, yielding the corresponding improved dimension dependence from Theorem 4.2. In particular, if the rescaled RGO potentials have uniformly bounded normalized parameter κF , the factor d1/3 above can be replaced by d1/5. For an original Hessian-Lipschitz constant βF , this normalized condition is β2/3 
+
+> F
+
+/β = O(1) .14 References 
+
+Radosław Adamczak, Rafał Latała, and Rafał Meller. Hanson–Wright inequality in Banach spaces. Annales de l’Institut Henri Poincaré, Probabilités et Statistiques , 56(4):2356–2376, 2020. Kwangjun Ahn and Sinho Chewi. Efficient constrained sampling via the mirror-Langevin algorithm. Advances in Neural Information Processing Systems , 34:28405–28418, 2021. Dallas Albritton, Scott Armstrong, Jean-Christophe Mourrat, and Matthew Novack. Variational methods for the kinetic Fokker–Planck equation. Anal. PDE , 17(6):1953–2010, 2024. Jason M. Altschuler and Sinho Chewi. Faster high-accuracy log-concave sampling via algorithmic warm starts. J. ACM , 71(3), 6 2024. Jason M. Altschuler and Sinho Chewi. Shifted composition I: Harnack and reverse transport inequalities. 
+
+IEEE Transactions on Information Theory , 71(1):90–113, 2025. Jason M. Altschuler and Sinho Chewi. Shifted composition III: local error framework for KL divergence. 
+
+Found. Comput. Math. , 2026. Jason M. Altschuler and Pablo A. Parrilo. Acceleration by stepsize hedging: silver stepsize schedule for smooth convex optimization. Math. Program. , 213(1-2):1105–1118, 2025. Jason M. Altschuler, Sinho Chewi, and Matthew S. Zhang. Shifted composition IV: toward ballistic acceleration for log-concave sampling. In Proceedings of the 58th Annual ACM Symposium on Theory of Computing ,pages 1739–1750, 2026. Dominique Bakry, Ivan Gentil, and Michel Ledoux. Analysis and geometry of Markov diffusion operators ,volume 348 of Grundlehren der Mathematischen Wissenschaften [Fundamental Principles of Mathematical Sciences] . Springer, Cham, 2014. Krishna Balasubramanian, Sinho Chewi, Murat A. Erdogdu, Adil Salim, and Matthew S. Zhang. Towards a theory of non-log-concave sampling: first-order stationarity guarantees for Langevin Monte Carlo. In Po-Ling Loh and Maxim Raginsky, editors, Proceedings of Thirty Fifth Conference on Learning Theory ,volume 178 of Proceedings of Machine Learning Research , pages 2896–2923. PMLR, 7 2022. Alexandros Beskos and Gareth O. Roberts. Exact simulation of diffusions. The Annals of Applied Probability ,15(4):2422–2444, 2005. Alexandros Beskos, Omiros Papaspiliopoulos, and Gareth O. Roberts. Retrospective exact simulation of diffusion sample paths with applications. Bernoulli , 12(6):1077–1098, 2006. Alexandros Beskos, Natesh S. Pillai, Gareth O. Roberts, Jesús M. Sanz-Serna, and Andrew M. Stuart. Optimal tuning of the hybrid Monte Carlo algorithm. Bernoulli , 19(5A):1501–1534, 2013. Giovanni Brigati. Time averages for kinetic Fokker–Planck equations. Kinet. Relat. Models , 16(4):524–539, 2023. Steve Brooks, Andrew Gelman, Galin Jones, and Xiao-Li Meng. Handbook of Markov Chain Monte Carlo .CRC press, 2011. Yu Cao, Jianfeng Lu, and Lihan Wang. On explicit L2-convergence rate estimate for underdamped Langevin dynamics. Arch. Ration. Mech. Anal. , 247(5):90, 2023. Fan Chen, Sinho Chewi, Constantinos Daskalakis, and Alexander Rakhlin. High-accuracy sampling for diffusion models and log-concave distributions. arXiv preprint arXiv:2602.01338 , 2026a. Fan Chen, Sinho Chewi, Constantinos Daskalakis, and Alexander Rakhlin. High-accuracy log-concave sampling with stochastic queries. In Steve Hanneke and Tor Lattimore, editors, Proceedings of Thirty Ninth Conference on Learning Theory , volume 336 of Proceedings of Machine Learning Research , pages 1341–1372. PMLR, 2026b. 15 Fang Chen, László Lovász, and Igor Pak. Lifting Markov chains to speed up mixing. In Annual ACM Symposium on Theory of Computing (Atlanta, GA, 1999) , pages 275–281. ACM, New York, 1999. Yongxin Chen, Sinho Chewi, Adil Salim, and Andre Wibisono. Improved analysis for a proximal algorithm for sampling. In Po-Ling Loh and Maxim Raginsky, editors, Proceedings of Thirty Fifth Conference on Learning Theory , volume 178 of Proceedings of Machine Learning Research , pages 2984–3014. PMLR, 7 2022. Yuansi Chen and Khashayar Gatmiry. A simple proof of the mixing of Metropolis-adjusted Langevin algorithm under smoothness and isoperimetry. arXiv preprint arXiv:2304.04095 , 2023. Yuansi Chen, Raaz Dwivedi, Martin J. Wainwright, and Bin Yu. Fast mixing of Metropolized Hamiltonian Monte Carlo: benefits of multi-step gradients. Journal of Machine Learning Research , 21(92):1–72, 2020. Yuansi Chen, Khashayar Gatmiry, and Minhui Jiang. When does Metropolized Hamiltonian Monte Carlo provably outperform Metropolis-adjusted Langevin algorithm? arXiv preprint 2304.04724 , 2026c. Sinho Chewi. Log-concave sampling . Forthcoming, 2026. Available online at https://chewisinho.github.io/ .Sinho Chewi and Andre Wibisono. Complexity of non-log-concave sampling in Fisher information. arXiv preprint arXiv:2605.15859 , 2026. Sinho Chewi, Thibaut Le Gouic, Chen Lu, Tyler Maunu, Philippe Rigollet, and Austin Stromme. Exponential ergodicity of mirror-Langevin diffusions. Advances in Neural Information Processing Systems , 33:19573– 19585, 2020. Sinho Chewi, Chen Lu, Kwangjun Ahn, Xiang Cheng, Thibaut Le Gouic, and Philippe Rigollet. Optimal dimension dependence of the Metropolis-adjusted Langevin algorithm. In Mikhail Belkin and Samory Kpotufe, editors, Proceedings of Thirty Fourth Conference on Learning Theory , volume 134 of Proceedings of Machine Learning Research , pages 1260–1300. PMLR, 8 2021. Sinho Chewi, Jaume De Dios Pont, Jerry Li, Chen Lu, and Shyam Narayanan. Query lower bounds for log-concave sampling. In 2023 IEEE 64th Annual Symposium on Foundations of Computer Science (FOCS) ,pages 2139–2148, 2023a. Sinho Chewi, Patrik Gerber, Holden Lee, and Chen Lu. Fisher information lower bounds for sampling. In 
+
+International Conference on Algorithmic Learning Theory , pages 375–410. PMLR, 2023b. Persi Diaconis, Susan Holmes, and Radford M. Neal. Analysis of a nonreversible Markov chain sampler. Ann. Appl. Probab. , 10(3):726–752, 2000. Raaz Dwivedi, Yuansi Chen, Martin J. Wainwright, and Bin Yu. Log-concave sampling: Metropolis–Hastings algorithms are fast. Journal of Machine Learning Research , 20(183):1–42, 2019. Andreas Eberle and Francis Lörler. Space-time divergence lemmas and optimal non-reversible lifts of diffusions on Riemannian manifolds with boundary. Journal of Functional Analysis , 291(9):111605, 2026a. Andreas Eberle and Francis Lörler. Non-reversible lifts of reversible diffusion processes and relaxation times. 
+
+Probability Theory and Related Fields , 194:173–203, 2026b. Andreas Eberle, Arnaud Guillin, Leo Hahn, Francis Lörler, and Manon Michel. Convergence of non-reversible Markov processes via lifting and flow Poincaré inequality. arXiv preprint 2503.04238 , 2025. Jiaojiao Fan, Bo Yuan, and Yongxin Chen. Improved dimension dependence of a proximal algorithm for sampling. In Gergely Neu and Lorenzo Rosasco, editors, Proceedings of Thirty Sixth Conference on Learning Theory , volume 195 of Proceedings of Machine Learning Research , pages 1473–1521. PMLR, 7 2023. Zexi Fan, Bowen Li, and Jianfeng Lu. Sharp hypocoercive convergence estimates for underdamped Langevin dynamics via the modified L2 method. arXiv preprint 2604.10068 , 2026. Khashayar Gatmiry and Santosh S. Vempala. Convergence of the Riemannian Langevin algorithm. arXiv preprint arXiv:2204.10818 , 2022. 16 Flávio B. Gonçalves, Krzysztof Łatuszyński, and Gareth O. Roberts. Barker’s algorithm for Bayesian inference with intractable likelihoods. Brazilian Journal of Probability and Statistics , 31(4):732–745, 2017. Flávio B. Gonçalves, Krzysztof Łatuszyński, and Gareth O. Roberts. Exact Monte Carlo likelihood-based inference for jump-diffusion processes. Journal of the Royal Statistical Society Series B: Statistical Methodology , 85(3):732–756, 2023. W. Keith Hastings. Monte Carlo sampling methods using Markov chains and their applications. Biometrika ,57(1):97–109, 1970. Qijia Jiang. Mirror Langevin Monte Carlo: the case under isoperimetry. Advances in Neural Information Processing Systems , 34:715–725, 2021. Richard Jordan, David Kinderlehrer, and Felix Otto. The variational formulation of the Fokker–Planck equation. SIAM J. Math. Anal. , 29(1):1–17, 1998. Dwija Kakkad and Dootika Vats. Exact MCMC for intractable proposals. Japanese Journal of Statistics and Data Science , 2026. Yunbum Kook. Complexity of log-concave sampling and applications . PhD thesis, Georgia Institute of Technology, 2026. Yin Tat Lee, Ruoqi Shen, and Kevin Tian. Logsmooth gradient concentration and tighter runtimes for Metropolized Hamiltonian Monte Carlo. In Jacob Abernethy and Shivani Agarwal, editors, Proceedings of Thirty Third Conference on Learning Theory , volume 125 of Proceedings of Machine Learning Research ,pages 2565–2597. PMLR, 7 2020. Yin Tat Lee, Ruoqi Shen, and Kevin Tian. Structured logconcave sampling with a restricted Gaussian oracle. In Mikhail Belkin and Samory Kpotufe, editors, Proceedings of Thirty Fourth Conference on Learning Theory , volume 134 of Proceedings of Machine Learning Research , pages 2993–3050. PMLR, 8 2021. Joseph Lehec. Convergence in total variation for the kinetic Langevin algorithm. Math. Stat. Learn. , 8(1-2): 71–104, 2025. Bowen Li and Jianfeng Lu. Space-time log-Sobolev inequality and hypocoercive hypercontractivity for underdamped Langevin dynamics. arXiv preprint 2605.25083 , 2026. Ruilin Li, Molei Tao, Santosh S. Vempala, and Andre Wibisono. The mirror Langevin algorithm converges with vanishing bias. In International Conference on Algorithmic Learning Theory , pages 718–742. PMLR, 2022. Linghai Liu and Sinho Chewi. A proximal gradient algorithm for composite log-concave sampling. arXiv preprint 2605.12461 , 2026. Jianfeng Lu. A sharp hypocoercive entropy decay estimate for underdamped Langevin dynamics. arXiv preprint 2605.01933 , 2026. Jianfeng Lu and Yinchen Luo. Windowed thinning and query complexity for the bouncy particle and zigzag samplers. arXiv preprint 2607.28413 , 2026. Jianfeng Lu and Lihan Wang. On explicit L2-convergence rate estimate for piecewise deterministic Markov processes in MCMC algorithms. Ann. Appl. Probab. , 32(2):1333–1361, 2022a. Jianfeng Lu and Lihan Wang. Complexity of zigzag sampling algorithm for strongly log-concave distributions. 
+
+Stat. Comput. , 32(3):Paper No. 48, 12, 2022b. Nicholas Metropolis, Arianna W. Rosenbluth, Marshall N. Rosenbluth, Augusta H. Teller, and Edward Teller. Equation of state calculations by fast computing machines. The Journal of Chemical Physics , 21(6): 1087–1092, 1953. Siddharth Mitra, Vishwak Srinivasan, Xiuyuan Wang, and Andre Wibisono. Accelerated mixing time of randomized Hamiltonian Monte Carlo. arXiv preprint 2607.12902 , 2026. 17 Pierre Monmarché and Lihan Wang. On the entropic convergence for piecewise deterministic samplers: speedup and obstruction. arXiv preprint 2606.26086 , 2026. Pierre Monmarché. Nesterov acceleration for the Wasserstein minimization of displacement-convex free energies. arXiv preprint 2605.13186 , 2026. Yurii E. Nesterov. A method for solving the convex programming problem with convergence rate O(1 /k 2).
+
+Dokl. Akad. Nauk SSSR , 269(3):543–547, 1983. Omiros Papaspiliopoulos. Monte Carlo probabilistic inference for diffusion processes: a methodological framework. In Bayesian time series models , pages 82–103. Cambridge Univ. Press, Cambridge, 2011. Iosif Pinelis. Optimum bounds for the distributions of martingales in Banach spaces. The Annals of Probability ,22(4):1679–1706, 1994. Gareth O. Roberts and Jeffrey S. Rosenthal. Optimal scaling of discrete approximations to Langevin diffusions. 
+
+Journal of the Royal Statistical Society: Series B (Statistical Methodology) , 60(1):255–268, 1998. Vishwak Srinivasan, Andre Wibisono, and Ashia Wilson. Fast sampling from constrained spaces using the Metropolis-adjusted mirror Langevin algorithm. In Shipra Agrawal and Aaron Roth, editors, Proceedings of Thirty Seventh Conference on Learning Theory , volume 247 of Proceedings of Machine Learning Research ,pages 4593–4635. PMLR, 7 2024. Weijie Su, Stephen Boyd, and Emmanuel J. Candès. A differential equation for modeling Nesterov’s accelerated gradient method: theory and insights. J. Mach. Learn. Res. , 17:Paper No. 153, 43, 2016. Dootika Vats, Flávio B. Gonçalves, Krzysztof Łatuszyński, and Gareth O. Roberts. Efficient Bernoulli factory Markov chain Monte Carlo for intractable posteriors. Biometrika , 109(2):369–385, 2022. Cédric Villani. Hypocoercivity. Mem. Amer. Math. Soc. , 202(950):iv+141, 2009. Wolfgang Wagner. Monte Carlo evaluation of functionals of solutions of stochastic differential equations. Variance reduction and numerical examples. Stochastic Anal. Appl. , 6(4):447–468, 1988. Andre Wibisono. Sampling as optimization in the space of measures: the Langevin dynamics as a composite optimization problem. In Sébastien Bubeck, Vianney Perchet, and Philippe Rigollet, editors, Proceedings of the 31st Conference on Learning Theory , volume 75 of Proceedings of Machine Learning Research , pages 2093–3027. PMLR, 7 2018. Keru Wu, Scott Schmidler, and Yuansi Chen. Minimax mixing time of the Metropolis-adjusted Langevin algorithm for log-concave sampling. Journal of Machine Learning Research , 23(270):1–63, 2022. Kelvin Shuangjian Zhang, Gabriel Peyré, Jalal Fadili, and Marcelo Pereyra. Wasserstein control of mirror Langevin Monte Carlo. In Conference on learning theory , pages 3814–3841. PMLR, 2020. Matthew S. Zhang, Jason M. Altschuler, and Sinho Chewi. Algorithmic warm starts for Hamiltonian Monte Carlo. arXiv preprint arXiv:2603.22741 , 2026. 
+
+# A Implementation 
+
+## A.1 Implementation of the refined ULD proposal 
+
+We write 
+
+g0 := ∇V (X0), H0 := ∇2V (X0), U ℓt := Xℓt − X0 .
+
+The iterative proposal in (4) is 
+
+dU ℓt = P ℓt dt, dP ℓt = −(g0 + H0U ℓ−1 
+
+> t
+
++ γP ℓt ) d t + p2γ dBt ,
+
+with U 0 
+
+> t
+
+≡ 0, U ℓ 
+
+> 0
+
+= 0 , and P ℓ 
+
+> 0
+
+= P0. We now give an explicit formula that avoids exponentiating any matrix depending on H0.18 Let 
+
+at := 1 − e−γt 
+
+γ ,
+
+and let K denote the scalar convolution operator 
+
+(Kf )( t) := 
+
+Z t
+
+> 0
+
+at−sf (s) d s . 
+
+For j ≥ 0, define scalar functions 
+
+Aj (t) := ( Kj a)( t), Bj (t) := 
+
+Z t
+
+> 0
+
+Aj (s) d s, Cj (t) := ˙Aj (t) .
+
+These coefficients are completely explicit, namely, 
+
+Aj (t) = 
+
+> j+1
+
+X
+
+> k=1
+
+2j + 1 − kj + 1 − k
+
+ (−1) j+1 −k + ( −1) j+1 e−γt 
+
+γ2j+2 −k
+
+tk−1
+
+(k − 1)! ,
+
+and 
+
+Bj (t) = 
+
+> j+2
+
+X
+
+> k=1
+
+(−1) j+2 −k
+
+2j + 2 − kj + 2 − k
+
+ tk−1
+
+γ2j+3 −k(k − 1)! + e−γt j+1 X
+
+> k=1
+
+(−1) j+2 
+
+2j + 2 − kj + 1 − k
+
+ tk−1
+
+γ2j+3 −k(k − 1)! .
+
+Finally, define the Gaussian convolution variables 
+
+ΞXj (t) := p2γ
+
+Z t
+
+> 0
+
+Aj (t − s) d Bs ,
+
+ΞPj (t) := p2γ
+
+Z t
+
+> 0
+
+Cj (t − s) d Bs .
+
+Then, for every ℓ ≥ 1,
+
+Xℓt = X0 +
+
+> ℓ−1
+
+X
+
+> j=0
+
+(−H0)j Aj (t) P0 − Bj (t) g0 + Ξ Xj (t) , (7) 
+
+P ℓt =
+
+> ℓ−1
+
+X
+
+> j=0
+
+(−H0)j Cj (t) P0 − Aj (t) g0 + Ξ Pj (t) . (8) For any finite set of times, the family 
+
+ΞXj (t), ΞPj (t) : 0 ≤ j ≤ L − 1
+
+is jointly Gaussian with covariances 
+
+Cov  ΞXi (t), ΞXj (s) = 2 γ
+
+Z t∧s
+
+> 0
+
+Ai(t − r) Aj (s − r) d r I , 
+
+Cov  ΞPi (t), ΞPj (s) = 2 γ
+
+Z t∧s
+
+> 0
+
+Ci(t − r) Cj (s − r) d r I , 
+
+Cov  ΞXi (t), ΞPj (s) = 2 γ
+
+Z t∧s
+
+> 0
+
+Ai(t − r) Cj (s − r) d r I . 
+
+These covariance matrices are scalar multiples of I and depend only on the one-dimensional kernels above, not on H0. Hence, conditional sampling of any finite collection of coordinates of the path reduces to Gaussian conditioning for these scalar convolution variables, followed by the deterministic polynomial map (7)–(8). 19 A.2 Examples of implementable mirror diffusions 
+
+In this section, we give examples of mirror maps ϕ for which we can implement the exact mirror diffusion. 
+
+One-dimensional examples. For 1 ≤ m ≤ 2, consider the family 
+
+ϕm : R>0 → R , ϕm(x) := 
+
+
+
+x log x − x , m = 1 ,
+
+−x2−m/[( m − 1) (2 − m)] , m ∈ (1 , 2) ,
+
+− log x , m = 2 .
+
+Then, ϕ′′ 
+
+> m
+
+(x) = x−m. In primal coordinates, the mirror diffusion becomes 
+
+dXt = m X m−1 
+
+> t
+
+dt + √2 Xm/ 2 
+
+> t
+
+dBt .
+
+After the transformation S := 2 X2−m/(2 − m)2, this becomes 
+
+dSt = 22 − m dt + 2 pSt dBt ,
+
+which is called a squared Bessel process. Its transition densities are non-central χ2 distributions and are therefore explicit. In the case m = 2 , we instead have 
+
+dXt = 2 Xt dt + √2 Xt dBt ,
+
+which is a geometric Brownian motion with 
+
+Xt = X0 exp( t + √2 Bt) .
+
+Direct sum. If ϕ1, . . . , ϕ k are mirror maps, then the mirror diffusion corresponding to (x1, . . . , x k) 7 →
+
+Pki=1 ϕi(xi) consists of coordinatewise mirror diffusions corresponding to the maps ϕi.
+
+Invertible linear transformation. If A : Rd → Rd is invertible and b ∈ Rd, then the mirror diffusion corresponding to ϕ(x) = ψ(Ax + b) is obtained by running the mirror diffusion for ψ in the coordinate 
+
+U = Ax + b (up to an orthogonal rotation of Brownian motion) and returning X = A−1(U − b).Combined with the preceding cases, a constraint set {x : Ax > b }, with A square and invertible, is handled by taking ϕ(x) = ψ(Ax − b) and returning X = A−1(U + b).
+
+# B Technical tools 
+
+## B.1 Bounds for underdamped Langevin dynamics 
+
+The following lemma is standard (e.g., Chewi, 2026, Lemma 6.2.7). 
+
+Lemma B.1. Under the distribution π, it holds that 
+
+E(x,p )∼π EZ∼Pz exp 
+
+ 14 ∥Pt∥2
+
+
+
+≤ exp( d), E(x,p )∼π exp 
+
+ 18β ∥∇ V (x)∥2
+
+
+
+≤ exp( d).
+
+In particular, for R(z) = ∥p∥2 + β−1∥∇ V (x)∥2 + d, it holds that for δ ∈ (0 , 1) ,
+
+π(z : R(z) ≥ 20( d + log(1 /δ ))) ≤ δ. 
+
+Proof. Since π is invariant for ULD, Pt ∼ N(0 , I ) under the stationary path law. Hence 
+
+Ez∼π EPz exp 
+
+ 14 ∥Pt∥2
+
+
+
+= 2 d/ 2 ≤ ed .
+
+20 For the second estimate, Chewi (2026, Lemma 6.2.7) shows that ∇V (X) is √β-sub-Gaussian when X ∼ μV .If G ∼ N(0 , I ) is independent of X, this sub-Gaussian estimate give 
+
+EμV exp 
+
+ 18β ∥∇ V (X)∥2
+
+
+
+= EμV EG exp 
+
+ 12√β ⟨G, ∇V (X)⟩
+
+
+
+≤ EG exp 
+
+ 18 ∥G∥2
+
+
+
+=
+
+ 43
+
+d/ 2
+
+≤ ed .
+
+Finally, X and P are independent under π, and the estimates above imply 
+
+Eπ exp 
+
+ 18
+
+ ∥P ∥2 + β−1∥∇ V (X)∥2
+
+≤ e5d/ 4 .
+
+If A := d + log (1 /δ ), then R ≥ 20 A implies ∥P ∥2 + β−1∥∇ V (X)∥2 ≥ 20 A − d. Markov’s inequality therefore bounds the probability of this event by 
+
+exp 
+
+ 54 d − 20 A − d
+
+8
+
+
+
+≤ δ . 
+
+We note that under z ∼ π, we have Xt ⊥ Pt marginally, and Pt ∼ N(0 , I ). Therefore, we may combine Lemma B.6 with the standard change-of-measure argument to prove the following lemma. 
+
+Lemma B.2. There is an absolute constant C > 0 such that, for every t ≥ 0, every ν ≪ π with R1.5(ν ∥ π) <
+
+∞, and every measurable F : Rd → Rd×d,
+
+Ez∼ν EPz exp 
+
+ 1
+
+Cβ H
+
+∥∇ 3V (Xt)[ Pt, P t]∥
+
+
+
+≤ exp 
+
+
+
+C√d + 13 R1.5(ν ∥ π)
+
+
+
+,
+
+Ez∼ν EPz exp 
+
+ 1
+
+Cβ Hβ ∥∇ 3V (Xt)[ Pt, ∇2V (Xt)Pt]∥
+
+
+
+≤ exp 
+
+
+
+C√d + 13 R1.5(ν ∥ π)
+
+
+
+,
+
+Ez∼ν EPz exp 
+
+ 1
+
+C∥F (Xt)∥2F
+
+∥F (Xt)Pt∥2
+
+
+
+≤ exp 
+
+
+
+C + 13 R1.5(ν ∥ π)
+
+
+
+.
+
+In the last display, the quotient is defined to be zero when ∥F (Xt)∥F = 0 .
+
+Proof. Let νt := Ptν and rt := d νt/dπ. By stationarity and data processing, 
+
+R3/2
+
+ νt ∥ π ≤ R3/2(ν ∥ π) .
+
+Consequently, for every non-negative measurable H, Hölder’s inequality gives 
+
+Eνt eH ≤
+
+
+
+Eπ r3/2
+
+> t
+
+2/3 Eπ e3H 1/3 ≤ exp 
+
+ 13 R3/2(ν ∥ π)
+
+ Eπ e3H 1/3 . (9) Under π, Xt and Pt are independent and Pt ∼ N(0 , I ). Conditional on Xt = x, Lemma B.6 with A = I gives 
+
+P
+
+
+
+∥∇ 3V (x)[ Pt, P t]∥ ≳ βH
+
+√d + u
+
+ 
+
+≤ e−u , u ≥ 1 .
+
+The same result with A = ∇2V (x), together with ∥∇ 2V (x)∥op ≤ β, gives the analogous bound with scale 
+
+βHβ. Integrating these two tail bounds shows that the corresponding exponential moments under π are at most exp (C√d) after enlarging by a universal constant C. Finally, conditional on Xt = x, the standard Gaussian quadratic-form identity gives 
+
+E exp 
+
+ ∥F (x)Pt∥2
+
+C∥F (x)∥2F
+
+
+
+≤ eC
+
+for a universal C, with the stated convention when F (x) = 0 . Applying (9) in the three cases proves the claim. 21 B.2 Concentration inequalities 
+
+Lemma B.3. Let (Bt)t≥0 be standard d-dimensional Brownian motion. For every T ≥ 0 and δ ∈ (0 , 1) , with probability at least 1 − δ,
+
+max  
+
+> 0≤t≤T
+
+∥Bt∥2 ≲ T (d + log(1 /δ )) .
+
+Proof. This is the estimate in Chewi (2026, Lemma 6.2.4). Indeed, that result with λ = 1 /(4 T ) gives 
+
+E exp 
+
+ 14T max  
+
+> 0≤t≤T
+
+∥Bt∥2
+
+
+
+≤ 3d .
+
+Markov’s inequality proves the result. The case T = 0 is immediate. The following result is a special case of Pinelis (1994, Theorem 3.5). 
+
+Lemma B.4. Fix T > 0. Let (Bt)t≥0 be standard d-dimensional Brownian motion, and let (Jt)t≥0 be an 
+
+Rd×d-valued process that is predictable with respect to the filtration of (Bt)t≥0 and satisfies R T 
+
+> 0
+
+∥Js∥2F ds < ∞
+
+almost surely. Denote Zt := R t 
+
+> 0
+
+Js dBs and Mt := R t 
+
+> 0
+
+∥Js∥2F ds. Then, for every L > 0 and δ ∈ (0 , 1) ,
+
+P
+
+
+
+max  
+
+> 0≤t≤T
+
+∥Zt∥2 ≥ 2L log(2 /δ ), M T ≤ L
+
+
+
+≤ δ . 
+
+Proof. Stop the Hilbert-valued continuous martingale Z when Mt first exceeds L. The stopped martingale has quadratic characteristic at most L, so Pinelis (1994, Theorem 3.5) gives 
+
+P
+
+
+
+max  
+
+> 0≤t≤T
+
+∥Zt∥ ≥ u, M T ≤ L
+
+
+
+≤ 2 exp 
+
+
+
+− u2
+
+2L
+
+
+
+.
+
+Taking u = p2L log(2 /δ ) proves the claim. 
+
+Lemma B.5 (Hilbert-valued Gaussian Hanson–Wright inequality) . Let H be a Hilbert space and let (aij )di,j =1 
+
+be a symmetric matrix with entries in H. Let g ∼ N (0 , I ) and define 
+
+Z := 
+
+> d
+
+X
+
+> i,j =1
+
+aij (gigj − 1i=j )
+
+> H
+
+.
+
+Then, for all δ ∈ (0 , 1/2) , with probability at least 1 − δ,
+
+Z ≲ EZ + R + U
+
+r
+
+log 1
+
+δ + V log 1
+
+δ ,
+
+where 
+
+R := E X
+
+> i̸=j
+
+aij Gij 
+
+> H
+
+,
+
+with (Gij )i̸ =j i.i.d. N (0 , 1) , and 
+
+U := sup 
+
+> ∥x∥≤ 1
+
+E
+
+> d
+
+X
+
+> i,j =1
+
+aij xigj
+
+> H
+
++ sup  
+
+> ∥B∥F≤1
+> d
+
+X
+
+> i,j =1
+
+aij Bij 
+
+> H
+
+,V := sup  
+
+> ∥x∥≤ 1,∥y∥≤ 1
+> d
+
+X
+
+> i,j =1
+
+aij xiyj
+
+> H
+
+.
+
+22 Proof. See Adamczak et al. (2020, Theorem 6 and Remark 9). The following lemma generalizes Zhang et al. (2026, Lemma 3.2). 
+
+Lemma B.6 (Gaussian chaos bound) . Let T ∈ (Rd)⊗3 be a symmetric 3-tensor and A ∈ Rd×d be a symmetric matrix. Assume ∥T ∥ {1,2},{3} ≤ ¯β and ∥A∥op ≤ L. Then for ξ ∼ N(0 , I ) and all δ ∈ (0 , 1/2) , with probability at least 1 − δ,
+
+∥T [ξ, Aξ ]∥ ≲ ¯βL 
+
+√d + log 1
+
+δ
+
+
+
+.
+
+More generally, 
+
+∥T [ξ, Aξ ]∥ ≲ ¯β
+
+
+
+∥A∥F + ∥A∥op log 1
+
+δ
+
+
+
+. (10) 
+
+Proof. For j, ℓ ∈ [d], define the vector 
+
+djℓ := T [·, e j , Ae ℓ] ∈ Rd, cjℓ := 12 (djℓ + dℓj ).
+
+Since ξj ξℓ is symmetric in (j, ℓ ),
+
+T [ξ, Aξ ] = 
+
+> d
+
+X
+
+> j,ℓ =1
+
+cjℓ ξj ξℓ.
+
+Let ¯c := Pdj=1 cjj = E T [ξ, Aξ ]. For any unit vector u,
+
+⟨u, ¯c⟩ = tr( T [u, ·, ·]A),
+
+and hence ∥¯c∥ ≤ ¯β∥A∥F. It remains to control the centered chaos 
+
+Z := 
+
+> d
+
+X
+
+> j,ℓ =1
+
+cjℓ (ξj ξℓ − I{j = ℓ}) .
+
+We apply Lemma B.5 with H = Rd and coefficients ajℓ = cjℓ .First, by symmetrization and the symmetry of T ,
+
+> d
+
+X
+
+> j,ℓ =1
+
+∥cjℓ ∥2 ≤
+
+> d
+
+X
+
+> j,ℓ =1
+
+∥djℓ ∥2 =
+
+> d
+
+X
+
+> ℓ=1
+
+∥T [Ae ℓ, ·, ·]∥2F ≤ ¯β2∥A∥2F.
+
+Therefore E Z ≤ (E Z2)1/2 ≲ ¯β∥A∥F and R ≲ ¯β∥A∥F in the notation of Lemma B.5. We next bound the two terms entering U . For the deterministic part, for any matrix B with ∥B∥F ≤ 1 and any unit vector u,
+
+*
+
+u, X
+
+> j,ℓ
+
+djℓ Bjℓ 
+
++
+
+= ⟨T [u, ·, ·]A, B ⟩F ≤ ¯β∥A∥op .
+
+The same bound holds with djℓ replaced by cjℓ . For the Gaussian-linear part, for any ∥x∥ ≤ 1,
+
+E X
+
+> j,ℓ
+
+cjℓ xj ξℓ ≤
+
+
+
+> d
+
+X
+
+> ℓ=1
+> d
+
+X
+
+> j=1
+
+cjℓ xj
+
+> 2
+
+
+
+> 1/2
+
+≤ 12 (∥T [x, ·, ·]A∥F + ∥T [Ax, ·, ·]∥F) ≤ ¯β∥A∥op .
+
+23 Thus U ≲ ¯β∥A∥op . Finally, for unit vectors x, y ,
+
+X
+
+> j,ℓ
+
+cjℓ xj yℓ ≤ 12 ∥T [x, Ay ]∥ + 12 ∥T [y, Ax ]∥ ≤ ¯β∥A∥op ,
+
+so V ≤ ¯β∥A∥op .Plugging these estimates into Lemma B.5 gives 
+
+Z ≲ ¯β∥A∥F + ¯β∥A∥op 
+
+r
+
+log 1
+
+δ + ¯β∥A∥op log 1
+
+δ .
+
+Since δ < 1/2, the middle term is absorbed into the last one. Adding the mean bound proves Eq. (10), and the displayed corollary follows from ∥A∥F ≤ √d ∥A∥op ≤ √dL .
+
+## B.3 Information-theoretic inequalities 
+
+Lemma B.7. Let ν ≪ μ ≪ π and ϵ ∈ (0 , 1] . For every λ ≥ 1,
+
+R1+ λ(ν ∥ π) ≤ (1 + ϵ)(1 + λ)1 + (1 + ϵ)λ R1+(1+ ϵ)λ(ν ∥ μ) + R4λ/ϵ (μ ∥ π).
+
+For every λ > 1,
+
+Rλ(ν ∥ π) ≤
+
+
+
+1 + ϵλ − 1
+
+
+
+R(1+ ϵ)λ(ν ∥ μ) + R2λ/ϵ (μ ∥ π).
+
+Proof. These are all instantiations of the Rényi weak triangle inequality (see, e.g., Chewi, 2026, Lemma 6.2.5). 
+
+Lemma B.8. For probability distributions ν, μ, bμ,
+
+DKL 
+
+ ν ∥ bμ ≤ 2DKL (ν ∥ μ) + log  1 + Dχ2
+
+ μ ∥ bμ .
+
+Proof. If the right-hand side is finite, then ν ≪ μ ≪ bμ; otherwise there is nothing to prove. Apply the Donsker–Varadhan variational principle, with reference measure μ and test function log(d μ/ dbμ). It yields 
+
+DKL 
+
+ ν ∥ bμ = DKL (ν ∥ μ) + Eν log dμ
+
+dbμ
+
+≤ 2DKL (ν ∥ μ) + log Eμ
+
+dμ
+
+dbμ = 2 DKL (ν ∥ μ) + log  1 + Dχ2
+
+ μ ∥ bμ .
+
+Lemma B.9. Let (Ω , F, ρ ) be a σ-finite measure space, and let f, g : Ω → R be measurable functions such that 
+
+0 < Z f := 
+
+Z
+
+e−f dρ < ∞, 0 < Z g := 
+
+Z
+
+e−g dρ < ∞.
+
+Define 
+
+dμf := Z−1 
+
+> f
+
+e−f dρ, dμg := Z−1 
+
+> g
+
+e−g dρ. 
+
+Then, for every q > 1,
+
+¯Dq (μf ∥ μg ) ≤ Eμf [e2q |f −g| − 1] .
+
+24 Proof. Set h := f − g, A := Eμf eh = Zg /Z f , and M := Eμf e2q|h|. The result is immediate if M = ∞.Otherwise, Hölder’s inequality and (Eμf eh)( Eμf e−h) ≥ 1 give 
+
+A ≤ M 1/(2 q), A−1 ≤ Eμf e−h ≤ M 1/(2 q).
+
+Since dμg /dμf = eh/A , we have 
+
+1 + Dq (μg ∥ μf ) = A−q Eμf eqh ≤ M, 
+
+1 + Dq (μf ∥ μg ) = Aq−1 Eμf e−(q−1) h ≤ M (q−1) /q ≤ M. 
+
+Taking the maximum proves the claim. 
+
+Lemma B.10. Suppose that T and bT are transition kernels on Z, and ν, π are probability distributions such that ν ≪ π and bTz ≪ Tz for ν-almost every z. Then, for λ > 0 and ϵ ∈ (0 , 12 ], it holds that 
+
+R1+ λ
+
+ bTν ∥ Tπ ≤ R1+(1+ ϵ)λ(ν ∥ π) + ϵλ log Ez∼ν
+
+
+
+1 + D1+ λ
+
+ bTz ∥ Tz
+
+1/ϵ +1 
+
+.
+
+Proof. Let r := d ν/ dπ and 
+
+a(z) := 1 + D1+ λ
+
+ bTz ∥ Tz
+
+ .
+
+Consider the joint laws ν(d z)bTz (d z′) and π(d z)Tz (d z′). Data processing under the projection (z, z ′) 7 → z′
+
+and then Hölder’s inequality with conjugate exponents 1 + ϵ and (1 + ϵ)/ϵ give 
+
+R1+ λ
+
+ bTν ∥ Tπ ≤ 1
+
+λ log Ez∼ν [r(z)λa(z)] 
+
+≤ 1
+
+λ(1 + ϵ) log Ez∼ν r(z)λ(1+ ϵ) + ϵλ(1 + ϵ) log Ez∼ν a(z)1+1 /ϵ 
+
+≤ R1+(1+ ϵ)λ
+
+ ν ∥ π + ϵλ log Ez∼ν a(z)1+1 /ϵ .
+
+This is the desired estimate. 
+
+## B.4 Truncated algorithm 
+
+Theorem B.11. Let q ≥ 2, 0 < δ ≤ ∆2 , 0 < p ≤ min 
+
+n
+
+1, δq
+
+o
+
+, and K ∈ N. Suppose that T and bT are transition kernels on Z, and π is stationary under T. Let ν be an initial distribution over Z with R2(ν ∥ π) ≤ ∆, and let E be an event such that bTz ≪ Tz for π-almost every z ∈ E and 
+
+1 − π(E) ≤
+
+ p
+
+64 K
+
+3
+
+e−2∆ .
+
+Further, we assume that for any ν′ supported on E with R1.5(ν′ ∥ π) ≤ 2∆ ,
+
+Ez∼ν′
+
+
+
+1 + Dq
+
+ bTz ∥ Tz
+
+5K
+
+≤ eδ .
+
+We consider the following algorithm: 
+
+• Set ν0 = ν(·|E ) and sample Z0 ∼ ν0.
+
+• Sample Zk ∼ bTZk−1 . If Zk ∈ E , set Zk = Zk; Otherwise, declare failure and set Zℓ =⊥ for ℓ ≥ k.Let bπ be the distribution of ZK conditioned on the algorithm succeeding. Then it holds that Dq/ 2
+
+ bπ ∥ TK ν ≤
+
+eδ − 1. Further, the failure probability of the algorithm is bounded by p.
+
+25 Proof. Let νk be the distribution of Zk conditional on Zk−1̸ =⊥, and let bνk be the distribution of Zk
+
+conditional on Zk̸ =⊥. Thus bν0 = ν(· | E ), ν0 = ν, and bνk = νk(· | E ). For every r > 1 and probability measure ϖ,
+
+Rr
+
+ νk(· | E ) ∥ ϖ ≤ Rr
+
+ νk ∥ ϖ + rr − 1 log 1
+
+νk(E) . (11) If R3/2(ρ ∥ π) ≤ 2∆ , Hölder’s inequality and the assumption on π(Ec) give 
+
+ρ(Ec) ≤ e2∆ /3π(Ec)1/3 ≤ p
+
+64 K . (12) The same conclusion holds for ρ = ν, using R2(ν ∥ π) ≤ ∆. Put 
+
+a := 1 + 14K , ℓk := a−k.
+
+Since aK ≤ e1/4 < 4/3, we have ℓk > 3/4. In particular, (11) and (12) show that the cost of conditioning in the every instance below is at most p/ (20 K).We first prove by induction that 
+
+R1+ ℓk
+
+ bνk ∥ π ≤ ∆ + k + 1 2K (p + δ) < 2∆ . (13) The case k = 0 follows from (11). If the claim holds at k, the transition kernel inequality above, monotonicity of the divergence in its order, and 4K + 1 ≤ 5K imply 
+
+R1+ ℓk+1 
+
+ νk+1 ∥ π ≤ R1+ ℓk
+
+ bνk ∥ π + δ
+
+4Kℓ k+1 
+
+≤ R1+ ℓk
+
+ bνk ∥ π + δ
+
+3K .
+
+This bound is below 2∆ , so (12) applies to νk+1 . Adding the conditioning cost proves (13). For the accuracy estimate, define 
+
+qk := 1 + ( q − 1) a−k, Ak := Rqk
+
+ bνk ∥ Tkν.
+
+Again qk − 1 > 3( q − 1) /4, and 
+
+A0 = log 1
+
+ν(E) ≤ p
+
+60 K .
+
+The same transition calculation, now at order qk+1 , followed by (11), gives 
+
+Ak+1 ≤ Ak + δ
+
+3K(q − 1) + p
+
+20 K .
+
+Consequently, 
+
+(q − 1) AK ≤ p(q − 1) 60 K + δ
+
+3 + p(q − 1) 20 < δ, 
+
+where we used p(q − 1) ≤ δ. Since qK ≥ q/ 2, monotonicity of Rényi divergence yields, for q > 2,
+
+Dq/ 2
+
+ bνK ∥ TK ν ≤ exp 
+
+ q/ 2 − 1
+
+q − 1 δ
+
+
+
+− 1 ≤ eδ − 1.
+
+For q = 2 , the conclusion is immediate from the convention D1(ρ ∥ μ) = 0 . Finally, (12) and a union bound give 
+
+P(fail) ≤
+
+> K
+
+X
+
+> k=1
+
+νk(Ec) ≤ p
+
+64 ≤ p. 
+
+26 C Proofs from Section 3 
+
+To apply Lemma 2.4, we define 
+
+w⋆(Z) := log dP
+
+dQ = −
+
+Z T
+
+> 0
+
+⟨μ(Xt), dBt⟩ − 12
+
+Z T
+
+> 0
+
+∥μ(Xt)∥2dt, 
+
+and recall that we define w(Z) := Et∼Unif ([0 ,T ]) W (t; Z).We state the following lemmas. 
+
+Lemma C.1. There are universal constants c, C > 0 such that, if T ≤ c/ √β and γT ≤ 1, then the following holds. For 
+
+1 ≤ λ ≤ c min 
+
+ 1
+
+hβT √d , 1
+
+hβ 2T 3
+
+
+
+,
+
+it holds that 
+
+EZ∼Pz exp( λ|w⋆(Z) − w(Z)|) ≤ exp 
+
+ Cλhβ γ
+
+
+
+d−1/2 + βT 2
+
+R(z)
+
+
+
+.
+
+Proof in Appendix C.2. 
+
+Lemma C.2. There are universal constants c, C > 0 such that, if T ≤ c/ √β and γT ≤ 1, then for any 
+
+1 ≤ λ ≤ c/ (βT 2) and any t ∈ [0 , T ),
+
+EZ∼Pz exp( λ|W (t; Z)|) ≤ 2 exp 
+
+ Cλ 2β2T 3
+
+γ R(z)
+
+
+
+.
+
+The proof is contained in Appendix C.3. 
+
+Lemma C.3 (Finite-time simulation of ULD) . Suppose that V is convex and β-smooth. Let α > 0, γ ≍ √α,
+
+κ := max {β/α, 1}, q > 1, δ ∈ (0 , 12 ], and K ∈ N. Set 
+
+∆ := d + R2(ν ∥ π) , ϑq := δ min {1, q − 1} , Λq := q + log Kq ϑq
+
+!
+
+.
+
+If 
+
+1
+
+T γ ≫ κ2/3∆1/3Λ2/3 
+
+> q
+
+,
+
+then there is an algorithm with output distribution bν such that 
+
+Rq
+
+ bν ∥ PKT ν ≤ δ . 
+
+Moreover, for every p ∈ (0 , 1] , with probability at least 1 − p, the number of first-order queries is bounded by 
+
+O(K + log(1 /p )) , with a universal implicit constant. 
+
+Lemma C.4 (Composition of Rényi errors) . Let q > 1 and r > q , and set 
+
+s := 1 + (q − 1) rr − q .
+
+For probability distributions ρ, μ, and π,
+
+Rq (ρ ∥ π) ≤ q(r − 1) 
+
+r(q − 1) Rr (ρ ∥ μ) + Rs(μ ∥ π) .
+
+Proof. This is another special case of the Rényi weak triangle inequality. 27 C.1 Proof of Proposition 3.1 and Lemma C.3 and Theorem 3.2 
+
+Proof of Proposition 3.1. By Lemma 2.4, it holds that 
+
+2 log 
+
+
+
+1 + ¯Dq
+
+ bTz ∥ Tz
+
+
+
+≤ log EPz exp(4 q|w⋆(Z) − w(Z)|) + log EPz ,t ∼Unif ([0 ,T ]) exp(4 qτ B (W (t; Z))) .
+
+By Lemma C.1, as long as 
+
+h ≤ δγ C0qβR (z) d−1/2 + βT 2 ,
+
+it holds that 
+
+log EPz exp(4 q|w⋆(Z) − w(Z)|) ≤ δ
+
+2 .
+
+Fix any ℓ ≥ 1. By Lemma C.2, it holds that as long as qℓ ≤ 1  
+
+> C1βT 2
+
+,
+
+EPz exp(4 qτ B (W (t; Z))) ≤ 1 + e−4qℓB EPz exp(4 qℓ |W (t; Z)|)
+
+≤ 1 + 2 exp 
+
+
+
+−4qℓB + C1q2ℓ2β2T 3
+
+γ R(z)
+
+
+
+.
+
+Then, we can choose 
+
+ℓ = 1
+
+C1
+
+min 
+
+ 1
+
+C1qβT 2 , γB C1qβ 2T 3R(z)
+
+
+
+,
+
+so that as long as ℓ ≥ 1 + log(4 /δ ) 
+
+> qB
+
+holds, it holds that 
+
+EPz exp(4 qτ B (W (t; Z))) ≤ 1 + δ
+
+2 .
+
+Therefore, under Eq. (2) and Eq. (3), we have 
+
+¯Dq
+
+ bTz ∥ Tz
+
+ ≤ eδ/ 2 − 1 ≤ δ. 
+
+Proof of Lemma C.3. Fix q > 1 and δ ∈ (0 , 12 ], and recall ϑq = δ min {1, q − 1}. Set p0 := ϑq /(4 q). Fix the FORS threshold B ∈ [1 , 2] throughout the construction. We define 
+
+E = z = ( x, p ) : ∥p∥2 + β−1∥∇ V (x)∥2 ≤ C0(∆ + log( Kq/ϑ q )) ,
+
+Increasing C0 if necessary, we have 
+
+1 − π(E) ≤
+
+ p0
+
+64 K
+
+3
+
+e−2∆ .
+
+In the following, we define R = ( C0 + 1)(∆ + log (Kq/ϑ q )) , so that R(z) ≤ R for z ∈ E . Further, by Proposition 3.1, as long as 
+
+T 3 ≤ γC1β2R(q + log( Kq/ϑ q )) , T 2 ≤ 1
+
+Cβ (q + log( Kq/ϑ q )) , h = TN ≤ ϑq γCKqβR  d−1/2 + βT 2 ,
+
+(14) we can guarantee that 
+
+¯D2q
+
+ bTz ∥ Tz
+
+ ≤ ϑq
+
+10 K
+
+28 for any z ∈ E . To see that the hypothesis of Lemma C.3 implies (14), use γ2 ≍ α, β/α ≤ κ, and R ≲ ∆Λ q .The first detailed condition is equivalent, up to constants, to (T γ )−3 ≳ κ2RΛq , while the second follows from (T γ )−2 ≳ κΛq ; both follow from the displayed κ2/3∆1/3Λ2/3 
+
+> q
+
+bound because κ, ∆, Λq ≥ 1. Apply Theorem B.11 at order 2q, with accuracy parameter ϑq and failure parameter p0. We obtain 
+
+Dq
+
+ bν ∥ PKT ν ≤ eϑq − 1 .
+
+Consequently, 
+
+Rq
+
+ bν ∥ PKT ν ≤ ϑq
+
+q − 1 ≤ δ . 
+
+If we restart after declaring failure, the output law remains preserved. The exponential tail bound for the sum of the FORS query counts over the K steps and over the restarts gives O(K + log (1 /p )) queries with probability at least 1 − p.
+
+Proof of Theorem 3.2. Let νK := PKT ν.First suppose that PI holds. Apply Lemma C.3 at order 3 and accuracy δ/ 4. Since 
+
+3 + log(12 K/δ ) ≲ log( K/δ ) ,
+
+the assumed step size condition gives 
+
+R3
+
+ bν ∥ νK
+
+ ≤ δ
+
+4 .
+
+By Theorem 2.2 and the identity Dχ2 (ν ∥ π) = exp (R2(ν ∥ π)) − 1, the assumed lower bound on K ensures that 
+
+R2(νK ∥ π) ≤ Dχ2 (νK ∥ π) ≤ δ
+
+2 .
+
+Taking q = 3 /2 and r = 3 in Lemma C.4 gives 
+
+R3/2
+
+ bν ∥ π ≤ 2R3
+
+ bν ∥ νK
+
+ + R2(νK ∥ π) ≤ δ . 
+
+Now suppose that LSI holds. Apply Lemma C.3 at order 2q and accuracy δ/ 3, giving 
+
+R2q
+
+ bν ∥ νK
+
+ ≤ δ
+
+3 .
+
+Applying Theorem 2.1 at order 2q, and using R2q (ν ∥ π) ≤ ∆q , the assumed lower bound on K yields 
+
+R2q (νK ∥ π) ≤ δ
+
+2 .
+
+For q ≥ 2, Lemma C.4 and monotonicity of Rényi divergence give the simpler bound 
+
+Rq
+
+ bν ∥ π ≤ 32 R2q
+
+ bν ∥ νK
+
+ + R2q (νK ∥ π) ≤ δ . 
+
+In both cases, the query bound follows from Lemma C.3. 29 C.2 Proof of Lemma C.1 
+
+For simplicity, write m(t) = ⌊t/h ⌋h and 
+
+at := μ(Xt) − μ(Xm(t)).
+
+Since dBt = d Bt − μ(Xt) d t under Pz , the discretization error is 
+
+b := w⋆(Z) − w(Z) = −
+
+Z T
+
+> 0
+
+⟨at, dBt⟩ +
+
+Z T
+
+> 0
+
+⟨at, μ (Xt)⟩ dt. 
+
+Set 
+
+R0 := ∥P0∥ + T ∥∇ V (X0)∥, R ¯B := max  
+
+> 0≤t≤T
+
+∥Bt∥, R := R ¯B + R0
+
+√2γ .
+
+The formula for the exact ULD equation, followed by the β-Lipschitz property of ∇V , gives 
+
+max  
+
+> 0≤t≤T
+
+∥Pt∥ ≤ C
+
+
+
+R0 + p2γR ¯B
+
+
+
+when CβT 2 ≤ 1 and γT ≤ 1. Consequently, 
+
+∥at∥ ≤ Chβ R, ∥μ(Xt)∥ ≤ CT β R,
+
+Z T
+
+> 0
+
+⟨at, μ (Xt)⟩dt ≤ Chβ 2T 2R2.
+
+Let M = − R T 
+
+> 0
+
+⟨at, dBt⟩. The exponential martingale identity and the bound on at give 
+
+EPz exp  λ|M | − Cλ 2h2β2T R2 ≤ 2.
+
+For k ≥ 2, Hölder’s inequality therefore yields 
+
+EPz eλ|M | ≤ 21/k 
+
+EPz eCλ 2kh 2β2T R2 1−1/k 
+
+.
+
+Choose k = 1 /(C0λhβT √d); the constant in the statement is small enough that k ≥ 2. Since R2 ≤
+
+2R2¯B + γ−1R20, the Brownian estimate in Lemma B.3, together with R20 ≤ 2R(z), d ≤ R(z), and γT ≤ 1, gives 
+
+log EPz eλ|M | ≤ Cλhβ γ√d R(z)
+
+provided CλhβT √d ≤ 1. For the other term, the same Brownian estimate gives 
+
+log EPz exp  Cλhβ 2T 2R2 ≤ Cλhβ 2T 2
+
+γ R(z)
+
+provided Cλhβ 2T 3 ≤ 1. Cauchy–Schwarz, with constants absorbed into C, proves the claim. 
+
+## C.3 Proof of Lemma C.2 
+
+Fix t ∈ [0 , T ) and set j := ⌊t/h ⌋ + 1 . Define 
+
+uj := ∇V (Xjh ) − ∇ V (X(j−1) h)
+
+h√2γ .
+
+Under Pz ,
+
+BT − Bjh = BT − Bjh −
+
+Z Tjh 
+
+μ(Xs)d s. 
+
+30 The increment BT − Bjh is independent of uj . With R as in the preceding proof, 
+
+∥uj ∥ ≤ Cβ R, ∥μ(Xt)∥ ≤ CT β R.
+
+It follows that 
+
+|W (t; Z)| ≤ T ⟨BT − Bjh , u j ⟩ + Cβ 2T 3R2.
+
+Conditioning at time jh and using the exponential martingale bound for the first term, followed by Cauchy– Schwarz, yields 
+
+log EPz exp( λ|W (t; Z)|) ≤ log 2 2 + 12 log EPz exp  C(λ2 + λ)β2T 3R2.
+
+Since λ ≥ 1, the linear term is absorbed by λ2. The condition λ ≤ (CβT 2)−1 and Lemma B.3 therefore imply 
+
+log EPz exp  Cλ 2β2T 3R2 ≤ Cλ 2β2T 3
+
+γ R(z),
+
+which proves the result. 
+
+Remark 2. Under Qz , write 
+
+at := 1 − e−γt 
+
+γ , bt := 
+
+Z t
+
+> 0
+
+asds. 
+
+The proposal has the explicit representation 
+
+Xt − X0 = atp − bt∇V (x) + p2γ
+
+Z t
+
+> 0
+
+at−sdBs.
+
+Here at ≤ T , bt ≤ T 2/2, and the Gaussian term has covariance at most CγT 3Id. Since ∥μ(Xt)∥ ≤ 
+
+β∥Xt − X0∥/√2γ, the standard Gaussian-square MGF bound, with s = λβ 2T / (2 γ), gives 
+
+log EQz exp  λT ∥μ(Xt)∥2 ≤ Cλγ −1β2T  T 2∥p∥2 + T 4∥∇ V (x)∥2 + γT 3d,
+
+provided λβ 2T 4 ≤ c. Consequently, if T ≤ c/ √β and γT ≤ 1, then 
+
+sup 
+
+> 0≤t<T
+
+log EQz exp  λT ∥μ(Xt)∥2 ≤ Cλγ −1β2T 3R(z)
+
+for 0 ≤ λ ≤ c/ (β2T 4). In particular, if T ≤ c/ √β and γT ≤ 1, Jensen’s inequality gives 
+
+EQz exp 
+
+Z T
+
+> 0
+
+∥μ(Xt)∥2dt
+
+!
+
+≤ 1
+
+T
+
+Z T
+
+> 0
+
+EQz exp  T ∥μ(Xt)∥2dt < ∞.
+
+Thus Novikov’s condition holds, 
+
+EQz exp 
+
+Z T
+
+> 0
+
+∥μ(Xt)∥2dt
+
+!
+
+< +∞,
+
+and Girsanov’s theorem can be applied. 
+
+## C.4 Limitation of the exponential Euler proposal 
+
+We consider the example of a Gaussian target. Let T denote the proposal transition kernel and T the exact underdamped Langevin transition kernel; thus, Tz and Tz are their respective output distributions at time T
+
+from z.31 1D calculation. Consider d = 1 and V (x) = w 
+
+> 2
+
+x2. The target distribution is then π = N 0, w −1I ⊗ N(0 , I ).Under Qz , the dynamics are affine and hence Tz = N  ¯mT , ¯ΣT
+
+ is Gaussian. More explicitly, set 
+
+aT := 1 − e−γT 
+
+γ , bT := Tγ − 1 − e−γT 
+
+γ2 .
+
+Then 
+
+¯mT := ETz
+
+XT
+
+PT
+
+
+
+=
+
+x + aT p − wb T xe−γT p − wa T x
+
+
+
+,
+
+and 
+
+¯ΣT =
+
+ 2
+
+> γ
+
+
+
+T − 2(1 −e−γT ) 
+
+> γ
+
++ 1−e−2γT 
+
+> 2γ
+
+ (1 −e−γT )2  
+
+> γ
+> (1 −e−γT )2
+> γ
+
+1 − e−2γT 
+
+ .
+
+The following lower bound shows that the exponential Euler proposal can already incur a non-negligible one-step error. Note that the error below is measured marginally , not conditionally. 
+
+Lemma C.5 (Marginal lower bound) . There are universal constants c, τ 0 > 0 such that, if 0 < γ ≤ 32
+
+√β
+
+and √βT ≤ τ0, then there exists a probability distribution π′ satisfying 
+
+12 ≤ dπ′
+
+dπ ≤ 2
+
+such that 
+
+DTV 
+
+ Tπ′, Tπ′2 ≥ c min 
+
+ β2T 3
+
+γ , 1
+
+
+
+.
+
+Proof of Lemma C.5. Set 
+
+ϵ := γ
+
+√β , τ := pβT. 
+
+We take V (x) = β 
+
+> 2
+
+x2. In the rescaled coordinates Z = ( Y, P ) = ( √βX, P ), the invariant law is N(0 , I 2), and the exact dynamics are 
+
+dYt = Ptdt, dPt = −(Yt + ϵP t)d t + √2ϵdBt.
+
+Let 
+
+θ := p1 − ϵ2/4.
+
+For 0 < ϵ < 2, the exact transition satisfies 
+
+Pτ | Z0 ∼ N ℓ⊤Z0, q ,
+
+where 
+
+ℓ =
+
+ −e−ϵτ / 2 sin( θτ )
+
+> θ
+
+e−ϵτ / 2 cos( θτ ) − ϵ 
+
+> 2θ
+
+sin( θτ )
+
+and q = 1 − ∥ ℓ∥2.For the exponential Euler proposal, ¯Pτ | Z0 ∼ N ¯ℓ⊤Z0, ¯q,
+
+where 
+
+¯ℓ =
+
+− 1−e−ϵτ 
+
+> ϵ
+
+e−ϵτ 
+
+
+
+, ¯q = 1 − e−2ϵτ .
+
+We first record the elementary estimates used below, which can be shown by applying Taylor’s expansion to τ .32 Lemma C.6. There exist universal constants c, C, τ 0 > 0 such that, for all 0 < ϵ ≤ 32 and 0 < τ ≤ τ0,
+
+12 ≤ ¯ℓ ≤ 2, (15) 
+
+cτ 2 ≤ − ¯ℓ, ℓ − ¯ℓ ≤ Cτ 2, (16) 
+
+ℓ − ¯ℓ ≤ Cτ 2, (17) 
+
+cϵτ ≤ q, ¯q ≤ Cϵτ, |q − ¯q| ≤ Cϵτ 3. (18) 
+
+Proof. All remainders below are uniform over 0 < ϵ ≤ 32 . Indeed, θ = p1 − ϵ2/4 is bounded away from zero on this interval, and the functions involved are smooth after defining (1 − e−ϵτ )/ϵ = τ at ϵ = 0 . Taylor’s theorem therefore gives 
+
+¯ℓ =
+
+ −τ + ϵ 
+
+> 2
+
+τ 2 + O(τ 3)1 − ϵτ + ϵ2 
+
+> 2
+
+τ 2 + O(τ 3)
+
+
+
+,ℓ − ¯ℓ =
+
+ 16 τ 3 + O(τ 4)
+
+− 12 τ 2 + O(τ 3)
+
+
+
+.
+
+Consequently, 
+
+∥¯ℓ∥ = 1 + O(τ ), −⟨ ¯ℓ, ℓ − ¯ℓ⟩ = 12 τ 2 + O(τ 3), ∥ℓ − ¯ℓ∥ = O(τ 2).
+
+Choosing a sufficiently small universal τ0 proves (15)–(17). For the variance bounds, the exact covariance formula gives 
+
+q = 2 ϵ
+
+Z τ
+
+> 0
+
+e−ϵs 
+
+cos( θs ) − ϵ
+
+2θ sin( θs )
+
+2
+
+ds, ¯q = 2 ϵ
+
+Z τ
+
+> 0
+
+e−2ϵs ds. 
+
+Both integrands are bounded above and below by positive universal constants for 0 ≤ s ≤ τ0, which proves 
+
+q, ¯q ≍ ϵτ . The two integrands have the same value and first derivative at s = 0 ; their second derivatives are uni-formly bounded. Taylor’s theorem thus bounds their difference by Cs 2, and integration gives |q−¯q| ≤ Cϵτ 3.Now fix a parameter K ≥ 2 to be decided later, and λ := K − 1. Define 
+
+h(z) := 1 + 12 sin( K ¯ℓ⊤z), π′ := hπ. 
+
+Since ¯ℓ⊤Z is centered Gaussian under π, we have Eπ sin( K ¯ℓ⊤Z) = 0 , so π′ is a probability measure. Let ϕ(p) := sin( λp ). Since ∥ϕ∥∞ ≤ 1,
+
+2DTV 
+
+ Tπ′, Tπ′ ≥ ETπ′ ϕ(P ) − ETπ′ ϕ(P )
+
+= 12 Eπ
+
+sin( K ¯ℓ⊤Z0) ϕ(Pτ ) − ϕ( ¯Pτ ) .
+
+Here we used Eπ ϕ(Pτ ) = Eπ ϕ( ¯Pτ ) = 0 .For a centered Gaussian Z ∼ N(0 , I 2) and an independent ξ ∼ N 0, s 2, the identity 
+
+E sin( K ¯ℓ⊤Z) sin( λ(ℓ⊤ 
+
+> 0
+
+Z + ξ)) = 12 exp − K ¯ℓ − λℓ 0 
+
+> 2
+
++ λ2s2
+
+2
+
+!
+
+− 12 exp − K ¯ℓ + λℓ 0 
+
+> 2
+
++ λ2s2
+
+2
+
+!
+
+holds for every vector ℓ0 and variance s2. Applying this with (ℓ0, s 2) = ( ℓ, q ) and (ℓ0, s 2) = ( ¯ℓ, ¯q), we obtain 
+
+A1 := Eπ
+
+sin( K ¯ℓ⊤Z0) ϕ(Pτ ) − ϕ( ¯Pτ ) = 12
+
+
+
+e−E−/2 − e− ¯E−/2
+
+− 12
+
+
+
+e−E+/2 − e− ¯E+/2
+
+,
+
+33 where 
+
+E± := K ¯ℓ ± λℓ 2 + λ2q, ¯E± := K ¯ℓ ± λ¯ℓ 2 + λ2 ¯q. 
+
+We first analyze the “minus” exponents. Since K − λ = 1 , it holds that ¯E− = ¯ℓ 2 + λ2 ¯q ≤ 5 as long as 
+
+K2 ¯q ≤ 1. Let δ := ℓ − ¯ℓ. Then 
+
+E− − ¯E− = ¯ℓ − λδ 2 − ¯ℓ 2 + λ2(q − ¯q)= −2λ⟨¯ℓ, δ ⟩ + λ2 ∥δ∥2 + λ2(q − ¯q).
+
+Using (16)–(18), as long as K ≤ c 
+
+> 2Cϵτ
+
+,
+
+E− − ¯E− ≥ cKτ 2 − CK 2ϵτ 3 ≥ c
+
+2 Kτ 2,
+
+Consequently, assuming K ≤ min 
+
+n 1√Cϵτ , c
+
+> 2Cϵτ
+
+o
+
+,
+
+e−E−/2 − e− ¯E−/2 = e− ¯E−/2
+
+1 − e−(E−− ¯E−)/2
+
+≥ c1 min  Kτ 2, 1.
+
+It remains to show that the “plus” exponents are negligible. Since K + λ = 2 K − 1 and λ ≍ K,
+
+¯E+ = ( K + λ)2 ¯ℓ 2 + λ2 ¯q ≥ 14 K2.
+
+Similarly, using (17), as long as 4Cτ 2 ≤ 1,
+
+E+ = (K + λ)¯ℓ + λδ 2 + λ2q ≥ (K ¯ℓ − Cλτ 2)2+ ≥ 116 K2.
+
+Therefore, e−E+/2 + e− ¯E+/2 ≤ 2e−K2/32 .In summary, if 2 ≤ K ≤ min 
+
+n 12√Cϵτ , c
+
+> 2Cϵτ
+
+o
+
+, then 
+
+2DTV 
+
+ Tπ′, Tπ′ ≥ 12 |A1| ≥ c1 min  Kτ 2, 1 − 2e−K2/32 .
+
+Therefore, there is a constant τ1 > 0 such that for τ ≤ τ1, we can choose K = 12√Cϵτ ∈ [2 , c 
+
+> 2Cϵτ
+
+], and it holds that 
+
+2DTV 
+
+ Tπ′, Tπ′ ≥ c2 min 
+
+p τ 3/ϵ, 1
+
+
+
+− 2e−c2/(ϵτ ).
+
+For a sufficiently small universal constant τ2 > 0 and τ ∈ (0 , τ 2], the exponential term is absorbed uniformly over 0 < ϵ ≤ 32 . Thus, for τ ≤ τ2,
+
+DTV 
+
+ Tπ′, Tπ′ ≥ c3 min 
+
+p τ 3/ϵ, 1
+
+
+
+.
+
+Squaring this inequality and using τ 3/ϵ = β2T 3/γ proves the claim. Finally, push the constructed law forward under (Y, P ) 7 → (Y / √β, P ) to conclude. 
+
+# D Proofs from Section 4 
+
+## D.1 Analysis of FORS 
+
+We state the following results. 
+
+Lemma D.1. For λ ≥ 1, it holds that 
+
+EPz Et∼Unif ([0 ,T ]) exp( λ|W (t; Z)|) ≤ 2 EPz Et∼Unif ([0 ,T ]) exp  6λ2T 3∥∂tμt∥2.
+
+34 Proof in Appendix D.7. 
+
+Lemma D.2. Suppose T √β ≤ 14 , γT ≤ 14 , and γ ≤ √β. Let 
+
+RB := sup 
+
+> 0≤t≤T
+
+∥Bt∥, R := 4( ∥P0∥ + T ∥∇ V (X0)∥ + √γR B ).
+
+Then, under Eq. (4), ∥P ℓt ∥ ≤ R and ∥Xℓt − X0∥ ≤ T R for every ℓ ≥ 1 and t ∈ [0 , T ]. For every ℓ ≥ 2,
+
+sup 
+
+> 0≤t≤T
+
+∥P ℓt − P ℓ−1 
+
+> t
+
+∥ ≤ (T pβ)2ℓ−2R, (19) 
+
+For every ℓ ≥ 1,
+
+sup 
+
+> 0≤t≤T
+
+∥Xℓt − Xℓ−1 
+
+> t
+
+∥ ≤ T (T pβ)2ℓ−2R. (20) Proof in Appendix D.8. 
+
+Proposition D.3. Suppose that ν is supported on the set ER = z : R(z) ≤ R . Let ρ = βT 2, ∆ = 1 + R1.5(ν ∥ π), r > 0, and K, L ∈ N. Suppose that T ≤ 14√β , γT ≤ 14 , γ ≤ √β, T 3 ≤ 1
+
+> βH
+
+√R
+
+, and 
+
+1
+
+Cr ≥ β2T + γ−1βHβKT 
+
+p
+
+R + γ−1β2
+
+> H
+
+T 3R, 
+
+then 
+
+log Ez∼ν
+
+
+
+EZ∼Pz exp 
+
+
+
+r max  
+
+> 0≤t≤T
+
+∥∂tμt∥2
+
+ K
+
+≤ CrKβ 2T + CrKγ −1
+
+β2
+
+> H
+
+T 2(d + ∆ 2) + β2ρ2L−2R + βHβT 
+
+p
+
+R + β2
+
+> H
+
+T 3R + β3β2
+
+> H
+
+T 8R2
+
++ CrKγ −1 min β3T 2R, β 2
+
+> H
+
+βT 4R∆
+
+≤ K + CrKγ −1
+
+β2
+
+> H
+
+T 2(d + ∆ 2) + β2ρ2L−2R + β3β2
+
+> H
+
+T 8R2 + min β3T 2R, β 2
+
+> H
+
+βT 4R∆
+
+
+
+,
+
+Proof in Appendix D.5. 
+
+Corollary D.4. Suppose that ν is supported on the set ER = z : R(z) ≤ R . Let ρ = βT 2 and ∆ = 1 + R1.5(ν ∥ π).Suppose also that T ≤ 14√β , γT ≤ 14 , γ ≤ √β, and βHT 3√R ≤ 1. Let δ ∈ (0 , 12 ], B = Θ(1) , K ≥ 1, q ≥ 2,
+
+1
+
+C(q2 + log 2(K/δ )) ≥ β2T 4 + γ−1βHβKT 4p
+
+R + γ−1β2
+
+> H
+
+T 6R, 
+
+1
+
+C(q2 + q log( K/δ )) ≥ γ−1
+
+β2
+
+> H
+
+T 5(d + ∆ 2) + β2T 3ρ2L−2R + β3β2
+
+> H
+
+T 11 R2 + min β3T 5R, β 2
+
+> H
+
+βT 7R∆
+
+
+
+.
+
+Then 
+
+Ez∼ν
+
+
+
+1 + ¯Dq
+
+ bTz ∥ Tz
+
+K
+
+≤ 1 + δ. 
+
+Proof in Appendix D.4. 
+
+## D.2 Proof of Theorem 4.1 
+
+Proof of Theorem 4.1. Similar to the proof of Theorem 3.2, we consider the set E = {z : R(z) ≤
+
+C0(∆ + d + log (K/δ )) }, where C0 > 0 is a sufficiently large constant so that 1 − π(E) ≤   p
+
+> 64 K
+
+3e−2∆ . Then, by Corollary D.4, we can guarantee that as long as ν′ satisfies R1.5(ν′ ∥ π) ≤ 2∆ , we have 
+
+Ez∼ν′
+
+
+
+1 + ¯D2q
+
+ bTz ∥ Tz
+
+K
+
+≤ 1 + δ. 
+
+Applying Theorem B.11 gives the desired result. 35 D.3 Proof of Theorem 4.2 
+
+Let Tz be the distribution of (XT , P T ) under Eq. (4). The following guarantee for T follows from Proposi-tion D.3. 
+
+Corollary D.5. Let q ≥ 2. Suppose that the hypotheses of Proposition D.3 hold with r = q2T 3, after adjusting the universal constant C. Then 
+
+Ez∼ν
+
+ 1 + ¯Dq
+
+ Tz ∥ Tz
+
+ K ≤ exp 
+
+
+
+C + CKq 2γ−1T 3 β2
+
+> H
+
+T 2(d + ∆ 2) + β2ρ2L−2R + γβ 2T
+
++ β2
+
+> H
+
+T 3R + β3β2
+
+> H
+
+T 8R2 + min β3T 2R, β 2
+
+> H
+
+βT 4R∆ 
+
+.
+
+Further, we also have the crude bound 1 + ¯Dq
+
+ Tz ∥ Tz
+
+ ≤ eCq 2γ−1β2T 3R for any z ∈ E R.
+
+Proof in Appendix D.6. 
+
+Proposition D.6. Suppose that V is convex and β-smooth, that μV is log-concave and satisfies LSI with constant 1/α , and that Assumption 1 holds. Set γ ≍ √α, κ := β/α , and κH := β2/3 
+
+> H
+
+/α . Let w be a constant and L ∈ N. Suppose that a constant c > 0 satisfies w ≥ 2 + c, and set 
+
+∆ := d + 2 + Rw(ν ∥ π), Λ := log ∆ .
+
+Then as long as 
+
+M := 1
+
+γT ≫ √κΛ + κ1/3(κH + κ 310  
+
+> H
+
+)(∆ + log M )1/6Λ,
+
+there is N = O(M Λ2) and an algorithm from Theorem B.11 that uses at most N queries to T, succeeds with probability at least 1 − e−∆, and, conditional on success, has output distribution bν satisfying 
+
+Rw−c
+
+ bν ∥ π ≲ 1 + γ−2 β2
+
+> H
+
+T 4d + ( β2T 2ρ2L−2 + β2
+
+> H
+
+T 5 + β2
+
+> H
+
+βT 6)(∆ + log M )+ β3β2
+
+> H
+
+T 10 (∆ + log M )2 + γβ 2T 3Λ3
+
+≲ (∆ + log M )1/3 + κ1/2 + γ−2β2T 2ρ2L−2(∆ + log M )Λ 3.
+
+Proof in Appendix D.9. We finish the proof of Theorem 4.2. Let 
+
+ι := 1 + log 
+
+ κ(1 + κH)dδ
+
+
+
+,A1 := √κ, A2 := κ3/5 
+
+> H
+
+d1/5, A3 := κ1/3(κH + κ3/11  
+
+> H
+
+)d2/11 .
+
+Choose 
+
+M := 1
+
+γT = Cι 2(A1 + A2 + A3), L = ⌈C log(2 + κd )⌉ . (21) Set ∆ = d + 2 + Rw(ν ∥ π) = O(d log (2 κ)) and apply Proposition D.6 with order w and c = 1 /4. The step size condition holds because 
+
+pκ log ∆ + κ1/3(κH + κ3/10  
+
+> H
+
+)(∆ + log M )1/6 log ∆ ≤ Cι 7/6(A1 + A3) ≤ M/C. 
+
+Here we used d1/6 ≤ d2/11 and κH + κ3/10  
+
+> H
+
+≤ 2( κH + κ3/11  
+
+> H
+
+). Let ν⋆ be the resulting distribution and write 
+
+D⋆ := 1 + Rw−1/4
+
+ ν⋆ ∥ π.
+
+36 Repeat this stage upon failure; its success probability gives only a constant expected overhead. We substitute 
+
+T = ( γM )−1 to obtain 
+
+D⋆ ≤ 1 + Cι 5
+
+ κ3
+
+> H
+
+dM 4 + κκ 3
+
+> H
+
+dM 6 + κ3κ3
+
+> H
+
+d2
+
+M 10 + κ2
+
+M 3
+
+
+
+, (22) and also 
+
+D⋆ ≤ Cι 3(d1/3 + √κ). (23) Indeed, the omitted M −5 term is bounded by the M −4 term, while M ≥ Cι 2√κ and the choice of L make the iterative term’s contribution to D⋆ at most a constant. For the final stage, set q = w − 1/2, s = w − 1/4,
+
+r := q(s − 1) 
+
+s − q = 4( w − 1/2)( w − 5/4) ,
+
+and set 
+
+U = C log( D⋆/δ ), K = ⌈CM log( D⋆/δ )⌉ .
+
+Then K ≤ U M and U + log (K/δ ) ≤ Cι . We apply Theorem 4.1 at order r and accuracy δ2/3, with initial law ν⋆, and take its second branch. The bound (23) shows directly that all terms outside this branch are at most Cι 2(A1 + A2 + A3). For the last term, substitute (22) and use 
+
+(( d + D⋆)D⋆)1/7 ≤ (dD ⋆)1/7 + D2/7 
+
+> ⋆
+
+.
+
+Balancing the four powers of M in (22) yields 
+
+max 
+
+n
+
+κ1/7κ3/7 
+
+> H
+
+d1/7, κ 1/11 κ6/11  
+
+> H
+
+d2/11 , κ 2/13 κ6/13  
+
+> H
+
+d2/13 , κ 4/17 κ6/17  
+
+> H
+
+d3/17 , κ 3/10 κ3/10  
+
+> H
+
+d1/10 ,κ1/7κ3/7 
+
+> H
+
+, κ 1/15 κ3/5 
+
+> H
+
+d2/15 , κ 3/19 κ9/19  
+
+> H
+
+d2/19 , κ 7/27 κ1/3 
+
+> H
+
+d4/27 , κ 5/13 κ3/13 
+
+> H
+
+o
+
+≤ C(A1 + A2 + A3).
+
+To see the last inequality, the first term is A2/71 A5/72 ; the second through fifth, as well as the eighth and ninth, are bounded by A3 after splitting at κH = 1 . The sixth is bounded by the first. Finally, the seventh and tenth are bounded by A1 + A2 + A3 after splitting at κH = √κ. The largest logarithmic factor arising from this substitution is ι12 /7, which is absorbed by the ι2 in (21). Thus (5) holds. The exact law μ at time KT satisfies Rs(μ ∥ π) ≤ δ2/3 by Theorem 2.1, and the simulated law bν satisfies 
+
+Rr
+
+ bν ∥ μ ≤ δ2/3. Since 1 + ( q − 1) r/ (r − q) = s and the prefactor in Lemma C.4 is at most 2, the lemma gives Rq
+
+ bν ∥ π ≤ δ2. The two stages use at most Cι 4(A1 + A2 + A3) queries, which is the claimed bound. 
+
+## D.4 Proof of Corollary D.4 
+
+By Lemma 2.4 and Lemma D.1, we can take ℓ ≥ 1 and bound 
+
+¯Dq
+
+ bTz ∥ Tz
+
+ ≤ EPz Et∼Unif ([0 ,T ]) exp(2 q(|W (t; Z)| − B)+) − 1
+
+≤ e−2Bqℓ EPz Et∼Unif ([0 ,T ]) exp(2 qℓ |W (t; Z)|)
+
+≤ 2e−2Bqℓ EPz Et∼Unif ([0 ,T ]) exp  24 ℓ2q2T 3∥∂tμt∥2.
+
+Then, by Proposition D.3, there are constants C0, C 2 > 0 such that as long as 
+
+1
+
+C0ℓ2q2 ≥ β2T 4 + γ−1βHβKT 4p
+
+R + γ−1β2
+
+> H
+
+T 6R, 
+
+37 it holds that for 1 ≤ j ≤ K,
+
+Ez∼ν ¯Dq
+
+ bTz ∥ Tz
+
+j ≤ Cj 
+
+> 2
+
+exp 
+
+
+
+−2jBqℓ + C0jℓ 2q2γ−1T 3 β2
+
+> H
+
+T 2(d + ∆ 2) + β2ρ2L−2R
+
++ β3β2
+
+> H
+
+T 8R2 + min β3T 2R, β 2
+
+> H
+
+βT 4R∆ 
+
+.
+
+Therefore, as long as 
+
+1
+
+C0ℓq 2 ≥ γ−1
+
+β2
+
+> H
+
+T 5(d + ∆ 2) + β2T 3ρ2L−2R + β3β2
+
+> H
+
+T 11 R2
+
++ min β3T 5R, β 2
+
+> H
+
+βT 7R∆
+
+
+
+,
+
+it holds that for 1 ≤ j ≤ K, Ez∼ν ¯Dq
+
+ bTz ∥ Tz
+
+j ≤ Cj 
+
+> 2
+
+e−jℓqB . In particular, as long as ℓqB ≥ log (2 C2K/δ ),we can use (1 + x)K ≤ PKj=0 (Kx )j to bound 
+
+Ez∼ν
+
+
+
+1 + ¯Dq
+
+ bTz ∥ Tz
+
+K
+
+≤
+
+> K
+
+X
+
+> j=0
+
+Kj Ez∼ν ¯Dq
+
+ bTz ∥ Tz
+
+j ≤
+
+> K
+
+X
+
+> j=0
+
+(δ/ 2) j ≤ 1 + δ. 
+
+## D.5 Proof of Proposition D.3 
+
+We denote ρ = T 2β, Ht := ∇2V (Xt), Yt := ( Ht − H0)Pt for t ≥ 0. Then by Lemma D.2, we have shown 
+
+∥Yt − √2γ∂ tμt∥ ≤ β∥Pt − P L−1 
+
+> t
+
+∥ ≤ βρ L−1R0, where 
+
+R0 := 4( ∥p∥ + β−1/2∥∇ V (x)∥ + √γR B ), RB := max  
+
+> 0≤t≤T
+
+∥Bt∥.
+
+Further, for every t ∈ [0 , T ], we have ∥Xt − X0∥ ≤ T R 0 and 
+
+∥∇ V (Xt)∥ ≤ ∥∇ V (X0)∥ + βT R 0 ≤ 2pβR 0.
+
+Step 1: Upper bound on ∥Yt∥. Note that 
+
+dYt = ∇3V (Xt)[ Pt, P t]d t + ( Ht − H0)d Pt.
+
+We denote At := ∇3V (Xt)[ Pt, P t], and then 
+
+dYt = ( At − γY t − (Ht − H0)∇V (Xt))d t + p2γ(Ht − H0)d Bt.
+
+Now, we define 
+
+St := 
+
+Z t
+
+> 0
+
+eγs (Hs − H0)d Bs, Zt := ( Ht − H0)∇V (Xt),
+
+and by definition, we have 
+
+∥Yt∥ ≤ 
+
+Z t
+
+> 0
+
+(∥As∥ + ∥Zs∥)d s + p2γe −γt ∥St∥.
+
+Now, by taking the derivative recursively, we have 
+
+Zt =
+
+Z t
+
+> 0
+
+∇3V (Xs)[ Ps, ∇V (Xs)]d s +
+
+Z t
+
+> 0
+
+(Hs − H0)HsPsds, 
+
+and we denote Ut := ( Ht − H0)HtPt, so that 
+
+dUt = ( ∇3V (Xt)[ Pt, H tPt] + ( Ht − H0)( At − Ht∇V (Xt)) − γU t)d t + p2γ(Ht − H0)HtdBt.
+
+38 Now, define 
+
+S′ 
+
+> t
+
+:= 
+
+Z t
+
+> 0
+
+eγs (Hs − H0)HsdBs, A′ 
+
+> t
+
+:= ∇3V (Xt)[ Pt, ∇V (Xt)] , A′′  
+
+> t
+
+:= ∇3V (Xt)[ Pt, H tPt].
+
+Then, using ∥∇ V (Xt)∥ ≤ 2√βR 0, ∥Ht∥op ≤ β, and ∥Ht − H0∥op ≤ βH∥Xt − X0∥ ≤ βHT R 0, we can bound 
+
+∥Ut∥ ≤ 
+
+Z t
+
+> 0
+
+(∥A′′  
+
+> s
+
+∥ + 2 β∥As∥ + 2 β3/2βHT R 20)d s + p2γe −γt ∥S′
+
+> t
+
+∥,
+
+and hence 
+
+∥Zt∥ ≤ 
+
+Z t
+
+> 0
+
+(∥A′
+
+> s
+
+∥ + T ∥A′′  
+
+> s
+
+∥ + 2 βT ∥As∥ + p2γ∥S′
+
+> s
+
+∥)d s + 2 β3/2βHT 3R20.
+
+Combining the above bounds, we can bound 
+
+∥Yt∥ ≤ 2
+
+Z t
+
+> 0
+
+(∥As∥ + T ∥A′
+
+> s
+
+∥ + T 2∥A′′  
+
+> s
+
+∥ + √γT ∥S′
+
+> s
+
+∥)d s + 2 β3/2βHT 4R20 + p2γ∥St∥.
+
+Alternatively, ∥Zt∥ ≤ 2β3/2R0, and the first bound on Yt gives 
+
+∥Yt∥ ≤ 
+
+Z t
+
+> 0
+
+∥As∥ds + 2 β3/2T R 0 + p2γ∥St∥.
+
+Step 2: High probability upper bounds. Fix any t ∈ [0 , T ].(i) By Lemma B.3, it holds that with probability at least 1 − δ under Pz , RB ≲ pT (d + log(1 /δ )) , and hence 
+
+R20 ≲ R(z) + γT (d + log(1 /δ )) ≲ R + γT log(1 /δ ) =: R2+.
+
+(ii) Note that under the event of (i), it holds that 
+
+Z T
+
+> 0
+
+∥Hs − H0∥2Fds ≤ T (βHT R 0)2 ≲ β2
+
+> H
+
+T 3R2+.
+
+Since γT ≤ 1/4, the factors in the quadratic variations satisfy e2γs ≤ e1/2. Thus, by Lemma B.4, it holds that with probability at least 1 − 2δ under Pz ,
+
+max 
+
+> 0≤t≤T
+
+ ∥St∥2 + β−2∥S′
+
+> t
+
+∥2 ≲ β2
+
+> H
+
+T 3R2+ log(1 /δ ).
+
+(iii) We define Ft := ∇3V (Xt)[ ∇V (Xt)] and 
+
+Et := 
+
+h
+
+β−1 
+
+> H
+
+∥At∥ + β−1β−1 
+
+> H
+
+∥A′′  
+
+> t
+
+∥ − C1(√d + ∆) 
+
+i
+
+> +
+
++
+
+ ∥FtPt∥2
+
+∥Ft∥2F
+
+− C1∆
+
+
+
+> +
+
+,RE (z) := log EZ∼Pz ,t ∼Unif ([0 ,T ]) exp( c1Et),
+
+where the last quotient is defined to be zero when ∥Ft∥F = 0 , and C1, c 1 > 0 are appropriate constants so that Lemma B.2 applies, i.e., 
+
+Ez∼ν exp( RE (z)) ≤ 2.
+
+Now, by Markov’s inequality, it holds that with probability at least 1 − δ under Pz ,
+
+Z T
+
+> 0
+
+(∥At∥ + β−1∥A′′  
+
+> t
+
+∥)d t ≲ βHT (√d + ∆ + RE (z) + log(1 /δ )) ,
+
+Z T
+
+> 0
+
+∥FtPt∥2
+
+∥Ft∥2F
+
+dt ≲ T (1 + ∆ + RE (z) + log(1 /δ )) .
+
+39 Note that under this event, we can choose η = βH
+
+> √βR 0
+
+√1+∆+ RE (z)+log(1 /δ ) and further bound (using ∥Ft∥F ≤
+
+βH∥∇ V (Xt)∥ ≤ 2βH
+
+√βR 0)
+
+1
+
+T
+
+Z T
+
+> 0
+
+∥A′
+
+> t
+
+∥dt = 1
+
+T
+
+Z T
+
+> 0
+
+∥FtPt∥dt ≤ 1
+
+T
+
+Z T
+
+> 0
+
+ η∥FtPt∥2
+
+∥Ft∥2F
+
++ η−1∥Ft∥2F
+
+
+
+dt
+
+≲ η(1 + ∆ + RE (z) + log(1 /δ )) + η−1(βH
+
+pβR 0)2
+
+≲ βH
+
+pβR 0
+
+p1 + ∆ + RE (z) + log(1 /δ ).
+
+Step 3: Finalizing the proof. Recall that we denote R2+ := R + γT log (1 /δ ) so R20 ≲ R2+. In the following, we condition on the event of (i)–(iii), which holds with probability at least 1 − 4δ under Pz , and denote 
+
+ι := RE (z) + log(1 /δ ). The refined bound from Step 1 gives 
+
+1
+
+βHT max  
+
+> 0≤t≤T
+
+∥Yt∥ ≲ √d + ∆ + ι + T
+
+q
+
+βR 2+(1 + ∆ + ι) + 
+
+q
+
+γT R 2+ log(1 /δ ) + β3/2T 3R2+
+
+≲ √d + ∆ + ι +
+
+q
+
+βT 2R(1 + ∆ + RE (z)) +
+
+q
+
+(γT + βT 2)R log(1 /δ ) + β3/2T 3R, 
+
+where we use γT ≤ √βT ≤ 1. Therefore, 
+
+max  
+
+> 0≤t≤T
+
+∥Yt∥2 ≲ β2
+
+> H
+
+T 2(ι2 + d + ∆ 2) + β2
+
+> H
+
+βT 4R(1 + ∆ + ι)+ γβ 2
+
+> H
+
+T 3R log(1 /δ ) + β3β2
+
+> H
+
+T 8R2.
+
+The alternative bound from Step 1 gives, on the same event, 
+
+max  
+
+> 0≤t≤T
+
+∥Yt∥2 ≲ β2
+
+> H
+
+T 2(ι2 + d + ∆ 2) + β3T 2R
+
++ γβ 2
+
+> H
+
+T 3R log(1 /δ ) + β2γT log(1 /δ ).
+
+We also have the trivial bound 
+
+∥Yt∥2 ≤ 4β2∥Pt∥2 ≤ 4β2R20 ≲ β2(R + γT log(1 /δ )) .
+
+We use min {a1 + a2, b 1 + b2} ≤ √a1b1 + a2 + b2 only to replace the common ι2 term by a term linear in 
+
+ι. Since βHT 3√R ≤ 1, the term β2
+
+> H
+
+βT 4Rι is absorbed by βHβT √Rι . Applying this argument to the two estimates separately, and then retaining the better one, gives 
+
+max  
+
+> 0≤t≤T
+
+∥Yt∥2 ≲ γ(β2T + β2
+
+> H
+
+T 3R) log(1 /δ ) + βHβT 
+
+p
+
+R ι + β2
+
+> H
+
+T 2(d + ∆ 2) + β3β2
+
+> H
+
+T 8R2
+
++ min β3T 2R, β 2
+
+> H
+
+βT 4R∆ .
+
+Further, we recall that √2γ∥∂tμt∥ ≤ ∥ Yt∥ + βρ L−1R0, and hence 
+
+max  
+
+> 0≤t≤T
+
+∥∂tμt∥2 ≲ (β2T + γ−1β2
+
+> H
+
+T 3R) log(1 /δ ) + γ−1βHβT 
+
+p
+
+Rι 
+
++ γ−1
+
+β2
+
+> H
+
+T 2(d + ∆ 2) + β3β2
+
+> H
+
+T 8R2 + β2ρ2L−2R
+
+
+
++ γ−1 min β3T 2R, β 2
+
+> H
+
+βT 4R∆ .
+
+In the following, we denote 
+
+M0 := β2T + γ−1β2
+
+> H
+
+T 3R, M1 := γ−1βHβT 
+
+p
+
+R, G := γ−1
+
+β2
+
+> H
+
+T 2(d + ∆ 2) + β3β2
+
+> H
+
+T 8R2 + β2ρ2L−2R + min β3T 2R, β 2
+
+> H
+
+βT 4R∆
+
+
+
+.
+
+40 Then, for 0 ≤ r ≤ 1 
+
+> C2(M0+M1)
+
+, integrating gives 
+
+EZ∼Pz exp 
+
+
+
+r max  
+
+> 0≤t≤T
+
+∥∂tμt∥2
+
+
+
+≤ exp( C2r(G + M1RE (z) + M0 + M1)) 
+
+for an absolute constant C2 > 0. Taking expectation over z ∼ ν gives 
+
+Ez∼ν
+
+
+
+EZ∼Pz exp 
+
+
+
+r max  
+
+> 0≤t≤T
+
+∥∂tμt∥2
+
+ K
+
+≤ exp( C3rK (G + M0 + M1)) 
+
+as long as r ≤ 1 
+
+> C3KM 1
+
+, and the desired upper bound follows. 
+
+## D.6 Proof of Corollary D.5 
+
+By Girsanov’s theorem, it is straightforward to verify that 
+
+1 + ¯Dq
+
+ Tz ∥ Tz
+
+ ≤ EPz exp q2
+
+Z T
+
+> 0
+
+∥μt∥2dt
+
+!
+
+≤ EPz exp 
+
+
+
+q2T 3 max  
+
+> 0≤t≤T
+
+∥∂tμt∥2
+
+
+
+.
+
+The first upper bound follows from Proposition D.3. For the second, the proof of that proposition gives 
+
+p2γ∥∂tμt∥ ≤ ∥ Yt∥ + βρ L−1R0 ≤ 3βR 0 ≲ β p R(z) + √γR B
+
+.
+
+The result then follows from Lemma B.3 and the preceding Girsanov bound. 
+
+## D.7 Proof of Lemma D.1 
+
+For any t ∈ [0 , T ], we can bound 
+
+1
+
+T |W (t; Z)| ≤ |⟨ ∂tμt, B T − Bt⟩| + 12 ∥μt∥2 ≤ |⟨ ∂tμt, B T − Bt⟩| + ∥∂tμt∥
+
+Z T
+
+> 0
+
+∥μs∥ds + 12 ∥μt∥2.
+
+Note that 
+
+EPz exp 
+
+
+
+λ|⟨ ∂tμt, B T − Bt⟩| − λ2T
+
+2 ∥∂tμt∥2
+
+
+
+≤ 2, ∀λ ≥ 0.
+
+Therefore, by the Cauchy–Schwarz inequality, 
+
+EPz exp 
+
+ λT |W (t; Z)|
+
+
+
+≤ EPz exp λ|⟨ ∂tμt, B T − Bt⟩| + λ2T
+
+2 ∥∂tμt∥2 + λ
+
+2 ∥μt∥2 + λ
+
+2T
+
+Z T
+
+> 0
+
+∥μs∥2ds
+
+!
+
+≤ 2 EPz exp 3λ2T ∥∂tμt∥2 + λ∥μt∥2 + λT
+
+Z T
+
+> 0
+
+∥μs∥2ds
+
+!
+
+≤ 2 EPz exp 3λ2T ∥∂tμt∥2 + 2 λT 
+
+Z T
+
+> 0
+
+∥∂sμs∥2ds
+
+!
+
+,
+
+where we also used ∥μt∥ ≤ R t 
+
+> 0
+
+∥∂sμs∥ds. In the preceding displays, take the internal parameter to be λT ,where the rescaled parameter λ ≥ 1. Taking t ∼ Unif ([0 , T ]) then gives 
+
+EPz Et∼Unif ([0 ,T ]) exp( λ|W (t; Z)|) ≤ 2 EPz Et,s ∼Unif ([0 ,T ]) exp  3λ2T 3∥∂tμt∥2 + 2 λT 3∥∂sμs∥2
+
+≤ 2 EPz Et∼Unif ([0 ,T ]) exp  6λ2T 3∥∂tμt∥2.
+
+41 D.8 Proof of Lemma D.2 
+
+We regard P 0 
+
+> t
+
+≡ 0. For ℓ ≥ 1, define 
+
+eXℓt := Xℓt − Xℓ−1 
+
+> t
+
+.
+
+For ℓ ≥ 2, define 
+
+eP ℓt := P ℓt − P ℓ−1 
+
+> t
+
+.
+
+For ℓ ≥ 2, the Brownian motion and the gradient terms cancel, so 
+
+d eXℓt = eP ℓt dt, d eP ℓt = −γ eP ℓt dt − H0 eXℓ−1 
+
+> t
+
+dt, 
+
+with eXℓ 
+
+> 0
+
+= eP ℓ 
+
+> 0
+
+= 0 . Hence, for ℓ ≥ 2,
+
+eP ℓt = −
+
+Z t
+
+> 0
+
+e−γ(t−s)H0 eXℓ−1 
+
+> s
+
+ds. 
+
+Let 
+
+DℓX := sup 
+
+> 0≤t≤T
+
+∥ eXℓt ∥ (ℓ ≥ 1) , DℓP := sup 
+
+> 0≤t≤T
+
+∥ eP ℓt ∥ (ℓ ≥ 2) .
+
+Then, for ℓ ≥ 2,
+
+DℓP ≤ βT D ℓ−1 
+
+> X
+
+, DℓX ≤ T D ℓP . (24) For the base position increment, we define R1 
+
+> P
+
+= sup 0≤t≤T ∥P 1 
+
+> t
+
+∥, and 
+
+D1 
+
+> X
+
+= sup 
+
+> 0≤t≤T
+
+∥X1 
+
+> t
+
+− x∥ ≤ T sup 
+
+> 0≤t≤T
+
+∥P 1 
+
+> t
+
+∥ = T R 1 
+
+> P
+
+.
+
+Combining this with (24) yields, by induction, the following position bound for ℓ ≥ 1 and momentum bound for ℓ ≥ 2:
+
+DℓX ≤ T (T pβ)2ℓ−2R1 
+
+> P
+
+, DℓP ≤ (T pβ)2ℓ−2R1 
+
+> P
+
+.
+
+Summing the geometric series and using βT 2 ≤ 1/16 gives 
+
+∥Xℓt − X0∥ ≤ 16 15 T R 1 
+
+> P
+
+, ∥P ℓt ∥ ≤ 16 15 R1
+
+> P
+
+for every ℓ ≥ 1.We next bound R1 
+
+> P
+
+. For any continuous Brownian path, integration by parts gives, for all t ≤ T ,
+
+Z t
+
+> 0
+
+e−γ(t−s)dBs = Bt − γ
+
+Z t
+
+> 0
+
+e−γ(t−s)Bsds. 
+
+Therefore, we denote R′ 
+
+> B
+
+= max 0≤t≤T ∥Bt∥, and 
+
+sup 
+
+> 0≤t≤T
+
+Z t
+
+> 0
+
+e−γ(t−s)dBs ≤ (1 + γT )R′ 
+
+> B
+
+. (25) Then, 
+
+P 1 
+
+> t
+
+= e−γt p −
+
+Z t
+
+> 0
+
+e−γ(t−s)∇V (x)d s + p2γ
+
+Z t
+
+> 0
+
+e−γ(t−s)dBs,
+
+42 and hence, by (25), 
+
+R1 
+
+> P
+
+= sup 
+
+> 0≤t≤T
+
+∥P 1 
+
+> t
+
+∥ ≤ ∥ p∥ + T ∥∇ V (x)∥ + p2γ(1 + γT )R′ 
+
+> B
+
+.
+
+Next, we can bound (using T ≤ 14√β ≤ 14γ )
+
+p2γ(R′ 
+
+> B
+
+− RB ) ≤ T max 
+
+> t
+
+p2γ∥μt∥ ≤ T β max  
+
+> t
+
+(∥XLt − X0∥ + ∥XL−1 
+
+> t
+
+− X0∥) ≤ 8T 2β
+
+3 R1
+
+> P
+
+≤ 3T 2β(∥p∥ + T ∥∇ V (x)∥) + 4 T 2βp2γR ′ 
+
+> B
+
+.
+
+This immediately implies 
+
+p2γR ′ 
+
+> B
+
+≤ 2p2γR B + ∥p∥ + T ∥∇ V (x)∥.
+
+Combining this estimate with (25), γT ≤ 1/4, and (24) yields 
+
+R1 
+
+> P
+
+≤ 15 4 (∥p∥ + T ∥∇ V (x)∥ + √γR B ) = 15 16 R. 
+
+Hence ∥P ℓt ∥ ≤ R, ∥Xℓt − X0∥ ≤ T R , and (19)–(20) follow. 
+
+## D.9 Proof of Proposition D.6 
+
+After the standard rescaling, we may assume α = 1 and γ ≍ 1. By Theorem 2.1, we can choose K = ⌈C0M Λ⌉
+
+so that 
+
+Rℓ
+
+ TK ν′ ∥ π ≤ 1100∆ Rℓ(ν′ ∥ π), 2 ≤ ℓ ≤ w. 
+
+Fix I = ⌈C0Λ⌉ and ϵ = log (w/ (w − c)) /I , so that (1 + ϵ)I ≤ w/ (w − c). Set q = max {4, 2w/ϵ }, p = e−∆/(2 I),and 
+
+R = 20[ d + 5∆ + 3 log(128 KI )] , E = {z : R(z) ≤ R}.
+
+Then Lemma B.1 gives 
+
+1 − π(E) ≤
+
+ p
+
+64 K
+
+3
+
+e−2∆ . (26) Let C1 absorb the constants in Corollary D.5, and define 
+
+U := 200 
+
+h
+
+qp + C1 + C1Kq 2γ−1 β2
+
+> H
+
+T 5d + β2T 3ρ2L−2R + γβ 2T 4 + β2
+
+> H
+
+T 6R
+
++ β3β2
+
+> H
+
+T 11 R2 + β2
+
+> H
+
+βT 7Ri
+
+.
+
+When U ≥ ∆, there is nothing to prove: We simply output ν. Therefore, assume U < ∆.Let ν0 = ν, let νi be the conditional success distribution after i stages of Theorem B.11, set wi = w(1 + ϵ)−i,and let Si be a deterministic upper bound on Rwi (νi ∥ π). Set 
+
+η0 := qp + C1Kq 2γ−1β2T 3R, U0 := 1 + 2 η0.
+
+If U0 ≤ ∆, apply Theorem B.11 using the crude bound in Corollary D.5, with warmness ∆, accuracy η0,and failure probability p. The composition below gives Rw1 (ν1 ∥ π) ≤ U0, so choose i0 = 1 and Si0 = U0.Otherwise choose i0 = 0 and Si0 = ∆ . In either case, Si0 ≤ min {∆, U 0}.For i ≥ i0, use failure probability p and truncation accuracy 
+
+ηi := qp + C1 + C1Kq 2γ−1
+
+β2
+
+> H
+
+T 5(d + S2 
+
+> i
+
+) + β2T 3ρ2L−2R + γβ 2T 4 + β2
+
+> H
+
+T 6R + β3β2
+
+> H
+
+T 11 R2 + β2
+
+> H
+
+βT 7RS i
+
+
+
+.
+
+43 As long as Si ≤ ∆ and Si > 4U , we have p ≤ ηi/q and ηi ≤ Si/2, while (26) supplies the required cutoff. Thus Theorem B.11 gives Rq/ 2
+
+ νi+1 ∥ TK νi
+
+ ≤ ηi.For 
+
+ri := wi+1 (wi − 1) 
+
+wi − wi+1 
+
+= wi − 1
+
+ϵ ≤ q
+
+2 ,
+
+by Lemma C.4, the Rényi triangle inequality gives 
+
+Rwi+1 (νi+1 ∥ π) ≤ Si
+
+100∆ + wi
+
+wi − 1 Rri
+
+ νi+1 ∥ TK νi
+
+ ≤ Si
+
+100∆ + 2 ηi := Si+1 .
+
+Substituting K ≍ M Λ, q ≍ Λ, and R ≲ ∆ + log M into the stated condition gives 
+
+2C1Kq 2γ−1 β2
+
+> H
+
+T 5U0 + β2
+
+> H
+
+βT 7R ≤ 1100 .
+
+Hence Si+1 ≤ Si/2 whenever Si > 4U . We therefore stop at the first deterministic index with Si ≤ 4U , which occurs by stage I. Since wI ≥ w −c, the total failure probability is at most Ip ≤ e−∆ and N ≤ KI = O(M Λ2).Substituting the definitions of K, q, R into U gives the two stated bounds. 
+
+# E Proofs from Section 5 
+
+## E.1 Sub-exponentiality of the estimator 
+
+Lemma E.1. Define 
+
+M := sup 
+
+> x
+
+∥∇ V (x)∥x, ∗ < ∞ .
+
+Then we have the following bound, where ∗ in the expectation denotes either the proposal measure Q or P,and C > 0 is a sufficiently large absolute constant, for any λ > 0 and t ∈ [0 , h ]:
+
+E∗ exp 
+
+n
+
+λ|W (t, Y )|} ≤ 2 exp Cλh {(β + 2 Mϕ M) d + M2} + Cλ 2hM2 .
+
+Proof. Consider a point y ∈ X ∗, and let x ∈ X denote T (y). Then, 
+
+∇f (y) =  ∇2ϕ(x)−1 ∇V (x) .
+
+Applying the chain rule, 
+
+∂2 
+
+> ij
+
+f = X
+
+> k,ℓ
+
+∂2
+
+> k,ℓ
+
+V (x) · (∇2ϕ(x)) −1 
+
+> ki
+
+· (∇2ϕ(x)) −1 
+
+> ℓj
+
++ X
+
+> k
+
+∂kV (x) ∂2 
+
+> ij
+
+Tk(y) .
+
+We now evaluate tr  ∇2ϕ(x) ∇2f (y). Using the expression for ∂2 
+
+> ij
+
+f , we have 
+
+tr  ∇2ϕ(x) ∇2f (y) = ⟨∇ 2V (x), (∇2ϕ(x)) −1⟩ + X
+
+> i,j,k
+
+∂kV (x) ∂2 
+
+> ij
+
+Tk(y) ( ∇2ϕ(x)) i,j 
+
+| {z }
+
+> R(x)
+
+,
+
+where R(x) will correspond to the second term, analyzed below. For this, differentiating (∇2ϕ(x)) −1 ∇2ϕ(x) = (∇2ϕ(x)) −1 ∇T (y) = I,
+
+∂j (∇T (y)) k,i = − X
+
+> ℓ,m,n
+
+(∇T (y)) kℓ ∂3
+
+> ℓ,m,n
+
+ϕ(x) ( ∇T (y)) im (∇T (y)) jn ,
+
+44 Thus, we can write for a ∇2ϕ(x)-orthogonal basis {ek}k∈[d],
+
+R(x) = −
+
+> d
+
+X
+
+> k=1
+
+∇3ϕ(x)[( ∇2ϕ(x)) −1 ∇V (x), e k, e k] .
+
+We can now apply self-concordance. Since the ek have unit length in the local norm, 
+
+|R(x)| ≤ 2
+
+> d
+
+X
+
+> k=1
+
+Mϕ (∇2ϕ(x)) −1 ∇V (x) x = 2 
+
+> d
+
+X
+
+> k=1
+
+Mϕ ∥∇ V (x)∥x, ∗ .
+
+Now, since V is convex and β-relatively smooth, 
+
+⟨∇ 2V (x), (∇2ϕ(x)) −1⟩ ≤ β d . 
+
+Thus, we can bound 
+
+|tr( ∇2ϕ(x) ∇2f )| ≤ β d + 2 d M ϕ · M ,
+
+where M is given in the lemma statement. Therefore, under the proposal measure, 
+
+|Lf | ≤ | tr( ∇2ϕ(x) · ∇ 2f )| ≤ β d + 2 d M ϕ · M .
+
+Repeat this calculation along the true path Xs = T (Ys), with 
+
+df (Ys) = 2 ⟨μs, dBs⟩ + Lf (Ys) d s , 
+
+where L is the generator of the true mirror Langevin diffusion. Using Cauchy–Schwarz in the dual norm, we have 
+
+|⟨∇ V (x), ∇f (y)⟩| = |⟨∇ V (x), (∇2ϕ(x)) −1 ∇V (x)⟩| ≤ M2 .
+
+Consequently, 
+
+|Lf | ≤ |⟨∇ V, ∇f ⟩| + |tr( ∇2ϕ(x) · ∇ 2f )| ≤ β d + 2 d M ϕ · M + M2 .
+
+Furthermore, we have, for Ct := 2 R t 
+
+> 0
+
+⟨μs, dBs⟩, the quadratic variation 
+
+⟨C⟩h = 4 
+
+Z h
+
+> 0
+
+∥μs∥2 ds ≤ 2hM2 .
+
+Finally, it follows that 
+
+|f (Yh) − f (Y0)| ≤ | Ch| + h (β + 2 Mϕ M) d + M2 ,
+
+and combining this with the bounds on ∥μt∥2 and Lf , we obtain for some constant C > 0
+
+|W (t, Y )| ≤ 12 |Ch| + Ch (β + 2 Mϕ M) d + M2 .
+
+Indeed, as we have bounded the quadratic variation, the exponential martingale inequality also gives 
+
+E exp 
+
+ λ
+
+2 |Ch|
+
+
+
+≤ 2 exp 
+
+
+
+Cλ 2hM2
+
+.
+
+Putting this all together gives the bound. We then apply this result within the framework of Lemma 2.4. 45 Lemma E.2. For any order q ≥ 2, ε ∈ (0 , 1] , under the same assumptions and notation as Lemma E.1, if we choose 
+
+B ≳ h (β + 2 Mϕ M) d + M2 + hq M2 + Mph log(2 /ε 2) .
+
+as the clipping parameter in FORS, then letting py and bpy denote the exact and FORS-corrected one-step transition laws from Y0 = y, respectively, 
+
+ 1 + Dq (py ∥bpy )2 ≤ 1 + ε2 .
+
+Proof. Recall that the estimator constructed above is unbiased. The resulting error is therefore determined solely by clipping. Using Lemma E.1, we have 
+
+E exp {λ|W (t, Y )|} ≤ 2 exp Cλh (β + 2 Mϕ M) d + M2 + Cλ 2hM2 ,
+
+under the reference path measure. For |W − Clip B (W )|, we have the following simple inequality for any k ≥ 1:
+
+exp(4 q |W − Clip B (W )|) ≤ 1 + exp( −4qkB ) exp(4 qk |W |) .
+
+Applying the preceding lemma to bound the expectation of the second term, we obtain 
+
+(1 + Dq (p∗ ∥ bp)) 2 ≤ 1 + 2 exp( −4kqB + Chkq (β + 2 Mϕ M) d + M2 + Chk 2q2M2 ,
+
+and equivalently, it suffices to choose 
+
+B ≳ h (β + 2 Mϕ M) d + M2 + hkq M2 + log(2 /ε )4kq .
+
+Take 
+
+k = max 
+
+n
+
+1,
+
+plog(2 /ε )
+
+qM√h
+
+o
+
+,
+
+to obtain the bound in the result. We provide another composition lemma which will be used in the proof below. 
+
+Lemma E.3 (Fixed-order composition of uniformly close kernels) . Let P1, . . . , P K and bP1, . . . , bPK be Markov kernels on a common measurable state space, and suppose that, for some fixed q ≥ 2 and η ≥ 0,
+
+sup 
+
+> k∈[K]
+
+sup 
+
+> x
+
+¯Dq
+
+ Pk(x, ·) ∥ bPk(x, ·) ≤ η. 
+
+If νK = ν0P1 · · · PK and bνK = ν0 bP1 · · · bPK , then 
+
+1 + ¯Dq
+
+ νK ∥ bνK
+
+ ≤ (1 + η)K .
+
+In particular, if η ≤ cε 2/K for a sufficiently small absolute constant c, then Rq
+
+ bνK ∥ νK
+
+ ≲ ε2.
+
+Proof. Put the exact and approximate chains on path space, with common initial law ν0. In either direction, the likelihood ratio of one path law with respect to the other is the product of the K conditional likelihood ratios. Successive conditioning, starting from the last transition, and the uniform one-step assumption show that its order-q moment is at most (1 + η)K . The same argument with the two path laws interchanged gives the symmetric bound. Projecting a path to its final coordinate and using data processing proves the display. Finally, (1 + η)K ≤ eKη and Rq (bνK ∥ νK ) = ( q − 1) −1 log(1 + Dq
+
+ bνK ∥ νK
+
+).46 E.2 Proof of Lemma 5.2 
+
+Consider an optimal coupling γ with X ∼ π and Y ∼ νt for Breg ϕ(π ∥ νt). We note that the mirror Langevin diffusion for Y can be written in terms of a continuity equation with vector field 
+
+vt(y) = −[∇2ϕ(y)−1] ∇V (y) + ∇ log νt(y) .
+
+Then, differentiating the Bregman transport cost using these characteristics, we obtain 
+
+∂tBreg ϕ(π ∥ νt) ≤ E⟨vt(y), ∇y Dϕ(x ∥ y)⟩]= E⟨∇ V (y) + ∇ log νt(y), x − y⟩] ,
+
+where we used that ∇y Dϕ(x ∥ y) = −∇ 2ϕ(y) ( x − y).Now, split the RHS into the potential energy and the entropy parts. Recalling that V is α-convex relative to 
+
+ϕ, integrating with respect to the optimal coupling γ gives 
+
+E⟨∇ V (y), x − y⟩ ≤ Eπ V − Eνt V − αBreg ϕ(π ∥ νt) .
+
+As for the entropy term, we use Ahn and Chewi (2021, Theorem 4), which states for any measures μ, π ,coupling y ∼ μ, x ∼ π optimally according to the Bregman transport cost, 
+
+Ent (π) ≥ Ent (μ) + E⟨[∇W2 Ent (μ)]( y), x − y⟩ ,
+
+where ∇W2 denotes the Wasserstein-2 gradient of a functional over probability measures, which for the entropy Ent (μ) is simply ∇ log μ. We take νt in place of μ above, and this shows that 
+
+E⟨∇ log νt(y), x − y⟩ ≤ Ent (π) − Ent (νt) .
+
+As a result, we obtain 
+
+∂tBreg ϕ(π ∥ νt) ≤ Eπ V − Eνt V + Ent (π) − Ent (νt) − αBreg ϕ(π ∥ νt) .
+
+Using the definition of the DKL and Ent (π) = −Eπ V + C, it follows that 
+
+∂tBreg ϕ(π ∥ νt) ≤ − DKL (νt ∥ π) − αBreg ϕ(π ∥ νt) .
+
+This can be rearranged to yield the first result. For the integrated bounds, we use the fact that DKL is nonincreasing along the mirror Langevin flow by the data-processing inequality. Writing F (t) := Breg ϕ(π ∥ νt) and multiplying the differential inequality by eαt 
+
+gives 
+
+eαt DKL (νt ∥ π) ≤ − ∂t
+
+ eαt F (t).
+
+Hence, for α > 0,
+
+eαT − 1
+
+α DKL (νT ∥ π) ≤
+
+Z T
+
+> 0
+
+eαt DKL (νt ∥ π) d t ≤ F (0) ,
+
+where the first inequality uses monotonicity of DKL (νt ∥ π). For α = 0 , the same calculation gives 
+
+T D KL (νT ∥ π) ≤ F (0) .
+
+These are the two claimed bounds. 47 E.3 Proof of Theorem 5.3 
+
+Fix the Rényi order q = 3 throughout. To bound the Rényi divergence by ε2, we take 
+
+Niter ≍ 1
+
+αh log CD χ2 (ν0 ∥ π)
+
+ε2 .
+
+Then, let bνNiter h be the law obtained by running FORS for Niter iterations with step size h, and let νNiter h be the mirror Langevin law after the same duration. It follows that 
+
+R3/2
+
+ bνNiter h ∥ π ≲ R3
+
+ bνNiter h ∥ νNiter h
+
+ + R2(νNiter h ∥ π) .
+
+Use Lemma 5.1 to bound the second term; we use the bound R2(ν ∥ π) ≤ Dχ2 (ν ∥ π).For the first term, the Lipschitz condition in Assumption 2 allows us to take M ≤ L in Lemma E.2. Apply that lemma at the fixed order q = 3 , with its accuracy parameter chosen so that ε2step ≍ ε2/N iter . It gives a uniform one-step bound η ≲ ε2/N iter . Apply Lemma E.3 to the dual transition kernels and then push forward by T ; data processing gives 
+
+R3
+
+ bνNiter h ∥ νNiter h
+
+ ≲ ε2.
+
+Since log(2 /ε 2step ) = O(log( Niter /ε 2)) , the clipping threshold remains O(1) provided 
+
+h ≍ 1¯d + L2Λ , Λ ≍ polylog( ε−2, D χ2 (ν0 ∥ π), ζ −1) .
+
+Then, it suffices to take B = O(1) . The query complexity then follows from Theorem 2.3 by applying a union bound over Niter iterations (taking the failure probability to be ζ/N iter ) and multiplying the per-iteration cost by Niter .Alternatively, using the bound from Lemma 5.2 to control the DKL divergence in continuous time, we can obtain a guarantee in total variation distance by combining the triangle inequality with Pinsker’s inequality; namely, 
+
+DTV 
+
+ bνNiter h, π  ≤ DTV 
+
+ bνNiter h, ν Niter h
+
+ + DTV (νNiter h, π ) .
+
+The composition lemma and Pinsker’s inequality bound the first term, while Lemma 5.2 and Pinsker’s inequality bound the second. In the strongly convex case, we obtain 
+
+Niter ≍ 1
+
+αh log 
+
+
+
+1 + Breg ϕ(π ∥ ν0)
+
+ε2
+
+
+
+,
+
+Using the same union bounds as before, it then suffices to take 
+
+h ≍ 1¯d + L2Λ , Λ = eO
+
+
+
+polylog( ¯d, α −1, ε −2, Breg ϕ(π ∥ ν0)) 
+
+
+
+.
+
+The query complexity again follows from Theorem 2.3. It remains to analyze the convex case α = 0 . Write R0 := Breg ϕ(π ∥ ν0). By Lemma 5.2 and Pinsker’s inequality, 
+
+DTV 
+
+ νT , π 2 ≤ 12 DKL (νT ∥ π) ≤ R0
+
+2T .
+
+Thus it suffices to take T = Niter h ≍ R0/ε 2, or 
+
+Niter ≍ R0
+
+hε 2 .
+
+48 Applying Lemma E.2 with ε2step ≍ ε2/N iter and then Lemma E.3, exactly as above, gives 
+
+DTV 
+
+ bνNiter h, ν Niter h
+
+ ≲ ε. 
+
+Taking h−1 = eO( ¯d) and targeting a failure probability of ζ/N iter to each call of FORS gives 
+
+Nquery = eO
+
+ ¯d R 0
+
+ε2
+
+
+
+,
+
+where the suppressed logarithms include the dependence on ε−2, R0, and ζ−1.
+
+# F Proof of Theorem 6.2 
+
+By Theorem 6.1, it suffices to instantiate Assumption 3. Let ϖ ∝ e−U be any 1-strongly log-concave and 
+
+3-log-smooth distribution with mode at the origin. Initialize the underdamped Langevin sampler from 
+
+ν0 = N(0 , I/ 3) ⊗ N(0 , I ). By the quadratic sandwich 
+
+U (0) + 12 ∥x∥2 ≤ U (x) ≤ U (0) + 32 ∥x∥2 ,
+
+the density ratio is bounded by 3d/ 2. Since the momentum laws agree, this yields 
+
+R∞
+
+ ν0 ∥ ϖ ⊗ N(0 , I ) ≤ d
+
+2 log 3 ,
+
+and therefore the order-2 and order-6 Rényi divergences are both O(d). For this auxiliary target, κ = O(1) and hence Theorem 3.2(ii), with q = 3 and its accuracy parameter set to min {1/2, δ 2RGO }, produces a phase-space law bν satisfying 
+
+R3
+
+ bν ∥ ϖ ⊗ N(0 , I ) ≤ δ2RGO .
+
+By data processing, its position marginal implements Alg at the accuracy required in Assumption 3. One such call uses 
+
+eO d1/3 + log( M/p )
+
+queries to the first-order oracle for U with failure probability at most p/M . Plugging this implementation of 
+
+Alg into Theorem 6.1 gives the stated complexity. The RGO subproblems appearing in the proximal sampler have condition number bounded by a universal constant, so the preceding implementation applies uniformly to every call. Each first-order query to a translated and rescaled RGO potential requires one query to ∇V .Finally, a union bound over the M calls gives total failure probability at most p and total first-order query complexity 
+
+eO
+
+
+
+M
+
+
+
+d1/3 + log( M/p )
+
+ 
+
+.
+
+For the final claim under higher-order smoothness, apply Theorem 4.2 with w = 7 /2. The R∞ bound above verifies its initialization requirement, and when κ, κ F = O(1) its displayed dimension dependence reduces to 
+
+eO(d1/5).49
