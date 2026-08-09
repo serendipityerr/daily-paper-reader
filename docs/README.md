@@ -6,31 +6,22 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-08
-- 运行时间：2026-08-08 20:12:05 UTC
+- 最新运行日期：2026-08-09
+- 运行时间：2026-08-09 20:29:42 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：1
-- 速读区：2
+- 本次总论文数：0
+- 精读区：0
+- 速读区：0
 
 ### 今日简报（AI）
-今日精读1篇、速读2篇，聚焦最优传输与Wasserstein重心计算。  
-最值得关注Beckmann输运模型的自主流到单步映射高阶视角，以及固定支撑熵正则Wasserstein重心的牛顿法。  
-建议先理解Beckmann模型的数学框架，再用现成工具跑小规模数值实验巩固直觉。
-- 详情：[/202608/08/README](/202608/08/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202608/09/README](/202608/09/README)
 
 ### 精读区论文标签
-1. [Beckmann Transport Models: From Autonomous Flows to One-Step Maps](/202608/08/2608.01692v1-beckmann-transport-models-from-autonomous-flows-to-one-step-maps)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：利用自治流和单步映射精确连接两个分布，与扩散桥及最优输运密切相关
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Beckmann Transport Models: From Autonomous Flows to One-Step Maps](/202608/08/2608.01692v2-beckmann-transport-models-from-autonomous-flows-to-one-step-maps)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：基于最优传输的流匹配框架，用自治流和一步映射实现分布间转换
-2. [Newton Method for Fixed-Support Doubly Entropic Wasserstein Barycenter](/202608/08/2607.29109v1-newton-method-for-fixed-support-doubly-entropic-wasserstein-barycenter)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：熵正则化最优传输的牛顿方法，可用于Schrödinger桥相关的最优传输求解
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
