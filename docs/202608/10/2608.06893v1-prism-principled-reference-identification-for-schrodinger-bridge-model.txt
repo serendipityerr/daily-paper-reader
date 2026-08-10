@@ -1,0 +1,2986 @@
+Title: PRISM: Principled Reference Identification for Schrodinger Bridge Model
+
+URL Source: https://arxiv.org/pdf/2608.06893v1
+
+Published Time: Mon, 10 Aug 2026 00:34:41 GMT
+
+Number of Pages: 40
+
+Markdown Content:
+# PRISM: Principled Reference Identification for Schrödinger Bridge Models 
+
+Forouzan Fallah, Yezhou Yang 
+
+Arizona State University 
+
+## Abstract 
+
+Schrödinger bridge models restore a clean signal from a degraded observation by following the conditional bridges of a reference process, yet this reference is chosen heuristically, typically white noise with a hand-tuned schedule. We develop PRISM, a theory of bridge reference design. We characterize the time-varying Gaussian references that remain exactly tractable with per-mode schedules: precisely those whose instantaneous covariances commute. We then prove an invisibility principle: with the exact drift and unlimited solver steps, every admissible reference recovers the true posterior. The choice of reference therefore matters only under finite computational resources. For a fixed step budget, we derive the finite-step objective in closed form and prove that every optimal noise spectrum is proportional to Pk,the spectrum of information destroyed by the sensor, with a mode-independent constant x∗(T ) = (2 ln T )−1/2(1 + o(1)) . The analysis shows that noise color and temporal scheduling are interchangeable, and regularization provably shifts the optimal reference toward white noise. Experiments in Gaussian settings confirm the predicted orderings and the closed-form loss floors. On FFHQ, the distortion– perception trade-off and spectral localization transfer, but white noise outperforms the matched reference; a pre-registered study that changes the training regime refutes ridge whitening as the explanation. A 2×2 mechanism study then traces the inversion to the non-Gaussian per-mode statistics of real images. PRISM turns reference design from a hyperparameter sweep into a calculation in the Gaussian regime, and locates exactly where real images break it. 
+
+## 1 Introduction 
+
+Schrödinger bridge models [31, 9, 38] learn to transport samples between two distributions along the conditional bridges of a reference process . This reference determines the intermediate states used during training, including how noise is distributed across spatial frequencies. Yet it is usually chosen by hand, most often as white noise with a heuristic scalar schedule. This practice treats the reference as a minor implementation detail. Fig. 1 shows that it is not: at every solver budget there is an interior optimal noise level, and its location follows a simple, predictable rule. Diffusion schedules were hand-tuned until schedule theory [24, 28] made their design principled. Recent work has shown empirically that the spectrum of injected noise matters in one-endpoint generative diffusion [11, 22, 3, 10]. That setting, however, has no measurement operator that identifies a preferred spectrum. Color is therefore selected by search rather than derived, with no theory describing when it should matter. This paper develops the analogous theory for bridge references, which we call PRISM (Principled Reference Identification for Schrödinger Bridge Models), and finds the answer more subtle than a single optimal formula: the reference is irrelevant in the ideal limit, while its optimal finite-resource design depends on solver steps or model error. Our analysis proceeds in a solvable linear-Gaussian degradation model, where the observation is 
+
+x1 = hkx0 + n per spatial frequency k, with transfer function hk, noise spectrum Nk, and signal 
+
+> Preprint. arXiv:2608.06893v1 [cs.LG] 7 Aug 2026 T = 5
+
+x = 0.08 x = 0.16 x = 0.32 x = 0.64 x = 1.28 x = 2.56  
+
+> T = 20 T = 100 T = 1000
+> 10 −1 10 0
+
+x = v/P   
+
+> 050 100 150
+> FID  #
+> T = 5 T = 20 T = 100 T = 1000
+> 10 110 210 3
+
+T
+
+> 0.3 0.5 0.6 0.8
+
+x*
+
+> (2ln T) −1/2
+> measured argmin
+> solver steps T  !
+
+(a) reference scale x = v/P !
+
+(b) interior optimum at every T (c) the constant, and its law Figure 1: There is a right amount of reference noise, and its size is predictable. (a) Each row is a solver sampling budget T ; each column shows the injected reference noise level, as a scale x relative to the information destroyed by the sensor. Too little noise (left) fails to recover missing detail; too much (right) obscures the reconstruction. (b) Reconstruction error as a function of x, with one curve per T . Every curve has a minimum, showing that an intermediate noise level performs best. (c) The minimum’s location follows Eq. (7), matching the measured optimum at every tested budget. prior Sk. The central quantity is the Wiener residual spectrum 
+
+Pk = SkNk/(h2
+
+> k
+
+Sk + Nk), (1) which measures the posterior uncertainty remaining after observing x1; where the sensor sees well, 
+
+Pk ≈ Nk ≈ 0; where it is blind, Pk ≈ Sk. Thus, Pk is the spectrum of the destroyed information and is computable directly from the known degradation model. 
+
+Contributions. 
+
+1. A tractability theorem (§3.1). We characterize the time-varying operator-valued references that admit I2SB-style closed-form bridges and decouple into independent scalar modes: their instantaneous covariances must pairwise commute, equivalently simultaneously diago-nalizable. We also give blockwise aliasing, linear-drift, and Hilbert-space extensions. 2. An invisibility principle (§3.2). With the exact drift and T → ∞ steps, the terminal law equals the true posterior for every reference variance v > 0, and collapses to a point mass at 
+
+v = 0 . The reference matters only once some resource (solver steps or model accuracy) is limited. 23. Finite-step theory (§3.3). We derive the T -step terminal law in closed form. The per-mode KL depends on (v, P ) only through x = v/P , so every optimizer is proportional, 
+
+vk = x∗Pk. On uniform grids, x∗(T ) = (2 ln T )−1/2(1 + o(1)) and the optimal KL is    
+
+> ln T
+> 2T2
+
+(1 + o(1)) . A second change of variables, the z-identity, makes color and schedule exchangeable: under per-mode schedules discretization error is color-blind, and the optimal schedule is unique with a 4P/T floor. On clustered grids the color objective has several local minima, so the two cannot be designed independently. 4. Model error and learning (§3.4). We extend the analysis to arbitrary (gain, bias) pertur-bations of the drift. Given the z-schedule and error profile, sampling is color-blind, and per-mode learning is color-blind for any scale-equivariant learner; color matters only where scale symmetry breaks. Shared ridge regularization breaks it in a definite direction, giving the sub-proportional law vk = x∗(nP k) · Pk: less data whitens the optimal reference, which lands between white noise and Pk.5. Experiments, and a refuted prediction (§4). Numerics and trained predictors confirm the predicted orderings and closed-form loss floors, and measure ridge whitening directly. On FFHQ [25] at 64 ×64 with a known degradation, the distortion–perception trade-off and the predicted spectral localization transfer, but white stays the better perceptual reference. A pre-registered two-regime study (§4.4) refutes ridge whitening as the explanation, and a 
+
+2×2 mechanism study (§4.5) shows that the inversion tracks the data, not the architecture, implicating the non-Gaussian per-mode statistics that the theory idealizes away. 
+
+## 2 Related Work 
+
+Schrödinger bridges and bridge matching. Diffusion Schrödinger Bridge (DSB) approximates iterative proportional fitting using score-based diffusion [9]; DSBM and Iterative Markovian Fitting instead alternate bridge matching with Markovian projection [38, 35], and Iterative Proportional Markovian Fitting unifies the two families [26, 16]. A parallel line pursues simplified, non-iterative, or provably light solvers [39, 14, 35], task-dependent state costs, and semi-supervised couplings [30, 20]. These methods improve estimators built on a given reference. We instead ask which reference should be used. 
+
+Bridge models for restoration and inverse problems. [31] uses the analytic Brownian-bridge posterior to map paired degraded and clean images, while [48] formulate DDBMs over a general reference diffusion with VE/VP variants. Follow-up work improves faster and non-Markovian sampling [42, 47], few- or one-step distillation [17, 15], pretrained priors [40], mean-reverting and stochastic-control formulations [49], residual or energy-shortened trajectories [41, 19], and regularization against exposure bias and distortion [45]. These methods mainly modify the drift or time horizon; the diffusion covariance remains isotropic, with a scalar scale chosen by tuning. 
+
+Structured references and degradation-aware forward processes. Gaussian Schrödinger bridges admit closed forms [5], and richer reference dynamics such as multivariate Ornstein–Uhlenbeck processes, topology-aware heat diffusions, analytic linear–quadratic bridges—have been studied recently [46, 44, 6]. In these works, the reference or its inducing cost is fixed in advance; we treat it as unknown. 
+
+Spectral shaping and colored noise. The closest line of work studies the spectrum of injected noise. Fourier-space analyses of the forward process [11] motivate schedules that corrupt all frequencies at a matched rate. Empirical studies report gains from blue noise, low-frequency-heavy noise, spectrally anisotropic forward noise, spectrally-guided or per-instance schedules, and frequency-band redistribution at sampling time [21, 22, 37, 3, 10, 8]. These works show that noise color is an important design choice, but select it through search or end-to-end fitting. This produces dataset-specific rules without explaining why one spectrum should be preferred or when color should have no effect. We provide both results in the bridge setting: the optimal spectrum is the destroyed-information spectrum 
+
+Pk, and its effect provably vanishes in the exact-drift, schedule-adapted limit. 
+
+Schedule design, step budgets, and distortion–perception. Variational Diffusion Models and EDM established schedule and weighting choices as important design variables [28, 24]. Later 3work studied ELBO-based reweighting, logSNR importance sampling, and corrections to common schedules [27, 29, 33]. These methods optimize the temporal schedule of a fixed one-endpoint process and evaluate it empirically under a given NFE budget. Our finite-step objective is closed-form, so its optimum is proved rather than measured. Moreover, the z-identity shows that reported color effects must be tested for schedule confounds. Finally, the distortion–perception trade-off is classical [4, 13] and remains important in bridge restoration [45, 12]. In our model, its factor-two cost follows as a theorem, while the reference traces the entire curve. 
+
+## 3 PRISM: A Theory of Reference Design 
+
+3.1 Which References Are Exactly Tractable? 
+
+Let B be standard Brownian motion in Rd, and let dXt = L(t) d Bt with Q(t) := L(t)L(t)⊤.Image-to-Image Schrödinger Bridge ( I2SB) methods [31, 43] require two closed-form objects: the pinned marginal Xt | (X0, X 1) for training-state sampling and the reverse sub-bridge kernel 
+
+Xs | (Xt, X 0) for ancestral sampling. For any deterministic covariance schedule Q(·), both are multivariate Gaussians with explicit matrix formulas (Lemmas 1–2, App 6.2). Practical I2SB, however, needs an exact decomposition into independent scalar modes, each with its own spatial-frequency noise schedule. The following result characterizes this condition. 
+
+Theorem 1 (Commuting-reference tractability) . Suppose Q(t) is real symmetric and positive semidef-inite for almost every t ∈ [0 , 1] . Then the following are equivalent: 1. Pairwise commutativity: Q(s)Q(t) = Q(t)Q(s) for all s, t outside a common null set. 2. A fixed modal basis: Q(t) = U diag  q1(t), . . . , q d(t)U ⊤, with a time-independent orthog-onal U .3. In the coordinates Y = U ⊤X, the reference is a product of independent time-changed scalar Brownian motions: dYk,t = pqk(t) d Bk,t .Under these conditions, with ak(t) := R t 
+
+> 0
+
+qk, vk := ak(1) , and ρk(t) := ak(t)/v k, the pinned bridge decomposes exactly over modes: 
+
+Yk,t | (yk, 0, y k, 1) ∼ N  μk,t , σ 2
+
+> k,t
+
+ ,μk,t =  1 − ρk(t)yk, 0 + ρk(t)yk, 1,σ2 
+
+> k,t
+
+= vkρk(t) 1 − ρk(t),
+
+(2) 
+
+and for 0 < s < t ≤ 1 the reverse kernel is modewise Gaussian with mean coefficient rk(s, t ) = 
+
+ρk(s)/ρ k(t) and variance ak(s) 1 − rk(s, t ).
+
+Corollary 1 (Schedule parameterization) . The family in Theorem 1 is parameterized exactly, per mode, by a total variance vk > 0, called the color , and an absolutely continuous nondecreasing schedule 
+
+ρk : [0 , 1] → [0 , 1] with ρk(0) = 0 and ρk(1) = 1 , called the allocation , through qk(t) = vk ˙ρk(t).
+
+Three extensions matter in practice, all proved in App 6.2. (i) Static colors: references of the form Q(t) = β(t)Σ , used in prior fixed-color work, form the strict subfamily where all modes share one ρ; white I2SB corresponds to Σ = cI .(ii) Aliasing blocks: if every Q(t) is block-diagonal under one fixed orthogonal decomposition, the bridge decouples into independent finite-dimensional blocks without within-block commutativity. This correctly models downsampling, where each frequency couples to its foldovers. (iii) Commuting linear drift: simultaneously diagonalizable F (t) and Q(t) preserve exact modal tractability under modified Gaussian formulas, covering mean-reverting references; a Hilbert-space version holds under a trace condition. 
+
+3.2 Solvable Model and Invisibility Principle 
+
+Theorem 1 separates the operator problem into scalar modes, so we work per mode and omit the index k. For each spatial frequency, the degradation model is 
+
+x0 ∼ N (0 , S ), x1 = h x 0 + n, n ∼ N (0 , N ). (3) 4The posterior is x0 | x1 ∼ N (W x 1, P ), where W = Sh/ (h2S + N ) is the Wiener gain and 
+
+P = SN / (h2S + N ) > 0 is the residual variance. For color v ≥ 0 and bridge level ρ ∈ [0 , 1] , the reference bridge is xρ = (1 − ρ)x0 + ρx 1 + pvρ (1 − ρ) ξ.Let 0 = ρ0 < · · · < ρ T = 1 be the discretization grid. The plug-in-mean ancestral sampler —standard I2SB with a Bayes-optimal network—starts at x1. At each level, it computes ˆx0 = E[x0 |
+
+xρi , x 1] and applies the reverse kernel from Theorem 1, replacing x0 with ˆx0.Define φ(ρ) := (1 − ρ)P + vρ and 
+
+K(ρ) = Pφ(ρ) , M (ρ) = vρP φ(ρ) , Σ( ρ) = (1 − ρ)φ(ρ). (4) Here K(ρ) is the conditional gain, M (ρ) = Var( x0 | xρ, x 1) is the conditional variance, and 
+
+Σ( ρ) = Var( xρ | x1). Given x1, every sampler state remains Gaussian: xρi | x1 ∼ N (cix1, V i),with ci and Vi following an explicit affine recursion (App 6.3). 
+
+Theorem 2 (Invisibility of the reference) . (a) Fix v > 0 and any grid whose deficit sum in Lemma 6 (App 6.3) vanishes as T → ∞ , including uniform grids and power grids ρi = ( i/T )a with a ≥ 1.Then the terminal law converges to the true posterior: N (c0x1, V 0) −→ N (W x 1, P ). More precisely, 
+
+D0/P → 0 at rate O(log T /T ) on uniform grids and O(1 /T ) on power grids with a > 1. Because the terminal mean is exact, KL = D20 /4P 2  1 + o(1) ; consequently, KL = O
+
+
+
+(log T /T )2
+
+on uniform grids and KL = O(1 /T 2) on power grids with a > 1. The limiting law is independent of v > 0 and the admissible schedule; the reference becomes invisible in the infinite-step limit. (b) At the boundary v = 0 , the terminal law is δ(W x 1) for every finite T : the sampler collapses discontinuously to Wiener regression and has infinite KL divergence from the posterior. 
+
+The proof (App 6.3) rests on three exact properties. First, the mean is exact at every finite T : for every grid, T , and v ≥ 0, ci = (1 − ρi)W + ρi. Replacing x0 by its posterior mean removes only its conditional randomness, so finite-step error affects only variance. Second, the contraction telescopes exactly : the step coefficient is Ai = φ(ρi−1)/φ (ρi), so products of step coefficients reduce to exact ratios of φ. Third, the variance deficit Di := Σ( ρi) − Vi satisfies a linear recursion with a nonnegative source term, yielding: 
+
+Corollary 2 (Systematic underdispersion) . Suppose v > 0. Then Vi < Σ( ρi) for every i < T ;in particular, V0 < P for every finite T . The plug-in-mean sampler has a single failure mode: it produces too little variance. 
+
+Theorem 2 is the central negative result. Any meaningful objective for reference design must assign a cost to a finite resource: solver steps (§3.3) or model accuracy and data (§3.4). Without such a cost, objectives become degenerate; for example, the integrated Bayes risk of the training target is minimized at the collapsed boundary v = 0 (App 6.3). 
+
+3.3 Steps: The Exact Finite-Step Theory The exact objective and the form of optimizer 
+
+Unrolling the variance-deficit recursion with the telescoped products gives the deficit in closed form (Lemma 6, App 6.3): 
+
+D0(v, P ; grid ) = vP 3
+
+> T
+
+X
+
+> i=1
+
+(∆ ρi)2
+
+ρi φ(ρi) φ(ρi−1)2 ,u = 1 − D0/P, KL = 1 /2 u − 1 − ln u.
+
+(5) This is the exact T -step objective. Reference design minimizes P 
+
+> k
+
+KL k over colors {vk} and, optionally, per-mode schedules (Cor. 1). 
+
+Theorem 3 (Scale symmetry and proportionality) . Fix any shared grid. The per-mode KL depends on (v, P ) only through the dimensionless ratio x = v/P : a mode-independent profile Φ satisfies 
+
+KL( v, P ; grid ) = Φ( v/P ). Since Φ( x) → ∞ as x → 0 or x → ∞ , interior optimizers exist. The objective also separates: P 
+
+> k
+
+KL k = P 
+
+> k
+
+Φ( vk/P k).
+
+5Consequently: (i) At every local optimizer, vk = xkPk, where each xk is a local minimizer of the same mode-independent profile Φ.(ii) At every global optimizer, xk ∈ arg min Φ for every k.(iii) Whenever arg min Φ is a singleton, every global optimizer is proportional to the posterior spectrum, 
+
+v∗ 
+
+> k
+
+= x∗(grid , T ) Pk, k = 1 , . . . , d, (6) 
+
+with one mode-independent x∗ for every T . If the minimizer is nonunique, as on some non-uniform grids (Prop. 2), modes may select different local minimizers, yielding non-proportional local optima. 
+
+This proportionality follows from an exact algebraic symmetry, not an asymptotic argument. In the per-mode Gaussian problem, P is the only scale and v/P the only dimensionless parameter; T
+
+controls only the constant. 
+
+Proposition 1 (The proportionality constant) . On the uniform grid, every minimizer satisfies 
+
+x∗(T ) = (2 ln T )−1/2 1 + o(1) , (7) 
+
+and the optimal value satisfies KL( x∗) = ln T 
+
+> 2T2
+
+ 1 + o(1) .The proof (App 6.4) establishes the uniform expansion T D 0/P = x ln T + 12x + 1 + o(1) on the window x ∈ [x0/3, 3x0] with x0 = (2 ln T )−1/2, together with global lower bounds excluding mini-mizers outside the window. A numerical certificate with exact derivatives independently corroborates the expansion; the finite-T remainder stabilizes near 1.15 over T = 10 3–10 5.
+
+Practically, x∗ ≈ 0.2–0.6 for realistic step counts: the optimal reference injects a modest fraction of the destroyed-information spectrum, and that fraction shrinks only like (ln T )−1/2.
+
+Proposition 2 (Uniqueness is grid-dependent) . At T = 2 , Φ is strictly unimodal. On uniform grids, uniqueness is proved for 2 ≤ T ≤ 120 and numerically certified for T ≤ 200 and T ∈{500 , 1000 , 5000 } (App 6.4); extending the proof to general T remains an open problem. On general grids, uniqueness is false. An analytic two-cluster construction shows that, already at 
+
+T = 3 , the grid ρ =  1/(1 + C), 1/2, 1 yields at least two local minima of Φ for every C ≥ 100 
+
+(App 6.4). As C → ∞ , the profile splits into two unimodal T = 2 profiles, one per cluster, at scales 
+
+x ≍ 1 and x ≍ C. A T = 48 two-cluster grid has seven local minima: each step cluster favors its own noise scale. 
+
+The counterexample carries a warning: on non-uniform grids, schedule design and color design cannot be decoupled .
+
+Proposition 3 (Budgets bend the exponent) . Fix P1, . . . , P d and a total-noise budget V with 
+
+V P max / P 
+
+> j
+
+P 2 
+
+> j
+
+≤ 34 . On uniform grids, as T → ∞ , every global optimizer of P 
+
+> k
+
+KL k sub-ject to P 
+
+> k
+
+vk = V satisfies 
+
+v∗ 
+
+> k
+
+= P 2
+
+> k
+
+P 
+
+> j
+
+P 2
+
+> j
+
+V
+
+
+
+1 + O
+
+ 1ln T
+
+ 
+
+, k = 1 , . . . , d. (8) 
+
+The fixed budget places every mode on the increasing branch of Φ: the free optima x∗(T )Pk vanish as T → ∞ , but the budget remains fixed. The optimal exponent therefore bends from Pk to P 2 
+
+> k
+
+.Equal-budget comparisons, common in empirical color sweeps, silently change the optimization problem and steepen the optimum. We report both conventions in §4 because they answer different questions. 
+
+The z-identity: color and schedule are exchangeable 
+
+The key structure appears under the change of variables z(ρ) := vρ/φ (ρ) = M (ρ)/P , the normalized conditional-MMSE level, with z0 = 0 and zT = 1 .
+
+Theorem 4 (Exact z-identity and schedule theory) . For every color v > 0 and every grid, 
+
+D0 = P
+
+> T
+
+X
+
+> i=1
+
+(zi − zi−1)2/z i. (9) 6Consequently: (a) Color-freeness. For every v > 0, the map ρ 7 → z(ρ) is a bijection of [0 , 1] . Every color therefore achieves the same set of z-grids, and hence the same schedule-optimized deficit, at every finite T :under per-mode schedule adaptation, discretization error cannot prefer any color. (b) Unique optimal schedule. The objective F (z) = PTi=1 (∆ zi)2/z i is jointly convex, being a sum of quadratic-over-linear terms, and its minimizer over pinned grids is unique. (c) Explicit forward recurrence. With ai = zi−1/z i, the first-order conditions become 2ai+1 = 1+ a2 
+
+> i
+
+,
+
+a1 = 0 , giving an explicit forward recurrence ( a2 = 12 , a3 = 58 , a4 = 89 128 , . . . ), with no shooting required. (d) The floor and the continuum limit. The optimal deficit satisfies D∗ 
+
+> 0
+
+= 4PT
+
+ 1 + O(log 2 T /T ),giving a per-mode KL floor ∼ 4/T 2. The exact optimizer converges to the continuum schedule z = s2
+
+at the explicit rate z∗ 
+
+> i
+
+= ( i/T )2 exp  O(ln( i + 1) /(i + 1)) ; in the original variable, ρ∗(s) = 
+
+P s 2/ P s 2 + v(1 − s2), and the conditional MMSE is quadratic in solver time: M (ρ∗(s)) = P s 2.
+
+Theorem 4 reframes the design space: the reference affects discretization only through its z-schedule, while per-mode color is merely a reparameterization. Two practical consequences follow. With a 
+
+shared schedule, as in existing implementations, Theorem 3 determines the color optimum. With frequency-adaptive schedules, discretization is exactly color-free; any color effect must instead arise from learned drift or finite data. 
+
+3.4 Model Error: Where Color Genuinely Lives 
+
+In the solvable model, the exact drift is affine. Any learned affine drift therefore differs by two quantities per level: relative gain error ηi and additive bias βi. Since everything is conditioned on x1, the βi may depend on it; this absorbs errors in the drift’s x1 coefficient. This two-channel decomposition is exhaustive within the model, and both channels preserve affine-Gaussian structure, making all terminal laws below exact. 
+
+Proposition 4 (Gain error cannot bias the sampler) . With arbitrary gain errors {ηi}, the terminal conditional mean is still exactly W x 1. Gain error acts purely on the variance channel; only bias moves the mean. 
+
+Theorem 5 (Exact z-reduction of the perturbed sampler) . Work at a fixed z-grid with per-level error profile (η(z), β (z)) . The perturbed contraction is ˆAi = Ai
+
+ 1 + ηi ∆zi
+
+> zi
+
+. A bias injected at level i
+
+reaches the output with weight ∆zi
+
+> zi
+
+Q
+
+> m<i
+
+ 1 + ηm ∆zm
+
+> zm
+
+, which is exactly ∆zi/z i when η ≡ 0. Thus, the terminal mean error is 
+
+m0 =
+
+> T
+
+X
+
+> i=1
+
+βi
+
+∆zi
+
+zi
+
+Y
+
+> m<i
+
+
+
+1 + ηm
+
+∆zm
+
+zm
+
+
+
+, (10) 
+
+and the terminal variance has the closed form 
+
+V0 = P
+
+> T
+
+X
+
+> j=1
+
+zj−1
+
+∆zj
+
+zj
+
+× Y
+
+> m<j
+
+
+
+1 + ηm
+
+∆zm
+
+zm
+
+2
+
+, (11) 
+
+whose η ≡ 0 case recovers V0/P = 1 − P
+
+> i
+
+(∆ zi)2/z i. Every factor depends only on the z-grid and error profile. Thus, the sampler’s terminal law is identical for every color v > 0: given the 
+
+z-schedule, sampling remains color-blind under arbitrary drift error. The terminal KL is 
+
+u = V0/P, KL = 1 /2  u + m20/P − 1 − ln u . (12) 
+
+Proposition 5 (The learning problem is also color-blind, per mode) . At level z, the per-mode joint law of (x0, x t) given x1 is determined up to scale by z alone: corr 2(x0, deviation | x1) = 1 − z
+
+exactly. Hence any scale-equivariant learner has a color-free relative-error law at each z-level; for example, zero-intercept OLS from n pairs has Var( ˆK/K − 1) = z/  n(1 − z) on a normalized design P 
+
+> i
+
+X2 
+
+> i
+
+= nτ 2 (random design replaces n by n − 2). With Theorem 5, color is therefore invisible end to end in the per-mode scalar model, given the z-schedule. 
+
+710 2 10 4                                    
+
+> steps T
+> 0.0 0.5 1.0
+> V0/P
+> (a) variance posterior
+> 10 210 4
+> steps T
+> 10 7
+> 10 4
+> 10 1
+> terminal KL
+> (b) convergence rate ( v=P)
+> 10 210 4
+> steps T
+> 0.2 0.4 0.6
+> x * = v * /P
+> (c) optimal noise
+> 10 210 4
+> steps T
+> 1.0 1.2
+> measured / law  1.29 1.016
+> (d) ratio 1: exact law
+> 10 310 110 510 910 13
+> x
+> 10.4 0.6 0.8
+> (x)
+> (e) clustered schedule
+> v= 0.1 Pv=Pv= 10 Pv= 0 uniform power x*(T)law (2ln T)1/2 7 minima
+
+Figure 2: Exact finite-step predictions. (a) Invisibility (Theorem 2). (b) Terminal KL rates, uniform vs. power grid. (c,d) The constant (Prop. 1): measured x∗(T ) against (2 ln T )−1/2, and their ratio. (e) Reference multimodality (Prop. 2): seven local minima of Φ on a clustered T =48 schedule, certified in 50-digit arithmetic. Color therefore matters only through what the per-mode scalar model cannot see: (a) scale-non-equivariant learning, and (b) cross-mode coupling. Mechanism (a) is present in every trained network (weight decay, ridge penalties, finite initialization scales), and its minimal model already breaks proportionality in a definite direction: 
+
+Proposition 6 (Ridge whitens the optimal reference) . A shared ridge penalty λ induces relative shrinkage ηk(z) = −λ/ (λ + nΣk(z)) (same convention), a dimensionful bias that breaks the scale symmetry protecting v ∝ P . Exact-chain optimization yields a sharply decreasing x∗(nP ): at 
+
+T =100 and λ=1 , it falls from 11 .92 at nP =10 to 0.363 as nP → ∞ . Weakly observed frequencies therefore need disproportionately more reference noise. The law bends sub-proportionally, v∗ 
+
+> k
+
+=
+
+x∗(nP k)Pk, so regularization whitens the optimal reference ; pure v ∝ P returns only in the equivariant, infinite-data limit. 
+
+Two further results follow from this machinery (proofs in App 6.5). Distortion–perception trade-off: 
+
+the posterior-mean estimator has MSE exactly P , independent of the reference, while the sampled output has MSE = P + V0 ∈ [P, 2P ); the classical factor-2 cost of posterior sampling thus emerges as a theorem, with the reference tracing the entire trade-off curve. Principled underdispersion correction: since the sampler’s main failure is underdispersion (Corollary 2), deliberate gain inflation is a calibrated fix, with an exact condition: choose η(z) so that the reweighted sum in (11) reaches 
+
+P , the closed-form counterpart of temperature and churn heuristics. Theorem 5 also yields a 
+
+measurement protocol for real networks: probe the trained drift’s Jacobian along the path to estimate 
+
+ˆη(z), then predict the sampler’s terminal variance via (11), without retraining, just one forward analysis. We use this protocol in §4. 
+
+## 4 Experiments 
+
+4.1 Exact Numerical Evaluation 
+
+The deterministic affine recursions of Sections 3.2–3.4 isolate finite-step effects from sampling and training error; every quantity is computed in closed form and cross-checked to machine precision (App 7.3). Figure 2 confirms each prediction. For P =v=4 , the terminal variance reaches 3.9995 at T =10 5,while v = 0 collapses (Theorem 2). The measured optimum tracks the (2 ln T )−1/2 law, with the ratio falling from 1.29 at T =5 to 1.017 at T =10 5 (Prop. 1), and the clustered grid exhibits the predicted multimodality (Prop. 2). In a two-mode problem, the matched allocation minimizes KL at every tested T ; at T =200 , the Bayes-risk vertex has 294 × larger KL (Table 13 in App 7.3). Optimized 
+
+z-schedules remove reference-color dependence to numerical precision (Theorem 4(a)), and the budgeted optimum moves toward the predicted P 2 allocation (Prop. 3). 
+
+4.2 Learned Gaussian Models 
+
+We train per-mode predictors on 64 –256 independent modes with Sk ∼ k−2, a Gaussian modulation transfer function, and flat observation noise, comparing white, matched ( v ∝ P ), anti-matched (v ∝ 1/P ), and prior-colored ( v ∝ S) references at equal total budget ( 3 seeds, common random numbers). The learned models reach the theory’s floor and reproduce its ordering (Fig. 3). After 
+
+12 k steps, the median relative excess over the closed-form Bayes floor is 0.18% , well inside the pre-registered 5% gate. At NFE 50 , total KL runs from 0.19 ±0.03 (matched) to 4.3±0.3 (prior-colored), 80.0 0.2 0.4         
+
+> rel. excess over floor
+> 0200 400 600
+> count
+> (a) gate: PASS
+> 10 110 2
+> NFE (steps T)
+> 10 1
+> 10 1
+> 10 3
+> 10 5
+> terminal KL
+> (b) ordering; -- exact floor
+> med 0.18% 5% gate matched white anti prior
+
+Figure 3: Learned Gaussian models. (a) Relative excess of the converged loss over the closed-form Bayes floor for ρ ∈ [0 .1, 0.95] : median 0.18% against the pre-registered 5% gate. (b) NFE-vs-KL by reference ( 3 seeds, mean ±std; dashed lines are exact-drift floors). with white and anti-matched between—the exact-drift ordering, at learned drifts. At NFE 200 , gain error (Prop. 4) dominates discretization error: matched and white overlap within seed variation, while the colored references become unstable (App 7.4). The measured optimal scale agrees with theory where the model is accurate: 0.575 vs. 0.577 at 
+
+T =10 and 0.402 vs. 0.404 at T =50 . At T =200 it sits 8% above the exact-drift value, the direction predicted for finite-data regularization by Proposition 6; the ridge sweep, the Jacobian probe (median 
+
+0.6% relative error in predicted terminal variance, with no retraining), and the per-mode-schedule null are in App 7.4. Table 1: FFHQ restoration at NFE 50 (original recipe; σblur =2 .0, σn=0 .05 ). FID from 50 ksamples; white and matched use three seeds (mean ±std), others one, so bold gaps <0.1 are within seed noise. 
+
+reference PSNR ↑ SSIM ↑ LPIPS ↓ FID ↓
+
+white 25 .01 0.836 0.0337 7.87 ±0.06 
+
+matched v ∝ P 24 .98 0.836 0.0344 8.45 ±0.13 
+
+matched, equal budget 24 .97 0.836 0.0370 9.12 
+
+anti-matched 25 .75 0.854 0.0426 14 .14 
+
+fixed color ( α=1 ) 25 .04 0.837 0.0338 7.93 
+
+fixed color ( α=2 ) 25 .21 0.840 0.0354 8.46 5 10 20 50 100                   
+
+> NFE
+> 25.0 25.5 26.0 26.5
+> PSNR (dB)
+> (a) PSNR
+> 510 20 50 100
+> NFE
+> 10 20
+> FID
+> (b) FID
+> 10 010 1
+> radial frequency r
+> 10 3
+> 10 2
+> 10 1
+> E| F(x x0)| 2
+> (c) error spectra, NFE 50
+> matched matched_eqb white alpha1 alpha2 anti exact-drift 2 P(r)D0(r)MTF cutoff ( r= 6)
+
+Figure 4: FFHQ under the original recipe (common random numbers; matched and white mean ±std over 3 seeds). (a) PSNR and (b) FID against NFE: anti-matched attains the best distortion and the worst perception at every NFE—the distortion–perception trade-off of App 6.5. (c) Radially averaged error spectra at NFE 50 against the exact-drift prediction 2P (r) − D0(r) (dashed); reference differences concentrate near the MTF cutoff (SSIM, LPIPS, error-ratio view, training fingerprint: App 7.5). 
+
+4.3 FFHQ Under a Known Degradation 
+
+We train bridge models on FFHQ at 64 ×64 with known Gaussian blur and flat observation noise; Pk
+
+and the matched reference are therefore fixed by the theory rather than tuned. All references share one training recipe, one solver, and common evaluation randomness (App 7.5). 9Two predictions transfer exactly. First, the distortion–perception trade-off: anti-matched gives the best PSNR and SSIM and the worst LPIPS and FID at every NFE (Table 1, Fig. 4), as the theory predicts for a reference that suppresses variance where the sensor is blind: the posterior mean sharpens while sampled detail is lost (App 6.5). Second, the predicted spectral localization: reference-dependent error differences concentrate near the MTF cutoff, where P (k) transitions (Fig. 4(c)). The fine-grained matched-first ordering does not transfer. White and the fixed α=1 reference attain lower FID and LPIPS than matched over the tested NFE range (Table 1). Re-evaluating every trained network on the z-optimal schedule of Theorem 4 improves all references by a similar amount and leaves the white–matched gap nearly unchanged ( 0.58 → 0.53 ; App 7.5), so shared discretization error does not explain the gap. By Theorem 5, what remains is the learned drift: either scale-non-equivariant learning (Prop. 6) or cross-mode coupling. The next two studies separate them. Table 2: FFHQ under the converged recipe (dropout 0, batch 512 , 300 k steps; v ∝ P θk at fixed budget). FID from 50 k samples; endpoints mean ±std over 5 seeds, θ one seed.                      
+
+> reference FID@ 10 ↓FID@ 50 ↓LPIPS@ 50 ↓
+> white ( θ=0 )9.62 ±0.06 3.53 ±0.02 0.0323
+> θ=0 .25 9.42 3.58 0.0326
+> θ=0 .59.75 3.78 0.0332
+> θ=0 .75 10 .77 4.15 0.0343
+> matched ( θ=1 )12 .05 ±0.15 4.71 ±0.09 0.0355
+
+4.4 Training Regime and Reference Exponent 
+
+Ridge whitening (Prop. 6) predicts that improved optimization should shift the optimal reference toward v ∝ Pk. We test it with a pre-registered intervention and a sweep v ∝ P θk , θ ∈ { 0, 14 , 12 , 34 , 1}.The converged recipe improves both matched and white in absolute terms, but it increases the matched–white FID gap on the same 50 k evaluation set: the gap grows from 1.36 to 2.43 at NFE 10 
+
+and from 0.58 to 1.18 at NFE 50 . The endpoint prediction is therefore refuted. Stronger blur ( σblur =4 .0) widens the gap, and replication on CelebA [32] under the same experimen-tal protocol reproduces both the white-first ordering and the distortion–perception trade-off (App 7.7). The sweep reveals budget dependence. At low NFE, mild spectral coloring is beneficial: θ=0 .25 
+
+achieves the lowest observed FID for NFE ≤ 20 (Table 2). As the budget increases, however, the optimum shifts toward white, which performs best on all reported metrics for NFE ≥ 50 . Thus, the experiments support partial Pk-coloring in the few-step regime. They leave open whether the practical failure of the per-mode theory arises from dependence among Fourier modes, non-Gaussian per-mode marginals, or both. 
+
+4.5 Mechanism Study: Data vs. Coupling Non-Gaussianity, rather than mode coupling, explains the inversion. Our 2×2 study separates model coupling from data statistics. The white-over-matched inversion persists whenever real FFHQ statistics are retained, even when coupling is impossible. On a Gaussian corpus with the same spectrum but no higher-order cross-mode structure, the matched reference regains its low-NFE advantage: FID improves from 19 .3 to 13 .5 at NFE 5 and from 7.9 to 5.3 at NFE 10 . At NFE 50 , the two references are nearly tied. The coupling probe shows substantial off-diagonal Fourier response in FFHQ-trained U-Nets, roughly tenfold less in Gaussian-trained models, and numerical zero in per-mode models. The inversion tracks the data, not the coupling: it persists in per-mode models where coupling is numerically zero, and it vanishes when a coupling-capable U-Net is trained on Gaussian data. Coupling in FFHQ-trained networks is therefore a symptom of non-Gaussian image statistics, not the operative cause; the per-mode Gaussianity assumption, not the decoupling assumption alone, is what fails on real images. The near-tie at NFE 50 is consistent with the exact-drift invisibility limit of Theorem 2, in which reference gaps vanish as the step budget grows. The theorem does not guarantee this for learned, non-Gaussian models, where drift error need not vanish with NFE; indeed, in §4.2 the colored references destabilize at NFE 200 .10 5 Conclusion 
+
+We have developed a theory of reference design for Schrödinger bridge models. With exact drift and unlimited steps the reference is invisible; under a finite budget every optimum is proportional to the destroyed-information spectrum Pk with color and schedule exactly exchangeable. On real images this ordering inverts, and controlled studies trace the inversion to non-Gaussian per-mode statistics. The resulting recipe is budget-dependent: mild Pk coloring in the few-step regime, white noise otherwise, with the z-optimal schedule in both cases. Extending the theory beyond Gaussian conditional modes is therefore the main direction for future work. 11 6 Appendix 
+
+6.1 Overview 
+
+Apart from the six textbook facts collected in Table 4, every argument is proved here from first principles. Sections 6.2–6.5 present the proofs in the order in which the results appear in the main text. Section 7 provides the experimental protocols and the additional results. Table 3 collects the symbols. Three conventions are in force everywhere below. 1. Conditioning on the observation. All statements about the sampler are conditional on x1. Expec-tations, variances and KL divergences are conditional on x1 unless said otherwise. 2. Per-mode reduction. After Theorem 1 we work in the diagonalizing basis and drop the mode index k whenever a statement is about a single mode. Sums over k reappear only when modes are coupled by a budget (App 6.4) or by a shared learner (App 6.5). 3. Grids. A grid is 0 = ρ0 < ρ 1 < · · · < ρ T = 1 , and i runs from T (the observation end) down to 
+
+0 (the clean end), which is the direction the sampler travels. Table 4 lists the six textbook facts we use, with the tags (S1)–(S6) by which they are cited throughout. Cauchy–Schwarz (Theorem 6(ii)) and the mean value theorem (Theorem 2(a)) are used only in their elementary forms and are not tabulated. 
+
+6.2 Proofs for Section 3.1 (Tractability) The general Gaussian bridge 
+
+We first show that every deterministic matrix-valued covariance gives a tractable bridge at the multivariate level. Theorem 1 then identifies exactly when that tractability separates into scalar modes. 
+
+Lemma 1 (Exact pinned marginal) . For every t ∈ (0 , 1) ,
+
+Xt | (X0=x0, X 1=x1) ∼ N  μt, Γt
+
+, (13) 
+
+where 
+
+μt := x0 + A(t)V −1(x1 − x0), (14) 
+
+Γt := A(t) − A(t)V −1A(t). (15) 
+
+Proof. Condition on X0 = x0. Then 
+
+Xt = x0 +
+
+Z t
+
+> 0
+
+L dB, X1 = x0 +
+
+Z 10
+
+L dB, (16) so Var( Xt | X0) = A(t) and Var( X1 | X0) = V . Independence of Brownian increments gives 
+
+Cov( Xt, X 1 | X0) = A(t). Applying Gaussian conditioning (S1) to the jointly Gaussian pair 
+
+(Xt, X 1) proves the claim. 
+
+Lemma 2 (Exact reverse sub-bridge kernel) . For 0 < s < t ≤ 1 with A(t) ≻ 0,
+
+Xs | (Xt=xt, X 0=x0) ∼ N  μs|t, Γs|t
+
+, (17) 
+
+where 
+
+μs|t := x0 + A(s)A(t)−1(xt − x0), (18) 
+
+Γs|t := A(s) − A(s)A(t)−1A(s), (19) 
+
+and moreover L(Xs | Xt, X 0, X 1) = L(Xs | Xt, X 0).Proof. Condition on X0. The pair (Xs, X t) is jointly Gaussian with Var( Xs | X0) = A(s),
+
+Var( Xt | X0) = A(t) and Cov( Xs, X t | X0) = A(s), so Gaussian conditioning (S1) gives the stated kernel. The final equality is the two-sided Markov property (S3): after conditioning on Xt, the past is independent of the future endpoint. 12 Table 3: Notation. Deliberate overloads are marked †; they never occur in the same argument. 
+
+Signals, spectra, modes 
+
+x0, x 1 clean signal; observation 
+
+Xt bridge state, t ∈ [0 , 1] 
+
+U , k orthogonal diagonalizer; mode index 
+
+Sk , h k , N k prior power, transfer function, observation noise 
+
+Pk posterior variance of mode k given x1
+
+W posterior-mean (Wiener) operator, E[x0 | x1] = W x 1
+
+vk reference variance of mode k — the color 
+
+V total budget P 
+
+> k
+
+vk (App 6.4) †
+
+Reference process 
+
+Q(t) instantaneous increment covariance 
+
+A(t) R t 
+
+> 0
+
+Q; V = A(1) †
+
+qk , a k modal versions of Q, A ; vk = ak (1) 
+
+ρk (t) schedule ak (t)/v k , increasing from 0 to 1
+
+β(t) rate of a static-color reference (Cor. 3) 
+
+Grids and coordinates 
+
+T number of sampler steps (NFE) 
+
+ρi, ∆ρi grid level; ρi − ρi−1
+
+ri ρi−1/ρ i
+
+x v/P , the only dimensionless color parameter 
+
+φ(ρ) (1 − ρ)P + vρ = P ψ (ρ)
+
+ψ(ρ) 1 + ( x − 1) ρ; b := 1 − xM (ρ) conditional MMSE at level ρz(ρ) vρ/φ (ρ) ∈ [0 , 1] , the solver coordinate 
+
+zi, ∆zi z(ρi); zi − zi−1
+
+ai, ε i zi−1/z i; 1 − ai (App 6.4) 
+
+s continuum solver time, z = z(s)
+
+Sampler, deficit, objective 
+
+a(ξ) frontier launch point, root of ln 1 
+
+> a
+
+− (1 − a) = ξ (Theorem 6) 
+
+xρi sampler state at level ρi, conditional on x1
+
+ξ, ξ i standard Gaussian noise (bridge; sampler step i) †
+
+K(ρ) regression gain of the plug-in drift 
+
+Ai, B i, q i affine-recursion coefficients †
+
+ci, V i mean and variance coefficients of the plug-in chain †
+
+Σ( ρ) variance of the exact ancestral chain 
+
+Di, D 0 variance deficit Σ( ρi) − Vi; its terminal value 
+
+H(x) D0/P F (z) P
+
+> i
+
+(∆ zi)2/z i; equals H under z = z(ρ)Φ( x) terminal KL, 12 (u − 1 − ln u) with u = 1 − H
+
+HT harmonic number P 
+
+> i≤T
+
+1/i χT (2 ln T )−1/2, the target point 
+
+WT localization window [χT /3, 3χT ]
+
+ηi, β i relative gain error; additive bias at step i
+
+Ξ, ξ gain-error susceptibility; its budget †
+
+λ ridge penalty (App 6.5); Lagrange multiplier (App 6.4) 
+
+13 Table 4: Standard facts, used without proof. These are the only external ingredients in Apps. 6.2– 6.5. 
+
+Fact Used in (S1) Gaussian conditioning. If (X, Y ) is jointly Gaussian with 
+
+Cov( X, Y ) = C and Var( Y ) = Σ Y ≻ 0, then 
+
+X | Y =y ∼ N  EX + CΣ−1 
+
+> Y
+
+(y − EY ), Var( X) − CΣ−1 
+
+> Y
+
+C⊤. If 
+
+ΣY is singular the same formula holds on ran Σ Y with the Moore–Penrose pseudoinverse in place of Σ−1 
+
+> Y
+
+[1, Theorem 2.5.1]. Lemmas 1–2, Cor. 5 (S2) Simultaneous diagonalization. A family of real symmetric matrices is simultaneously orthogonally diagonalizable if and only if its members commute pairwise [18, Ch. 4.5]. Theorem 1, step (1) ⇒(2) (S3) Linear SDEs; two-sided Markov property. A linear SDE with deterministic coefficients is solved by variation of constants and has Gaussian marginals with deterministic covariance; and for a Markov process, conditionally on Xt the past σ(Xs : s ≤ t) is independent of the future σ(Xu : u ≥ t) [23, 34]. Lemma 2, Cor. 5, Lemma 5 (S4) Riemann-sum error via total variation. For f of bounded variation on 
+
+[c, d ] and any partition, the sum of the oscillations of f over the subintervals is at most TV [c,d ](f ); for f monotone on each of two subintervals, TV( f ) is bounded by the sum of its endpoint values [36, Ch. 6]. Lemmas 8, 12 (S5) Descartes’ rule of signs. The number of positive real roots of a nonzero real polynomial, counted with multiplicity, is at most the number of sign changes in its coefficient sequence, and differs from it by an even number; see [2, Ch. 2] for its use in exact certificates. the exact integer uniqueness certificates for 
+
+2 ≤ T ≤ 120 , App 6.4 (S6) Gaussian KL. For p = N (μ1, σ 21 ) and q = N (μ2, σ 22 ),
+
+KL( p ∥ q) = 12 (u − 1 − ln u) + (μ1−μ2)2
+
+> 2σ22
+
+with u = σ21 /σ 22 [7, Ch. 8]. Theorem 2, Prop. 1, Theorem 5, and the definition of Φ throughout App 6.4 
+
+If A(t) is singular, the directions in ker A(t) have accumulated no noise by time t and remain deterministically equal to x0. Apply the kernel on ran A(t), or equivalently replace A(t)−1 by the pseudoinverse. In the modal setting this is the convention for modes with ak(t) = 0 . On the sampler’s grids only ρ0 = 0 is degenerate, and no reverse step is taken there. 
+
+Proof of Theorem 1 
+
+Proof. (1) ⇒(2). Each Q(t) is real symmetric, hence orthogonally diagonalizable. The linear span of 
+
+{Q(t) : t / ∈ N } is a finite-dimensional subspace of the symmetric matrices, so finitely many members 
+
+Q(t1), . . . , Q (tm) of the family span it. By (1) these commute pairwise, and a finite commuting family of real symmetric matrices is simultaneously orthogonally diagonalizable (S2): diagonalize one matrix, observe that every other matrix preserves its eigenspaces, and recurse on the restrictions. The resulting U diagonalizes Q(t1), . . . , Q (tm), hence every matrix in their span, hence every Q(t)
+
+outside N . Redefining Q on a null set does not change the law of the SDE. Finally Q ⪰ 0 forces all diagonal entries to be nonnegative. 
+
+(2) ⇒(3). In the coordinates Y = U ⊤X the increment covariance is U ⊤Q(t)U dt = diag( qk(t)) d t,so we may choose a deterministic diagonal square root. The coordinates are jointly Gaussian with zero cross-covariance at all times, hence independent scalar Gaussian processes, and each is a Brownian motion under the clock ak(t).
+
+(3) ⇒(1). Independent scalar modes in a fixed basis have diagonal instantaneous covariance in that basis, so all Q(t) share the diagonalizer U ; diagonal matrices commute. 
+
+The pinned formulas. Substitute the diagonalizations A(t) = U diag( ak(t)) U ⊤ and V =
+
+U diag( vk)U ⊤ into Lemma 1. In mode k the mean is 
+
+yk, 0 + ak(t)
+
+vk
+
+ yk, 1 − yk, 0
+
+ = (1 − ρk)yk, 0 + ρkyk, 1, (20) 14 and the variance is 
+
+ak(t) − ak(t)2
+
+vk
+
+= vk ρk(1 − ρk). (21) The conditional covariance is diagonal, so the modes remain independent. Substituting into Lemma 2 gives the reverse mean coefficient ak(s)/a k(t) = rk(s, t ) and the variance ak(s) 1 − rk(s, t ).
+
+Proof of Corollary 1 
+
+Proof. Absolute continuity gives ak(t) = R t 
+
+> 0
+
+qk = vkρk(t). Nonnegativity of qk is equivalent to monotonicity of ρk, and the endpoint conditions give ak(0) = 0 and ak(1) = vk. Conversely, define 
+
+ρk := ak/v k.
+
+Four consequences stated only here. Corollary 3 (Static color is a strict subfamily) . Suppose Q(t) = β(t)Σ with Σ = U diag( vk)U ⊤ and 
+
+R 10 β = 1 . Then Theorem 1 applies with the shared schedule ρk ≡ ρ(t) = R t 
+
+> 0
+
+β and mode-dependent totals vk. White I2SB is the special case Σ = cI . A fixed color therefore allows different vk but forces every mode to use the same ρ.
+
+Corollary 4 (Aliasing blocks) . Suppose Rd = E1 ⊕ · · · ⊕ Em is a fixed orthogonal decomposition and every Q(t) is block diagonal with respect to it. Then Lemmas 1–2 decompose the bridge into independent finite-dimensional blocks, even when the matrices inside a block do not commute ; each block uses the matrix formulas in A(t) and V . This is the correct treatment of downsampling aliasing: a frequency and its foldovers form one coupled block, and small matrix-valued block schedules replace scalar schedules. Proof. Let Πj be the orthogonal projection onto Ej . Since every Q(t) is block diagonal, so are 
+
+A(t) = R t 
+
+> 0
+
+Q and V = A(1) . Writing X(j) 
+
+> t
+
+:= Π j Xt, for j̸ = l the increments satisfy 
+
+Cov  X(j) 
+
+> t
+
+− X(j) 
+
+> s
+
+, X (l) 
+
+> t
+
+− X(l)
+
+> s
+
+ = Π j
+
+ A(t) − A(s)Π⊤ 
+
+> l
+
+= 0 , (22) so the jointly Gaussian block processes (X(j))j are mutually independent. Consequently the pinned marginal and the reverse kernel factor over blocks, with the matrix formulas applied blockwise to 
+
+A(j)(t) := Π j A(t)Π ⊤ 
+
+> j
+
+and V (j) := Π j V Π⊤ 
+
+> j
+
+. No commutativity within a block is used. 
+
+Corollary 5 (Simultaneously diagonal linear drift and diffusion) . Consider dXt = F (t)Xt dt +
+
+L(t) d Bt and suppose a single orthogonal U diagonalizes both coefficients, U ⊤F (t)U = diag( fk(t)) 
+
+and U ⊤Q(t)U = diag( qk(t)) a.e. Put 
+
+gk(t, s ) := exp 
+
+Z ts
+
+fk, σ2
+
+> k
+
+(t) := 
+
+Z t
+
+> 0
+
+gk(t, u )2qk(u) d u. (23) 
+
+Then the reference and all pinned bridges decompose exactly into scalar modes, with 
+
+E[Yk,t | yk, 0, y k, 1] = gk(t, 0) yk, 0
+
++ σ2
+
+> k
+
+(t) gk(1 , t )
+
+σ2
+
+> k
+
+(1) 
+
+ yk, 1 − gk(1 , 0) yk, 0
+
+, (24) 
+
+Var( Yk,t | yk, 0, y k, 1) = σ2
+
+> k
+
+(t)
+
+− σ2
+
+> k
+
+(t)2 gk(1 , t )2
+
+σ2
+
+> k
+
+(1) , (25) 
+
+and for 0 < s < t the reverse kernel has mean 
+
+gk(s, 0) yk, 0 + σ2
+
+> k
+
+(s) gk(t, s )
+
+σ2
+
+> k
+
+(t)
+
+ yk,t − gk(t, 0) yk, 0
+
+ (26) 
+
+and variance σ2
+
+> k
+
+(s) − σ2
+
+> k
+
+(s)2gk(t, s )2/σ 2
+
+> k
+
+(t).
+
+15 Proof. Variation of constants (S3) gives Yk,t = gk(t, 0) yk, 0 + R t 
+
+> 0
+
+gk(t, u )pqk(u) d Bk,u , whence 
+
+Var( Yk,t | yk, 0) = σ2
+
+> k
+
+(t), (27) 
+
+Cov( Yk,t , Y k, 1 | yk, 0) = σ2
+
+> k
+
+(t) gk(1 , t ), (28) 
+
+Cov( Yk,s , Y k,t | yk, 0) = σ2
+
+> k
+
+(s) gk(t, s ). (29) Gaussian conditioning (S1) gives the stated formulas, and independence across modes follows from the common diagonalization. 
+
+Remark 1 (Hilbert space) . Assume H is separable, the covariance operators share an orthonormal eigenbasis with Q(t)ek = qk(t)ek, and P 
+
+> k
+
+vk < ∞ (trace class). Then the reference is an H-valued Gaussian process and Theorem 1 applies coordinatewise, the Gaussian series converging in L2(Ω; H).For cylindrical noise the modal identities remain formal in a larger distribution space. For discrete images the finite-dimensional theorem suffices. Complex Fourier coefficients are handled either by a unitary/Hermitian version or by grouping conjugate pairs into two-dimensional real blocks (Corollary 4). 
+
+6.3 Proofs for Section 3.2 (Invisibility) The sampler as an affine recursion 
+
+Write ¯ci := (1 − ρi)W + ρi. The plug-in step from level ρi to ρi−1 is 
+
+ˆx0 = W x 1 + K(ρi) xρi − ¯cix1
+
+, (30) 
+
+xρi−1 = ˆ x0 + ri
+
+ xρi − ˆx0
+
+ + √qi ξi, (31) with ri = ρi−1/ρ i and qi = vρ i−1(1 − ri). Every operation is affine in (x, x 1) and adds independent Gaussian noise. Conditional on x1 the state is therefore exactly N (cix1, V i), where 
+
+Ai = ri + (1 − ri)K(ρi), (32) 
+
+Bi = (1 − ri) W − K(ρi)¯ ci
+
+, (33) 
+
+ci−1 = Aici + Bi, cT = 1 , (34) 
+
+Vi−1 = A2 
+
+> i
+
+Vi + qi, VT = 0 . (35) 
+
+Lemma 3 (Mean exactness at every T ). ci = (1 − ρi)W + ρi for all i, for any grid, any T ≥ 1 and any v ≥ 0. In particular c0 = W exactly. Proof. Backward induction. Base case: cT = 1 = (1 − ρT )W + ρT . Step: substitute ci = ¯ ci into (34). The two terms containing K(ρi)¯ ci cancel exactly, leaving 
+
+ci−1 = ri ¯ci + (1 − ri)W
+
+= W (1 − riρi) + riρi
+
+= (1 − ρi−1)W + ρi−1, (36) where we used riρi = ρi−1.
+
+Lemma 4 (Exact telescoping) . Ai = φ(ρi−1)/φ (ρi), and hence 
+
+> i
+
+Y
+
+> m=j+1
+
+Am = φ(ρj )
+
+φ(ρi) ,
+
+> i
+
+Y
+
+> m=1
+
+Am = Pφ(ρi) . (37) 
+
+Proof. By (32), Ai = riφ(ρi) + (1 − ri)P /φ (ρi), and the numerator telescopes: 
+
+riφ(ρi) + (1 − ri)P = ri
+
+(1 − ρi)P + vρ i
+
+ + (1 − ri)P
+
+= P (1 − riρi) + v r iρi
+
+= P (1 − ρi−1) + vρ i−1
+
+= φ(ρi−1). (38) 16 Lemma 5 (One-step identity and deficit recursion) . Let Di := Σ( ρi) − Vi be the gap between the exact ancestral chain and the plug-in chain. Then 
+
+Di−1 = A2 
+
+> i
+
+Di + (1 − ri)2M (ρi), DT = 0 . (39) 
+
+Every term is nonnegative and the source term is strictly positive when v > 0; this proves Corollary 2. Proof. By the two-sided Markov property (S3) the exact ancestral chain reproduces the true condi-tional law at every level. That chain draws x0 ∼ N (·, M (ρi)) rather than replacing the variable by its conditional mean, so its variance obeys 
+
+Σ( ρi−1) = A2 
+
+> i
+
+Σ( ρi) + (1 − ri)2M (ρi) + qi. (40) The plug-in chain obeys the same recursion with the middle term omitted, namely (35). Subtracting gives (39). Nonnegativity of D0 is immediate by backward induction from DT = 0 .
+
+Lemma 6 (Deficit in closed form) . For every grid and every T ≥ 1,
+
+D0 = vP 3
+
+> T
+
+X
+
+> i=1
+
+(∆ ρi)2
+
+ρi φ(ρi) φ(ρi−1)2 . (41) 
+
+For P = v on the uniform grid this reduces to D0 = ( P/T )HT with HT the T -th harmonic number. Proof. Unroll (39) from DT = 0 and use (37) for the accumulated contractions, together with the one-step identity 
+
+(1 − ri)2M (ρi) = vP (∆ ρi)2
+
+ρi φ(ρi) . (42) Each surviving term acquires the factor  P/φ (ρi−1)2, which produces the stated φ(ρi−1)2 in the denominator and the overall P 3. When P = v we have φ ≡ P , so the sum collapses to P
+
+> i
+
+(∆ ρi)2/ρ i = (1 /T ) P 
+
+> i≤T
+
+1/i .
+
+Proof of Theorem 2 
+
+Proof. (a) v > 0. Put φmin = min( P, v ) > 0, φmax = max( P, v ) and let 
+
+ΘT := 
+
+> T
+
+X
+
+> i=1
+
+(∆ ρi)2
+
+ρi
+
+(43) be the purely geometric part of (41). Since φmin ≤ φ(ρ) ≤ φmax on [0 , 1] ,
+
+vP 3
+
+φ3max 
+
+ΘT ≤ D0 ≤ vP 3
+
+φ3min 
+
+ΘT . (44) It therefore suffices to show ΘT → 0.
+
+Uniform grid. ΘT = (1 /T )HT = (log T )/T + O(1 /T ).
+
+Power grid ρi = ( i/T )a, a > 1. The mean value theorem gives ∆ρi ≤ a i a−1/T a, hence 
+
+(∆ ρi)2
+
+ρi
+
+≤ a2 ia−2
+
+T a . (45) The summand is not uniformly of order T −2: the i = 1 term is T −a. Now u 7 → ua−2 is monotone on [1 , ∞) (nonincreasing for 1 < a ≤ 2, nondecreasing for a ≥ 2), so comparing the sum with the integral term by term — adding the first term separately in the nonincreasing case — gives 
+
+> T
+
+X
+
+> i=1
+
+ia−2 ≤ 1 + 
+
+Z T +1 1
+
+ua−2 du
+
+≤
+
+
+
+1 + 2a−1
+
+> a−1
+
+
+
+T a−1, (46) 17 where we used (T + 1) a−1 ≤ (2 T )a−1 and 1 ≤ T a−1. Therefore 
+
+ΘT ≤ a2
+
+1 + 2a−1
+
+> a−1
+
+ 1
+
+T = O(1 /T ). (47) In both cases D0 → 0 by (44), so V0 → P . Lemma 3 shows the mean is already exact, so the terminal law converges to N (W x 1, P ). By (S6) the terminal KL is 
+
+> 12
+
+ V0 
+
+> P
+
+− 1 − log V0
+
+> P
+
+
+
+= D20
+
+4P 2 + O (D0/P )3, (48) and the limiting law depends on neither v nor the schedule. 
+
+(b) v = 0 . All qi = 0 , so Vi ≡ 0 and the terminal law is the point mass at c0x1 = W x 1; Lemma 3 remains valid. The first step from ρ = 1 is defined directly by ˆx0 = W x 1, because the scaled deviation is identically zero. Hence KL  δ(W x 1) ∥ N (W x 1, P ) = + ∞. The map from v to the limiting law is constant on v > 0 and jumps at v = 0 .
+
+Why resource-free objectives are degenerate 
+
+The integrated-Bayes-risk objective 
+
+J = X
+
+> k
+
+Z
+
+w(t) MMSE k(t) d t (49) is concave and increasing in every vk. Under a budget the matched point does satisfy the Lagrange condition — but it is the maximum ; the minima sit at vertex allocations. An explicit counterexample is ρ = 0 .5, P = (1 , 4) and budget 5: the matched value is 2.5, whereas a vertex allocation gives 
+
+0.833 .Minimizing target Bayes risk rewards a bridge state that is maximally informative about x0, and without a resource constraint the optimum is v = 0 . That choice makes the interpolation deterministic, reduces the method to one-shot Wiener regression, and destroys distributional correctness because the terminal variance tends to 0. An objective whose optimum lies on the v = 0 boundary is unsuitable for a bridge , whose purpose is distributional. 
+
+6.4 Proofs for Section 3.3 (Finite-Step) Proof of Theorem 3 
+
+Proof. Step 1 (scale symmetry). Write φ(ρ) = P ψ (ρ) with ψ(ρ) = 1 + ( x − 1) ρ and x = v/P . In (41) the factor P 3 cancels the three factors of P contributed by the φ terms, and the remaining factor is v = xP . Thus x survives in the dimensionless expression while P normalizes D0:
+
+D0
+
+P = x G (x), G(x) = X
+
+> i
+
+(∆ ρi)2
+
+ρi ψ(ρi) ψ(ρi−1)2 . (50) Hence KL = Φ( x) depends on the reference only through x, and otherwise only on the grid. Structurally, P is the only scale in the per-mode Gaussian problem and v/P is its only dimensionless parameter. 
+
+Step 2 (form of every optimizer). By Step 1, P 
+
+> k
+
+KL k = P 
+
+> k
+
+Φ( vk/P k) with the same function Φ
+
+in every mode, so the objective is separable. At any local minimizer each coordinate xk = vk/P k
+
+must be a local minimizer of Φ; different coordinates may, however, select different local minima, so a common mode-independent x is not forced. At any global minimizer xk ∈ arg min Φ for every 
+
+k. If arg min Φ is the singleton {x∗} then v∗ 
+
+> k
+
+= x∗Pk for every mode, with x∗ mode-independent. If Φ has several local minimizers — which does occur on general grids, by Proposition 2 — then assigning different modes to different valleys produces genuinely non-proportional local optimizers of the sum. 
+
+Step 3 (barriers, hence an interior optimum). As x → 0 the observation-end term ( i=T ) of 
+
+xG (x) tends to 1: the sampler cannot create posterior variance without reference noise, exactly as in Theorem 2(b). Hence u → 0 and Φ → ∞ . As x → ∞ the clean-end term ( i=1 ) of xG (x) tends to 
+
+1: excess noise entering the final Bayes step cannot be fully removed, so again Φ → ∞ . Since Φ
+
+is continuous on (0 , ∞) it attains an interior minimum. Both barriers are visible in the left panel of Figure 5. 18 Proof of Proposition 1: the constant x∗(T )
+
+Two conventions are in force in this subsection. First, the window center denoted x0 in the statement of Proposition 1 is the quantity χT = (2 ln T )−1/2 here; the symbol x0 is reserved for the clean signal. Second, minimizer means global minimizer of Φ on (0 , ∞); Proposition 1 is proved in this sense. Throughout this subsection the grid is uniform, ρi = i/T , and we write 
+
+H(x) := D0
+
+P = x S(x)
+
+T , (51) 
+
+S(x) := 1
+
+T
+
+> T
+
+X
+
+> i=1
+
+1
+
+ρi ψi ψ2
+
+> i−1
+
+, (52) 
+
+ψi := ψ(i/T ) = 1 − b iT , b := 1 − x. (53) We also set 
+
+f (ρ) := 1
+
+ρ ψ (ρ)3 , S◦(x) := 1
+
+T
+
+> T
+
+X
+
+> i=1
+
+f (ρi), (54) 
+
+h(x) := x ln T + 12x , χT := (2 ln T )−1/2, (55) and WT := [ χT /3, 3χT ]. The comparison function h is strictly convex on (0 , ∞) with unique minimizer χT , minimum value h(χT ) = √2 ln T and h′′ (x) = x−3. Finally, Φ( x) = 12 (u−1−ln u)
+
+with u = 1 − H(x) ∈ (0 , 1) is strictly decreasing in u, so minimizing Φ is equivalent to minimizing 
+
+H. We work throughout with the scaled quantity T H .The proof compares T H with h in four steps: replace the shifted grid factor (Lemma 7), replace the sum by an integral (Lemma 8), evaluate that integral in closed form (Lemma 9), and combine (Lemma 10). Lemma 11 then confines the minimizer to WT , where the comparison is uniform. 10 −2 10 −1 10 0 10 1                             
+
+> x=v/P
+> 10 0
+> 10 1
+> 10 2
+> 10 3
+> T H (x) =  T D 0/P
+> clean-end barrier (i= 1 term → 1) observation-end barrier (i=Tterm → 1)
+> T= 10 1
+> T= 10 2
+> T= 10 3
+> T= 10 5
+> 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9
+> x=v/P
+> 45678910
+> T H (x)
+> x*
+> x0
+> window T= [ x0/3, 3 x0]
+> x0= (2ln T)−1/2
+> T= 10 4
+> T H (x) (exact)
+> h(x) = xln T+12x
+> h(x) + 1
+
+Figure 5: The landscape of T H (x), and why the minimizer is localized. Left: the two barriers of Theorem 3, Step 3 — Φ → ∞ at both ends — with the exact minimizer marked for each T . Right: 
+
+at T = 10 4, the exact T H against the comparison function h(x) = x ln T + 12x of Lemma 10; the additive gap is 1 + o(1) , the shaded band is the window WT = [ χT /3, 3χT ] of Lemma 11, and x∗
+
+has already almost reached χT = (2 ln T )−1/2. Computed from (41); no simulation. 
+
+Lemma 7 (Grid-shift replacement) . For 0 < x < 1 and T ≥ 2,
+
+
+
+1 + 1
+
+> T x
+
+−2
+
+S◦(x) ≤ S (x) ≤ S ◦(x). (56) 
+
+Proof. ψi−1 = ψi + b/T with 0 < b < 1, and ψi ≥ ψT = x, so ψi ≤ ψi−1 ≤ ψi
+
+ 1 + 1
+
+> T x
+
+. Square and invert termwise. 
+
+Lemma 8 (Riemann comparison) . For 0 < x ≤ 34 and T ≥ 8,
+
+S◦(x) − 1 −
+
+Z 11/T 
+
+f (ρ) d ρ ≤ 1 + 12 
+
+T + 1
+
+T x 3 . (57) 19 Proof. The logarithmic derivative (ln f )′(ρ) = −1/ρ + 3 b/ψ (ρ) vanishes only at ρ∗ = 1 /(4 b) ≤ 1,using b ≥ 14 . Hence f strictly decreases on (0 , ρ ∗] and strictly increases on [ρ∗, 1] .Separate the initial term first. For T ≥ 8, 
+
+> 1
+> T
+
+f (1 /T ) = ψ(1 /T )−3 ∈ 1, 1 + 6
+
+> T
+
+, (58) because ψ(1 /T ) ≥ 1 − 1/T and (1 − u)−3 ≤ 1 + 6 u on [0 , 18 ]. For each remaining interval,  
+
+> 1
+> T
+
+f (ρi) − R ρi 
+
+> ρi−1
+
+f ≤ 1 
+
+> T
+
+osc [ρi−1,ρ i] f , and by (S4) the sum of those oscillations is at most TV( f ).Because f first decreases and then increases, TV( f ) ≤ f (1 /T ) + f (1) . Therefore 
+
+> T
+
+X 
+
+> i=2 1
+> T
+
+f (ρi) −
+
+Z 11/T 
+
+f ≤ 1
+
+> T
+
+ f (1 /T ) + f (1) 
+
+≤ ψ(1 /T )−3 + 1
+
+> T x 3
+
+≤ 1 + 6 
+
+> T
+
++ 1 
+
+> T x 3
+
+. (59) Combining the two displays gives the claim. 
+
+Lemma 9 (The integral in closed form) . For 0 < x < 1 and T ≥ 3,
+
+x
+
+Z 11/T 
+
+f (ρ) d ρ = x ln T + 12x + 1 + x ln 1
+
+x − 3x
+
+2 + θ, (60) 
+
+with |θ| ≤ 6x/T .Proof. Clearing denominators in (1 − u)(1 + u + u2) = 1 − u3 with u = 1 − bρ gives the partial-fraction identity 
+
+1
+
+ρψ 3 = 1
+
+ρ + bψ + bψ2 + bψ3 , (61) whose antiderivative is 
+
+F (ρ) = ln ρψ(ρ) + 1
+
+ψ(ρ) + 12ψ(ρ)2 , F ′ = f. (62) Hence R 11/T f = F (1) −F (1 /T ) with F (1) = ln 1 
+
+> x
+
++ 1 
+
+> x
+
++ 12x2 . Also ψ(1 /T ) = 1 −b/T ∈ [1 − 1 
+
+> T
+
+, 1] ,so 
+
+F (1 /T ) = − ln T − ln ψ(1 /T ) + 1
+
+ψ(1 /T ) + 12ψ(1 /T )2
+
+= − ln T + 32 + O  1
+
+> T
+
+. (63) For T ≥ 3 that remainder is at most 6/T in absolute value. Multiplying by x completes the proof. (At T = 2 the constant 6 fails narrowly as x → 0; this is harmless, because Lemma 10 is used only for large T and Proposition 2 handles T = 2 exactly.) 
+
+Lemma 10 (Uniform expansion on the window) . Let δT := sup x∈W T T H (x) − h(x) − 1 . Then 
+
+δT → 0; explicitly 
+
+δT = O
+
+
+
+χT ln 1 
+
+> χT
+
++ ln TT
+
+
+
+. (64) 
+
+Proof. Take T large enough that 3χT ≤ 34 , so that Lemmas 7–9 all apply on WT . Chaining the three lemmas, 
+
+T H (x) = x S(x) = x S◦(x) + E1
+
+= x + x
+
+Z 11/T 
+
+f + xE 2 + E1
+
+= h(x) + 1 + r(T, x ), (65) where the remainder collects the six small terms, 
+
+r(T, x ) := x + x ln 1 
+
+> x
+
+− 3x 
+
+> 2
+
++ θ + xE 2 + E1. (66) 20 Here |E1| ≤ 2 
+
+> T x
+
+· xS◦ = 2S◦ 
+
+> T
+
+by Lemma 7, |E2| ≤ 1 + 12  
+
+> T
+
++ 1 
+
+> T x 3
+
+by Lemma 8, and |θ| ≤ 6xT by Lemma 9. We check each contribution uniformly on WT . First x ≤ 3χT → 0 and x ln 1 
+
+> x
+
+≤ 3χT ln 3 
+
+> χT
+
+→ 0.Next x · 1 
+
+> T x 3
+
+= 1 
+
+> T x 2
+
+≤ 18 ln TT → 0. Finally Lemmas 8–9 together with 12x2 ≤ 9 ln T give 
+
+S◦ = O(ln T ) on the window, so 2S◦ 
+
+> T
+
+= O( ln TT ) → 0. Every contribution to r therefore vanishes uniformly on WT .
+
+Lemma 11 (No minimizer outside the window) . There is a T0 such that for every T ≥ T0 every global minimizer of H on (0 , ∞) lies in WT = [ χT /3, 3χT ].Proof. By Lemma 10, min x∈W T T H (x) ≤ ΛT where 
+
+ΛT := √2 ln T + 1 + δT . (67) We show T H (x) > ΛT outside WT for all large T .
+
+Two lower bounds. For 0 < x ≤ 12 and T ≥ 8, keep only the terms with i > T / 2. Since ρi ≤ 1,
+
+ψi ≤ ψi−1 and ψ−3 is increasing there, 
+
+T H (x) ≥ x X
+
+> i>T / 2
+
+1/T ψ3
+
+> i−1
+
+≥ x
+
+Z 1−1/T 
+
+> 1/2
+
+dρψ(ρ)3
+
+= x
+
+2b
+
+ 1
+
+ψ(1 − 1 
+
+> T
+
+)2 − 1
+
+ψ( 12 )2
+
+
+
+≥ x
+
+2
+
+ 1(x + 1 
+
+> T
+
+)2 − 4
+
+
+
+, (68) where we used b ≤ 1, ψ(1 − 1 
+
+> T
+
+) = x + bT ≤ x + 1 
+
+> T
+
+and ψ( 12 ) ≥ 12 . Separately, for 0 < x ≤ 1 the 
+
+i = T term alone gives 
+
+T H (x) ≥ 1
+
+T  x + 1
+
+> T
+
+2 . (69) 
+
+The six regions. Table 5 lists them; empty regions may be ignored. Region (i) uses (69) with 
+
+x+ 1 
+
+> T
+
+≤ 2 
+
+> T
+
+. Regions (ii)–(iii) use (68) with, respectively, x+T −1 ≤ 2x and x+T −1 ≤ x(1+ T −1/2).Region (iv) uses ψ ≤ 1 on [0 , 1] , so T H ≥ x P 
+
+> i
+
+1/i ≥ x ln T . Region (v) uses ψi−1 ≤ ψi ≤ 32
+
+for i ≤ T / (2 x), giving T H ≥ 827 x ln T 
+
+> 2x
+
+and hence 881 ln T for T ≥ 64 . Region (vi) uses the i = 1 
+
+term, T H ≥ x/ψ (1 /T ) ≥ T x/ (T + x).Comparing the last column of Table 5 with ΛT = √2 ln T (1 + o(1)) : in region (iii) the leading coefficient is 32
+
+√2 > √2, in region (iv) it is 3√2 > √2, and in the remaining regions T , √T or ln T
+
+grows faster than √ln T . Hence no global minimizer lies outside WT once T is large enough. Table 5: The six regions of Lemma 11. Each row gives a lower bound on T H , obtained from the tool named in the proof, that already exceeds the benchmark ΛT = √2 ln T (1 + o(1)) attained inside the window. Only regions (iii) and (iv) are decided by a constant, and in both the constant is > √2.
+
+region lower bound on T H 
+
+(i) x ≤ T −1 T / 4
+
+(ii) T −1 ≤ x ≤ T −1/2 √T / 8 − 2
+
+(iii) T −1/2 ≤ x ≤ χT /3 32
+
+√2 ln T (1 − 2T −1/2) − 1
+
+(iv) 3χT ≤ x ≤ 1 3√2
+
+√ln T
+
+(v) 1 ≤ x ≤ √T 881 ln T
+
+(vi) x ≥ √T √T / 2
+
+Proof of Proposition 1. Theorem 3 guarantees a global minimizer x∗, and for T ≥ T0 Lemma 11 places it in WT . On WT we have h′′ ≥ (3 χT )−3, hence the quadratic lower bound 
+
+h(x) ≥ h(χT ) + (x − χT )2
+
+54 χ3
+
+> T
+
+. (70) 21 Lemma 10 gives both T H (x∗) ≤ T H (χT ) ≤ h(χT ) + 1 + δT and T H (x∗) ≥ h(x∗) + 1 − δT .Subtracting, 
+
+(x∗ − χT )2
+
+54 χ3
+
+> T
+
+≤ 2δT =⇒ x∗
+
+χT
+
+− 1 ≤ p108 δT χT −→ 0. (71) Therefore x∗(T ) = (2 ln T )−1/2(1 + o(1)) , which is the claim. For the optimal value, H(x∗) = 1
+
+> T
+
+ √2 ln T + 1 + O(δT ), and expanding Φ = 12 (u − 1 − ln u) at 
+
+u = 1 − H as in (48) gives 
+
+Φ( x∗) = H(x∗)2
+
+4
+
+ 1 + O(H(x∗))  = ln T
+
+2T 2
+
+
+
+1 + O  1√ln T
+
+
+
+. (72) 
+
+Numerical certificates Remark 2 (Numerical certificate) . An independent certificate, using exact derivatives and no finite differences, supports the finite-T expansion in three ways. (i) On WT , sup |T H (x) − h(x)| stabilizes near 1.146 for T = 10 3–10 5, consistent with the limiting constant 1 of Lemma 10 plus the slowly decaying terms x ln 1 
+
+> x
+
+− 3x 
+
+> 2
+
+. (ii) The derivative certificate sup |T H ′(x) − h′(x)|/ ln T decreases as 0.648 , 0.246 , 0.170 and 0.126 over T = 10 2–10 5. (iii) The measured argmin tracks χT : 0.211 
+
+against 0.208 at T = 10 5. Table 6 gives the full sweep and Figure 6 plots it. 
+
+Remark 3. Our initial asymptotic ansatz was x∗ ≍ (2 /(T ln T )) 1/3, which balanced the logarithmic bulk against the discrete endpoint term. Exact numerics refuted it decisively: the ratio drifted from 1.1
+
+to 17 .6 over T = 5 –10 5. Re-examining the continuum integral revealed the 12x term that Lemma 9 makes rigorous. This episode is the reason for the protocol behind every numerically certified claim in this paper: derive the prediction first, then check it against the exact discrete objective. 
+
+Table 6: The constant x∗(T ) against Proposition 1. Exact minimization of Φ on the uniform grid via (41). The ratio approaches 1 slowly, at the proved rate O(δ1/2 
+
+> T
+
+χ1/2 
+
+> T
+
+); the T ≤ 50 rows are the values quoted in App 7.4.                                
+
+> Tx∗(T)χT= (2 ln T)−1/2ratio
+> 50.721 0.557 1.294 10 0.577 0.466 1.239 50 0.404 0.357 1.130 200 0.332 0.307 1.081 217 0.329 0.305 1.079 10 30.283 0.269 1.050 10 40.240 0.233 1.028 10 50.212 0.208 1.017
+
+Uniqueness (Proposition 2) Reduction. Since Φ( x) = 12 (u − 1 − ln u) is strictly decreasing in u ∈ (0 , 1) , minimizing Φ is equivalent to minimizing H(x) = D0/P . Put ωi := (1 − ρi)/ρ i. Then the color path in the solver coordinate is 
+
+zi(x) = xx + ωi
+
+, H(x) = F  z(x), (73) with F as in (83). Uniqueness of x∗ is thus a question about how the one-parameter curve x 7 → z(x)
+
+meets the convex function F .
+
+T = 2 : proved. Here H(x) = z1(x) +  1 − z1(x)2. The map z1 is strictly increasing onto (0 , 1) 
+
+and J(z) := z + (1 − z)2 is strictly convex, so H is strictly unimodal and x∗ is unique. 22 10 1 10 2 10 3 10 4 10 5      
+
+> T
+> 0.2 0.3 0.4 0.5 0.6 0.7
+> x* = v*/P
+> exact x*(T)(2ln T)−1/2
+> 10 110 210 310 410 5
+> T
+> 1.00 1.05 1.10 1.15 1.20 1.25 1.30
+> x*(T) / (2ln  T)−1/2
+> 1.294 1.016
+
+Figure 6: x∗(T ) follows (2 ln T )−1/2. Left: exact optimizer against the law of Proposition 1. Right: 
+
+their ratio, which decreases from 1.29 at T = 5 to 1.017 at T = 10 5. The approach is slow because the proved error is O(√δT χT ), not O(1 /T ).
+
+Uniform grids: proved for 2 ≤ T ≤ 120 . For each integer 2 ≤ T ≤ 120 we derives an explicit polynomial PT ∈ Z[x] whose positive roots are exactly the critical points of H. The sequence of nonzero coefficients of PT has exactly one sign change, so by Descartes’ rule (S5) PT has at most one positive root [2, Sec. 2.2.1]. Combined with the interior-existence argument of Theorem 3, Step 3 (the barriers Φ → ∞ at both ends), this proves that H has a unique critical point, hence a unique minimum, for every 2 ≤ T ≤ 120 .Beyond that certified range, a tolerance-robust numerical scan finds exactly one local minimum for every T = 2 , . . . , 200 and for T ∈ { 500 , 1000 , 5000 }. A general analytic proof remains open. It reduces it either to the conjecture that the relevant coefficient sequence has one sign change for every 
+
+T , or to verifying Var p(z) < 1/12 at each critical point, where 1/12 is the limiting value in the continuum. 
+
+General grids: false, by explicit construction. Non-uniqueness already occurs at T = 3 on a two-cluster grid. Take ρ =   11+ C , 12 , 1, equivalently ω = ( C, 1, 0) . Then z1 = xx+C , z2 = xx+1 ,
+
+z3 = 1 and 
+
+H(x) = z1 + (z2 − z1)2
+
+z2
+
++ (1 − z2)2. (74) Table 7 evaluates (74) at five points and shows that the value 34 is crossed four times, for every 
+
+C ≥ 100 ; By continuity H — and therefore Φ — has at least two local minima, one in ( 110 , √C) and one in (√C, 10 C).For fixed x, H(x) → J  xx+1 
+
+ with J the strictly unimodal T =2 profile above; for x = Cw with w
+
+fixed, H → J  ww+1 
+
+. Each cluster therefore creates one T =2 valley, with minima approaching 34
+
+near x ≈ 1 and x ≈ C, and the valleys are separated by the cluster-scale ratio. Table 7: Five evaluations that force two valleys (Eq. (74), any C ≥ 100 ; the table reads C = 100 ). With u := 11+ C and ¯u := 11+ √C ≤ 111 . Each outer bound keeps a single term of (74); the two interior identities are exact substitutions. All five were also checked in exact rational arithmetic. 
+
+point value or bound vs. 34
+
+x = 110 H ≥ (1 − z2)2 = 100 121 > 34
+
+x = 1 H = 34 − u + 2 u2 < 34
+
+x = √C H ≥ z1 + ( z2 − z1)2 = 1 − 3¯ u + 4¯ u2 > 34
+
+x = C H = 3 − 6u + 8 u2 − 4u3
+
+4(1 − u) < 34
+
+x = 10 C H ≥ z1 = 10 11 > 34
+
+23 The interior identities follow by direct substitution, using z1(1) = u, z2(1) = 12 , z1(C) = 12 and 
+
+z2(C) = 1 − u. For the middle lower bound we drop (1 − z2)2 ≥ 0 and use z2 ≤ 1; moreover 
+
+¯u ≤ 111 lies below 3−√58 , the smaller root of 4¯ u2 − 3¯ u + 14 .
+
+Severity. Clustering can push the count higher. A two-cluster grid at T =48 with nodes concentrated near 10 −7 and near 1 produces seven local minima of H, each confirmed in 50-digit arithmetic. The consequence for the theory is the conditional statement in Theorem 3: every local optimizer is mode-wise proportional to some local minimizer of Φ, and the common form v∗ 
+
+> k
+
+= x∗Pk holds for global optimizers exactly when arg min Φ is a singleton. On a two-cluster grid of this type, a two-mode instance with P = (1 , 4) has a genuine local optimizer whose modes occupy different valleys, with v2/v 1 of order 10 6 instead of the proportional ratio 4;perturbations in every direction confirm local optimality. 
+
+Budget bending (Proposition 3) 
+
+The relevant asymptotic regime holds the budget V fixed while T → ∞ ; this is also the regime the experiments test. The proof uses Lemmas 7–9 plus one derivative lemma of the same kind. Throughout, xk := vk/P k and ¯xk := V P k/ P 
+
+> j
+
+P 2 
+
+> j
+
+; the hypothesis implies ¯xmax ≤ 34 .
+
+Lemma 12 (Expansion and derivative on extended windows) . Fix X ≥ 1. Uniformly on x ∈
+
+[T −1/4, X ], on the uniform grid, 
+
+T H (x) = x ln T + 12x + O(1) , (75) 
+
+T H ′(x) = ln T − 12x2 + O  1
+
+> x
+
+, (76) 
+
+with constants depending only on X.Proof. Extension of the three lemmas. The restriction x ≤ 34 entered only through the decreasing-then-increasing shape of f in Lemma 8. For b < 14 (including b ≤ 0) one checks (ln f )′ =
+
+−1/ρ + 3 b/ψ < 0 on all of (0 , 1] , so f is monotone and the total-variation bound only improves. The antiderivative of Lemma 9 is valid for every b̸ = 0 , and x = 1 is the trivial case ψ ≡ 1. So Lemmas 7–9 extend from (0 , 34 ] to (0 , X ].
+
+The value. Chaining as in (65) and noting x ln 1 
+
+> x
+
+= O(1) and 1 
+
+> T x 3
+
+≤ T −1/4 on the window gives (75). 
+
+The derivative. From T H = xS(x) we get T H ′ = S +xS′, and (75) gives S = ln T + 12x2 +O( 1 
+
+> x
+
+).Differentiating (52) termwise with ∂xψ(ρ) = ρ,
+
+−S ′(x) = 1
+
+T
+
+> T
+
+X
+
+> i=1
+
+ 1
+
+ψ2 
+
+> i
+
+ψ2
+
+> i−1
+
++ 2 ρi−1/ρ i
+
+ψi ψ3
+
+> i−1
+
+
+
+, (77) which is a pair of Riemann-type sums of the integrands ψ−4, monotone in ρ, up to the grid shift of Lemma 7 and the factor ρi−1/ρ i = 1 − 1 
+
+> i
+
+, whose deviation contributes at most 2 ln TT x 4 = O( 1 
+
+> x
+
+) on the window. Since Z 10
+
+ψ−4 dρ = x−3 − 13b = x−3
+
+3 + O(x−2) (78) and the total-variation Riemann error is O(x−4/T ) = O( 1 
+
+> x
+
+) there, we get −S ′ = x−3 + O(x−2)
+
+and hence T H ′ = ln T + 12x2 − 1 
+
+> x2
+
++ O( 1 
+
+> x
+
+), which is (76). 
+
+Proof of Proposition 3. Because Φ → ∞ at 0 and Φ is continuous, a global optimizer exists in the interior and satisfies the Lagrange condition 1 
+
+> Pk
+
+Φ′(xk) = λ for every k, where Φ′(x) = 12 
+
+> H
+> 1−H
+
+H′(x).In particular sign Φ ′ = sign H′ and Φ = H2 
+
+> 4
+
+(1 + O(H)) .
+
+Step 1 (value benchmark). The feasible point ¯vk = ¯ xkPk has objective value 
+
+Φbm  
+
+> T
+
+:= X
+
+> k
+
+Φ(¯ xk) = ln 2 T
+
+4T 2
+
+X 
+
+> k
+
+¯x2
+
+> k
+
+ 1 + o(1)  (79) 24 by Lemma 12. Any optimizer does at least as well, so every coordinate satisfies Φ( xk) ≤ Φbm  
+
+> T
+
+=
+
+O(ln 2 T /T 2).
+
+Step 2 (localization). First exclude xk ≤ T −1/4: there (68) gives T H ≥ 12x (1 − 2T −1/2) − 2x ≥  
+
+> T1/4
+> 3
+
+, so Φ( xk) ≥ H2 
+
+> 4
+
+≫ Φbm  
+
+> T
+
+. Next exclude xk ≥ xhi for a large fixed constant xhi depending only on P 
+
+> j
+
+¯x2 
+
+> j
+
+, using the regional bounds of Table 5: T H ≥ x ln T on [T −1/4, 1] , T H ≥ 827 x ln T 
+
+> 2x
+
+on 
+
+[1 , √T ], and T H ≥ √T 
+
+> 2
+
+beyond. Now λ > 0. If λ ≤ 0 then H′(xk) ≤ 0 for every k, so on [T −1/4, x hi ] Lemma 12 would force 
+
+xk ≤ (2 ln T )−1/2(1 + o(1)) and hence P 
+
+> k
+
+vk ≤ (2 ln T )−1/2(1 + o(1)) P 
+
+> k
+
+Pk < V for large 
+
+T , contradicting the budget. Therefore λ > 0, every coordinate has H′(xk) > 0, and xk ≥
+
+(2 ln T )−1/2(1 − o(1)) .Finally all coordinates are bounded below by a fixed constant. The budget forces some xk0 ≥
+
+V / P 
+
+> j
+
+Pj =: xlo > 0, and Lemma 12 then gives λ = 1
+
+> Pk0
+
+Φ′(xk0 ) ≥ c ln 2 TT 2 . Suppose some xk ≤ ε
+
+with ε small and fixed. Then Φ′(xk) = λP k ≥ c′ ln 2 TT 2 would require 
+
+
+
+xk ln T + 12xk
+
+ 
+
+ln T − 12x2
+
+> k
+
+
+
+≥ c′′ ln 2 T, (80) and for xk ≤ ε the first factor can reach c′′ ln T only through 12xk ≳ ln T , which makes the second factor negative — a contradiction. Hence every xk ∈ [c′, x hi ], a fixed compact interval. 
+
+Step 3 (stationarity gives the law). On that compact, Lemma 12 gives uniformly 
+
+Φ′(x) = 12 H(x)H′(x) 1 + O(H)
+
+= x ln 2 T
+
+2T 2
+
+
+
+1 + O  1ln T
+
+
+
+, (81) so 1 
+
+> Pk
+
+Φ′(xk) = λ becomes xk = κP k
+
+ 1 + O(1 / ln T ) with the common constant κ = 2 λT 2/ ln 2 T .The budget equation V = P 
+
+> k
+
+xkPk = κ P 
+
+> k
+
+P 2 
+
+> k
+
+(1 + O(1 / ln T )) determines κ, and therefore 
+
+v∗ 
+
+> k
+
+= xkPk = P 2
+
+> k
+
+P 
+
+> j
+
+P 2
+
+> j
+
+V  1 + O(1 / ln T ), (82) which is (8). The hypothesis V P max / P 
+
+> j
+
+P 2 
+
+> j
+
+≤ 34 ensures the limiting allocation stays in the window where the constants are uniform. Table 8: The budgeted optimum bends toward the P 2 law. Two modes, P = (1 , 4) , budget V = 5 ,uniform grid; exact minimization of P 
+
+> k
+
+Φk. The limit is P 21 V / P 
+
+> j
+
+P 2 
+
+> j
+
+= 517 = 0 .294 , approached at the proved rate O(1 / ln T ). Note that equal-budget protocols and free-noise optimization answer different questions and have different exponents; both should be reported. 
+
+T 5 10 50 200 10 3 2×10 4
+
+v∗ 
+
+> 1
+
+0.773 0.634 0.460 0.391 0.347 0.306 
+
+Proof of Theorem 4 
+
+Proof. (The identity.) Let z(ρ) = vρ/φ (ρ). Substituting into (41) through φ = vρ/z and 1 − z =(1 − ρ)P/φ collapses the expression to 
+
+D0 = P F (z), F (z) := 
+
+> T
+
+X
+
+> i=1
+
+(∆ zi)2
+
+zi
+
+, (83) with z0 = 0 and zT = 1 ; the two-line simplification has symbolic residual 0. Equation (83) restates (9). Two identities used repeatedly below are 
+
+M (ρ) = P z (ρ), ∆zi
+
+zi
+
+= P ∆ρi
+
+ρi φ(ρi−1) , (84) 25 both immediate from K(ρ) = P/φ (ρ).
+
+(a) Color-blindness of the achievable set. For every v > 0 the map ρ 7 → z is a continuous strictly increasing bijection of [0 , 1] (left panel of Figure 7). The achievable z-grids — and hence the schedule-optimized deficit — therefore coincide for every color at every finite T .
+
+(b) Uniqueness of the optimal grid. F is a sum of quadratic-over-linear terms and so is jointly convex. If two minimizers existed, F would be affine on the segment joining them, which forces every ratio zi−1/z i to be constant along that segment. Together with the pinned endpoints those ratios determine the grid, so the minimizer is unique. 
+
+(c) The optimal grid in closed form. Put ai := zi−1/z i. Stationarity of F in the interior coordinates gives 
+
+2ai+1 = 1 + a2 
+
+> i
+
+, a1 = z0
+
+z1
+
+= 0 , (85) an explicit forward recurrence, from which zi = Q 
+
+> j>i
+
+aj . Table 9 lists the first values and the resulting optimal costs. Brute-force minimization agrees to 10 −14 for T = 2 , 3, 4. At T = 2 the exact optimum is z1 = 12 with F ∗ = 34 , whereas the continuum schedule z = s2 gives 13 16 : the continuum schedule is not exactly optimal at finite T .
+
+(d) Asymptotics of the optimum. Set εi := 1 − ai. Two exact rewrites start the argument. First 
+
+∆zi = zi(1 − ai), so the optimal value is 
+
+F ∗ =
+
+> T
+
+X
+
+> i=1
+
+zi ε2 
+
+> i
+
+. (86) Second, (85) becomes exactly 
+
+εi+1 = εi
+
+
+
+1 − εi
+
+2
+
+
+
+, ε1 = 1 , (87) a purely quadratic recurrence with no cubic term. It shows εi ∈ (0 , 1] and that the sequence decreases, so 
+
+1
+
+εi+1 
+
+= 1
+
+εi
+
++ 12 · 11 − εi/2= 1
+
+εi
+
++ 12 + εi
+
+4 + O(ε2 
+
+> i
+
+). (88) 
+
+Sharp recurrence asymptotics. Dropping the positive correction in (88) gives 1/ε i ≥ (i + 1) /2, i.e. 
+
+εi ≤ 2/(i+1) . Substituting that bound back yields P 
+
+> j<i
+
+εj /4 = 12 ln i+O(1) and P 
+
+> j<i
+
+ε2 
+
+> j
+
+= O(1) ,so a two-sided induction with explicit constants gives 
+
+1
+
+εi
+
+= i
+
+2 + 12 ln i + O(1) , (89) 
+
+εi = 2
+
+i
+
+
+
+1 + O  ln( i+1) 
+
+> i+1
+
+
+
+. (90) 
+
+Modal positions. Since zi = Q 
+
+> j>i
+
+aj ,
+
+ln zi = X
+
+> j>i
+
+ln(1 − εj )= − X
+
+> j>i
+
+εj + O
+
+X 
+
+> j>i
+
+ε2
+
+> j
+
+
+
+= −2 ln Ti + O
+
+ ln( i + 1) 
+
+i + 1 
+
+
+
+, (91) using P 
+
+> j>i
+
+2/j = 2 ln( T /i ) + O(1 /i ) and the fact that the two correction sums P
+
+> j>i
+
+(ln j)/j 2 and 
+
+P 
+
+> j>i
+
+1/j 2 are both O(ln( i + 1) /(i + 1)) . Hence 
+
+z∗ 
+
+> i
+
+= ( i/T )2 e O(ln( i+1) /(i+1)) . (92) 26 This is the rigorous convergence statement, with its rate: the exact optimizer approaches the continuum schedule z = s2. Equivalently the limiting schedule is 
+
+ρ∗(s) = P s 2
+
+P s 2 + v(1 − s2) , (93) under which M (ρ∗(s)) = P s 2 by (84): the conditional MMSE is quadratic in solver time. 
+
+The floor. Combining (90) and (92) term by term, 
+
+ziε2 
+
+> i
+
+= 4
+
+T 2
+
+
+
+1 + O  ln( i+2) 
+
+> i+1
+
+
+
+, (94) 
+
+F ∗ = 4
+
+T + O
+
+ 1
+
+T 2
+
+> T
+
+X
+
+> i=1
+
+ln( i + 2) 
+
+i + 1 
+
+
+
+= 4
+
+T
+
+
+
+1 + O  log 2 TT
+
+
+
+, (95) so D∗ 
+
+> 0
+
+= 4PT
+
+ 1 + O(log 2 T /T ). The log 2 factor comes from P
+
+> i
+
+(ln i)/i ; improving the rate would require cancellation among the per-term corrections, and no such cancellation is evident. The last column of Table 9 supports the proved law. Finally, for the uniform s-grid under z = s2 the summand of (83) simplifies symbolically to 
+
+P (s2 
+
+> i
+
+− s2
+
+> i−1
+
+)2/s 2 
+
+> i
+
+, in which the color v disappears identically — confirming (a) term by term. Table 9: The optimal z-schedule of Theorem 4(c). Left: the first ratios ai = zi−1/z i from the forward recurrence (85), as exact rationals. Right: the optimal cost, exactly for small T and against the floor F ∗ = 4 /T of part (d). The approach to 1 is at the proved rate 1 + O(log 2 T /T ).
+
+i ai T F ∗ F ∗T / 41 0 2 3/4 0.375 2 1/2 3 39 /64 0.457 3 5/8 4 16929 /32768 0.517 4 89 /128 10 0.2778 0.694 5 24305 /32768 200 0.01931 0.966 6 0.7751 . . . 10 4 3.996 ×10 −4 0.999 0.00 0.25 0.50 0.75 1.00                     
+
+> ρ
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> z = vρ /φ(ρ)
+> ρ↦zis onto [0, 1]
+> x= 0.05
+> x= 0.33
+> x= 1
+> x= 3
+> x= 20 0.00 0.25 0.50 0.75 1.00
+> i/T
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> zi
+> T= 64
+> exact z*
+> i
+> (i/T)2
+> 10 110 210 310 4
+> T
+> 0.4 0.6 0.8 1.0
+> F *T/4
+> floor D*0= 4 P/T
+
+Figure 7: The solver coordinate z absorbs the color. Left: ρ 7 → z = vρ/φ (ρ) for five values of x = v/P . Each is a bijection of [0 , 1] , so every z-grid is reachable at every color — this is Theorem 4a. Center: the exact optimizer z∗ 
+
+> i
+
+from the recurrence (85) against the continuum law 
+
+(i/T )2 at T = 64 , illustrating (92). Right: F ∗T / 4 → 1, the floor D∗ 
+
+> 0
+
+= 4 P/T of part (d). 
+
+The multi-objective schedule frontier 
+
+The discretization-optimal schedule has gain-error susceptibility 
+
+Ξ := X
+
+> i
+
+∆zi
+
+zi
+
+(1 − zi) = 2 ln T + O(1) , (96) 27 which diverges logarithmically; numerically Ξ = 2 ln T − 3.05 at T = 10 4. The two objectives therefore conflict: discretization favors many small steps near z = 0 , whereas robustness favors a short log-path. Under model error, reference design becomes a multi-objective z-schedule problem — minimize P
+
+> i
+
+(∆ zi)2/z i subject to a susceptibility budget. The constraint involves the ratios zi−1/z i,which are not jointly convex, so convexity of the exact finite-T frontier does not follow from convexity of F . In the continuum, however, the frontier is available in closed form. 
+
+Theorem 6 (Continuum susceptibility–discretization frontier) . Consider increasing C1 schedules 
+
+z : [0 , 1] → (0 , 1] with z(0 +) = z1 and z(1) = 1 .
+
+(i) Susceptibility is path-independent. 
+
+Ξcont =
+
+Z 10
+
+˙zz (1 − z) d s =
+
+Z 1
+
+> z1
+
+1 − zz dz = ln 1
+
+z1
+
+− (1 − z1). (97) 
+
+This depends only on the launch point z1. The budget Ξcont ≤ ξ therefore imposes only z1 ≥ a(ξ)
+
+and no further path constraint, where a(ξ) ∈ (0 , 1) is the unique root of ln 1 
+
+> a
+
+− (1 − a) = ξ.
+
+(ii) The square law, derived. Substituting w = √z turns the discretization functional into a Dirichlet energy, Z 10
+
+˙z2
+
+z ds = 4 
+
+Z 10
+
+˙w2 ds, (98) 
+
+with endpoints fixed at w(0) = √a and w(1) = 1 . Cauchy–Schwarz gives the unique minimizer 
+
+w(s) = √a + (1 − √a)s, that is the free square-law path launched at a:
+
+z(s) =  √a + (1 − √a)s2, E(ξ) = 4  1 − pa(ξ)2. (99) 
+
+(iii) Closed-form, C1 frontier. Differentiating the constraint, 
+
+da
+
+dξ = − a
+
+1 − a , (100) 
+
+d2a
+
+dξ2 = a
+
+(1 − a)3 > 0, (101) 
+
+dE
+
+dξ = 4√a
+
+1 + √a > 0. (102) 
+
+Both derivatives are strictly monotone in ξ: a decreases as ξ increases, while √a/ (1 + √a) increases with a. Each branch therefore has curvature of one sign. The launch point a(ξ) is C1, strictly decreasing and strictly convex; the smooth-path energy E(ξ) is C1, strictly increasing and strictly concave, and approaches the free value 4 as ξ → ∞ .
+
+At finite T the launch point z1 is exactly the first step’s O(1) contribution to the deficit, because its term in (83) is (z1 − 0) 2/z 1 = z1. Along the envelope family the total deficit is therefore 
+
+a(ξ) + 1 
+
+> T
+
+E(ξ) 1 + o(1) , (103) whose leading-order frontier is convex, decreasing and available in closed form; the concave E-branch contributes only the O(1 /T ) correction. The susceptibility constraint becomes inactive near ξ ≈ 2 ln T , where the frontier flattens at the free optimum of Theorem 4d. The continuum identity in (i) is the main conceptual statement and replaces the discrete bound Ξ ≤ ln(1 /z 1); the discrete bound remains useful as a finite-T comparison, and the difference between them, 1 − z1, is exactly the first step’s susceptibility contribution. 
+
+6.5 Proofs for Section 3.4 (Model Error and Learning) Completeness of the error model 
+
+In the solvable model the exact drift is affine, ˆx0 = W x 1 + Ki(x − ¯cix1). Any learned affine drift can differ from it in exactly two ways: a relative gain error ηi, which mis-scales the sensitivity to the state deviation, and an additive bias βi. Because the analysis conditions on x1, the bias may depend on x1; consequently an error in the drift’s x1-coefficient — for instance using ˆW̸ = W — is absorbed into βi. The two-channel decomposition is therefore exhaustive within the model. Both channels preserve the affine–Gaussian structure, so the terminal laws remain exact. 28 Proof of Proposition 4 
+
+Proof. The perturbed step gives 
+
+c′ = r + (1 − r)K(1 + η)c + (1 − r)W − K(1 + η)¯ c. (104) Substituting the inductive value c = ¯ ci, the two terms K(1 + η)¯ c cancel identically in η, leaving 
+
+c′ = r¯ci + (1 − r)W = ¯ ci−1. Mis-scaling the deviation around the correct center therefore cannot bias the mean; only the additive bias can move it. 
+
+Proof of Theorem 5 
+
+Proof. Work in z-coordinates. Three direct computations give exact step quantities that do not depend on color at matched z-grids. The unperturbed contraction is a ratio of values of w(z) := z + x(1 − z),consistent with Lemma 4, and the key identity is the second half of (84), 
+
+(1 − ri)Ki
+
+Ai
+
+= ∆zi
+
+zi
+
+, (105) which is exact and independent of x = v/P . The gain-perturbed contraction is therefore 
+
+ˆAi = Ai
+
+
+
+1 + ηi
+
+∆zi
+
+zi
+
+
+
+. (106) The bias enters at step i as (1 − ri)βi and is multiplied by the downstream contractions ˆAi−1 · · · ˆA1
+
+on its way to the output, so its weight is 
+
+(1 − ri) Y
+
+> m<i
+
+ˆAm = ∆zi
+
+zi
+
+Y
+
+> m<i
+
+
+
+1 + ηm
+
+∆zm
+
+zm
+
+
+
+, (107) where we used Q 
+
+> m<i
+
+Am = P/φ (ρi−1) from Lemma 4 together with (1 − ri)P/φ (ρi−1) = (1 − ri)Ki/A i = ∆zi 
+
+> zi
+
+from (105). When η ≡ 0 the weight reduces to ∆zi 
+
+> zi
+
+. In general, therefore, 
+
+m0 = X
+
+> i
+
+βi
+
+∆zi
+
+zi
+
+Y
+
+> m<i
+
+
+
+1 + ηm
+
+∆zm
+
+zm
+
+
+
+, (108) which is (10). Unrolling the variance recursion (35) with the same factors gives 
+
+V0
+
+P = X
+
+> j
+
+zj−1
+
+∆zj
+
+zj
+
+Y
+
+> m<j
+
+
+
+1 + ηm
+
+∆zm
+
+zm
+
+2
+
+, (109) which is (11). In the special case η ≡ 0 this becomes 
+
+V0
+
+P = X
+
+> j
+
+zj−1
+
+∆zj
+
+zj
+
+= 1 − X
+
+> j
+
+(∆ zj )2
+
+zj
+
+, (110) using zj−1 = zj − ∆zj and P 
+
+> j
+
+∆zj = 1 , which recovers (83). Every factor in (108)–(109) depends only on the z-grid and the error profile. The terminal law is therefore identical for every v > 0, and with mean error the terminal KL is 12 (u + m20/P − 1 − ln u)
+
+with u = V0/P by (S6). 
+
+Remark 4 (Numerical verification) . For simultaneous perturbations η(z) = 0 .2z + 0 .1 sin 3 z and a smooth bias profile β(z), both closed forms agree with the exact recursion to ≤ 3 × 10 −16 in V0 and in m0. At a matched z-grid they are also identical to 12 digits across x ∈ [0 .01 , 100] .
+
+Proof of Proposition 5 
+
+Proof. At level z the conditional correlation satisfies 
+
+corr 2 x0, deviation | x1
+
+ = 1 − z (111) 29 Table 11: Ridge-whitening sweep. Optimal scale x∗(nP ) for T = 100 and λ = 1 . Smaller effective sample size nP produces a flatter optimal spectrum.                
+
+> nP 10 30 100 300 10 310 4∞
+> x∗(nP )11 .92 3.95 1.58 0.89 0.58 0.39 0.363
+
+exactly, with symbolic residual 0. Up to scale, the per-mode joint law of (x0, x t) given x1 therefore depends only on z, so any scale-equivariant learner has a color-free relative-error law at each z-level. For zero-intercept least squares from n pairs on a normalized design P 
+
+> i
+
+X2 
+
+> i
+
+= nτ 2,
+
+Var   ˆK/K − 1 = MnΣK2 = zn(1 − z) , (112) which is again color-free; under a random design n is replaced by n − 2. Combined with Theorem 5, per-mode color is exactly invisible end to end once the z-schedule is fixed. 
+
+Remark 5 (Correlated miscalibration) . A constant relative gain error compounds along the z-path as 
+
+exp 
+
+
+
+±2η X
+
+> i
+
+∆zi
+
+zi
+
+
+
+. (113) 
+
+On a fixed ρ-grid the color changes the shape of that path, and the measured optima move a great deal (Table 10). By Theorem 5 this dependence must be read as a z-schedule effect, not as a color effect in its own right. 
+
+Table 10: Constant gain error ±η on a fixed ρ-grid moves the apparent optimum by orders of magnitude — an artifact of the induced z-schedule, per Remark 5.         
+
+> η00.02 0.05 0.2
+> x∗0.34 5.416 .478 .8
+
+Ridge whitening (Proposition 6) 
+
+A shared ridge penalty λ shrinks the estimated gain through the relative bias 
+
+ηk(z) = − λλ + nΣk(z) . (114) Because Σk is dimension ful , this penalty breaks the scale symmetry of Theorem 3. Exact-chain optimization with T =100 and λ=1 gives the sweep in Table 11, which decreases strongly with the effective sample size nP .For P = (1 , 4) and n = 100 the optimum satisfies 
+
+v∗
+
+> 2
+
+v∗
+
+> 1
+
+= 4 · x∗(400) 
+
+x∗(100) = 1 .99 , (115) against the proportional value 4: weakly observed frequencies need disproportionately more reference noise to counteract shrinkage, and the regularized optimum is substantially flatter. With a shared 
+
+constant λ the modes remain separable, because the mechanism is per-mode scale sensitivity. A genuinely shared network introduces true cross-mode coupling; the simplest such model ties one gain across modes, and its exact cost equals the curvature-weighted dispersion of the per-mode optimal gains. The fully nonlinear shared-network case remains open. 
+
+Data-dependent optima. Using exact moment recursions and no Monte Carlo, the leading-order statistical contribution equals 1/n times the discretization functional; measured/predicted is 0.971 
+
+and 0.979 at x = 0 .3 and x = 2 .0. The mean effect therefore does not move the argmin. The shift is caused instead by the variance-of-variance penalty, which produces the mild downward trend 
+
+x∗ = 0 .323 ( n=∞) → 0.305 ( n=300) → 0.272 ( n=100) . (116) 30 Distortion–perception and underdispersion correction Corollary 6 (Distortion–perception trade-off, derived) . The posterior-mean estimator W x 1 has conditional MSE exactly P for every T , independent of the reference; this is the only quantity made invariant by mean exactness (Lemma 3). The sampled output has the correct mean and is conditionally independent of the true x0 given x1, so its conditional MSE is 
+
+MSE = P + V0 ∈ [P, 2P ), (117) 
+
+which depends on the reference through V0 alone. The collapsed sampler minimizes it at V0 = 0 ,where it is the posterior-mean estimator in disguise; at distributional perfection V0 = P and the MSE equals 2P . The classical factor-2 ( 3 dB) cost of posterior sampling therefore follows as a theorem, and the reference traces the entire trade-off curve. 
+
+Corollary 7 (Principled underdispersion correction) . By Corollary 2 the plug-in sampler’s only failure mode is underdispersion, so deliberate gain inflation can serve as a calibrated correction: by 
+
+(109) , choose η(z) so that 
+
+X
+
+> j
+
+zj−1
+
+∆zj
+
+zj
+
+Y
+
+> m<j
+
+
+
+1 + ηm
+
+∆zm
+
+zm
+
+2
+
+= 1 . (118) 
+
+Each term carries its own partial product; there is no single global factor multiplying the η ≡ 0
+
+variance. A convenient one-parameter solution holds η constant and solves the resulting scalar equation, giving an exact-formula counterpart to temperature and churn heuristics. 
+
+Note that an objective that checks only the expected variance can be satisfied by any error that adds variance. The appropriate objective is E[KL] over error realizations. 
+
+## 7 Experimental Protocols & Additional Results 
+
+7.1 Reference color in I2SB super-resolution 
+
+We begin with the question that motivated the theory: does reference color matter for a full pretrained restoration model? Starting from the stock I2SB 4× super-resolution checkpoint, we fine-tune one model per reference for 50 k steps under identical optimization settings, changing only the color of the reference noise — white, low-pass ( 1/f 2), and high-pass ( f 2). All three references share the same scale ε and the same total pixel variance, which removes the trivial confound; only the allocation of variance across frequencies differs. Since 4× downsampling destroys high spatial frequencies, the high-pass reference is the one that concentrates noise on the destroyed information — the qualitative direction of vk ∝ Pk.Table 12: 4× super-resolution with recolored references. PSNR/SSIM on held-out aligned pairs at NFE 20 ; equal data, compute and total reference variance. “Best” selects the best validation checkpoint; “final” is at 50 k steps.                    
+
+> best final reference PSNR ↑SSIM ↑PSNR ↑SSIM ↑
+> high-pass ( f2)29 .13 0.714 27 .66 0.647
+> white 27 .64 0.579 26 .82 0.554
+> low-pass ( 1/f 2)26 .36 0.476 21 .35 0.207
+
+Table 12 shows the ordering predicted by the destroyed-information picture: high-pass > white >
+
+low-pass on both metrics, at both the best checkpoint and the end of training. The high-pass reference beats white by 1.5 dB PSNR and 0.14 SSIM at the best checkpoint, despite the base model having been pretrained with white noise. The low-pass reference is more striking: its best checkpoint is its first one, and continued fine-tuning is monotonically destructive, losing 5.0 dB by 50 k steps. A reference that concentrates noise on frequencies the observation already preserves does not merely learn slowly; it steadily erases the pretrained model’s ability to reconstruct. This experiment changes only the color of the noise, at a single scale ε and a single step budget. It confirms the coarse direction the theory predicts — noise belongs where the observation destroyed 31 information — but it does not test the predicted amount x∗(T ), which requires sweeping the scale (Fig. 1 does this in the exact setting). Even within these limits the effect is large: on a real pretrained restoration model the reference spectrum is a first-order design choice, not an implementation detail. 
+
+7.2 Protocols Exact numerics (Phase 1) 
+
+Every quantity is computed three ways — the closed-form deficit (41), the telescoped V0, and the exact affine recursion (34)–(35) — and the three are cross-checked to machine precision before each run. The fixed regression anchor is D0 = 1 .171587 at P = v = 4 and T = 10 .Figure 2(a) uses P = v = 4 on uniform and power grids with T up to 10 5. Figure 2(c) locates x∗(T )
+
+by golden-section minimization of Φ at 22 logarithmically spaced T ∈ [5 , 10 5]. Figure 2e uses the two-cluster grid at T =48 ; each candidate minimum is re-verified with exact derivatives in 50-digit 
+
+mpmath arithmetic. Table 13 uses the exact recursion with budget P 
+
+> k
+
+vk = 5 , a linear schedule and vertex ϵ = 10 −2. The z-schedule computations use the forward recurrence (85). All Phase-1 experiments are deterministic, use no random seeds, and run in minutes on a laptop. 
+
+Gaussian Setting (Phase 2) 
+
+The synthetic setting has 64 modes (up to 256 in secondary sweeps), prior Sk = k−2, Gaussian MTF 
+
+hk = exp( −(k/k c)2) with kc = 16 , and flat noise Nk = 10 −3; Pk is computed exactly and saved with every run. The matched reference is vk = x∗(T )Pk with x∗ from Table 6; white, anti-matched (∝ 1/P k) and prior-colored ( ∝ Sk) references are rescaled to the matched total budget. The predictor is 64 independent per-mode MLPs (batched with bmm ), each receiving 
+
+(xt, x 1, 32-dim sinusoidal t), with 3 SiLU hidden layers and scalar output ˆx0. Training: Adam 
+
+10 −3, batch 2048 –4096 , 12 k– 20 k steps, EMA 0.999 , continuous t ∼ U (0 , 1) , per-mode I/O normal-ization by √Sk (a benign per-mode rescaling), seeds {0, 1, 2}, common random numbers across references. Terminal KL is estimated as follows: conditional on x1, the terminal law of each mode is fit by regression over a common-random-number batch of 10 5 samples. The KL divergence between the fitted Gaussian and N (W x 1, P ) is then evaluated in closed form; the empirical KL floor is about 
+
+10 −5. The ridge-whitening and constant-sweep experiments use closed-form ridge/OLS learners per 
+
+(k, t -bin ) with 32 bins and exact deterministic chain propagation, hence zero sampling noise. The Jacobian probe estimates ˆη(z) by finite differences of ∂ ˆx0/∂x t on the trained fingerprint network and applies (109). 
+
+FFHQ 64 ×64 (Phase 3) 
+
+FFHQ is center-cropped and resized to 64 ×64 with Lanczos interpolation; the first 60 k images are used for training, for fitting S(k) and for FID statistics, and the next 10 k for evaluation; pixels lie in 
+
+[−1, 1] .The degradation is defined in the DFT domain so that P (k) is analytic: x1 = kblur ∗ x0 + n with Gaussian blur σblur = 2 .0 px, transfer function h(k) = exp( −2π2σ2blur |f |2), and noise σn = 0 .05 ,i.e. N = 2 .5×10 −3. There is no decimation and hence no aliasing block, so Corollary 4 is not needed here. S(k) is fit once by radially averaging the training-split power spectrum and saved in a bundle together with P (k), W (k), h(k) and x∗(T ). The matched reference uses x∗(Tref =50) = 0 .404 ;all budget-matched colors have the same per-pixel noise variance, so “same noise level, different spectrum” is literal. Each run trains one I2SB-style ADM U-Net (base width 128 , multipliers (1 , 2, 2, 2) , 2 residual blocks per resolution, attention at 16 2 and 82; 39 .6M parameters), conditioned by concatenating x1
+
+with xt (6 input channels) plus a standard t-embedding. 
+
+Original recipe: ˆx0 MSE with ρ ∼ U (0 , 1) on the uniform schedule; Adam 10 −4, batch 128 , 150 ksteps, EMA 0.9999 , dropout 0.1, horizontal flips, bf16 autocast. Matched and white use seeds 
+
+{0, 1, 2}; anti, α=1 , α=2 and equal-budget matched use seed 0 — 10 runs, each 4–7 h on one modern GPU. 32 Evaluation uses the ancestral plug-in-mean sampler at NFE 5, 10 , 20 , 50 and 100 on uniform sub-grids with fixed generator seeds and chunking, so comparisons across references use byte-identical common random numbers. We report PSNR/SSIM/LPIPS on 1k held-out images and FID against FFHQ-64 statistics; radially averaged error spectra include the exact-drift overlay 2P (k) − D0(k).Every 5k steps the EMA network is probed on 256 fixed images over a 16 -point t-grid, recording the per-(radial band, t) fingerprint relative to the Bayes floor. 
+
+Converged recipe and the θ-family 
+
+The converged recipe is identical to the original except dropout 0, batch size 512 and 300 k steps — eight times as many gradient samples. The θ-family is v(k) ∝ P (k)θ rescaled to the fixed total budget A, with θ ∈ { 0, 14 , 12 , 34 , 1}; the endpoints coincide with the white and matched references at that budget (verified against the saved bundle to 10 −6, so separate endpoint runs are unnecessary). Runs: matched and white with seeds {0, . . . , 4}; θ ∈ { 0.25 , 0.5, 0.75 } with seed 0; matched and white at σblur = 4 .0 with seed 0 (separate bundle). 
+
+FID protocol. Every FID in Section 4.4 uses 50 k samples, formed by pooling 5 replicates of the 
+
+10 k evaluation set with fresh sampler driving noise; per-replicate 10 k FIDs are stored, and the original-recipe runs were re-evaluated under the same protocol before any comparison. 
+
+Schedule ablation. Every trained network is also evaluated on the z-optimal grid of Theorem 4(c) without retraining. Predictions P1–P4 of Section 7.6 were written down before the first converged-recipe run began. 
+
+7.3 Exact numerical evaluation Numerical verification. All deterministic-recursion self-tests pass to machine precision. For the invisibility experiment (Fig. 2a) the terminal variance reaches V0 = 3 .9995 at T = 10 5 for 
+
+P = v = 4 , while the singular case v = 0 collapses, as Theorem 2(b) requires. For the scaling experiment (Fig. 2c) the measured optima include x∗(217) = 0 .329 and x∗(10 5) = 0 .212 , and the ratio x∗(T )/(2 ln T )−1/2 decreases from 1.29 at T = 5 to 1.017 at T = 10 5; Table 6 gives the full sweep. For the clustered T = 48 schedule (Fig. 2e) seven local minima are certified in 50-digit arithmetic. Table 13: Finite-step KL in a two-mode setting. Total KL P 
+
+> k
+
+KL k for P = (1 , 4) , total budget 5
+
+and a linear schedule. The matched allocation is best at every tested step count. The vertex allocation uses v2 = ϵ with ϵ = 10 −2 and is the allocation selected by the degenerate Bayes-risk objective of App 6.3.                                      
+
+> allocation T=5 T=10 T=20 T=50 T=200
+> matched (1 ,4) 0.1534 0.0537 0.0184 0.0043 0.0004
+> uniform (2 .5,2.5) 0.1901 0.0710 0.0263 0.0068 0.0008
+> anti (4 ,1) 0.2682 0.1012 0.0382 0.0104 0.0013
+> vertex (5 −ϵ, ϵ )1.8491 1.3075 0.8995 0.4869 0.1174
+
+Table 13 shows that the matched allocation minimizes KL at every tested T ; at T = 200 the vertex allocation has 294 × larger KL. 
+
+Schedule and budget effects. For the z-schedule recurrence, F ∗T / 4 equals 0.375 , 0.694 , 0.966 
+
+and 0.999 at T = 2 , 10 , 200 and 10 4 (Table 9), approaching the 4P/T floor of Theorem 4d. After schedule optimization the deficit is invariant to reference color up to 10 −12 , as Theorem 4a requires. The budgeted optimum bends toward the P 2 allocation predicted by Proposition 3: v∗ 
+
+> 1
+
+moves from 
+
+0.773 at T = 5 to 0.347 at T = 10 3 and 0.306 at T = 2 × 10 4, approaching the vertex value 
+
+5/17 ≈ 0.294 (Table 8). 
+
+7.4 Controlled Gaussian experiments Tested predictions. We test whether: (i) the converged loss matches the Bayes floor P ϕ/ (ϕ + P )
+
+with ϕ = vρ/ (1 − ρ); (ii) the predicted finite-NFE reference ordering appears; (iii) the optimal scale 33 follows the theoretical constant and bends toward P 2 under an equal-budget constraint; (iv) finite data and weight decay flatten the optimum toward white; and (v) a Jacobian-based estimate from one trained network predicts terminal variance without retraining. 
+
+Loss fingerprint and NFE dependence. After 12 k training steps the median relative excess over the Bayes floor is 0.18% across the 64 × 32 grid of mode–time pairs, below the pre-specified 5% 
+
+gate. For every NFE up to 50 the KL ordering is matched < white < anti-matched < prior-colored; at NFE 50 the total KL is 0.19 ±0.03 , 0.21 ±0.03 , 0.44 ±0.04 and 4.3±0.3 over three seeds. At NFE 200 gain error dominates discretization error: the learned curves lie one to two orders of magnitude above their exact-drift floors, the prior-colored reference becomes unstable (KL 10 4–10 5), and matched and white are statistically indistinguishable at 0.60 ±0.16 and 0.54 ±0.15 . This regime therefore does not preserve the finite-step ordering predicted under exact drift — exactly as Theorem 5 anticipates. 
+
+Optimal scale and ridge whitening. The measured optimal constants are 0.575 at T = 10 and 
+
+0.402 at T = 50 , against the theoretical values 0.577 and 0.404 of Table 6. At T = 200 the measured optimum is 0.360 , which is 8% above the exact-drift value 0.332 — the direction predicted for finite-data regularization by Proposition 6. In the exact-chain ridge sweep at T = 100 and λ = 1 (relative bias (114)), the optimal scale x∗(nP ) grows monotonically as the effective sample size shrinks — from 0.363 at nP = ∞ through 0.58 at nP = 10 3 to 11 .92 at nP = 10 — i.e. a smaller effective sample size produces a flatter optimal spectrum. For P = (1 , 4) and n = 100 the ridge-adjusted optimum gives v∗ 
+
+> 2
+
+/v ∗ 
+
+> 1
+
+= 1 .99 against 4 under exact proportionality: the regularized optimum is substantially flatter. 
+
+Jacobian and schedule probes. The Jacobian analysis of the trained fingerprint network predicts terminal variance with 0.6% median relative error and needs no retraining, validating the measurement protocol of Section 3.4. Per-mode schedule adaptation reduces reference-color gaps toward the theoretical floor, supporting the color-blindness prediction of Theorem 4a once schedule error is removed. 
+
+7.5 FFHQ: evaluation details and secondary results Data and metrics. All FFHQ runs use common random numbers across reference choices. PSNR, SSIM and LPIPS are computed on the same 1,000 held-out images. In the original-recipe experiments FID is computed from 50 k restorations against Inception statistics of the 60 k clean training images; the converged-recipe experiments use 50 k restorations (Section 7.6). The matched reference is computed from the known Gaussian MTF and flat observation-noise spectrum; it is not selected using validation performance. 
+
+Budget conventions. Most rows of Table 1 use total budget A = P 
+
+> k
+
+x∗P (k). The “matched, equal budget” row instead uses the optimal-white budget B. At NFE 50 the equal-budget matched model has FID 9.12 against 8.45 for matched under its free budget — the budget effect predicted by Proposition 3. We report both conventions because they answer different questions. The flatter empirical optimum is also not specific to NFE 50 : at NFE 100 , white attains FID 6.07 against 6.64 
+
+for matched, beyond the observed seed variation. 
+
+Schedule re-evaluation. Each trained model is re-evaluated with the z-optimal schedule of Theo-rem 4, without retraining. The optimized schedule improves every reference by a similar amount and leaves the ordering unchanged (at NFE 50 : white 7.87 → 7.10 , matched 8.45 → 7.62 , anti-matched 
+
+14 .1 → 13 .0); the white–matched FID gap changes only from 0.58 to 0.53 . It therefore removes a shared discretization component but does not explain the color-dependent gap. 
+
+7.6 Training regime and reference exponent FID measurement. For each converged-recipe run, five independent groups of 10 k restorations are generated with fresh sampler noise and their Inception features pooled into a 50 k estimate; the median per-group spread is ±0.04 and the maximum ±0.08 . For direct comparison with the original 34 10 k protocol, per-group 10 k FIDs are also reported. Pooling does not change the conclusions: at NFE 
+
+50 the matched–white gap is 1.169 on the 10 k basis and 1.177 after pooling. 
+
+Pre-specified prediction ledger. Before training we recorded four directional predictions: P1. Better optimization should shrink the matched–white FID and LPIPS gaps, particularly at NFE 
+
+5–10 , and may reverse their sign. P2. The θ-family should have an interior perceptual optimum, and its minimizing θ should increase under the converged recipe. P3. Anti-matched should remain substantially worse on perceptual metrics in every tested regime. P4. Increasing the blur to σblur = 4 .0 should increase the magnitude of the matched–white effect, regardless of direction. These predictions concern the direction in which the optimum moves; they do not assume that matched must become best. 0.00 0.25 0.50 0.75 1.00 246810 12 14 16 18 FID                       
+
+> FID vs (converged recipe)
+> NFE 5 NFE 10 NFE 20 NFE 50 NFE 100
+> 0.00 0.25 0.50 0.75 1.00 0.032 0.034 0.036 0.038 0.040 0.042 0.044 0.046 0.048 LPIPS
+> LPIPS vs (converged recipe)
+> 0.00 0.25 0.50 0.75 1.00 (vP, fixed budget)
+> white matched 7.5 10.0 12.5 15.0 17.5 20.0 22.5 25.0 FID
+> FID vs (original recipe)
+> 0.00 0.25 0.50 0.75 1.00 (vP, fixed budget)
+> white matched 0.0325 0.0350 0.0375 0.0400 0.0425 0.0450 0.0475 0.0500 0.0525 LPIPS
+> LPIPS vs (original recipe)
+
+Figure 8: Reference exponent under two training recipes. FID (left) and LPIPS (right) against the color exponent θ (v ∝ P θk , fixed budget); stars mark the argmin per NFE. Top: converged recipe — θ=0 .25 is best only for NFE ≤ 20 , and white is best for NFE ≥ 50 . Bottom: original recipe (endpoints only; the α-suite is not in the P θk family). Better optimization widens, rather than closes, the white–matched FID gap. 
+
+P1 and P2. The converged recipe improves both endpoint references in absolute terms: at NFE 50 ,white improves from FID 7.87 to 4.34 and matched from 8.45 to 5.50 .P1 is nevertheless refuted. The matched–white gap increases from 1.78 to 2.09 at NFE 5, from 1.36 
+
+to 2.43 at NFE 10 , and from 0.58 to 1.18 at NFE 50 — at NFE 50 roughly 27 standard errors, given seed spreads of ±0.09 (matched) and ±0.02 (white) on the pooled estimate. The LPIPS gap increases from 0.0028 to 0.0055 at NFE 10 and from 0.0007 to 0.0032 at NFE 50 .P2 receives limited support only at small NFE: FID is minimized at θ = 0 .25 for NFE ≤ 20 (Fig. 8), and at NFE 5 its value is 14 .87 against 15 .27 ±0.07 for white. For NFE ≥ 50 FID returns to a white optimum, and LPIPS selects white for NFE ≥ 10 . A direct cross-recipe comparison of the minimizing 35 θ is not identifiable, because the original recipe did not include interior θ values; the identifiable endpoint gap moves opposite to the prediction. 
+
+P3 and P4. P3 is supported in the original regime under both schedule grids: at NFE 50 anti-matched has FID 14 .1 under the uniform schedule and 13 .0 under the z-optimal schedule, the worst perceptual reference in both cases. Anti-matched was not retrained under the converged recipe, so P3 is not evaluated there. P4 is supported in magnitude, in the direction favoring white: at σblur = 4 .0 the white–matched FID gap at NFE 50 is 2.80 (6.45 versus 9.25 ; one seed per reference, pooled 50 k FID), against 1.18 at 
+
+σblur = 2 .0 on the same basis. The corresponding LPIPS gaps are 0.0066 and 0.0032 .
+
+Convergence audit and scope. The loss fingerprint (Fig. 9) shows that the converged recipe reduces but does not eliminate low-frequency optimization error: in the lowest radial band the median relative excess above the Bayes floor decreases from 1.37 × at 150 k steps to 1.05 × at 300 k for matched, and from 0.73 × to 0.60 × for white, while mid- and high-frequency bands remain at the floor. Under the pre-specified criterion the converged recipe is better optimized but has not reached the exact-drift regime. Because low-frequency fingerprint error persists at 300 k steps, the ridge-whitening law remains untested at true convergence. The small-NFE optimum at θ = 0 .25 shows that limited Pk-coloring can help. 10 0 10 1              
+
+> r10 5
+> 10 4
+> 10 3
+> 10 2
+> 10 1
+> fingerprint: measured (solid) vs Bayes floor (dashed), matched
+> t=0.09 t=0.34 t=0.59 t=0.84
+> 0510 15 20 25 30 35 40 45 r0.2 0.4 0.6 0.8 t
+> 0.5
+> 0.0 0.5 1.0 1.5 2.0 relative excess over floor
+
+Figure 9: Convergence audit (converged recipe). Per-(radial band, t) training loss relative to the Bayes floor at 300 k steps. The low-frequency excess shrinks relative to the original recipe but persists; mid and high frequencies sit at the floor. Table 14: FFHQ under the converged recipe at NFE 50 (dropout 0, batch size 512 , 300 k steps; all other settings as in Table 1). FID uses 50 k pooled samples. White and matched report mean ±std over five seeds; interior θ values use one seed. 
+
+reference PSNR ↑ SSIM ↑ LPIPS ↓ FID ↓
+
+white ( θ=0 ) 24 .81 ±0.01 0.828 0.0323 3 .53 ±0.02 
+
+θ=0 .25 24 .73 0.826 0.0326 3.58 
+
+θ=0 .5 24 .67 0.824 0.0332 3.78 
+
+θ=0 .75 24 .67 0.823 0.0343 4.15 
+
+matched ( θ=1 ) 24 .73 ±0.01 0.825 0.0355 4.71 ±0.09 
+
+7.7 Dataset replication: CelebA Protocol. To test whether the white-first ordering is specific to FFHQ, we replicate the converged recipe on CelebA at 64 ×64 under the identical degradation ( σblur = 2 .0, σn = 0 .05 ), with S(k) and the bundle re-fit on the CelebA training split; white, matched, θ=0 .25 and anti-matched are trained with one seed each. Table 15 reports FID, PSNR and LPIPS at every evaluated NFE. 36 Table 15: CelebA replication (converged recipe, one seed per reference; FID uses 50 k pooled samples). Best per column in bold within each block. White has the best FID and anti-matched the best PSNR (SSIM tracks PSNR) at every NFE; anti-matched has the worst LPIPS and FID at every NFE.                                                                  
+
+> NFE 510 20 50 100
+> FID ↓
+> white 10 .97 6.99 4.46 2.73 2.13
+> θ=0 .25 11 .03 7.21 4.75 2.98 2.34
+> matched 12 .72 8.88 6.04 3.85 2.99
+> anti-matched 16 .12 11 .97 8.77 5.88 4.44
+> PSNR ↑
+> white 26 .64 26 .28 25 .95 25 .60 25 .42
+> θ=0 .25 26 .50 26 .17 25 .83 25 .53 25 .39
+> matched 26 .39 26 .13 25 .85 25 .54 25 .33
+> anti-matched 27 .27 27 .10 26 .89 26 .56 26 .28
+> LPIPS ↓
+> white 0.0371 0.0330 0.0306 0.0295 0.0295
+> θ=0 .25 0.0365 0.0329 0.0312 0.0298 0.0296
+> matched 0.0428 0.0388 0.0355 0.0326 0.0326
+> anti-matched 0.0510 0.0463 0.0416 0.0362 0.0335
+
+Results. Both FFHQ findings replicate (Table 15). The distortion–perception split of Corollary 6 holds at every NFE: anti-matched has the best PSNR/SSIM and the worst LPIPS/FID throughout. The white-first FID ordering also holds at every NFE, and at NFE 50 the matched–white gap of 1.12 
+
+is comparable to FFHQ’s. On CelebA white already has the best FID at NFE 5, so the small-NFE interior optimum of Fig. 8 appears dataset-dependent. 
+
+## References 
+
+[1] T.W. Anderson. An Introduction to Multivariate Statistical Analysis . Wiley Series in Probability and Statistics. Wiley, 2003. [2] Saugata Basu, Richard Pollack, and Marie-Françoise Roy. Algorithms in real algebraic geometry .Springer, 2006. [3] Roi Benita, Miki Elad, and Joseph Keshet. Spectral analysis of diffusion models with application to schedule design. Advances in Neural Information Processing Systems , 38:2073–2127, 2026. [4] Yochai Blau and Tomer Michaeli. The perception-distortion tradeoff. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 6228–6237, 2018. [5] Charlotte Bunne, Ya-Ping Hsieh, Marco Cuturi, and Andreas Krause. The schrödinger bridge between gaussian measures has a closed form. In International Conference on Artificial Intelligence and Statistics , pages 5802–5833. PMLR, 2023. [6] Michael Chertkov. Analytic bridge diffusions for controlled path generation. arXiv preprint arXiv:2605.02961 , 2026. [7] T.M. Cover and J.A. Thomas. Elements of Information Theory . Wiley, 2012. [8] Hadar Davidson, Noam Issachar, and Sagie Benaim. Colored noise diffusion sampling. arXiv preprint arXiv:2605.30332 , 2026. [9] Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet. Diffusion Schrödinger bridge with applications to score-based generative modeling. Advances in Neural Information Processing Systems , 34:17695–17709, 2021. [10] Carlos Esteves and Ameesh Makadia. Spectrally-guided diffusion noise schedules. In Forty-third International Conference on Machine Learning , 2026. 37 [11] Fabian Falck, Teodora Pandeva, Kiarash Zahirnia, Rachel Lawrence, Richard Turner, Edward Meeds, Javier Zazo, and Sushrut Karmalkar. A fourier space perspective on diffusion models. 
+
+arXiv preprint arXiv:2505.11278 , 2025. [12] Forouzan Fallah, Wenwen Li, Chia-Yu Hsu, Hyunho Lee, and Yezhou Yang. Rareflow: Physics-aware flow-matching for cross-sensor super-resolution of rare-earth features. arXiv preprint arXiv:2510.23816 , 2025. [13] Dror Freirich, Tomer Michaeli, and Ron Meir. A theory of the distortion-perception tradeoff in wasserstein space. Advances in Neural Information Processing Systems , 34:25661–25672, 2021. [14] Nikita Gushchin, Sergei Kholkin, Evgeny Burnaev, and Alexander Korotin. Light and optimal schrödinger bridge matching. In Forty-first International Conference on Machine Learning ,2024. [15] Nikita Gushchin, David Li, Daniil Selikhanovych, Evgeny Burnaev, Dmitry Baranchuk, and Alexander Korotin. Inverse bridge matching distillation. arXiv preprint arXiv:2502.01362 ,2025. [16] Nikita Gushchin, Daniil Selikhanovych, Sergei Kholkin, Evgeny Burnaev, and Alexander Korotin. Adversarial schrödinger bridge matching. Advances in Neural Information Processing Systems , 37:89612–89651, 2024. [17] Guande He, Kaiwen Zheng, Jianfei Chen, Fan Bao, and Jun Zhu. Consistency diffusion bridge models. Advances in Neural Information Processing Systems , 37:23516–23548, 2024. [18] R.A. Horn and C.R. Johnson. Matrix Analysis . Cambridge University Press, 2012. [19] Jinhui Hou, Zhiyu Zhu, and Junhui Hou. Energy-oriented diffusion bridge for image restoration with foundational diffusion models. arXiv preprint arXiv:2604.10983 , 2026. [20] Samuel Howard, Peter Potaptchik, and George Deligiannidis. Schrödinger bridge matching for tree-structured costs and entropic wasserstein barycentres. Advances in Neural Information Processing Systems , 38:130112–130149, 2026. [21] Xingchang Huang, Corentin Salaun, Cristina Vasconcelos, Christian Theobalt, Cengiz Oztireli, and Gurprit Singh. Blue noise for diffusion models. In ACM SIGGRAPH 2024 conference papers , pages 1–11, 2024. [22] Thomas Jiralerspong, Berton Earnshaw, Jason Hartford, Yoshua Bengio, and Luca Scimeca. Shaping inductive bias in diffusion models through frequency-based noise control. arXiv preprint arXiv:2502.10236 , 2025. [23] I. Karatzas and S. Shreve. Brownian Motion and Stochastic Calculus . Number v. 113 in Brownian Motion and Stochastic Calculus. Springer New York, 1991. [24] Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusion-based generative models. Advances in neural information processing systems ,35:26565–26577, 2022. [25] Tero Karras, Samuli Laine, and Timo Aila. A style-based generator architecture for generative adversarial networks. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 4401–4410, 2019. [26] Sergei Kholkin, Grigoriy Ksenofontov, David Li, Nikita Kornilov, Nikita Gushchin, Alexan-dra Suvorikova, Alexey Kroshnin, Evgeny Burnaev, and Alexander Korotin. Diffusion & adversarial schrödinger bridges via iterative proportional markovian fitting. arXiv preprint arXiv:2410.02601 , 2024. [27] Diederik Kingma and Ruiqi Gao. Understanding diffusion objectives as the elbo with simple data augmentation. Advances in Neural Information Processing Systems , 36:65484–65516, 2023. 38 [28] Diederik Kingma, Tim Salimans, Ben Poole, and Jonathan Ho. Variational diffusion models. 
+
+Advances in neural information processing systems , 34:21696–21707, 2021. [29] Shanchuan Lin, Bingchen Liu, Jiashi Li, and Xiao Yang. Common diffusion noise schedules and sample steps are flawed. In Proceedings of the IEEE/CVF winter conference on applications of computer vision , pages 5404–5411, 2024. [30] Guan-Horng Liu, Yaron Lipman, Maximilian Nickel, Brian Karrer, Evangelos Theodorou, and Ricky T. Q. Chen. Generalized schrödinger bridge matching. In The Twelfth International Conference on Learning Representations , 2024. [31] Guan-Horng Liu, Arash Vahdat, De-An Huang, Evangelos A. Theodorou, Weili Nie, and Anima Anandkumar. I2SB: Image-to-image Schrödinger bridge. arXiv preprint arXiv:2302.05872 ,2023. [32] Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Deep learning face attributes in the wild. In Proceedings of the IEEE international conference on computer vision , pages 3730–3738, 2015. [33] Shuntaro Okada, Ryota Yoshihashi, Hirokatsu Kataoka, Tomohiro Tanaka, et al. Constant rate scheduling: Constant-rate distributional change for efficient training and sampling in diffusion models. arXiv preprint arXiv:2411.12188 , 2024. [34] B. Øksendal. Stochastic Differential Equations: An Introduction with Applications . Universitext. Springer Berlin Heidelberg, 2010. [35] Stefano Peluchetti. Diffusion bridge mixture transports, schrödinger bridge problems and generative modeling. Journal of Machine Learning Research , 24(374):1–51, 2023. [36] W. Rudin. Principles of Mathematical Analysis . International series in pure and applied mathematics. McGraw-Hill, 1976. [37] Luca Scimeca, Thomas Jiralerspong, Berton Earnshaw, Jason Hartford, and Yoshua Bengio. Learning what matters: Steering diffusion via spectrally anisotropic forward noise. arXiv preprint arXiv:2510.09660 , 2025. [38] Yuyang Shi, Valentin De Bortoli, Andrew Campbell, and Arnaud Doucet. Diffusion Schrödinger bridge matching. Advances in Neural Information Processing Systems , 36:62183–62223, 2023. [39] Zhicong Tang, Tiankai Hang, Shuyang Gu, Dong Chen, and Baining Guo. Simplified diffusion schrödinger bridge. arXiv preprint arXiv:2403.14623 , 2024. [40] Hanting Wang, Tao Jin, Wang Lin, Shulei Wang, Hai Huang, Shengpeng Ji, and Zhou Zhao. Irbridge: Solving image restoration bridge with pre-trained generative diffusion models. arXiv preprint arXiv:2505.24406 , 2025. [41] Hebaixu Wang, Jing Zhang, Haoyang Chen, Haonan Guo, Di Wang, Jiayi Ma, and Bo Du. Residual diffusion bridge model for image restoration. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 8375–8386, 2026. [42] Yuang Wang, Siyeop Yoon, Pengfei Jin, Matthew Tivnan, Zhennong Chen, Rui Hu, Li Zhang, Zhiqiang Chen, Quanzheng Li, and Dufan Wu. Implicit image-to-image schrödinger bridge for ct super-resolution and denoising. arXiv preprint arXiv:2403.06069 , 2, 2024. [43] Yuang Wang, Siyeop Yoon, Pengfei Jin, Matthew Tivnan, Sifan Song, Zhennong Chen, Rui Hu, Li Zhang, Quanzheng Li, Zhiqiang Chen, and Dufan Wu. Implicit image-to-image schrödinger bridge for image restoration. Pattern Recognition , 165:111627, 2025. [44] Kacper Wyrwal, Ismail Ilkan Ceylan, and Alexander Tong. Topological flow matching. In The Fourteenth International Conference on Learning Representations , 2026. [45] Qing Yao, Lijian Gao, Qirong Mao, and Ming Dong. Regularized schrödinger bridge: Alleviat-ing distortion and exposure bias in solving inverse problems. arXiv preprint arXiv:2511.11686 ,2025. 39 [46] Stephen Zhang and Michael Stumpf. Learning non-equilibrium diffusions with schrödinger bridges: from exactly solvable to simulation-free. Advances in Neural Information Processing Systems , 38:119861–119898, 2026. [47] Kaiwen Zheng, Guande He, Jianfei Chen, Fan Bao, and Jun Zhu. Diffusion bridge implicit models. In International Conference on Learning Representations , volume 2025, pages 81857– 81884, 2025. [48] Linqi Zhou, Aaron Lou, Samar Khanna, and Stefano Ermon. Denoising diffusion bridge models. In International Conference on Learning Representations , volume 2024, pages 8160–8171, 2024. [49] Kaizhen Zhu, Mokai Pan, Yuexin Ma, Yanwei Fu, Jingyi Yu, Jingya Wang, and Ye Shi. Unidb: A unified diffusion bridge framework via stochastic optimal control. arXiv preprint arXiv:2502.05749 , 2025. 40
