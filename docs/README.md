@@ -6,26 +6,28 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-17
-- 运行时间：2026-08-17 19:55:36 UTC
+- 最新运行日期：2026-08-18
+- 运行时间：2026-08-18 20:19:07 UTC
 - 运行状态：成功
 - 本次总论文数：1
-- 精读区：1
-- 速读区：0
+- 精读区：0
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读1篇高分论文，聚焦非参数Schrödinger桥时间序列生成器。
-该工作提出新生成方法并给出收敛性分析，适用于复杂时间序列建模。
-普通读者可关注其在实际预测任务中的潜力，后续值得深入验证。
-- 详情：[/202608/17/README](/202608/17/README)
+今日仅完成1篇论文速读，无精读；聚焦于Lévy驱动生成模型的采样方法。
+
+值得关注的方向是生成器引导的逆采样技术，可用于改善Lévy过程建模的生成效率。
+
+建议普通读者先了解Lévy过程与生成模型的结合点，再深入评估该方法的适用场景。
+- 详情：[/202608/18/README](/202608/18/README)
 
 ### 精读区论文标签
-1. [Nonparametric Schrödinger Bridge Time Series Generator: Algorithm, Convergence Analysis and Applications](/202608/17/2608.13968v1-nonparametric-schrdinger-bridge-time-series-generator-algorithm-convergence-analysis-and-applications)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：非参数薛定谔桥时间序列生成器
+- 本次无精读推荐。
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [Generator-Guided Inverse Sampling for Lévy-Driven Generative Models](/202608/18/2608.10384v1-generator-guided-inverse-sampling-for-lvy-driven-generative-models)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：研究Lévy驱动生成模型的正向与逆向生成元，类比基于分数的逆向扩散与随机桥采样
 
 
 <div class="dpr-home-promo-card">
