@@ -6,28 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-18
-- 运行时间：2026-08-18 20:19:07 UTC
+- 最新运行日期：2026-08-19
+- 运行时间：2026-08-19 20:18:35 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：0
+- 本次总论文数：2
+- 精读区：1
 - 速读区：1
 
 ### 今日简报（AI）
-今日仅完成1篇论文速读，无精读；聚焦于Lévy驱动生成模型的采样方法。
-
-值得关注的方向是生成器引导的逆采样技术，可用于改善Lévy过程建模的生成效率。
-
-建议普通读者先了解Lévy过程与生成模型的结合点，再深入评估该方法的适用场景。
-- 详情：[/202608/18/README](/202608/18/README)
+今日精读1篇、速读1篇，共追踪2篇论文，重点聚焦超高清图像编辑。最值得关注的是《EDITBRIDGE》提出高效保真的超高清编辑方案（8.0/10），可优先了解；速读的扩散模型强化学习视角（6.0/10）仅供参考。建议普通读者先看精读论文的框架与效果对比，再决定是否深入细节。
+- 详情：[/202608/19/README](/202608/19/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [EDITBRIDGE: Towards Faithful and Efficient Ultra-High-Resolution Image Editing](/202608/19/2608.18063v1-editbridge-towards-faithful-and-efficient-ultra-high-resolution-image-editing)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：EditBridge将扩散桥框架用于高分辨率图像编辑，直接对应随机桥生成模型
 
 ### 速读区论文标签
-1. [Generator-Guided Inverse Sampling for Lévy-Driven Generative Models](/202608/18/2608.10384v1-generator-guided-inverse-sampling-for-lvy-driven-generative-models)  
+1. [Designing Reinforcement Learning for Diffusion Models: A Unified Path-Space View](/202608/19/2608.14430v1-designing-reinforcement-learning-for-diffusion-models-a-unified-path-space-view)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：研究Lévy驱动生成模型的正向与逆向生成元，类比基于分数的逆向扩散与随机桥采样
+   evidence：以路径空间观点通过采样SDE间的重要性采样推导策略梯度估计器。
 
 
 <div class="dpr-home-promo-card">
