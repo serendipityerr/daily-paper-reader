@@ -6,26 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-19
-- 运行时间：2026-08-19 20:18:35 UTC
+- 最新运行日期：2026-08-20
+- 运行时间：2026-08-20 20:05:21 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读1篇、速读1篇，共追踪2篇论文，重点聚焦超高清图像编辑。最值得关注的是《EDITBRIDGE》提出高效保真的超高清编辑方案（8.0/10），可优先了解；速读的扩散模型强化学习视角（6.0/10）仅供参考。建议普通读者先看精读论文的框架与效果对比，再决定是否深入细节。
-- 详情：[/202608/19/README](/202608/19/README)
+今日速读2篇论文，聚焦随机场条件分布重构与矩阵扩散模型误差分析。  
+值得关注：Sinkhorn框架用于多维随机场条件重构，以及矩阵扩散模型的前向演化误差自适应设计。  
+建议可优先精读其中一篇，结合实验部分验证方法在自身数据上的适用性。
+- 详情：[/202608/20/README](/202608/20/README)
 
 ### 精读区论文标签
-1. [EDITBRIDGE: Towards Faithful and Efficient Ultra-High-Resolution Image Editing](/202608/19/2608.18063v1-editbridge-towards-faithful-and-efficient-ultra-high-resolution-image-editing)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：EditBridge将扩散桥框架用于高分辨率图像编辑，直接对应随机桥生成模型
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Designing Reinforcement Learning for Diffusion Models: A Unified Path-Space View](/202608/19/2608.14430v1-designing-reinforcement-learning-for-diffusion-models-a-unified-path-space-view)  
+1. [A Local Sinkhorn Framework for Conditional Distribution Reconstruction of Multidimensional Random Fields](/202608/20/2608.11613v1-a-local-sinkhorn-framework-for-conditional-distribution-reconstruction-of-multidimensional-random-fields)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：以路径空间观点通过采样SDE间的重要性采样推导策略梯度估计器。
+   evidence：使用Sinkhorn散度，这是熵正则最优输运的关键工具，与Schrödinger桥问题密切相关。
+2. [Forward-Evolution Error Analysis and Adaptive Design for Matrix-Valued Diffusion Models](/202608/20/2608.15103v1-forward-evolution-error-analysis-and-adaptive-design-for-matrix-valued-diffusion-models)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：基于分数的扩散模型误差分析与噪声调度设计，与扩散桥和薛定谔桥的实现相关。
 
 
 <div class="dpr-home-promo-card">
