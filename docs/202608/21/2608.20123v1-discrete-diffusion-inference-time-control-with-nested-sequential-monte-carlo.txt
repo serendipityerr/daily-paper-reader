@@ -1,0 +1,770 @@
+Title: Discrete Diffusion Inference-Time Control with Nested Sequential Monte Carlo
+
+URL Source: https://arxiv.org/pdf/2608.20123v1
+
+Published Time: Fri, 21 Aug 2026 01:00:05 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+Accepted as a workshop paper at ReALM-GEN, ICLR 2026 
+
+# DISCRETE DIFFUSION INFERENCE -T IME CONTROL WITH NESTED SEQUENTIAL MONTE CARLO 
+
+Lohithsai Yadala Chanchu, Hany Abdulsamad, Christian A. Naesseth 
+
+University of Amsterdam 
+
+## ABSTRACT 
+
+We study inference-time control for text generation in discrete diffusion language models, where the goal is to steer sampling toward sequence-level rewards without retraining. Prior work in this domain has focused on particle-based methods such as best-of-n sampling and bootstrap sequential Monte Carlo, which may suffer from overoptimism and weight degeneracy, respectively. We address these limi-tations using nested sequential Monte Carlo methods. We formulate nested SMC (NSMC) and fully-adapted nested SMC (FA-NSMC) for Feynman–Kac steering, identifying and correcting errors in prior formulations that lead to biased final esti-mates. We evaluate these methods on toxicity and fluency steering tasks, showing that NSMC and FA-NSMC consistently outperform best-of-n and bootstrap SMC. 
+
+## 1 INTRODUCTION 
+
+Diffusion-based generative models have achieved remarkable success across continuous modalities, producing state-of-the-art results in image synthesis (Song et al., 2021), video generation (Ho et al., 2022), and protein design (Gruver et al., 2023). While autoregressive (AR) models have long domi-nated the landscape of text generation, the diffusion paradigm has recently expanded to the discrete domain of natural language processing (Sahoo et al., 2024; Ye et al., 2025; Shi et al., 2024), offering a compelling alternative. Unlike standard autoregressive models that generate text token by token in a fixed left-to-right order, discrete diffusion language models (DDLMs) (Austin et al., 2021; Sahoo et al., 2024; Shi et al., 2024) generate data through an iterative denoising process. Models such as the masked diffusion language model (MDLM) (Sahoo et al., 2024) learn a reverse-time Markov chain that progressively refines a sequence from a maximally corrupted degenerate state into coher-ent text, enabling bidirectional context integration and allowing the model to attend to information from all positions simultaneously to produce more globally consistent outputs. Despite these architectural advantages, the capability to generate coherent text does not inherently ensure alignment with human intent or safety standards. In practice, we aim to generate samples that optimize specific downstream objectives, such as minimizing toxicity, while preserving the diversity and naturalness of the pre-trained model. Relying solely on the base model is often insufficient, as pre-trained models may reproduce undesirable biases found in their training data. Furthermore, while training-time alignment methods like reinforcement learning from human feedback (RLHF) (Ouyang et al., 2022) are effective, they are computationally intensive, prone to mode collapse (Kirk et al., 2024), and rigidly couple the model to a single reward function. This motivates inference-time steering mechanisms that can flexibly guide discrete diffusion models toward user-specified rewards without the overhead of retraining. Broadly, existing approaches fall into two families: • Gradient-based methods, such as classifier guidance (Dhariwal & Nichol, 2021), modify the denoising drift using gradient information. These methods rely on differentiable reward func-tions, which significantly limits their applicability in discrete domains. • Gradient-free methods, including best-of-n sampling, rejection sampling (Na et al., 2024), and particle-based rare-event simulations (Naesseth et al., 2019b; Uehara et al., 2025; Li et al., 2024; Singhal et al., 2025), do not require differentiability and therefore apply more generally, though they are often computationally intensive. These limitations motivate the need for more efficient steering mechanisms that can flexibly guide discrete diffusion models toward arbitrary user-specified rewards. A promising framework is se-1arXiv:2608.20123v1 [stat.ML] 20 Aug 2026 Accepted as a workshop paper at ReALM-GEN, ICLR 2026 
+
+> Best-of-n
+> tn
+> Nested Sequential IS
+> tn
+> Nested SMC
+> tn
+
+Figure 1: Illustration of different particle-based steering strategies. (Left) Best-of-n: independent proposals with selection based on exponentiated rewards. (Middle) Nested sequential importance sampling: particles propagate sequentially with weight updates but no resampling. (Right) Nested SMC: particle filtering approach where each outer particle spawns an inner SMC, approximating the locally optimal proposal distribution for improved effective sample size. quential Monte Carlo (SMC) (Naesseth et al., 2019b; Chopin & Papaspiliopoulos, 2020), first stud-ied for continuous diffusion models by Wu et al. (2023); Trippe et al. (2023); Cardoso et al. (2024); Dou & Song (2024). SMC is a family of flexible probabilistic algorithms used to sample from complex sequences of distributions. At a high level, SMC maintains a population of particles , each representing a potential partial text generation trajectory, that evolves over time. Through a process of mutation (proposing new tokens) and selection (reweighting and resampling based on the reward), SMC methods steer the population toward a modified version of the model’s original distribution that favors desirable properties encoded by the reward function. The quality of SMC samples depends critically on the proposal distribution, the mechanism used to mutate particles across time steps. In inference-time steering, the central challenge is that poor proposals are unlikely to generate samples associated with high-reward regions of the discrete text space, causing most particles to accrue low weights and degenerate rapidly. This leads to wasted computation and ineffective steering (Naesseth et al., 2019b). Recent attempts to adapt SMC to discrete diffusion models face persistent difficulties stemming from proposal design. Singhal et al. (2025) formulate Feynman–Kac (FK) steering, and use bootstrap proposals in practice where new particle candidates are generated using the pretrained base model. While straightforward to implement, this proposal is agnostic to the reward, leaving undesirable particles to be filtered only through subsequent reweighting. This method often exhibits low statistical efficiency and struggles to discover rare, high-reward paths. Soft value-based decoding (SVDD) (Li et al., 2024) takes a dif-ferent approach by casting steering as nested sequential importance sampling (SIS). However, this method inherits the well-known pathologies of (nested) SIS methods, including weight degeneracy and high variance over long horizons (Naesseth et al., 2019b). Alternatively, Ou et al. (2026) con-struct improved proposals by leveraging gradient information of the reward function. In discrete text domains, this typically requires continuous relaxations, which may introduce approximation error. To address these limitations, we propose leveraging nested SMC (NSMC) methods (Naesseth et al., 2015; 2019a), which introduce an internal SMC sampler to approximate the locally optimal proposal and the associated normalizing constants when these quantities are not available in closed form. NSMC runs an inner SMC procedure for each outer particle to estimate the optimal proposal; the inner sampler produces (i) a properly weighted sample used to draw the child state, and (ii) an unbiased Monte Carlo estimate of the predictive normalizing constant required for the correct outer weight update. The fully-adapted NSMC (FA-NSMC) method further refines this idea by using estimated predictive weights to resample parents before propagation, increasing particle diversity. Although NSMC is well-established in computational statistics, it has not been applied to steering in modern discrete diffusion language models. A recent tutorial on diffusion-guidance by Uehara 2Accepted as a workshop paper at ReALM-GEN, ICLR 2026 et al. (2025) which, building on Li et al. (2024), presents an algorithm labeled “nested SMC”. How-ever, its weighting scheme does not correspond to a properly weighted NSMC algorithm, leading to systematic bias even in the infinite-particle limit. We resolve this by developing correctly weighted NSMC variants, implementing them for a discrete diffusion language model, and evaluating them on toxicity and perplexity steering tasks, which provide controlled environments for understanding how SMC variants behave in practice. We summarize our contributions as follows: • We develop properly weighted nested SMC and fully-adapted NSMC updates for Feynman–Kac steering in discrete diffusion language models. • We empirically compare NSMC and FA-NSMC against bootstrap SMC baselines on tox-icity and perplexity steering tasks, characterizing when nested methods improve sample efficiency and controllability. 
+
+## 2 BACKGROUND 
+
+We start by introducing the notation for discrete diffusions, the tilted path measures that correspond to the aligned sampling targets, the corresponding Feynman–Kac model, and the SMC algorithm. 
+
+Diffusion Models. Let V be a finite vocabulary of tokens and X = VL be the state space of a sequence of length L. We consider a diffusion process over token sequences, discretized into T + 1 
+
+time steps t ∈ { 0, . . . , T }. Here, t = T represents the maximally corrupted, fully masked state, and t = 0 represents the clean generated sequence. Given a pre-trained reverse-time generative base model, the prior path measure over trajectories x0: T := ( x0, . . . , x T ) ∈ X T +1 , conditioned on a context or prompt c, factorizes as: 
+
+p(x0: T | c) = μ(xT )
+
+> T
+
+Y
+
+> t=1
+
+f (xt−1 | xt, c ), (1) where μ(·) is the fixed distribution at t = T of fully masked sequences and f (· | xt, c ) denotes the reverse transition kernel used to denoise the sequence from step t to t − 1. For notational simplicity, we omit the dependence on c hereafter and write p(x0: T ) and f (· | xt).
+
+Target Distribution. We want to sample from a distribution aligned with a scalar reward r : X → 
+
+R evaluated on the terminal state x0. For λ > 0, we define the reward-tilted terminal distribution 
+
+pλ(x0) = p(x0) exp ( λ r (x0)) 
+
+Zλ
+
+, where Zλ := Ex0∼p
+
+ exp ( λ r (x0)) . (2) To sample from pλ(x0), we define the unnormalized target path measure γ0(x0: T ) by weighting the prior path measure by the terminal reward: 
+
+γ0(x0: T ) = 
+
+(
+
+μ(xT )
+
+> T
+
+Y
+
+> t=1
+
+f (xt−1 | xt)
+
+)
+
+exp ( λ r (x0)) . (3) 
+
+Feynman–Kac. We frame the problem of sampling from γ0(x0: T ) in terms of a Feynman–Kac model (Del Moral, 2004). A FK model is characterized by the transition kernel f (· | xt) and a set of nonnegative potential functions Gt−1 : X × X → R+. The induced path measure is: 
+
+π(x0: T ) ∝ μ(xT ) GT (xT )
+
+( TY
+
+> t=1
+
+f (xt−1 | xt) Gt−1(xt−1, x t)
+
+)
+
+. (4) To recover our specific target γ0(x0: T ), the potentials must telescope to reproduce the desired tilt, satisfying GT (xT ) QTt=1 Gt−1(xt−1, x t) = exp ( λ r (x0)) . While one could set G0(·) =exp ( λ r (x0)) and {Gt}t> 0 = 1 , this choice yields an inefficient sampling procedure that suffers from path degeneracy and high-variance weights at t = 0 . Since intermediate potentials provide no signal with regard to high-reward regions, samples are propagated under the base dynamics and only receive their reward-dependent weighting at the last step. 3Accepted as a workshop paper at ReALM-GEN, ICLR 2026 
+
+Sequential Monte Carlo. SMC (Naesseth et al., 2019b; Chopin & Papaspiliopoulos, 2020) is a sampling method designed to approximate a sequence of intermediate unnormalized targets 
+
+γt(xt:T ), with corresponding normalized targets πt ∝ γt. To approximate πt, SMC uses a set of weighted samples, or particles , {(w(i) 
+
+> t
+
+, x (i) 
+
+> t:T
+
+)}Ni=1 ,
+
+πt(xt:T ) ≈
+
+> N
+
+X
+
+> i=1
+
+w(i) 
+
+> t
+
+δx(i)
+
+> t:T
+
+,
+
+where δX is the Dirac measure at X. The particle system is then updated from time t to t − 1 by repeating the following for each particle i:1. Resampling, a ∼ Cat  w1: Nt
+
+,2. Propagation, x(i) 
+
+> t−1
+
+∼ qt−1(xt−1|x(a) 
+
+> t
+
+),3. Weighting, w(i) 
+
+> t−1
+
+∝ γt−1(( x(i)
+
+> t−1
+
+, x (a) 
+
+> t:T
+
+)) 
+
+γt(x(a) 
+
+> t:T
+
+)qt−1(x(i)
+
+> t−1
+
+|x(a) 
+
+> t
+
+) .The key design variables are the intermediate targets γt and the proposals qt. Bootstrap SMC for the FK model in Algorithm 3 is obtained by setting qt−1(xt−1|xt) = f (xt−1|xt) and γt−1(xt−1: T ) = 
+
+γt(xt:T )f (xt−1|xt)Gt−1(xt−1, x t).
+
+Optimal Twisting. To provide intermediate guidance, we construct the targets γt by twisting the prior path measure p(xt:T ) with a set of positive potential functions ψt : X → R+ that look ahead and tilt the intermediate targets toward high-reward regions γt(xt:T ) := p(xt:T ) ψt(xt). Naesseth et al. (2019b); Whiteley & Lee (2014); Guarniero et al. (2017); Heng et al. (2020) identify the opti-mal twisting functions, which minimize the variance of the incremental weights, as the conditional expectation of the future reward: 
+
+ψ⋆t (xt) := Ep
+
+ exp ( λ r (x0)) | xt
+
+, t = 0 , . . . , T. (5) At the terminal step t = 0 , this definition recovers the exact reward tilt ψ⋆ 
+
+> 0
+
+(x0) = exp ( λ r (x0)) .
+
+Optimal Proposals. The optimal twisting functions naturally induce a sequence of corresponding optimal proposal kernels that realize the transition between the intermediate targets: 
+
+q⋆t−1(xt−1 | xt) ∝ γt−1(xt−1: T )
+
+γt−1(xt:T ) = f (xt−1 | xt) ψ⋆t−1(xt−1)
+
+ψ⋆t (xt) , t = 1 , . . . , T, (6) while at time t = T , the optimal proposal is given by: q⋆T (xT ) ∝ μ(xT ) ψ⋆T (xT ). This in turn allows us to identify the optimal potential functions {G⋆t }t≥0 as the ratios of successive twists: 
+
+G⋆t−1(xt−1, x t) = ψ⋆t−1(xt−1)/ψ ⋆t (xt), G⋆T (xT ) = ψ⋆T (xT ). (7) Appendices B and C provide details and show that the cumulative product of these optimal potentials telescopes to recover the required terminal reward tilt. In contrast, the “nested SMC” algorithm in Uehara et al. (2025) uses only the numerator ψ⋆t−1(xt−1) in its weighting scheme, omitting the normalization by ψ⋆t (xt) implied by G⋆t−1, and therefore fails to target the correct tilted distribution. 
+
+## 3 NESTED SEQUENTIAL MONTE CARLO 
+
+Nested sequential Monte Carlo (NSMC) (Naesseth et al., 2015; 2019a) is a class of particle algo-rithms that lets us derive practical algorithms for optimal twisting and proposal distributions. First, recall that the optimal proposal is given by: 
+
+q⋆t−1(xt−1 | xt) = 1
+
+νt−1(xt)
+
+γt−1(xt−1: T )
+
+γt(xt:T ) ∝ γt−1(xt−1: T )
+
+γt−1(xt:T ) (8) where νt−1(xt) is the predictive normalizing constant: 
+
+νt−1(xt) := X
+
+> xt−1∈V L
+
+γt−1(xt−1: T )
+
+γt(xt:T ) = Ext−1∼f (·| xt)
+
+h
+
+G⋆t−1(xt−1, x t)
+
+i
+
+. (9) 4Accepted as a workshop paper at ReALM-GEN, ICLR 2026 Under q⋆t−1, the incremental importance weights wt−1 are equal to this normalizing constant: 
+
+wt−1 = γt−1(xt−1: T )/(q⋆t−1(xt−1 | xt) γt(xt:T )) ≡ νt−1(xt). This means it does not depend on the particular sample of xt−1. This is the key variance-reduction property of optimal propos-als: conditional on the parents xt, the incremental weights wt−1 are uniform and their incremental variance is zero. Computing the predictive normalizer νt−1(xt) is generally intractable in high-dimensional spaces, as it requires summing over all |V| L possible sequences at every step. NSMC resolves this in-tractability by replacing νt−1(xt) with an inner Monte Carlo estimate. For each parent particle x(i) 
+
+> t
+
+, where i ∈ { 1, . . . , N }, we propose M candidate states from the base transition kernel x(i,j ) 
+
+> t−1
+
+∼ f (· | x(i) 
+
+> t
+
+), for j = 1 , . . . , M . For each candidate, we compute an inner importance weight v(i,j ) 
+
+> t−1
+
+by evaluating the optimal twisting potential functions: 
+
+v(i,j ) 
+
+> t−1
+
+:= γt−1(x(i,j ) 
+
+> t−1: T
+
+)
+
+γt(x(i) 
+
+> t:T
+
+) f (x(i,j ) 
+
+> t−1
+
+| x(i) 
+
+> t
+
+) = G⋆t−1(x(i,j ) 
+
+> t−1
+
+, x (i) 
+
+> t
+
+) (10) where x(i,j ) 
+
+> t−1: T
+
+= ( x(i,j ) 
+
+> t−1
+
+, x (i) 
+
+> t:T
+
+). The predictive normalizing constant is then approximated by the average of the inner weights ˆνt−1(x(i) 
+
+> t
+
+) := 1 /M PMj=1 v(i,j ) 
+
+> t−1
+
+≈ νt−1(x(i) 
+
+> t
+
+).To approximate sampling from the optimal proposal q⋆(· | xt), NSMC selects a single candidate trajectory for the next step by resampling from the candidates based on their inner weights: 
+
+b(i) ∼ Cat 
+
+( v(i,j )
+
+> t−1
+
+P 
+
+> k
+
+v(i,k )
+
+> t−1
+
+)Mj=1 
+
+ , (11) and setting x(i) 
+
+> t−1
+
+← x(i,ℓ ) 
+
+> t−1
+
+, where ℓ = b(i). This nested approach ensures that the outer incremental importance weights w(i) 
+
+> t−1
+
+= ˆ νt−1(x(i) 
+
+> t
+
+) remain unbiased estimates of the true normalizing constants. Algorithm 1 provides an overview of the nested proposal procedure. By contrast, a standard bootstrap SMC, Algorithm 3, uses a single candidate proposal per parent without incorporating reward information, leading to resampling decisions based on a noisy one-sample estimate of future potential. NSMC reduces this noise by averaging over M candidates to estimate the predictive normalizer νt−1 and uses the inner weights to bias candidate selection toward promising regions of future high reward. Algorithm 2 provides a detailed recipe for NSMC. Finally, the fully-adapted NSMC (FA-NSMC) procedure incorporates lookahead information into the parent resampling mechanism. In this scheme, we estimate the future potential of all particles before committing to the resampling step. We perform the same lookahead procedure as in NSMC to generate M candidates and estimate the predictive normalizer for every parent ˆνt−1(x(i) 
+
+> t
+
+).Unlike standard NSMC, which resamples parents based solely on their accumulated weights w(i) 
+
+> t
+
+,FA-NSMC resamples parent indices a(i) proportional to w(i) 
+
+> t
+
+· ˆνt−1(x(i) 
+
+> t
+
+). Once the parent k = a(i)
+
+is selected, we sample x(i) 
+
+> t−1
+
+from that parent’s candidates using the inner weights v(k, ·) 
+
+> t−1
+
+.Crucially, this reordering enhances sample diversity. If a high-potential parent x(i) 
+
+> t
+
+is selected mul-tiple times, we can draw multiple distinct children from its set of promising candidates. In contrast, the standard resampling scheme would simply replicate the same parent state multiple times. This fully-adapted procedure is described in Algorithm 4. 
+
+## 4 NUMERICAL EVALUATION 
+
+We evaluate the performance of several inference-time sampling algorithms for reward-tilted gener-ation within the framework of discrete diffusion language models. Specifically, we benchmark our proposed nested SMC (NSMC) and fully-adapted nested SMC (FA-NSMC) against two baselines: Best-of-N (BoN) and Bootstrap SMC. Beyond measuring the terminal reward, we analyze: (i) the effect of steering on longer texts, (ii) the influence of population sizes N and M , (iii) intermediate 5Accepted as a workshop paper at ReALM-GEN, ICLR 2026 
+
+Algorithm 1 Nested Proposal 
+
+procedure NESTED PROPOSAL (xt, f, G ⋆)Sample candidates x(j) 
+
+> t−1
+
+∼ f (· | xt), for j = 1 , . . . , M 
+
+Compute weights v(j) ← G⋆t−1(x(j)
+
+> t−1
+
+, x t)
+
+Estimate normalizer ˆν ← 1/M PMj=1 v(j)
+
+return x1: Mt−1 , v1: M , ˆν
+
+end procedure Algorithm 2 Nested SMC 
+
+Require: Base kernel f , potentials {G⋆t }t≥0, population sizes N, M 
+
+Set w(i) 
+
+> T
+
+← 1/N , for i = 1 , . . . , N 
+
+Sample x(i) 
+
+> T
+
+∼ μ(xT ) G⋆T (xT )
+
+for t = T to 1 do for i = 1 to N do 
+
+Resample a ∼ Cat( w1: Nt )
+
+x(i, ·) 
+
+> t−1
+
+, v (i, ·), ˆν(i) ← NESTED PROPOSAL (x(a) 
+
+> t
+
+, f, G ⋆t−1)Sample b ∼ Cat  v(i, ·)/ P 
+
+> k
+
+v(i,k )
+
+Set x(i) 
+
+> t−1
+
+← x(i,b ) 
+
+> t−1
+
+, ˜w(i) 
+
+> t−1
+
+← ˆν(i)
+
+end for 
+
+Normalize w(i) 
+
+> t−1
+
+← ˜w(i)
+
+> t−1
+
+/ PNk=1 ˜w(k)
+
+> t−1
+
+end for return {(x(i)0 , w (i)0 )}Ni=1 
+
+reward evolution under the weighting scheme presented in Uehara et al. (2025), and (iv) the impact of the number of samples K used to approximate the optimal potentials. 4.1 EXPERIMENTAL SETUP 
+
+All algorithms above assume access to a terminal reward r(x0) and the ideal twisting functions and potentials defined in equation 5 and equation 7. In practice, we approximate the conditional expectations with a tractable surrogate, estimating the future reward using the model’s single-step prediction ˆx0 at each state. The particle-based algorithms themselves are unchanged, and the theo-retical guarantees for t = 0 remain valid. Our experimental validation focuses on two distinct steering objectives: • Toxicity steering: We define r(x0) = rtox (x0) using a toxicity classifier, encouraging the gen-eration of toxic content to test alignment. • Fluency steering: We define r(x0) = −rppl (x0), penalizing high perplexity to encourage the generation of fluent text. We maintain a consistent algorithmic framework across these tasks, varying only the scalar reward function used to define the exponential tilt exp( λr (x0)) .
+
+Base Model. We steer the publicly released MDLM (Sahoo et al., 2024) discrete diffusion model checkpoint, a DiT-style architecture with 12 transformer blocks, 12 attention heads, and 768 hidden units trained on OpenWebText with a GPT-2 tokenizer. Unless otherwise stated, generations are produced using T = 50 diffusion steps. Following Han et al. (2023), we use 15 controllable-generation prompts (e.g., “Once upon a time”, “The book”, “The year is 1910.”). For each prompt and configuration, we sample 10 independent continuations and report metrics averaged over the resulting 15 × 10 = 150 generations. 6Accepted as a workshop paper at ReALM-GEN, ICLR 2026 Table 1: Toxicity and fluency steering ( N = 4 ,
+
+M = 8 , K = 4 , λ = 10 ). PPL via GPT-2-XL.               
+
+> Method Toxic ↑PPL ↓
+> Base (MDLM) 0.003 85.3 BoN 0.022 55.5 SMC (bootstrap) 0.25 49.0 NSMC 0.39 42.3
+> FA-NSMC 0.40 42.9
+
+Table 2: Effect of reward window length on tox-icity rate ( N = 8 , M = 8 , K = 4 ).             
+
+> Length SMC NSMC FA-NSMC 50 0.57 0.70 0.68
+> 100 0.40 0.50 0.51 300 0.29 0.30 0.47
+
+Generation Protocol and Resampling Schedule. We generate 100-token continuations and re-sample at every diffusion step, unless stated otherwise. For ablations that vary the reward window length, we generate sufficiently long continuations, such that the reward window is well-defined. 
+
+Toxicity Reward. For toxicity steering, we use an off-the-shelf RoBERTa toxicity classifier 1
+
+(Logacheva et al., 2022) and define rtox (x0) as the log-softmax score of the toxic class (no clip-ping/normalization). We fix the steering strength parameter λ = 10 for all toxicity experiments. During steering, rewards are computed on a fixed continuation suffix length (reward window). For evaluation, we concatenate the full prompt and continuation and additionally report toxicity rates under a holdout classifier 2 (Dementieva et al., 2024), to assess robustness. 
+
+Perplexity Reward. For perplexity-based rewards (used only in the perplexity-steering task), we use GPT-2-XL (Radford et al., 2019) to score intermediate x0 reconstructions. 
+
+Intermediate Potentials via x0 Reconstructions. The described particle methods require inter-mediate potentials that approximate the remaining terminal reward. At resampling time t, for each particle state x(i) 
+
+> t
+
+, we draw K samples {ˆx(i,k )0 }Kk=1 and form the estimator 
+
+bψt(x(i) 
+
+> t
+
+) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+exp  λ r (ˆ x(i,k )0 ), (12) which enters the importance weights at resampling. We compare K ∈ { 4, 16 } to ablate the effect of the reconstruction count. We also log bψt over t to study how reward information propagates along the reverse chain. Additional plots are provided in Appendix D. Replacing the true potential with an unbiased estimator still results in a properly weighted SMC algorithm (Naesseth et al., 2019b, Section 4.3). 
+
+Compute Budgets. We match compute by the number of forward passes per diffusion step. With 
+
+N outer particles, bootstrap SMC, NSMC, and FA-NSMC each require N diffusion-model evalu-ations per step. For (FA-)NSMC, the M inner proposals are drawn by categorical sampling from already-computed logits (no additional transformer evaluations). Reward model calls are also typi-cally cheaper than diffusion forward passes, so we treat N as the primary hyperparameter and vary 
+
+(N, M, K ) under this constraint. For BoN, we match compute by setting N so that the total number of diffusion-model evaluations matches the particle methods, similar to Singhal et al. (2025). 
+
+Metrics. We report: (i) toxicity rates under a binary toxicity classifier and a separate holdout binary toxicity classifier, (ii) perplexity as a fluency proxy, and (iii) output diversity via Distinct-1/Distinct-2 (Tevet & Berant, 2021) (see Appendix 5). Perplexity is not optimized in toxicity steering. 4.2 RESULTS AND DISCUSSION 
+
+Steering Results for Toxicity and Fluency Tasks (Table 1). Table 1 compares BoN, bootstrap SMC, NSMC, and FA-NSMC. Nested methods substantially improve the toxicity rate over both BoN and bootstrap SMC, with FA-NSMC slightly outperforming NSMC. The base MDLM rarely produces toxic continuations, reflecting the rarity of toxicity under the base model. Best-of-n yields only a marginal increase, because it selects from a small set of fully sampled x0 candidates of-fering limited leverage when high-reward outcomes are rare. In contrast, bootstrap SMC achieves 
+
+> 1https://huggingface.co/s-nlp/roberta_toxicity_classifier
+> 2https://huggingface.co/textdetox/xlmr-large-toxicity-classifier
+
+7Accepted as a workshop paper at ReALM-GEN, ICLR 2026 Table 3: Effect of population size M (N =8 , K=4 ).                                          
+
+> Method MTox ↑Hold ↑
+> NSMC 1.57 .48 NSMC 2.61 .44 NSMC 4.59 .56 NSMC 8.71 .56 NSMC 16 .71 .62
+> NSMC 32 .70 .55 FA-NSMC 1.54 .47 FA-NSMC 2.58 .49 FA-NSMC 4.62 .55 FA-NSMC 8.68 .60 FA-NSMC 16 .74 .66
+> FA-NSMC 32 .71 .51
+
+Table 4: Results over 10 repititions ( λ=10 ).                                                                                        
+
+> K= 4 K= 16
+> NMethod MTox ↑Hold ↑PPL ↓Tox ↑Hold ↑PPL ↓
+> 4SMC –.25 .19 49 .31 .36 44 NSMC 4.29 .21 39 .46 .44 47 NSMC 8.39 .31 42 .45 .40 42 FA-NSMC 4.36 .38 38 .48 .44 41 FA-NSMC 8.40 .39 43 .45 .43 40
+> 8SMC –.57 .48 47 .67 .59 41 NSMC 4.70 .56 36 .71 .64 36 NSMC 8.70 .56 38 .74 .59 38 FA-NSMC 4.62 .55 33 .70 .61 37 FA-NSMC 8.68 .60 39 .74 .59 32
+
+a much larger increase by reallocating computation toward partial trajectories whose intermediate reconstructions already score highly under the reward. Nested methods improve outcomes by reducing the discrepancy between the proposal and the reward-tilted target. Intermediate potentials provide a lookahead estimate of future reward, yielding more informative resampling and reduced weight degeneracy. In this configuration, the difference between NSMC and FA-NSMC is small. The effect is more pronounced for perplexity steering, where nested methods show a larger gain over bootstrap SMC relative to BoN. 
+
+Reward Window Length Sensitivity (Table 2). Table 2 sweeps the length of the continuation suffix used by the reward model at fixed N = 8 and M = 8 . As the reward window grows, performance degrades across methods. This is expected: longer suffixes make toxicity rarer and noisier to predict, increase the chance of drifting away from toxic content, and introduce greater long-horizon uncer-tainty early in the reverse process. As a result, intermediate potentials become less informative— reconstruction-based reward estimates have higher variance and are less predictive of the terminal reward—reducing the effectiveness of resampling and increasing particle impoverishment. The notable exception is FA-NSMC at reward length 300. Full adaptation is most beneficial when lookahead is hardest: with long reward windows, accounting for future reward contributions at the proposal stage is more effective than relying on noisy weight corrections. When reward information is strongly delayed, better adaptation yields larger gains. 
+
+Intermediate NSMC Rewards with Biased Potential (Figure 2). We notice that intermediate expected rewards, Ep [( r(x0)) |xt], improve over time for NSMC and FA-NSMC when using the correct potentials G⋆t−1(xt−1, x t), as shown in Figure 2b. In contrast, Figure 2a shows that the potential proposed by Uehara et al. (2025), which omits the denominator term, fails to target the correct distribution pλ(x0) ∝ pθ (x0) exp( λr (x0)) . As a result, rewards do not increase over time under this biased potential. A full sweep of toxicity rates along N, M, K with Uehara et al. (2025)’s implementation is found in Appendix F. 
+
+Scaling with (N, M, K ) and Robustness (Tables 3 and 4). Table 3 sweeps M for NSMC and FA-NSMC at fixed N = 8 , K = 4 . Table 4 reports toxicity metrics over a broader sweep, aver-aged over 10 repetitions. Three trends stand out. First, the number of outer particles N dominates performance: increasing N yields the largest gains, reflecting reduced Monte Carlo error. Sec-ond, increasing the number of reconstructions K improves guidance, especially at small N . This is consistent with the role of K in reducing the variance of bψt, which helps preserve high-reward tra-jectories early. Third, increasing the number of inner proposals M yields gains that saturate quickly, indicating diminishing returns once the proposal is “good enough”. The external toxicity rates and perplexity provide a useful sanity check against reward-model overfitting. 
+
+## 5 CONCLUSION AND LIMITATIONS 
+
+This work provides initial evidence that nested sequential Monte Carlo methods can improve inference-time steering for discrete diffusion language models. We show that nested methods, in-cluding fully adapted variants, achieve higher rewards than bootstrap SMC at fixed N , highlighting 8Accepted as a workshop paper at ReALM-GEN, ICLR 2026   
+
+> (a) Average intermediate toxic reward for the biased NSMC variant in Uehara et al. (2025).
+> (b) Average intermediate toxic reward with Nouter par-ticles according to Algorithm 2
+
+.Figure 2: Comparison of intermediate rewards for toxicity steering. the value of better proposals and more informative intermediate potentials. FA-NSMC is the most robust variant in the most challenging regimes: it degrades less as the reward window grows and often improves external toxicity at comparable internal toxicity, suggesting improved robustness to reward-model idiosyncrasies. Furthermore, our experiments show that compute allocation matters: the number of outer particles N is the primary factor, while increasing the number of reconstructions 
+
+K and inner proposals M provides additional gains with diminishing returns. Our evaluation has clear limitations. We study only two reward settings, toxicity and perplexity, on a single base checkpoint, leaving open the question of how consistently these gains transfer across models and domains. In addition, our intermediate potentials rely on approximate x0 reconstructions and off-the-shelf reward models, which can be noisy and introduce substantial variance. A key next step is broader validation on established controllable-generation and safety benchmarks, including bias/fairness suites (BOLD, HolisticBias) (Dhamala et al., 2021; Smith et al., 2022), truth-fulness (TruthfulQA) (Lin et al., 2022), standardized red-teaming (HarmBench) (Mazeika et al., 2024), and instruction-following evaluations (MT-Bench, AlpacaEval) (Zheng et al., 2023; Dubois et al., 2024), ideally within broader suites such as HELM (Liang et al., 2023). Future work can also test generalizability on larger discrete diffusion models such as Dream-7B (Ye et al., 2025) or LLaDA (Nie et al., 2025). Another interesting avenue for future work is to apply the methods to sampling problems similar to Wu et al. (2025) and exploring image steering (Singhal et al., 2025). 
+
+## REFERENCES 
+
+Jacob Austin, Daniel D. Johnson, Jonathan Ho, Daniel Tarlow, and Rianne van den Berg. Structured denoising diffusion models in discrete state-spaces. In A. Beygelzimer, Y. Dauphin, P. Liang, and J. Wortman Vaughan (eds.), Advances in Neural Information Processing Systems , 2021. URL 
+
+https://openreview.net/forum?id=h7-XixPCAL .Gabriel Cardoso, Yazid Janati el idrissi, Sylvain Le Corff, and Eric Moulines. Monte Carlo guided denoising diffusion models for Bayesian linear inverse problems. In The Twelfth International Conference on Learning Representations , 2024. Nicolas Chopin and Omiros Papaspiliopoulos. An Introduction to Sequential Monte Carlo , vol-ume 4. Springer, 2020. Pierre Del Moral. Feynman-kac formulae. In Feynman-Kac Formulae: Genealogical and Interact-ing Particle Systems with Applications , pp. 47–93. Springer, 2004. Daryna Dementieva, Daniil Moskovskiy, Nikolay Babakov, Abinew Ali Ayele, Naquee Rizwan, Florian Schneider, Xintong Wang, Seid Muhie Yimam, Dmitry Ustalov, Elisei Stakovskii, Alisa Smirnova, Ashraf Elnagar, Animesh Mukherjee, and Alexander Panchenko. Overview of the multilingual text detoxification task at PAN 2024. CEUR Workshop Proceedings , 3740:2432– 2461, 2024. 9Accepted as a workshop paper at ReALM-GEN, ICLR 2026 Jwala Dhamala, Tony Sun, Varun Kumar, Satyapriya Krishna, Yada Pruksachatkun, Kai-Wei Chang, and Rahul Gupta. BOLD:Dataset and metrics for measuring biases in open-ended language gen-eration. In Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Trans-parency , FAccT ’21, pp. 862–872. ACM, March 2021. URL http://dx.doi.org/10. 1145/3442188.3445924 .Prafulla Dhariwal and Alex Nichol. Diffusion models beat gans on image synthesis. In Proceedings of the 35th International Conference on Neural Information Processing Systems , NeurIPS ’21. Curran Associates Inc., 2021. Zehao Dou and Yang Song. Diffusion posterior sampling for linear inverse problem solving: A filtering perspective. In The Twelfth International Conference on Learning Representations , 2024. Yann Dubois, Percy Liang, and Tatsunori Hashimoto. Length-controlled alpacaeval: A simple debiasing of automatic evaluators. In First Conference on Language Modeling , 2024. URL 
+
+https://openreview.net/forum?id=CybBmzWBX0 .Nate Gruver, Samuel Don Stanton, Nathan C. Frey, Tim G. J. Rudner, Isidro Hotzel, Julien Lafrance-Vanasse, Arvind Rajpal, Kyunghyun Cho, and Andrew Gordon Wilson. Protein design with guided discrete diffusion. In Thirty-seventh Conference on Neural Information Processing Sys-tems , 2023. URL https://openreview.net/forum?id=MfiK69Ga6p .Pieralberto Guarniero, Adam M Johansen, and Anthony Lee. The iterated auxiliary particle filter. 
+
+Journal of the American Statistical Association , 112(520):1636–1647, 2017. Xiaochuang Han, Sachin Kumar, and Yulia Tsvetkov. SSD-LM: Semi-autoregressive simplex-based diffusion language model for text generation and modular control. In Anna Rogers, Jordan Boyd-Graber, and Naoaki Okazaki (eds.), Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 11575–11596. Association for Compu-tational Linguistics, July 2023. URL https://aclanthology.org/2023.acl-long. 647/ .Jeremy Heng, Adrian N Bishop, George Deligiannidis, and Arnaud Doucet. Controlled sequential monte carlo. The Annals of Statistics , 48(5):2904–2929, 2020. Jonathan Ho, Tim Salimans, Alexey Gritsenko, William Chan, Mohammad Norouzi, and David J Fleet. Video diffusion models. arXiv:2204.03458 , 2022. Robert Kirk, Ishita Mediratta, Christoforos Nalmpantis, Jelena Luketina, Eric Hambro, Edward Grefenstette, and Roberta Raileanu. Understanding the effects of RLHF on LLM generalisation and diversity. In The Twelfth International Conference on Learning Representations , 2024. URL 
+
+https://openreview.net/forum?id=PXD3FAVHJT .Xiner Li, Yulai Zhao, Chenyu Wang, Gabriele Scalia, Gokcen Eraslan, Surag Nair, Tommaso Bian-calani, Shuiwang Ji, Aviv Regev, Sergey Levine, and Masatoshi Uehara. Derivative-free guidance in continuous and discrete diffusion models with soft value-based decoding, August 2024. Percy Liang, Rishi Bommasani, Tony Lee, Dimitris Tsipras, Dilara Soylu, Michihiro Yasunaga, Yian Zhang, Deepak Narayanan, Yuhuai Wu, Ananya Kumar, Benjamin Newman, Binhang Yuan, Bobby Yan, Ce Zhang, Christian Cosgrove, Christopher D Manning, Christopher Re, Diana Acosta-Navas, Drew A. Hudson, Eric Zelikman, Esin Durmus, Faisal Ladhak, Frieda Rong, Hongyu Ren, Huaxiu Yao, Jue WANG, Keshav Santhanam, Laurel Orr, Lucia Zheng, Mert Yuk-sekgonul, Mirac Suzgun, Nathan Kim, Neel Guha, Niladri S. Chatterji, Omar Khattab, Peter Hen-derson, Qian Huang, Ryan Andrew Chi, Sang Michael Xie, Shibani Santurkar, Surya Ganguli, Tatsunori Hashimoto, Thomas Icard, Tianyi Zhang, Vishrav Chaudhary, William Wang, Xuechen Li, Yifan Mai, Yuhui Zhang, and Yuta Koreeda. Holistic evaluation of language models. Trans-actions on Machine Learning Research , 2023. URL https://openreview.net/forum? id=iO4LZibEqW .Stephanie Lin, Jacob Hilton, and Owain Evans. TruthfulQA: Measuring how models mimic human falsehoods. In Smaranda Muresan, Preslav Nakov, and Aline Villavicencio (eds.), Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 3214–3252. Association for Computational Linguistics, May 2022. URL https: //aclanthology.org/2022.acl-long.229/ .10 Accepted as a workshop paper at ReALM-GEN, ICLR 2026 Varvara Logacheva, Daryna Dementieva, Sergey Ustyantsev, Daniil Moskovskiy, David Dale, Irina Krotova, Nikita Semenov, and Alexander Panchenko. ParaDetox: Detoxification with par-allel data. In Smaranda Muresan, Preslav Nakov, and Aline Villavicencio (eds.), Proceed-ings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 6804–6818. Association for Computational Linguistics, May 2022. URL 
+
+https://aclanthology.org/2022.acl-long.469/ .Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee, Nathaniel Li, Steven Basart, Bo Li, David Forsyth, and Dan Hendrycks. HarmBench: A stan-dardized evaluation framework for automated red teaming and robust refusal. In Proceedings of the 41st International Conference on Machine Learning , ICML’24. JMLR.org, 2024. Byeonghu Na, Yeongmin Kim, Minsang Park, Donghyeok Shin, Wanmo Kang, and Il-Chul Moon. Diffusion rejection sampling. In Proceedings of the 41st International Conference on Machine Learning , ICML’24. JMLR.org, 2024. Christian Naesseth, Fredrik Lindsten, and Thomas Schon. Nested sequential Monte Carlo meth-ods. In Francis Bach and David Blei (eds.), Proceedings of the 32nd International Confer-ence on Machine Learning , volume 37 of Proceedings of Machine Learning Research , pp. 1292–1301. PMLR, 07–09 Jul 2015. URL https://proceedings.mlr.press/v37/ naesseth15.html .Christian A Naesseth, Fredrik Lindsten, and Thomas B Sch¨ on. High-dimensional filtering using nested sequential Monte Carlo. IEEE Transactions on Signal Processing , 67(16):4177–4188, 2019a. Christian A. Naesseth, Fredrik Lindsten, and Thomas B. Sch¨ on. Elements of sequential Monte Carlo. Found. Trends Mach. Learn. , 12(3):307–392, November 2019b. Shen Nie, Fengqi Zhu, Zebin You, Xiaolu Zhang, Jingyang Ou, Jun Hu, JUN ZHOU, Yankai Lin, Ji-Rong Wen, and Chongxuan Li. Large language diffusion models. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. URL https://openreview. net/forum?id=KnqiC0znVF .Zijing Ou, Chinmay Pani, and Yingzhen Li. Inference-time scaling of discrete diffusion models via importance weighting and optimal proposal design. In The Fourteenth International Confer-ence on Learning Representations , 2026. URL https://openreview.net/forum?id= 7wbrFQvfdH .Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Gray, John Schulman, Jacob Hilton, Fraser Kel-ton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike, and Ryan Lowe. Training language models to follow instructions with human feedback. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.), Advances in Neu-ral Information Processing Systems , 2022. URL https://openreview.net/forum?id= TG8KACxEON .Alec Radford, Jeff Wu, Rewon Child, David Luan, Dario Amodei, and Ilya Sutskever. Language models are unsupervised multitask learners. 2019. URL https://api. semanticscholar.org/CorpusID:160025533 .Subham Sekhar Sahoo, Marianne Arriola, Aaron Gokaslan, Edgar Mariano Marroquin, Alexan-der M Rush, Yair Schiff, Justin T Chiu, and Volodymyr Kuleshov. Simple and effective masked diffusion language models. In The Thirty-eighth Annual Conference on Neural Information Pro-cessing Systems , 2024. URL https://openreview.net/forum?id=L4uaAR4ArM .Jiaxin Shi, Kehang Han, Zhe Wang, Arnaud Doucet, and Michalis Titsias. Simplified and gen-eralized masked diffusion for discrete data. In The Thirty-eighth Annual Conference on Neu-ral Information Processing Systems , 2024. URL https://openreview.net/forum?id= xcqSOfHt4g .11 Accepted as a workshop paper at ReALM-GEN, ICLR 2026 Raghav Singhal, Zachary Horvitz, Ryan Teehan, Mengye Ren, Zhou Yu, Kathleen McKeown, and Rajesh Ranganath. A general framework for inference-time scaling and steering of diffusion models. In Forty-second International Conference on Machine Learning , 2025. Eric Michael Smith, Melissa Hall, Melanie Kambadur, Eleonora Presani, and Adina Williams. “I’m sorry to hear that”: Finding new biases in language models with a holistic descriptor dataset. In Yoav Goldberg, Zornitsa Kozareva, and Yue Zhang (eds.), Proceedings of the 2022 Confer-ence on Empirical Methods in Natural Language Processing , pp. 9180–9211. Association for Computational Linguistics, December 2022. URL https://aclanthology.org/2022. emnlp-main.625/ .Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In Interna-tional Conference on Learning Representations , 2021. URL https://openreview.net/ forum?id=PxTIG12RRHS .Guy Tevet and Jonathan Berant. Evaluating the evaluation of diversity in natural language gen-eration. In Paola Merlo, Jorg Tiedemann, and Reut Tsarfaty (eds.), Proceedings of the 16th Conference of the European Chapter of the Association for Computational Linguistics: Main Volume , pp. 326–346. Association for Computational Linguistics, April 2021. URL https: //aclanthology.org/2021.eacl-main.25/ .Brian L. Trippe, Jason Yim, Doug Tischer, David Baker, Tamara Broderick, Regina Barzilay, and Tommi S. Jaakkola. Diffusion probabilistic modeling of protein backbones in 3d for the motif-scaffolding problem. In The Eleventh International Conference on Learning Representations ,2023. Masatoshi Uehara, Yulai Zhao, Chenyu Wang, Xiner Li, Aviv Regev, Sergey Levine, and Tom-maso Biancalani. Inference-time alignment in diffusion Models with reward-guided generation: Tutorial and review, January 2025. Nick Whiteley and Anthony Lee. Twisted particle filters. The Annals of Statistics , 42(1):115 – 141, 2014. Luhuan Wu, Brian Trippe, Christian Naesseth, David Blei, and John P Cunningham. Practical and asymptotically exact conditional sampling in diffusion models. Advances in Neural Information Processing Systems , 36:31372–31403, 2023. Luhuan Wu, Yi Han, Christian Naesseth, and John P Cunningham. Reverse diffusion sequential Monte Carlo samplers. Advances in Neural Information Processing Systems , 38, 2025. Jiacheng Ye, Zhihui Xie, Lin Zheng, Jiahui Gao, Zirui Wu, Xin Jiang, Zhenguo Li, and Lingpeng Kong. Dream 7B: Diffusion large language models, 2025. URL https://arxiv.org/abs/ 2508.15487 .Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. Judging LLM-as-a-judge with MT-bench and chatbot arena. In Proceedings of the 37th Inter-national Conference on Neural Information Processing Systems , NeurIPS ’23. Curran Associates Inc., 2023. 12 Accepted as a workshop paper at ReALM-GEN, ICLR 2026 
+
+## A COMPARING SMC A LGORITHMS 
+
+Algorithm 3 Bootstrap SMC 
+
+Require: Base kernel f , potentials {G⋆t }t≥0, population sizes N, M 
+
+Set w(i) 
+
+> T
+
+← 1/N , for i = 1 , . . . , N 
+
+Sample x(i) 
+
+> T
+
+∼ μ(xT ) G⋆T (xT )
+
+for t = T to 1 do for i = 1 to N do 
+
+Resample a ∼ Cat( w(1: N ) 
+
+> t
+
+)
+
+Sample x(i) 
+
+> t−1
+
+∼ f (· | x(a) 
+
+> t
+
+)
+
+Compute ˜w(i) 
+
+> t−1
+
+← G⋆t−1(x(i)
+
+> t−1
+
+, x (ai) 
+
+> t
+
+)
+
+end for 
+
+Normalize w(i) 
+
+> t−1
+
+← ˜w(i)
+
+> t−1
+
+/ PNk=1 ˜w(k)
+
+> t−1
+
+end for return {(x(i)0 , w (i)0 )}Ni=1 
+
+Algorithm 4 Fully-Adapted Nested SMC 
+
+Require: Base kernel f , potentials {G⋆t }t≥0, population sizes N, M 
+
+Set w(i) 
+
+> T
+
+← 1/N , for i = 1 , . . . , N 
+
+Sample x(i) 
+
+> T
+
+∼ μ(xT ) G⋆T (xT )
+
+for t = T to 1 do for i = 1 to N do 
+
+x(i, ·) 
+
+> t−1
+
+, v (i, ·), ˆν(i) ← NESTED PROPOSAL (x(i) 
+
+> t
+
+, f, G ⋆t−1)
+
+end for 
+
+Compute Ω(i) ∝ w(i) 
+
+> t
+
+· ˆν(i), for i = 1 , . . . , N 
+
+for i = 1 to N do 
+
+Resample a ∼ Cat(Ω 1: N )
+
+Sample b ∼ Cat  v(a, ·)/ P 
+
+> k
+
+v(a,k )
+
+Set x(i) 
+
+> t−1
+
+← x(a,b ) 
+
+> t−1
+
+, w(i) 
+
+> t−1
+
+← 1/N 
+
+end for end for return {(x(i)0 , w (i)0 )}Ni=1 
+
+## B DERIVATION OF OPTIMAL POTENTIALS 
+
+We now examine the ratio defining the optimal proposal q⋆t−1(xt−1 | xt), which targets the interme-diate distribution γt−1(xt−1: T ):
+
+q⋆t−1(xt−1 | xt) = γt−1(xt−1: T )
+
+γt(xt:T ) = p(xt−1: T ) ψ⋆t−1(xt−1)
+
+p(xt:T ) ψ⋆t (xt) . (13) Using the Markov factorization of the prior path measure p(xt−1: T ) = f (xt−1 | xt) p(xt:T ), this expression simplifies to: 
+
+γt−1(xt−1: T )
+
+γt(xt:T ) = f (xt−1 | xt) ψ⋆t−1(xt−1)
+
+ψ⋆t (xt) = f (xt−1 | xt) G⋆t−1(xt−1, x t), (14) where we identify the ideal Feynman–Kac potential G⋆t−1 as the ratio of expected future rewards: 
+
+G⋆t−1(xt−1, x t) := Ep
+
+exp  λ r (x0) | xt−1
+
+
+
+Ep
+
+exp  λ r (x0) | xt
+
+ . (15) 13 Accepted as a workshop paper at ReALM-GEN, ICLR 2026 
+
+## C TELESCOPING PROPERTY 
+
+Recall the optimal twisting functions ψ⋆t (xt) = Ep
+
+ exp( λr (x0)) | xt
+
+ and the induced potentials 
+
+G⋆t−1(xt−1, x t) = ψ⋆t−1(xt−1)/ψ ⋆t (xt). Taking the product of these potentials over the full reverse-time trajectory from t = T down to 1 yields a telescoping ratio: 
+
+> T
+
+Y
+
+> t=1
+
+G⋆t−1(xt−1, x t) = 
+
+> T
+
+Y
+
+> t=1
+
+ψ⋆t−1(xt−1)
+
+ψ⋆t (xt)= ψ⋆ 
+
+> 0
+
+(x0)
+
+ψ⋆T (xT ) = exp( λ r (x0)) 
+
+Ep [exp( λ r (x0)) | xT ] . (16) The numerator is exactly the terminal tilt required by the target distribution pλ(x0). The denom-inator depends only on the initial noise state xT and serves as the global normalizing constant. Consequently, weighting the prior path measure by this product recovers the correct target: 
+
+p(x0: T )
+
+> T
+
+Y
+
+> t=1
+
+G⋆t−1(xt−1, x t) ∝ p(x0: T ) exp( λr (x0)) = γ0(x0: T ). (17) This demonstrates that the cumulative product of the optimal potentials correctly recovers the reward-tilted posterior distribution. 
+
+## D INTERMEDIATE REWARD PLOTS 
+
+Figure 3: Intermediate rewards under toxicity steering increase over time, with higher population size M , yielding better rewards but diminishing returns and a largely stable ranking across time steps. 
+
+## E DIVERSITY 
+
+Output Diversity. We measure the diversity of the generations using Distinct-n (Tevet & Berant, 2021). Table 5 shows broadly comparable diversity across particle-based methods, with BoN slightly higher in this setting. 14 Accepted as a workshop paper at ReALM-GEN, ICLR 2026 Table 5: Output diversity on the toxicity task (Distinct-n; higher is more diverse) with N = 8 ,
+
+K = 4 , λ = 10 .Method Distinct-1 ↑ Distinct-2 ↑
+
+BoN 0.29 0.74 SMC 0.26 0.71 NSMC 0.26 0.70 FA-NSMC 0.26 0.71 
+
+Diversity (Table 5). Distinct-n is broadly similar across particle-based methods, with BoN slightly higher. This is consistent with resampling-induced duplication in SMC-style samplers, which can modestly reduce diversity (Naesseth et al., 2019b). However, the reverse diffusion tran-sitions still inject substantial randomness, so we do not observe strong mode collapse in this setting despite large gains in reward attainment. 
+
+## F BIASED NESTED ABLATION 
+
+Table 6 reports the average toxicity accuracy (and external toxicity accuracy) over 10 runs for the “biased nested” variant discussed in the main text. Configurations vary the number of outer particles, inner proposals, and number of x0 samples used for intermediate potentials; all runs use λ = 10 .Table 6: Toxicity rates for biased NSMC implementation according to Uehara et al. (2025) averaged over 10 repetitions ( λ = 10 ). 
+
+x0 samples Particles Inner particles Toxic acc Ext toxic acc 4 4 4 0.13 0.13 4 4 8 0.17 0.17 4 8 4 0.03 0.01 4 8 8 0.20 0.16 16 4 4 0.16 0.13 16 4 8 0.26 0.20 16 8 4 0.03 0.01 16 8 8 0.30 0.20 15
