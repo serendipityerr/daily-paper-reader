@@ -6,34 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-21
-- 运行时间：2026-08-21 20:20:11 UTC
+- 最新运行日期：2026-08-22
+- 运行时间：2026-08-22 19:28:30 UTC
 - 运行状态：成功
 - 本次总论文数：4
 - 精读区：1
 - 速读区：3
 
 ### 今日简报（AI）
-今日精读1篇、速读3篇，聚焦扩散模型与流匹配的图像生成新思路。  
-最值得关注：流匹配引入结构化源分布（8.0/10），显著优于传统噪声起点；另两篇探讨条件化与推理期控制。  
-下一步可优先复现流匹配方法，并对比扩散模型在路径评估上的差异。
-- 详情：[/202608/21/README](/202608/21/README)
+今日精读4篇，聚焦扩散模型逆问题与最优传输理论；最值得关注的是《Scale-Consistent Posterior Dynamics》提出的尺度一致后验动力学（8.0/10），可显著提升逆问题求解稳定性；建议先从此文入手，再结合三篇速读中的最优传输变体对比阅读。
+- 详情：[/202608/22/README](/202608/22/README)
 
 ### 精读区论文标签
-1. [Spatially-Grounded Flow Matching: Structured Source Distributions for Image Generation](/202608/21/2608.15452v1-spatially-grounded-flow-matching-structured-source-distributions-for-image-generation)  
+1. [Scale-Consistent Posterior Dynamics for Diffusion Inverse Problems](/202608/22/2608.15144v1-scale-consistent-posterior-dynamics-for-diffusion-inverse-problems)  
    标签：评分：8.0/10、query:diff-bridge
-   evidence：流匹配将源分布传输到目标分布，概念上等同于生成建模中的分布桥
+   evidence：构造后验SDE族控制概率流传输与探索，用于基于分数的扩散逆问题
 
 ### 速读区论文标签
-1. [A Plug-in Interpretation of Conditioning in Score-Based Diffusion Models](/202608/21/2608.19504v1-a-plug-in-interpretation-of-conditioning-in-score-based-diffusion-models)  
+1. [Graph Causal Optimal Transport and Wasserstein Distances](/202608/22/2608.13716v1-graph-causal-optimal-transport-and-wasserstein-distances)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：基于分数的扩散条件化与插件修正，对用分数模型求解薛定谔桥具有方法学参考价值
-2. [Conditioned Brownian motion and local equivalence of path ensembles](/202608/21/2608.19744v1-conditioned-brownian-motion-and-local-equivalence-of-path-ensembles)  
+   evidence：研究带因果约束的最优传输与适配Wasserstein距离，与扩散桥中的最优传输相关
+2. [Density-Reweighted Entropic Optimal Transport: Decoupling Geometry from Sampling Density](/202608/22/2608.16506v1-density-reweighted-entropic-optimal-transport-decoupling-geometry-from-sampling-density)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：条件布朗运动收敛到薛定谔基态扩散
-3. [Discrete Diffusion Inference-Time Control with Nested Sequential Monte Carlo](/202608/21/2608.20123v1-discrete-diffusion-inference-time-control-with-nested-sequential-monte-carlo)  
+   evidence：研究熵正则最优传输，与薛定谔桥的静态形式直接相关
+3. [Ordered Diffusion Kernels](/202608/22/2608.18019v1-ordered-diffusion-kernels)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：通过嵌套顺序蒙特卡洛实现离散扩散过程的Feynman-Kac转向
+   evidence：提供近似SDE生成元的局部核，是模拟条件扩散和构造桥的关键步骤
 
 
 <div class="dpr-home-promo-card">

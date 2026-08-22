@@ -1,0 +1,3112 @@
+Density-Reweighted Entropic Optimal Transport: Decoupling
+Geometry from Sampling Density
+Keyi Li1,∗
+Yuval Kluger1,2
+Boris Landa1,3,∗
+1Program of Applied & Computational Mathematics, Yale University
+2Department of Pathology, Yale University
+3Department of Electrical and Computer Engineering, Yale University
+∗Corresponding author. Email: keyi.y.li@yale.edu, boris.landa@yale.edu
+Abstract
+Dataset alignment is a central step in data analysis across science and engineering, where the goal is
+to match observations between datasets. Entropic Optimal Transport (EOT) offers a computationally
+tractable framework for this task by encoding cross-dataset affinities in a transport plan.
+However,
+when two datasets are sampled from geometrically similar low-dimensional structures with substantially
+different sampling densities, the EOT plan may match points by relative sampling density rather than
+geometric proximity, yielding geometrically misleading correspondences. To address this issue, we propose
+a density-reweighted EOT framework in which the influence of sampling density on the transport plan can
+be discounted to a desired degree, ranging from standard EOT to alignment driven purely by underlying
+geometry. Under suitable regularity conditions, we establish convergence of the reweighted EOT plan
+to a family of population-level plans whose dependence on sampling density is made explicit. Through
+simulations, we show that our approach recovers geometrically faithful correspondences, improving over
+related EOT-based frameworks when datasets exhibit substantial sampling density disparity.
+Keywords:
+Entropic Optimal Transport, dataset alignment, sampling density, manifold learning
+1
+Introduction
+Dataset alignment, the problem of establishing correspondences between observations across multiple datasets,
+is a fundamental task arising throughout the scientific and engineering disciplines [1–3]. In genomics, for in-
+stance, datasets collected under heterogeneous conditions, such as different experimental batches or measure-
+ment technologies, often exhibit similar low-dimensional structures characterizing the underlying biological
+process, yet undergo systematic deformations that render direct comparison infeasible [4–6]. Establishing
+correspondences in a geometrically meaningful way, i.e., identifying for each data point its most similar
+counterparts in the other dataset with respect to their underlying geometry, is therefore essential for reliable
+downstream analysis [1].
+Optimal Transport (OT) [7] provides a natural mathematical formalization of this task by seeking a
+transport plan that minimizes the total cost of moving mass between two datasets, where the cost function
+encodes geometric proximity between data points. However, exact OT scales cubically in the number of
+samples [8], limiting its applicability to large-scale datasets. Entropic Optimal Transport (EOT) [9], an
+entropy-regularized convex relaxation of OT, offers a computationally tractable alternative. Formally, given
+two finite point clouds X = {xi}m
+i=1 and Y = {yj}n
+j=1, a cost matrix C ∈Rm×n with entries Cij = c(xi, yj)
+denoting the transport cost per unit mass from xi to yj, and marginal constraints a ∈Rm
++, b ∈Rn
++ satisfying
+1⊤a = 1⊤b, EOT seeks the transport plan W∗(also referred to as EOT plan hereafter) solving
+min
+˜
+W∈Rm×n
++
+m
+X
+i=1
+n
+X
+j=1
+Cij ˜Wij + ε
+m
+X
+i=1
+n
+X
+j=1
+˜Wij log ˜Wij
+s.t.
+n
+X
+j=1
+˜Wij = ai,
+m
+X
+i=1
+˜Wij = bj,
+∀i ∈[m], ∀j ∈[n],
+(1)
+1
+arXiv:2608.16506v1  [stat.ML]  17 Aug 2026
+
+
+(a)
+EOT
+(b)
+Our Approach
+Sampling Density
+Figure 1: Sampling density mismatch biases EOT-based dataset alignment.
+Two datasets—a
+line segment (bottom) and an arc (top)—share similar underlying geometry but differ substantially in
+sampling density (yellow/green: high density; blue/purple: low density). Gray arrows indicate maximum-
+coupling correspondences, where each point is matched to its highest-affinity counterpart in the other dataset.
+(a) Standard EOT routes correspondences toward high-density regions, producing geometrically misleading
+matchings. (b) Our approach recovers correspondences that are driven by the underlying geometry. See
+Supplement A.1 for the experiment details.
+where ε > 0 is the entropic regularization parameter controlling the diffuseness of the resulting transport
+plan. The EOT problem in (1) is strictly convex and admits a unique solution of the form
+W ∗
+ij = ui Kij vj,
+Kij = exp(−Cij/ε) ,
+∀i ∈[m], ∀j ∈[n],
+(2)
+where u ∈Rm
++ and v ∈Rn
++ are positive scaling vectors that can be computed efficiently via the Sinkhorn
+algorithm [10]. The EOT plan W∗reflects pairwise affinities between data points across the two datasets,
+and thus provides a natural mechanism for establishing correspondence.
+Beyond its computational effi-
+ciency [11, 12], EOT enjoys favorable statistical properties [13], such as robustness to perturbations in the
+input datasets, making it well-suited for large-scale modern datasets. It has found successful application
+in domain adaptation [14, 15], generative modeling [16, 17], computer vision [18, 19], and computational
+biology [20], among others [8].
+In dataset alignment tasks, the EOT problem (1) is typically applied with squared Euclidean distances
+as the cost matrix and uniform empirical marginals reflecting the respective dataset sizes. Concretely, one
+sets Cij = ∥xi −yj∥2, ai = n for all i ∈[m], and bj = m for all j ∈[n]. However, this formulation, combined
+with the inherent mass-conservation requirement of EOT, can lead to biased alignment when datasets are
+class-imbalanced or, more generally, when they exhibit sampling density mismatch [21, 22]. Specifically,
+when two datasets are sampled from geometrically similar low-dimensional structures (e.g., manifolds) but
+with substantially different sampling densities, the EOT plan may match points across datasets based on
+their relative sampling densities rather than their geometric proximity, producing correspondences that are
+geometrically misleading; see Figure 1(a). Such density mismatches arise naturally in practice: in genomics,
+for instance, cells profiled across experimental conditions, sequencing batches, or measurement technologies
+may exhibit artificially skewed sampling densities due to technical biases introduced by the acquisition
+process itself [4–6]. While Unbalanced Optimal Transport (UOT) [23] (discussed in Section 2) mitigates
+this limitation by allowing variation in total mass, it requires additional hyperparameter tuning and offers
+little intuition on how the resulting transport plan is jointly influenced by sampling density and geometric
+similarity.
+Our Contribution
+In this work, we address the challenge of obtaining geometrically coherent EOT-based
+alignments between datasets sampled from manifolds with similar underlying geometry but substantially
+different sampling densities. In this setting, standard EOT can produce correspondences that are strongly
+distorted by density variation and therefore geometrically misleading; see Figure 1(a). Our goal is to recover
+the alignment that would arise if both manifolds were sampled uniformly, so that correspondences are driven
+primarily by geometry rather than by sampling density; see Figure 1(b). More broadly, we aim to provide a
+2
+
+
+principled mechanism for interpolating between purely geometry-driven alignment and the density-sensitive
+alignment produced by standard EOT.
+A density-reweighted EOT framework for geometry-driven alignment.
+We show that the
+dependence of the EOT plan on sampling density can be mitigated through density reweighting. Specifi-
+cally, while standard EOT with uniform empirical marginals amounts to scaling a Gaussian kernel to have
+constant row and column sums, we propose an approach that instead reweighs the Gaussian kernel by lo-
+cal sampling density and seeks scaling factors that satisfy suitably reweighted marginal constraints. Such
+density-reweighting assigns greater importance to data points in sparse regions and discounts data points in
+dense regions, compensating for sampling density variation. The reweighting strength can be controlled by a
+density discounting factor θ ∈[0, 1]. At θ = 0, the method reduces to standard EOT with uniform empirical
+marginals; at θ = 1, the population limit is independent of the sampling densities, so correspondences are
+driven by the underlying geometry; intermediate values of θ allow a trade-off between the two regimes (see
+Figure 2). Algorithm 1 outlines our proposed approach, where W(θ) from (6) is the reweighted plan.
+We prove that under suitable regularity conditions on the manifold geometry and sampling densities,
+W(θ) converges with high probability as m, n →∞, up to a global scaling constant, to a population-level
+EOT plan whose dependence on sampling density is explicitly governed by θ ∈[0, 1].
+In particular, at
+θ = 1, W(θ) converges to the population-level EOT plan under uniform measures on both manifolds. This
+is established in two settings: when the densities are known exactly (Theorem 3.2) and when the density of
+each dataset is estimated using a kernel density estimator (Theorem 3.4), with explicit convergence rates.
+Finally, we demonstrate empirically that our approach outperforms standard EOT and UOT across multiple
+hyperparameter configurations in recovering geometrically faithful correspondences between two datasets
+with substantial sampling density disparity. In these experiments, we also discuss practical considerations
+and provide guidance to facilitate deployment of the proposed framework.
+2
+Related Work
+Unbalanced Optimal Transport
+Unbalanced Optimal Transport (UOT) [23] extends EOT by relaxing
+the hard marginal constraints in (1) through soft penalty terms, allowing the transport plan to deviate from
+the prescribed marginals and thus accommodate variation in the total transported mass. A popular choice of
+penalty is the class of f-divergences [23, 24], among which the KL-divergence formulation is widely adopted.
+Formally, UOT with the KL-divergence penalty seeks a transport plan solving
+min
+˜
+W∈Rm×n
++
+m
+X
+i=1
+n
+X
+j=1
+Cij ˜Wij + ε
+m
+X
+i=1
+n
+X
+j=1
+˜Wij log ˜Wij + λ1 KL
+
+˜
+W1n
+ a
+
++ λ2 KL
+
+˜
+W⊤1m
+ b
+
+,
+(7)
+where KL(p∥q) = P
+i (pi log(pi/qi) −pi + qi) is the generalized KL divergence for non-negative vectors p, q
+of the same dimension, and λ1, λ2 > 0 control the degree of marginal relaxation. As λ1, λ2 →∞, the marginal
+constraints become increasingly strict and the UOT plan recovers the EOT plan; as λ1, λ2 →0, the marginal
+penalties vanish and the UOT plan reduces to the Gaussian kernel, which encodes cross-data similarities via
+raw Euclidean distances. UOT has been studied from multiple perspectives; we refer the reader to [23, 7, 8]
+for comprehensive overviews, to [25] for its statistical properties, to [24, 26] for computational algorithms,
+and to [20, 27] for applications in machine learning.
+In the context of dataset alignment, while relaxing strict mass conservation allows the UOT plan to
+suffer less from dataset-specific variation in sampling density, the influence of (λ1, λ2) on the resulting plan
+is implicit: it is unclear how the choice of (λ1, λ2) controls the extent to which ˜
+W reflects the underlying
+geometry versus the sampling densities, and to our knowledge this interplay has not been characterized in
+prior work. Our approach addresses this limitation by making the density-geometry tradeoff explicit and
+easily interpretable via the discounting parameter θ.
+Manifold Learning
+Our approach is conceptually motivated by Diffusion Maps [28], which provides a
+framework for manifold learning with the ability to suppress the influence of the sampling density on the
+recovered geometry. A key observation underlying Diffusion Maps is that the graph Laplacian constructed
+from a kernel k(x, y) = exp(−∥x −y∥2/h2) depends on the sampling density of the data, mixing geometric
+3
+
+
+Algorithm 1 Density-reweighted EOT for Geometry-driven
+Alignment
+Input: Datasets X = {xi}m
+i=1 ⊂RD and Y = {yj}n
+j=1 ⊂RD;
+positive density estimates ˆfi and ˆgj; EOT regularization ε > 0;
+discounting factor θ ∈[0, 1].
+1: Compute scaling constant.
+S(θ) =
+1
+m
+Pm
+i=1
+1
+( ˆfi) θ
+1
+n
+Pn
+j=1
+1
+(ˆgj) θ
+.
+(3)
+2: Form density-adjusted kernel.
+M (θ)
+ij
+= exp
+ −∥xi −yj∥2
+2/ε
+
+( ˆfi) θ (ˆgj) θ
+,
+∀i ∈[m], j ∈[n].
+(4)
+3: Sinkhorn scaling. Find α ∈Rm
++, β ∈Rn
++ such that
+1
+n
+n
+X
+j=1
+α(θ)
+i M (θ)
+ij β(θ)
+j
+=
+1
+√
+S(θ) ( ˆfi) θ ,
+1
+m
+m
+X
+i=1
+α(θ)
+i M (θ)
+ij β(θ)
+j
+=
+√
+S(θ)
+(ˆgj) θ .
+(5)
+4: Recover the density-reweighted EOT plan.
+W (θ)
+ij
+= α(θ)
+i
+exp
+ −∥xi −yj∥2
+2/ε
+
+β(θ)
+j .
+(6)
+µ = 0:00
+µ = 0:33
+µ = 0:67
+µ = 1:00
+Sampling Density
+Figure 2: Discounting the influence
+of sampling density via θ in Al-
+gorithm 1.
+Each panel shows the
+maximum-coupling correspondences for
+a different value of θ.
+At θ = 0, the
+method reduces to standard EOT; at
+θ = 1, it recovers purely geometry-based
+alignment.
+structure with the distribution of sample points. To mitigate this, Diffusion Maps introduce the following
+α-normalization of the kernel,
+kα(x, y) =
+k(x, y)
+d(x)α d(y)α ,
+d(x) =
+Z
+X
+k(x, y) dµ(y),
+(8)
+where d(x) is a local measure of volume, and α ∈[0, 1] controls the degree to which sampling density
+is discounted. As h →0, the infinitesimal generator of the Markov chain induced by kα converges to a
+differential operator whose dependence on the sampling density is explicitly controlled by α: at α = 0,
+the differential operator retains full dependence on the sampling density, recovering the random-walk graph
+Laplacian; at α = 1, the density dependence is completely removed and the differential operator recovers the
+Laplace–Beltrami operator on the manifold, independently of the distribution of sample points. We extend
+this idea to the EOT framework by incorporating an analogous density discounting via a parameter θ ∈[0, 1]
+(Algorithm 1). At θ = 0, the standard EOT plan is recovered; at θ = 1, the resulting transport plan is
+invariant to the sampling measure, with correspondences governed purely by geometry; and intermediate
+values of θ provide a principled balance between the two regimes.
+Our work is also closely related to EOT Eigenmaps [29], which established a connection between the
+EOT plan and manifold learning. Specifically, [29] showed that the singular vectors of the EOT plan can
+be used to jointly embed two datasets sampled from a shared low-dimensional manifold, possibly subject to
+dataset-specific deformations and corruptions. A central result is that, when viewed as a linear operator, the
+EOT plan converges in the large-sample limit to a kernel operator whose singular vectors encode the intrinsic
+geometry of the underlying manifold. This analysis assumes that the shared manifold is sampled according
+to the same density in both datasets. In contrast, our work addresses the setting in which two datasets
+4
+
+
+have similar underlying geometry while exhibiting different sampling densities.
+Therefore, our proposed
+reweighting can enable joint manifold learning and embedding methods that are robust to dataset-specific
+variation in sampling density.
+3
+Density-Reweighted EOT and Theoretical Guarantees
+Let X = {xi}m
+i=1 ⊂RD and Y = {yj}n
+j=1 ⊂RD be two point clouds sampled i.i.d. from probability
+measures µ dω and ν dη, respectively, where dω and dη denote the volume forms on Riemannian manifolds
+Mx, My ⊂RD with intrinsic dimensions d1, d2, and µ, ν are the corresponding sampling density functions.
+We begin with the following proposition, which motivates Algorithm 1 by connecting it to a suitably modified
+variant of the optimization problem (1).
+Proposition 3.1. The reweighted EOT plan W(θ) in (6) is the unique minimizer of the following optimiza-
+tion problem:
+min
+˜
+W∈Rm×n
++
+m
+X
+i
+n
+X
+j
+1
+( ˆfi) θ (ˆgj) θ · ∥xi −yj∥2
+2 · ˜Wij + ε
+m
+X
+i
+n
+X
+j
+1
+( ˆfi) θ (ˆgj) θ · ˜Wij log ˜Wij
+s.t.
+1
+n
+n
+X
+j=1
+˜Wij
+( ˆfi) θ (ˆgj) θ =
+1
+√
+S(θ)( ˆfi) θ ,
+1
+m
+m
+X
+i=1
+˜Wij
+( ˆfi) θ (ˆgj) θ =
+√
+S(θ)
+(ˆgj) θ ,
+∀i ∈[m], ∀j ∈[n],
+(9)
+where S(θ) is defined in (3).
+Compared with the standard EOT formulation in (1), the problem in (9) reweights the contribution
+of each pair (xi, yj) in both the transport cost and the entropic regularizer by 1/( ˆfiˆgj) θ. The marginal
+constraints are reweighted analogously: the mass at each data point is scaled inversely by its local density:
+1/( ˆfi) θ for each xi and 1/(ˆgj) θ for each yj. This reweighting scheme assigns more mass to points in sparse
+regions and less mass to points in dense regions, compensating for non-uniform sampling. The scaling factor
+√
+S on the right-hand side ensures that total mass is conserved across the two reweighted marginals.
+The reweighting in Proposition 3.1 is motivated by the goal of discounting the influence of sampling
+density from the transport plan, so that the resulting transport plan approximates the plan one would
+obtain if both datasets were drawn according to density-reweighted reference measures from their respective
+manifolds. In what follows, we first introduce the family of population-level EOT plans W(θ)
+ε
+under density-
+reweighted reference measures. We then show that under mild regularity conditions, W(θ) in (6) computed
+with fixed θ ∈[0, 1] and known sampling densities converges uniformly to W(θ)
+ε , up to a global scaling
+constant, with high probability as m, n →∞. We subsequently address the practically relevant setting in
+which the sampling densities are unknown and must be estimated from data.
+We next formalize our assumptions on the data geometry, sampling densities, and dataset sizes.
+Assumption 1. Mx and My are smooth, compact, boundaryless Riemannian manifolds isometrically em-
+bedded in RD, with intrinsic dimension d1 and d2, respectively. The sampling densities µ and ν are strictly
+positive and belong to C3(Mx) and C3(My), respectively.
+Assumption 1 is a standard regularity condition in manifold learning, with compactness of the manifolds
+and smoothness of the densities ensuring that finite-sample estimators concentrate around their population-
+level counterparts at a controlled rate.
+Assumption 2. n ≥m ≥nγ for some constant γ ∈(0, 1).
+We note that Assumption 2 generalizes to n ≥m ≥cnγ for any constant c > 0; we set c = 1 for simplicity.
+To state our results, we define the θ-reweighted density functions as
+µ(θ)(x) :=
+(µ(x))1−θ
+R
+Mx (µ(x))1−θ dω(x)
+,
+ν(θ)(y) :=
+(ν(y))1−θ
+R
+My (ν(y))1−θ dη(y)
+,
+(10)
+5
+
+
+where, as θ increases from 0 to 1, the reweighted densities interpolate between the sampling densities µ, ν and
+the uniform densities on their respective manifolds. We define the family of corresponding population-level
+EOT plans W(θ)
+ε
+: Mx × My →R+ and the Gaussian kernel Kε : Mx × My →R+ as
+W(θ)
+ε (x, y) = u(θ)
+ε (x)Kε(x, y)v(θ)
+ε (y),
+Kε(x, y) = exp
+−∥x −y∥2
+2
+ε
+
+,
+(11)
+where u(θ)
+ε
+and v(θ)
+ε
+are functions that solve the integral equations
+
+
+
+
+
+
+
+Z
+My
+W(θ)
+ε (x, y) ν(θ)(y) dη(y) =
+Z
+My
+u(θ)
+ε (x)Kε(x, y)v(θ)
+ε (y) ν(θ)(y) dη(y) = 1,
+∀x ∈Mx;
+Z
+Mx
+W(θ)
+ε (x, y) µ(θ)(x) dω(x) =
+Z
+Mx
+u(θ)
+ε (x)Kε(x, y)v(θ)
+ε (y) µ(θ)(x) dω(x) = 1,
+∀y ∈My.
+(12)
+We note W(θ)
+ε
+is doubly stochastic with respect to the density-reweighted measures µ(θ) dω and ν(θ) dη. The
+scaling functions u(θ)
+ε
+and v(θ)
+ε
+are guaranteed to exist as positive, continuous functions on Mx and My,
+respectively, and are unique up to a positive multiplicative constant [30].
+We now relate the transport plan W(θ) in (6), computed with θ ∈[0, 1] and known sampling densities, to
+the population-level EOT map W(θ)
+ε
+defined in (11), in Theorem 3.2 below. The proof is in Supplement B.3.
+Theorem 3.2. Suppose Algorithm 1 is applied with exact sampling densities ˆfi = µ(xi) and ˆgj = ν(yj), ∀i ∈
+[m], ∀j ∈[n], and let W(θ) ∈Rm×n
++
+denote the resulting transport plan in (6). Then, under Assumptions 1
+and 2, there exist positive constants τ0, n0(ε), C′(ε) (which may additionally depend on Mx, My, µ, ν, θ, and
+γ) such that for all τ ≥τ0, n ≥n0(ε, τ), and m ≥nγ, with probability at least 1 −n−τ,
+C(θ) W (θ)
+ij
+−W(θ)
+ε (xi, yj)
+ ≤τC′(ε)
+r
+log m
+m
+(13)
+holds simultaneously for all i ∈[m] and j ∈[n], where C(θ) =
+qR
+Mx µ(x)1−θ dω(x) ·
+R
+My ν(y)1−θ dη(y).
+102
+103
+104
+m
+10−1
+100
+Approximation Error
+1
+mn
+P
+i,j |
+p
+Vol(Mx)Vol(My) Wij −Wε(xi, yj)|
+maxi,j |
+p
+Vol(Mx)Vol(My) Wij −Wε(xi, yj))|
+y = c1m−1/2
+y = c2m−1/2
+Figure 3: Empirical evaluation of the conver-
+gence rate of the reweighted EOT plan. Both
+error metrics align with (13). Here C(θ=1) =
+p
+Vol(Mx) Vol(My),
+where Vol(Mx) and
+Vol(My) denote the Riemannian volumes of
+Mx and My, respectively.
+See Supple-
+ment A.1 for the experiment details.
+Theorem 3.2 shows that for any fixed ε and suffi-
+ciently large m and n, the entries W (θ)
+ij
+concentrate around
+W(θ)
+ε (xi, yj)/C(θ) simultaneously for all pairs (i, j) with
+high probability. It further provides an explicit probabilis-
+tic bound on the approximation error that depends on the
+smaller dataset size m and decays at the standard sample-to-
+population rate m−1/2 up to logarithmic factors. In partic-
+ular, Theorem 3.2 demonstrates that setting θ = 1 in Algo-
+rithm 1 effectively removes the dependence of W(θ) on sam-
+pling density, recovering a transport plan that depends solely
+on the underlying geometry of the manifolds. We numerically
+demonstrate the convergence rate using the same simulation
+setup as Figure 1 with θ = 1. As shown in Figure 3, the
+approximation error in both normalized ℓ1 and ℓ∞norms
+decay approximately like m−1/2. Although this stylized ex-
+ample has boundary and piecewise-smooth sampling density
+(hence outside the formal assumptions of Theorem 3.2), it
+illustrates the predicted convergence behavior.
+In practice, the sampling densities µ and ν are usually
+unknown and need to be estimated from data. A natural
+approach is kernel density estimation (KDE): given N points
+{zi}N
+i=1 in RD, the KDE with bandwidth h > 0 is given by
+ˆρ(z) =
+1
+Nhd/2
+N
+X
+i=1
+K
+z −zi
+√
+h
+
+,
+(14)
+6
+
+
+where K is a kernel function. If the points are sampled from a d-dimensional manifold embedded in RD, and
+h →0 sufficiently slowly as N →∞, then the KDE converges pointwise to the underlying sampling density.
+Moreover, the bandwidth can be tuned optimally to achieve a mean squared error of O(N−4/(d+4)) [31].
+Since the form of the KDE (14) depends explicitly on the intrinsic dimension d, which is typically unknown
+in practice, we consider a mean-normalized KDE whose construction does not require knowledge of d.
+Definition 3.3. For a fixed bandwidth h > 0 and kernel Kh(x, y) = exp(−∥x−y∥2
+2/h), the mean-normalized
+density estimator at any xi ∈X = {xi}m
+i=1 ⊂M is defined as
+ˆf(xi) := ˆq(xi)
+ˆZ
+,
+ˆq(xi) :=
+1
+m −1
+m
+X
+j̸=i
+Kh(xi, xj),
+ˆZ := 1
+m
+m
+X
+i=1
+ˆq(xi).
+(15)
+This construction is motivated by the observation that the optimal W(θ) in Proposition 3.1 is invariant
+to per-dataset multiplicative scalings of the density estimates: if ˆfi and ˆgj approximate µ(xi) and ν(yj) each
+up to a global constant, the resulting transport plan is rescaled by a positive global constant, leaving the
+correspondence structure intact.
+We now establish that the transport plan W(θ) computed with a fixed θ ∈[0, 1] using the mean-normalized
+KDE converges, up to a global scaling constant, to the population EOT plan W(θ)
+ε
+from (11). The proof is
+given in Supplement B.6.
+Theorem 3.4. Let ˆf and ˆg be the mean-normalized density estimators from (15) applied to X and Y
+with bandwidths h1 and h2, respectively.
+Suppose Algorithm 1 uses ˆfi = ˆf(xi) and ˆgj = ˆg(yj).
+Then,
+under Assumptions 1 and 2, there exist positive constants τ0 and C′(ε) such that the following holds. For
+every τ ≥τ0, one can choose positive constants n0(ε, τ), κ1(ε, τ), κ2(ε, τ), h′
+1(ε, τ) ≤1, and h′
+2(ε, τ) ≤1
+(which may additionally depend on Mx, My, µ, ν, θ, and γ) such that for all n ≥n0(ε, τ), m ≥nγ (under
+Assumption 2), and all bandwidths h1, h2 satisfying
+κ1 log m
+m
+1/d1
+≤h1 ≤h′
+1,
+κ2 log n
+n
+1/d2
+≤h2 ≤h′
+2,
+(16)
+we have with probability at least 1 −n−τ −4n−2γ,
+C(θ)′W (θ)
+ij
+−W(θ)
+ε (xi, yj)
+ ≤τC′(ε)
+ 
+h1 +
+s
+log m
+mhd1
+1
++ h2 +
+s
+log n
+nhd2
+2
+!
+(17)
+holds
+simultaneously
+for
+all
+i
+∈
+[m]
+and
+j
+∈
+[n],
+where
+C
+′(θ)
+=
+(∥µ∥L2∥ν∥L2)θ ·
+qR
+Mx µ(x)1−θ dω(x) ·
+R
+My ν(y)1−θ dη(y); with ∥µ∥L2 =
+qR
+Mx µ2 dω and ∥ν∥L2 =
+qR
+My ν2 dη.
+Theorem 3.4 extends Theorem 3.2 to the practical setting where the sampling densities µ and ν are
+unknown and must be estimated from the data.
+The probabilistic bound in (17) depends explicitly on
+the bandwidths h1 and h2, the sample sizes m and n, and the intrinsic dimensions d1 and d2. Choosing
+h1 ≍
+
+log m
+m
+1/(d1+2)
+and h2 ≍
+
+log n
+n
+1/(d2+2)
+balances the bias-like and variance-like terms for each den-
+sity estimator in (17), yielding a convergence rate of O
+
+log m
+m
+1/(d1+2)
++
+
+log n
+n
+1/(d2+2)
+. A data-driven
+approach to set the bandwidths is described in the next section.
+4
+Experiments
+In this section, we consider the task of aligning two datasets generated by sampling from the same underlying
+manifold up to a constant shift, but with substantially different sampling densities. We demonstrate that
+our density-reweighted EOT framework recovers geometrically faithful correspondences under this setting,
+while standard EOT and UOT (across multiple hyperparameter configurations) fail systematically.
+7
+
+
+The experiment involves two manifolds Mx and My, each composed of the union of two circular arcs
+embedded in R2. Specifically, Mx consists of a full unit circle centered at the origin and a semi-circle of radius
+2 centered at (4, 1). The manifold My is obtained by translating Mx by (3, 5)⊤. Datasets X = {xi}m
+i=1
+and Y = {yj}n
+j=1 are sampled from Mx and My respectively, with opposing sampling densities over their
+components. Specifically, each xi is drawn from the unit circle with probability 0.8 and from the semi-circle
+with probability 0.2, while each yj reverses these weights: drawn from the unit circle with probability 0.2 and
+from the semi-circle with probability 0.8. Additional density variations are imposed within each component;
+see Supplement A.3 for details and Figure 4(a) for a visualization of the sampling densities on each manifold.
+We compare our approach against standard EOT and UOT, with the latter tested across multiple hyper-
+parameter configurations. Performance is measured by the geometric fidelity of the correspondences encoded
+in the resulting transport plans, using the Rk metric:
+Rk = 1
+2 (Rk(X, Y) + Rk(Y, X)) ,
+(18)
+where
+Rk(S, T) = 1
+CS
+CS
+X
+c=1
+1
+nc
+nc
+X
+i=1
+K(W)
+k
+(si, T) ∩K(true)
+k
+(si, T)
+
+k
+.
+(19)
+Here (S, T) is either (X, Y) or (Y, X), with S and T denoting the source and target datasets, respectively,
+and si denoting the i-th point in the c-th component of S. Here CS is the number of disjoint components of
+the manifold from which S is sampled (e.g., CX = CY = 2), nc is the number of points in S belonging to the
+c-th component, K(true)
+k
+(si, T) is the set of true k nearest neighbors of si in T, and K(W)
+k
+(si, T) is the set of
+k points in T with the highest coupling weights from si under plan W(θ). The metric macro-averages over
+components so that each geometric component contributes equally regardless of sampling density imbalances,
+and averages symmetrically over both transfer directions (X →Y and Y →X) so that the score does not
+favor either direction. In our experiment, K(true)
+k
+is computed by translating Y back by the known shift to
+obtain Y′, and finding nearest neighbors between X and Y′ via pairwise Euclidean distances.
+We next describe the hyperparameter configurations for each method, beginning with parameters spe-
+cific to each approach, after which we describe how the entropic regularization parameter ε is selected. Our
+method requires two kernel bandwidths for the density estimation in the mean-normalized KDE (15), which
+we select via a data-driven procedure combining bootstrap resampling [32] with Lepski’s method [33]. Lep-
+ski’s method considers a geometric grid of candidate bandwidths and selects the largest bandwidth h for
+which the kernel density estimate does not differ significantly from those at any smaller bandwidth in the
+grid (i.e., the discrepancy remains within the expected stochastic fluctuation). Intuitively, it chooses the
+coarsest resolution at which no additional statistically significant structure is revealed at finer scales: for any
+η < h in the grid, the difference of density estimates ˆfh −ˆfη is small enough to be explained by stochastic
+variability rather than systematic bias. Bootstrap resampling is used to empirically quantify this stochastic
+variability. The full procedure is detailed in Algorithm 2 in Supplement A.3. For UOT, we set λ1 = λ2 =: λ
+in (7) and test a grid of values for λ. All three methods require choosing an entropic regularization param-
+eter ε, which controls the diffusiveness of the resulting transport plan. We select ε for each method (with
+other hyperparameters fixed) by maximizing the number of mutual k-nearest neighbor (MKNN) pairs in the
+resulting plan, which serves as a proxy for alignment consistency. Specifically, xi and yj form an MKNN
+pair if each is among the top-k maximum-coupling points of the other, reflecting a mutually agreed-upon
+correspondence. When ε is too small, the transport plan is overly sparse and few MKNN pairs exist; when
+ε is too large, the plan becomes nearly uniform and MKNN pairs are again scarce as correspondences lose
+specificity. Selecting the ε that maximizes the number of MKNN pairs at a prespecified k thus strikes a
+balance between these two extremes, yielding the greatest alignment consistency. See Supplement A.3 for
+details.
+In Figure 4(b), we report Rk averaged over 10 independent trials for all methods across k ∈[5, 100].
+Our approach (θ = 1) substantially outperforms all other methods at every neighborhood size, with Rk
+consistently exceeding that of the best UOT configuration by an approximate factor of 2× or more, and that
+of standard EOT by nearly an order of magnitude across all examined k. Standard EOT performs worst
+across all k, confirming that correspondences derived without accounting for heterogeneous sampling densities
+are systematically confounded by local data density. UOT partially mitigates this failure by relaxing the
+8
+
+
+x
+y
+20
+40
+60
+80
+100
+k
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+Rk
+EOT
+Our approach (θ=1)
+UOT (λ=0.1ε)
+UOT (λ=ε)
+UOT (λ=10ε)
+UOT (λ=100ε)
+Sampling Density
+(a)
+(b)
+Figure 4: Synthetic alignment under opposing sampling densities. (a) Visualization of Mx and My
+colored by sampling density (yellow: high; purple: low). (b) Alignment quality Rk in (18) as a function of
+k ∈[5, 100] for all methods and hyperparameter configurations examined.
+marginal constraints, but its performance varies substantially across hyperparameter configurations. Such
+sensitivity to λ may limit the practical utility of UOT, as dataset alignment is typically unsupervised and
+provides no natural criterion for choosing the degree of marginal relaxation.
+Acknowledgments
+The authors used Anthropic Claude Sonnet and OpenAI ChatGPT to assist with language editing, ex-
+position, and technical consistency checks.
+This work was supported by NIH grants UM1PA051410,
+U54AG076043, U54AG079759, U01DA053628, P50CA121974, and R33DA047037.
+Appendix A
+Details of Experiments and Additional Results
+A.1
+Experimental Setup for Figures 1, 2, and 3
+We consider a two-dimensional toy example to illustrate the effect of sampling densities on EOT plans.
+The source dataset X = {xi}n
+i=1 = {(xi1, xi2)}n
+i=1 lies on the line xi2 = xi1, and the target dataset Y =
+{yj}m
+j=1 = {(yj1, yj2)}m
+j=1 lies on the curve yj2 = 2 + yj1 + 0.5 y2
+j1. Both datasets share the first-coordinate
+domain [0, 1] but differ substantially in sampling density. Specifically, for the dataset X, the first coordinates
+xi1 are drawn uniformly from [0, 0.5] with probability 0.9 and uniformly from [0.5, 1] with probability 0.1;
+the dataset Y is generated analogously with the probabilities reversed. The second coordinate of data point
+in each dataset is then determined by the respective curve equation applied to its first coordinate.
+For computing the transport plan, standard EOT imposes uniform empirical measures as marginal con-
+straints (i.e, the row and columns sums are n · 1m and m · 1n, respectively), whereas our method solves for
+W(θ) via Algorithm 1 using the ground-truth sampling densities. The entropic regularization parameter is
+fixed at ε = 5 × 10−2 for both methods.
+Figure 1. The sample sizes are n = 3,000 and m = 2,000. We set θ = 1 in Algorithm 1.
+Figure 2. The sample sizes are n = 3,000 and m = 2,000. We vary θ over a uniform grid on [0, 1] and
+compute the corresponding transport plan W(θ) for each value via Algorithm 1.
+Figure 3.
+The population-level EOT plan Wε in (11) is computed via the following interpolation
+procedure. We first construct a fine grid of N = 10,000 points placed equally spaced with respect to arc
+length on each manifold, and solve standard EOT on this N × N grid via the Sinkhorn–Knopp algorithm,
+yielding scaling vectors ˆu, ˆv ∈RN. These vectors are then extended to continuous scaling functions ˜uε and
+9
+
+
+˜vε via cubic spline interpolation in the first coordinate, yielding approximations to uε and vε defined in (12).
+For each dataset, the approximate population-level EOT plan is then calculated entrywise as
+˜
+Wε
+ xi, yj
+
+= ˜uε(xi1) exp
+
+−∥xi−yj∥2
+ε
+
+˜vε(yj1),
+i ∈[m], j ∈[n].
+(20)
+To generate the convergence curve, we vary m over a log-uniform grid of 10 values on [100, 10,000] and
+set n = 2m. For each value of m, the experiment is repeated 20 times independently and the results are
+averaged to reduce variability. The two error metrics considered are:
+E1(m) =
+1
+mn
+m
+X
+i=1
+n
+X
+j=1
+
+q
+Vol(Mx) Vol(My) Wij −Wε(xi, yj)
+,
+E∞(m) = max
+i,j
+
+q
+Vol(Mx) Vol(My) Wij −Wε(xi, yj)
+,
+(21)
+where Vol(Mx) and Vol(My) are computed analytically via arc-length integration.
+A.2
+Estimation Performance of mean-normalized KDE
+Lemma A.1. Let Mx ⊂RD be a smooth, compact, boundaryless d-dimensional Riemannian manifold iso-
+metrically embedded in RD, let µ ∈C3(Mx) be a positive probability density on Mx, and let X = {xi}m
+i=1
+iid
+∼µ.
+Let ˆf(xi) be the mean-normalized density estimator defined in (15) with bandwidth h. Then there exist pos-
+itive constants h0(Mx, µ) ≤1, κ(Mx, µ), C0(Mx, µ), and m0(h0, κ) ≥2 such that for all m ≥m0(h0, κ)
+and all fixed h with
+κ log m
+m
+1/d
+≤h ≤h0(Mx, µ),
+(22)
+with probability at least 1 −2m−2,
+ ˆf(xi) −
+µ(xi)
+(∥µ∥L2)2
+ ≤C0
+ 
+h +
+r
+log m
+mhd
+!
+for all i ∈[m],
+(23)
+where ∥µ∥L2 =
+ R
+Mx µ(x)2 dω(x)
+1/2.
+The proof is in Appendix B.5.
+A.3
+Experimental Setup for Figure 4
+Sampling Density.
+The sampling density on each component is parameterized by ϕ as follows:
+• Unit circle of Mx: ϕ = ˜ϕ mod 2π, where ˜ϕ ∼0.3 · N(0.5π, 0.82) + 0.7 · N(1.5π, 1.02);
+• Semi-circle of Mx: ϕ = ˜ϕ mod π, where ˜ϕ ∼0.6 · N(0.25π, 0.32) + 0.4 · N(0.65π, 0.82);
+• Unit circle of My: ϕ = ˜ϕ mod 2π, where ˜ϕ ∼0.5 · N(0.2π, 0.52) + 0.5 · N(1.3π, 0.92);
+• Semi-circle of My: ϕ = ˜ϕ mod π, where ˜ϕ ∼0.25 · N(0.1π, 0.42) + 0.75 · N(0.7π, 0.62),
+where N(µ, σ2) denotes a Gaussian distribution with mean µ and variance σ2. Given ϕ, a point on a circle
+or semi-circle of radius r centered at c is given by c + r(cos ϕ, sin ϕ)⊤. We note that the densities of ϕ on
+each component are chosen arbitrarily and are not tuned to favor any particular method.
+KDE bandwidth Selection.
+The KDE bandwidth for each dataset X and Y is selected independently
+via Algorithm 2 with the following settings: k = 20, 2h2
+min = 10−2, 2h2
+max = 1, m = 50, α = 0.05, and C = 1.
+10
+
+
+Entropic Regularization Parameter ε.
+For each method, ε is chosen to maximize the number of MKNN
+pairs (K = 50) in the resulting transport plan, via golden-section search over [0, 5], a range chosen based on
+the scale of the data. The search terminates when the active interval shrinks below 0.10 or after at most 20
+iterations, whichever comes first.
+Figure 4.
+We fix the sample sizes at m = n = 2,000 and compute transport plans using standard EOT,
+our approach with θ = 1, and UOT with λ = γε for γ ∈{0.1, 1, 10, 100}, with all remaining hyperparameters
+selected as described above. Each plan is evaluated via Rk as defined in (18), and results are averaged over
+10 independent replicates.
+11
+
+
+Algorithm 2 Bootstrap–Lepski Bandwidth Selection
+Input: Datasets X = {xi}n
+i=1 ⊂RD; number of bootstrap resamples k ∈N; bandwidth range (hmin, hmax);
+number of candidate bandwidths m ∈N; quantile level α ∈(0, 1); threshold scaling constant C > 0.
+1: Construct bandwidth grid. Form the geometric grid H = {h1, . . . , hm} with
+hj = hmin · γ j−1,
+j ∈[m],
+(24)
+where γ = (hmax/hmin)1/(m−1).
+2: Bootstrap Resampling. Resample k i.i.d. datasets eX(1), . . . , eX(k) of size n uniformly with replacement
+from X.
+3: Compute pairwise squared distance matrices.
+• Self-distances on X:
+Dij = ∥xi −xj∥2,
+∀i, j ∈[n].
+(25)
+• Cross-distances between X and each resample eX(ℓ):
+D(ℓ)
+ij =
+xi −˜x(ℓ)
+j
+2,
+∀i, j ∈[n], ℓ∈[k].
+(26)
+4: Evaluate mean-normalized density estimates. For each h ∈H, compute the mean-normalized
+KDE (Definition 3.3) at each xp ∈X as:
+ˆfh(xp) =
+n
+X
+j=1
+exp
+
+−Dpj
+2h2
+
+1
+n
+n
+X
+i=1
+n
+X
+j=1
+exp
+
+−Dij
+2h2
+,
+(27)
+and its bootstrap counterpart on eX(ℓ), with normalizer retained from (27) as:
+ˆf (ℓ)
+h (xp) =
+n
+X
+j=1
+exp
+ 
+−
+D(ℓ)
+pj
+2h2
+!
+1
+n
+n
+X
+i=1
+n
+X
+j=1
+exp
+
+−Dij
+2h2
+,
+∀l ∈[k].
+(28)
+5: Form bootstrap null distributions and pointwise thresholds. For each pair hi < hj and each
+point xp ∈X, compute the centered absolute bootstrap differences:
+eV (ℓ)
+ij (xp) =
+
+  ˆf (ℓ)
+hj (xp) −ˆf (ℓ)
+hi (xp)
+
+−¯Vij(xp)
+,
+ℓ∈[k],
+(29)
+where ¯Vij(xp) = 1
+k
+Pk
+ℓ=1
+  ˆf (ℓ)
+hj (xp) −ˆf (ℓ)
+hi (xp)
+
+. Set the pointwise threshold as the scaled (1 −α)-quantile:
+Tij(xp) = C · q1−α
+
+eV (1)
+ij (xp), . . . , eV (k)
+ij (xp)
+
+.
+(30)
+6: Lepski bandwidth selection. Sweep j = 1, . . . , m in increasing order and return the largest hj such
+that for all i < j,
+n
+X
+p=1
+ ˆfhj(xp) −ˆfhi(xp)
+ ≤
+n
+X
+p=1
+Tij(xp).
+(31)
+12
+
+
+Appendix B
+Proofs and Related Background
+B.1
+Proof of Proposition 3.1
+Proof. The proof proceeds in two steps. We first verify that the feasible set of (9) is nonempty and compact,
+which, together with the strict convexity and continuity of the objective, guarantees the existence of a
+unique minimizer. We then show that the matrix W(θ) defined in (6) is feasible and satisfies the first-order
+optimality conditions, which are sufficient to identify it as the unique minimizer.
+For notational simplicity, we define
+ri :=
+n
+√
+S(θ) ( ˆfi) θ ,
+cj := m
+√
+S(θ)
+(ˆgj) θ ,
+Cij := ∥xi−yj∥2
+2,
+hij := ( ˆfi) θ(ˆgj) θ,
+∀i ∈[m], ∀j ∈[n].
+(32)
+Step 1. A direct calculation using the definition of S(θ) in (3) yields Pm
+i=1 ri = Pn
+j=1 cj, so the feasible set
+of (9) is nonempty: for instance, the rank-one plan Wij = hij ricj/ P
+k rk satisfies both marginal constraints.
+Moreover, the feasible set is closed (as the intersection of finitely many hyperplanes with the nonnegative
+orthant) and bounded (since each entry satisfies 0 ≤Wij ≤hij min{nri, mcj}), hence compact.
+Step 2. Feasibility. By (6) and the definition of M(θ) in (4), we have
+W (θ)
+ij
+hij
+= α(θ)
+i
+M (θ)
+ij β(θ)
+j ,
+∀i ∈[m], j ∈[n].
+(33)
+Substituting into the Sinkhorn scaling conditions in (5) gives exactly the marginal constraints in (9).
+First-order conditions. Introducing multipliers λ ∈Rm and µ ∈Rn for the row and column constraints
+in (9) respectively, the Lagrangian reads
+L( ˜
+W, λ, µ) =
+X
+i,j
+˜Wij
+hij
+Cij + ε
+X
+i,j
+˜Wij
+hij
+log ˜Wij −
+X
+i
+λi
+
+1
+n
+X
+j
+˜Wij
+hij
+−
+1
+√
+S(θ) ˆf θ
+i
+
+−
+X
+j
+µj
+ 
+1
+m
+X
+i
+˜Wij
+hij
+−
+√
+S(θ)
+(ˆgj) θ
+!
+.
+Differentiating with respect to ˜Wij, and setting ∂L/∂˜Wij = 0 yields
+˜Wij = exp
+ λi
+nε −1
+2
+
+· exp
+
+−Cij
+ε
+
+· exp
+ µj
+mε −1
+2
+
+,
+∀i ∈[m], ∀j ∈[n].
+(34)
+We note W(θ) in (6) factors in the same way.
+B.2
+Auxiliary Definition and Lemma for the Proof of Theorem 3.2 and 3.4
+We first introduce the matrix scaling problem and state the relevant lemmas, following Section SM5 of [29].
+Matrix scaling is the process of diagonally scaling a positive matrix A ∈Rm×n
+++
+to achieve certain pre-
+scribed row sums r ∈Rm
+++ and column sums c ∈Rn
+++, where ∥r∥1 = ∥c∥1. We say a pair of vectors α ∈Rm
+++
+and β ∈Rn
+++ scales A to row sums r and column sums c, if
+ri =
+n
+X
+j=1
+αiAi,jβj,
+and
+cj =
+m
+X
+i=1
+αiAi,jβj,
+(35)
+for all i ∈[m] and j ∈[n]. We refer to α and β from (35) (or their entries) as scaling factors of A.
+Lemma B.1 (Existence and uniqueness [34]). Suppose that A ∈Rm×n
+++ , r ∈Rm
+++, and c ∈Rn
+++ with
+∥r∥1 = ∥c∥1. Then, there exists a pair of vectors α ∈Rm
+++ and β ∈Rn
+++ that scales A to row sums r and
+column sums c. Furthermore, the pair of scaling factor (α, β) is unique up to a scaler multiple; that is, any
+other valid scaling pair is of the form (c α, c−1β) for some constant c > 0.
+The following lemma characterizes the stability of the scaling factors to perturbations in the row and
+column sums. In particular, it states that if there exists a pair of positive vectors (ˆα, ˆβ) that approximately
+scales A to certain row and column sums, then (ˆα, ˆβ) must be close to a true pair of scaling factors for these
+row and column sums.
+13
+
+
+Lemma B.2 (Stability of scaling factors under approximate scaling [29]). Let A ∈Rm×n
+++
+and denote
+a = mini,j Ai,j, b = maxi,j Ai,j. Suppose that there exists δ ∈(0, 1) and vectors ˆα ∈Rm
+++ and ˆβ ∈Rn
+++,
+such that
+
+1
+cj
+m
+X
+i=1
+ˆαiAi,j ˆβj −1
+ ≤δ,
+
+1
+ri
+n
+X
+j=1
+ˆαiAi,j ˆβj −1
+
+≤δ,
+(36)
+for all i ∈[m] and j ∈[n]. Then, there exists a pair of vectors α ∈Rm
+++ and β ∈Rn
+++ that scales A to row
+sums r and column sums c, satisfying
+|αi −ˆαi|
+ˆαi
+≤δ
+ 
+1
+1 −δ +
+4
+√
+b
+a2√sC3/2
+1
+C3/2
+2
+m mini ri
+!
+,
+(37)
+|βj −ˆβj|
+ˆβj
+≤δ
+ 
+1
+1 −δ +
+4
+√
+b
+a2√sC3/2
+1
+C3/2
+2
+n minj cj
+!
+,
+(38)
+for all i ∈[m] and j ∈[n], where C1 = mini{ˆαi/ri}, C2 = minj{ˆβj/cj}, and s = ∥r∥1 = ∥c∥1.
+For notational simplicity, we introduce the notation of order in probability, denoted as e
+O(ε)
+m,n.
+Definition B.3. For a random variable z, we say z =
+e
+O(ε)
+m,n (f(m, n)) if there exist global constant
+t0, n0(ε, t), C(ε) > 0 such that for all t > t0, n ≥n0(ε, t), and m ≥nγ (under Assumption 2),
+|z| ≤tC(ε)f(m, n),
+(39)
+with probability at least 1 −n−t.
+When n0 and C can be chosen independently of ε, we write z =
+e
+Om,n(f(m, n)).
+Note that under Definition B.3, given a polynomial function P(n), if for any i = 1, 2, . . . , P(n), zi =
+e
+O(ε)
+m,n (f(m, n)), then
+max
+i=1,2...,P (n) |zi| = e
+O(ε)
+m,n (f(m, n)) ,
+(40)
+which can be derived by applying the union bound.
+Furthermore, if Z = e
+O(ε)
+m,n(f(m, n)) and Y = g(ε)(Z), where g(ε) is C1 on a neighborhood of 0 for all
+ε > 0 and limm,n→∞f(m, n) = 0, then by a Taylor expansion of g(ε)(x) around zero,
+Y = g(ε)(0) + e
+O(ε)
+m,n(f(m, n)).
+(41)
+We will use properties (40) and (41) of Definition B.3 seamlessly throughout the remaining proofs.
+B.3
+Proof of Theorem 3.2
+For notation simplicity, we define:
+Z(θ)
+x
+=
+Z
+Mx
+µ(x)1−θ dω(x),
+Z(θ)
+y
+=
+Z
+My
+ν(y)1−θ dη(y).
+(42)
+Proof. Let α(θ) and β(θ) be the scaling factors in Algorithm 1 that diagonally scale M(θ), defined in (4), to
+satisfy the row and column constraints in (5), for fixed θ ∈[0, 1], ˆf = µ, and ˆg = ν. Define approximate
+scaling factors ˆα and ˆβ as
+ˆα(θ)
+i
+=
+1
+q
+Z(θ)
+x
+u(θ)
+ε (xi),
+and
+ˆβ(θ)
+j
+=
+1
+q
+Z(θ)
+y
+v(θ)
+ε (yj),
+(43)
+for any i ∈[m] and any j ∈[n], where u(θ)
+ε
+and v(θ)
+ε
+are defined in (12).
+14
+
+
+We first derive a bound on S(θ) in (3). Applying Hoeffding’s inequality, we have:
+1
+m
+m
+X
+i=1
+1
+( ˆfi)θ = 1
+m
+m
+X
+i=1
+1
+(µ(xi))θ =
+Z
+Mx
+1
+(µ(x))θ µ(x) dω(x)+ e
+Om
+ r
+log m
+m
+!
+= Z(θ)
+x + e
+Om
+ r
+log m
+m
+!
+, (44)
+where Z(θ)
+x
+is defined in (10). Similarly,
+1
+n
+n
+X
+j=1
+1
+(ˆgj)θ = Z(θ)
+y
++ e
+On
+ r
+log n
+n
+!
+= Z(θ)
+y
++ e
+Om
+ r
+log m
+m
+!
+.
+(45)
+In the derivation, we use the fact that
+p
+log n/n ≤2
+p
+log m/m for all sufficiently large m under Assump-
+tion 2.
+Combining (44) and (45),
+S(θ) = Z(θ)
+x
+Z(θ)
+y
++ e
+Om
+ r
+log m
+m
+!
+,
+and
+1
+S(θ) = Z(θ)
+y
+Z(θ)
+x
++ e
+Om
+ r
+log m
+m
+!
+.
+(46)
+We next show that ˆα(θ) and ˆβ
+(θ) approximately scale M(θ) to have prescribed row sums r and column
+sums c. Recall that, from (5),
+ri =
+n
+( ˆfi)θ√
+S(θ) =
+n
+(µ(xi))θ ·
+√
+S(θ) ,
+and
+cj = m
+√
+S(θ)
+(ˆgj)θ
+= m
+√
+S(θ)
+(ν(yj))θ ,
+(47)
+for all i ∈[m] and j ∈[n], and S(θ) is defined in (3). Using (43), (47), Kε and M(θ) defined in (11) and (4),
+we have: for any i ∈[m],
+1
+ri
+n
+X
+j=1
+ˆα(θ)
+i M (θ)
+ij ˆβ(θ)
+j
+= (µ(xi))θ ·
+√
+S(θ)
+n
+n
+X
+j=1
+u(θ)
+ε (xi)
+q
+Z(θ)
+x
+Kε(xi, yj)
+(µ(xi)ν(yj))θ
+v(θ)
+ε (yj)
+q
+Z(θ)
+y
+=
+√
+S(θ)
+q
+Z(θ)
+x Z(θ)
+y
+1
+n
+n
+X
+j=1
+u(θ)
+ε (xi)Kε(xi, yj)v(θ)
+ε (yj)
+1
+(ν(yj))θ .
+(48)
+Conditioning on xi and applying Hoeffding’s inequality yields
+1
+ri
+n
+X
+j=1
+ˆα(θ)
+i M (θ)
+ij ˆβ(θ)
+j
+=
+√
+S(θ)
+q
+Z(θ)
+x Z(θ)
+y
+Z
+My
+u(θ)
+ε (xi)Kε(xi, y)v(θ)
+ε (y) · (ν(y))1−θ dη(y) + e
+On
+ r
+log n
+n
+!
+=
+√
+S(θ)Z(θ)
+y
+q
+Z(θ)
+x Z(θ)
+y
++ e
+On
+ r
+log n
+n
+!
+=
+v
+u
+u
+tZ(θ)
+x
+Z(θ)
+y
++ e
+Om
+ r
+log m
+m
+!s
+Z(θ)
+y
+Z(θ)
+x
++ e
+On
+ r
+log n
+n
+!
+= 1 + e
+Om
+ r
+log m
+m
+!
++ e
+On
+ r
+log n
+n
+!
+= 1 + e
+Om
+ r
+log m
+m
+!
+,
+(49)
+where we use (12) and (46) in the second line. Under Assumption 2, a union bound over all i ∈[m] shows
+that (49) holds simultaneously for all i ∈[m].
+Similarly, for any j ∈[n],
+1
+cj
+m
+X
+i=1
+ˆα(θ)
+i M (θ)
+ij ˆβ(θ)
+j
+=
+1
+√
+S(θ)
+q
+Z(θ)
+x Z(θ)
+y
+1
+m
+m
+X
+i=1
+u(θ)
+ε (xi)Kε(xi, yj)v(θ)
+ε (yj)
+1
+(µ(xi))θ .
+(50)
+Following an analogous derivation of (49),
+1
+cj
+m
+X
+i=1
+ˆα(θ)
+i M (θ)
+ij ˆβ(θ)
+j
+= 1 + e
+Om
+ r
+log m
+m
+!
+,
+(51)
+15
+
+
+for all j ∈[n].
+We now apply Lemma B.2 to the approximate scaling factor of M(θ), namely ˆα(θ) and ˆβ
+(θ). We first
+evaluate and bound the different quantities appearing in Lemma B.2.
+By the definition of s in Lemma B.2 and using (44), (46), and (47):
+s = ∥r∥1 =
+m
+X
+i=1
+n
+(µ(xi))θ ·
+√
+S(θ) =
+nm
+√
+S(θ) · 1
+m
+m
+X
+i=1
+1
+(µ(xi))θ = nm
+ q
+Z(θ)
+x Z(θ)
+y
++ e
+Om
+ r
+log m
+m
+!!
+.
+(52)
+Since u(θ)
+ε , v(θ)
+ε , µ, and ν are positive and continuous on the compact manifolds, they are bounded away
+from zero and infinity. Thus, there exist some positive constants C
+′
+1(ε) and C
+′
+2(ε) (which may depend on ε),
+such that C1 and C2 defined in Lemma B.2 satisfy:
+C1 = min
+i
+(
+ˆα(θ)
+i
+ri
+)
+≥C
+′
+1(ε)
+n
+,
+C2 = min
+j
+( ˆβ(θ)
+j
+cj
+)
+≥C
+′
+2(ε)
+m
+.
+(53)
+Similarly, there exist positive constants C
+′
+3(ε) and C
+′
+4(ε) such that
+C
+′
+3(ε) ≤M (θ)
+ij
+= exp
+ −∥xi −yj∥2
+2/ε
+
+(µ(xi)ν(yj))θ
+≤C
+′
+4(ε).
+(54)
+Thus, a and b defined in Lemma B.2 satisfy
+C
+′
+3(ε) ≤a ≤b ≤C
+′
+4(ε).
+(55)
+Hence, for any δ ∈(0, 1/2], using (52), (53), and (55), the coefficients of (37) and (38) are bounded:
+ 
+1
+1 −δ +
+4
+√
+b
+a2√sC3/2
+1
+C3/2
+2
+m mini ri
+!
+≤D1(ε), and
+ 
+1
+1 −δ +
+4
+√
+b
+a2√sC3/2
+1
+C3/2
+2
+n minj cj
+!
+≤D2(ε),
+(56)
+for some positive constants D1(ε) and D2(ε).
+Applying Lemma B.2 with δ := τ C(ε)
+p
+log m/m, where C(ε) is the constant associated with (49)
+and (51) in Definition B.3 and δ ≤1/2 upon choosing n0(ε, τ) properly, there exists a pair of positive vectors
+(α(θ)′, β(θ)′) that scales M(θ) to row sums r and column sums c, such that
+|α(θ)′
+i
+−ˆα(θ)
+i |
+ˆα(θ)
+i
+= e
+O(ε)
+m
+ r
+log m
+m
+!
+,
+and
+|β(θ)′
+j
+−ˆβ(θ)
+j |
+ˆβ(θ)
+j
+= e
+O(ε)
+m
+ r
+log m
+m
+!
+,
+(57)
+for any i ∈[m] and any j ∈[n].
+By Lemma B.1 and the definition of scaling factors, the two pairs of scaling factors (α(θ), β(θ)) and
+(α(θ)′, β(θ)′) satisfy α(θ)
+i β(θ)
+j
+= α(θ)′
+i
+β(θ)′
+j
+, for any i ∈[m] and j ∈[n]. Hence, applying a union bound over
+all i ∈[m] and j ∈[n] under Assumption 2, we have: for any i ∈[m] and j ∈[n],
+W (θ)
+ij
+= α(θ)
+i e
+−∥xi−yj ∥2
+2
+ε
+β(θ)
+j
+= α(θ)′
+i
+e
+−∥xi−yj ∥2
+2
+ε
+β(θ)′
+j
+= ˆα(θ)
+i e
+−∥xi−yj ∥2
+2
+ε
+ˆβ(θ)
+j
+ 
+1 + e
+O(ε)
+m
+ r
+log m
+m
+!!
+= u(θ)
+ε (xi)Kε(xi, yj)v(θ)
+ε (yj)
+q
+Z(θ)
+x Z(θ)
+y
+ 
+1 + e
+O(ε)
+m
+ r
+log m
+m
+!!
+= W(θ)
+ε (xi, yj)
+q
+Z(θ)
+x Z(θ)
+y
+ 
+1 + e
+O(ε)
+m
+ r
+log m
+m
+!!
+(58)
+Since W(θ)
+ε
+is continuous and bounded above on the compact product manifold Mx ×My, the multiplicative
+estimate in (58) implies the additive bound in (13), completing the proof.
+16
+
+
+B.4
+Auxiliary Lemmas for the Proof of Lemma A.1
+Lemma B.4. Let M ⊂RD be a smooth, compact, boundaryless d-dimensional Riemannian manifold, and
+let f ∈C3(M). Then there exist h0(M) > 0 and C = C(M, f) > 0 such that for all 0 < h ≤h0(M),
+sup
+x∈M
+
+1
+(πh)d/2
+Z
+M
+exp
+
+−∥x −y∥2
+h
+
+f(y) dV (y) −f(x)
+ ≤Ch.
+(59)
+Proof. By [28, Lemma 8] applied to the Gaussian kernel h(t) = e−t, for which
+R
+Rd h(∥u∥2) du = πd/2 and
+R
+Rd u2
+1h(∥u∥2) du = 1
+2πd/2, we have
+1
+(πh)d/2
+Z
+M
+exp
+
+−∥x −y∥2
+h
+
+f(y) dV (y) = f(x) + h
+4 [ω(x)f(x) + ∆Mf(x)] + O(h2),
+uniformly in x ∈M, where ω is a potential term depending on the embedding of M and ∆M is the
+Laplace–Beltrami operator. (The estimate in [28] is stated uniformly over points at distance more than εγ
+from ∂M for any fixed 0 < γ < 1/2; since ∂M = ∅this is all of M.) Since ω, f and ∆Mf are continuous on
+the compact manifold M, the first-order term is bounded by a constant multiple of h uniformly in x, and
+the claim follows.
+Lemma B.5. Let M ⊂RD be a smooth, compact, boundaryless d-dimensional Riemannian manifold iso-
+metrically embedded in RD, let µ ∈C3(M) be a positive probability density on M, and let x1, . . . , xn
+iid
+∼µ.
+Define
+ˆp(x) := 1
+n
+n
+X
+j=1
+1
+(πh)d/2 exp
+
+−∥x −xj∥2
+h
+
+.
+(60)
+Then there exist h0(M, µ) > 0 and C = C(M, µ) > 0 such that for all n ≥2h0(M, µ)−1/2 and all fixed h
+with 4n−2 ≤h ≤h0(M, µ), with probability at least 1 −n−2,
+sup
+x∈M
+ˆp(x) −µ(x)
+ ≤C
+ 
+h +
+r
+log n
+nhd
+!
+.
+(61)
+Proof. We decompose the error via the triangle inequality:
+sup
+x∈M
+ˆp(x) −µ(x)
+ ≤sup
+x∈M
+ˆp(x) −E[ˆp(x)]
+ + sup
+x∈M
+E[ˆp(x)] −µ(x)
+.
+(62)
+Bias term. Since xj
+iid
+∼µ, the expected value of ˆp(x) is given by
+E[ˆp(x)] =
+1
+(πh)d/2
+Z
+M
+exp
+
+−∥x −y∥2
+h
+
+µ(y) dV (y),
+so applying Lemma B.4 with f = µ, there exist constants C1 = C1(M, µ) > 0 and h1(M, µ) > 0 such that
+for all 0 < h ≤h1,
+sup
+x∈M
+E[ˆp(x)] −µ(x)
+ ≤C1h.
+(63)
+Since this bound is deterministic, it holds with probability 1.
+Variance term. Set η :=
+√
+h/2, so that the kernel kη(x, y) = exp
+ −∥x −y∥2/(4η2)
+
+of [35, Section 3.1]
+coincides with exp
+ −∥x −y∥2/h
+
+. By [35, Proposition 2, equation (64)], applied with bandwidth η =
+√
+h/2
+to the function class Kη = { kη(x, ·) : x ∈M } of [35, Definition 6], there exist h2(M, µ) > 0 and Cgc > 0
+such that for all 0 < h ≤h2(M, µ), with probability at least 1 −n−2,
+sup
+x∈M
+
+1
+n
+n
+X
+j=1
+exp
+
+−∥x −xj∥2
+h
+
+−
+Z
+M
+exp
+
+−∥x −y∥2
+h
+
+µ(y) dV (y)
+
+≤Cgc
+√n
+q
+log(2/
+√
+h) +
+p
+log n
+
+,
+(64)
+17
+
+
+where Cgc depends only on d, the diameter of M, and the uniform upper and lower bounds of µ, all of which
+are finite since M is compact and µ is positive and continuous.
+The condition h ≥4n−2 gives η =
+√
+h/2 ≥1/n, hence log(2/
+√
+h) = log(1/η) ≤log n, so that the
+right-hand side of (64) is at most 2Cgc
+p
+log n/n.
+Dividing (64) by (πh)d/2, the left-hand side becomes
+supx∈M
+ˆp(x) −E[ˆp(x)]
+, and we obtain
+sup
+x∈M
+ˆp(x) −E[ˆp(x)]
+ ≤C3
+r
+log n
+nhd ,
+C3 := 2π−d/2Cgc.
+(65)
+Substituting (63) and (65) into (62) and setting h0 := min{h1, h2} and C := max{C1, C3} yields (61).
+B.5
+Proof of Lemma A.1
+Proof. Let h⋆
+0 and C⋆be the constants in Lemma B.5, both depending only on Mx and µ. For a fixed
+bandwidth h, let ˆp denote the kernel density estimator in (60) constructed from all m samples x1, . . . , xm
+and for each i ∈[m], we define
+ˆp−i(xi) :=
+1
+m −1
+m
+X
+j̸=i
+1
+(πh)d/2 Kh(xi, xj) =
+ˆq(xi)
+(πh)d/2 ,
+¯Z = 1
+m
+m
+X
+i=1
+ˆp−i(xi).
+(66)
+Note by definition of ˆf(xi) in (15), ˆf(xi) = ˆp−i(xi)
+¯
+Z
+. We also note that since µ is positive and continuous on
+the compact manifold Mx, there exist 0 < c1 ≤c2 < ∞with c1 ≤µ(x) ≤c2, ∀x ∈Mx.
+We take m0 ≥2 large enough that, for all m ≥m0: (i) (κ log m/m)1/d ≤h0, so that (22) is nonempty;
+and (ii) (κ log m/m)1/d ≥4m−2, so that (22) implies 4m−2 ≤h ≤h0 ≤h⋆
+0 and Lemma B.5 applies with
+sample size m. Each of these holds for all sufficiently large m. The constants h0 ≤min{1, h⋆
+0} and κ are
+fixed at the end of Step 3; the constants C1, C2, C3 introduced below depend only on C⋆, c1, c2 and d, and
+in particular not on h0 or κ.
+Step 1: We first bound
+ˆp−i(xi) −µ(xi)
+.
+Since Kh(xi, xi) = 1, we note ˆp(xi) and ˆp−i(xi) are related by
+ˆp−i(xi) =
+m
+m −1 ˆp(xi) −
+1
+(m −1)(πh)d/2 ,
+∀i ∈[m].
+(67)
+Using (67), we obtain, for any i ∈[m]:
+ˆp−i(xi) −µ(xi)
+ =
+
+m
+m −1
+ ˆp(xi) −µ(xi)
+
++ µ(xi)
+m −1 −
+1
+(m −1) πd/2 hd/2
+
+≤
+m
+m −1
+ˆp(xi) −µ(xi)
+ +
+c2
+m −1 +
+1
+(m −1) πd/2 hd/2 ≤2
+ˆp(xi) −µ(xi)
+ + 2c2
+m +
+2
+πd/2 m hd/2
+≤2
+ˆp(xi) −µ(xi)
+ + (2c2 + 2π−d/2)
+r
+log m
+mhd .
+(68)
+where the first line uses (67), the second line follows from the triangle inequality and the bounds m/(m−1) ≤
+2 and 1/(m−1) ≤2/m, both valid for m ≥m0 ≥2, and the third line from
+1
+mhd/2 ≤
+q
+log m
+mhd and 1
+m ≤
+q
+log m
+mhd ,
+valid for m ≥m0 ≥2 and h ≤h0 ≤1.
+By (ii) the bandwidth h lies in the admissible range of Lemma B.5, so with probability at least 1 −m−2,
+sup
+x∈Mx
+ˆp(x) −µ(x)
+ ≤C⋆
+ 
+h +
+r
+log m
+mhd
+!
+.
+(69)
+Call this event A. Since (69) is uniform over Mx, it holds simultaneously at every sample point xi. Com-
+bining (68) and (69), we have: with probability at least 1 −m−2,
+max
+i∈[m]
+ˆp−i(xi) −µ(xi)
+ ≤C1
+ 
+h +
+r
+log m
+mhd
+!
+,
+C1 := 2C⋆+ 2c2 + 2π−d/2.
+(70)
+18
+
+
+Step 2: we next bound
+ ¯Z −(∥µ∥L2)2.
+¯Z −(∥µ∥L2)2 = 1
+m
+m
+X
+i=1
+ ˆp−i(xi) −µ(xi)
+
++
+ 
+1
+m
+m
+X
+i=1
+µ(xi) −(∥µ∥L2)2
+!
+.
+(71)
+On event A, the first term is bounded by C1(h +
+p
+log m/(mhd)) by (70). For the second, since E[µ(x)] =
+R
+Mx µ(x) · µ(x) dω(x) = (∥µ∥L2)2 and x1, . . . , xm are i.i.d. with µ(xi) ∈[c1, c2], Hoeffding’s inequality gives,
+for any t > 0,
+P
+ 
+1
+m
+m
+X
+i=1
+µ(xi) −(∥µ∥L2)2
+ ≥t
+!
+≤2 exp
+
+−
+2mt2
+(c2 −c1)2
+
+.
+(72)
+Choosing t = (c2−c1)
+p
+log(2m2)/(2m) makes the right-hand side of (72) equal to m−2, and with probability
+at least 1 −m−2,
+
+1
+m
+m
+X
+i=1
+µ(xi) −(∥µ∥L2)2
+ ≤(c2 −c1)
+s
+log(2m2)
+(2m)
+≤2(c2 −c1)
+r
+log m
+m
+≤2(c2 −c1)
+r
+log m
+mhd ,
+(73)
+where we use m ≥m0 ≥2, and h ≤h0 ≤1. Call this event B and define C2 := 2(c2 −c1).
+By the union bound P(A ∩B) ≥1 −2m−2, and on A ∩B, combining (71)–(73),
+ ¯Z −(∥µ∥L2)2 ≤C3
+ 
+h +
+r
+log m
+mhd
+!
+,
+C3 := C1 + C2.
+(74)
+Step 3: We next bound ¯Z away from zero. Under (22) we have h ≤h0 and mhd ≥κ log m, hence
+h +
+r
+log m
+mhd
+≤h0 + 1
+√κ.
+(75)
+Choosing
+h0 := min
+
+1, h⋆
+0, (∥µ∥L2)2
+4C3
+
+,
+κ :=
+
+4C3
+(∥µ∥L2)2
+2
+,
+(76)
+both of which depend only on Mx and µ, inequalities (75) and (74) give | ¯Z −(∥µ∥L2)2| ≤(∥µ∥L2)2/2 and
+therefore, on A ∩B:
+¯Z ≥(∥µ∥L2)2
+2
+.
+(77)
+ ˆf(xi) −
+µ(xi)
+(∥µ∥L2)2
+ =
+
+ˆp−i(xi)
+¯Z
+−
+µ(xi)
+(∥µ∥L2)2
+ =
+
+(∥µ∥L2)2 ˆp−i(xi) −µ(xi)
+
+−µ(xi)
+  ¯Z −(∥µ∥L2)2
+(∥µ∥L2)2 ¯Z
+
+≤(∥µ∥L2)2ˆp−i(xi) −µ(xi)
+ + µ(xi)
+ ¯Z −(∥µ∥L2)2
+(∥µ∥L2)2 ¯Z
+≤
+(∥µ∥L2)2C1
+ 
+h +
+r
+log m
+mhd
+!
++ c2C3
+ 
+h +
+r
+log m
+mhd
+!
+(∥µ∥L2)2 ¯Z
+≤2
+
+(∥µ∥L2)2C1 + c2C3
+
+(∥µ∥L2)4
+ 
+h +
+r
+log m
+mhd
+!
+,
+where we use triangle inequality, (70) and (74) in the second line, and (77) in the last line. This concludes
+the proof.
+19
+
+
+B.6
+Proof of Theorem 3.4
+Proof. Let α(θ) and β(θ) be the scaling factors in Algorithm 1 that diagonally scale M(θ), defined in (4), to
+satisfy the row and column constraints in (5), for fixed θ ∈[0, 1], where ˆf and ˆg are the mean-normalized
+density estimates in (15) applied to X and Y with bandwidths h1 and h2. Define approximate scaling factors
+ˆα(θ) and ˆβ
+(θ) as
+ˆα(θ)
+i
+=
+u(θ)
+ε (xi)
+(∥µ∥L2)θ
+q
+Z(θ)
+x
+,
+and
+ˆβ(θ)
+j
+=
+v(θ)
+ε (yj)
+(∥ν∥L2)θ
+q
+Z(θ)
+y
+,
+(78)
+for any i ∈[m] and any j ∈[n], where u(θ)
+ε
+and v(θ)
+ε
+are defined in (12). For brevity we write
+ρ1 := h1 +
+s
+log m
+mhd1
+1
+,
+ρ2 := h2 +
+s
+log n
+nhd2
+2
+.
+(79)
+The density-estimation event. Let E denote the event on which the conclusion of Lemma A.1, applied to
+X with bandwidth h1 and to Y with bandwidth h2, holds simultaneously:
+ ˆf(xi) −
+µ(xi)
+(∥µ∥L2)2
+ ≤Cx
+0 ρ1
+and
+ˆg(yj) −
+ν(yj)
+(∥ν∥L2)2
+ ≤Cy
+0 ρ2,
+∀i ∈[m], ∀j ∈[n],
+(80)
+where Cx
+0 = C0(Mx, µ) and Cy
+0 = C0(My, ν) are defined in Lemma A.1. Applying the union bound over
+each dataset and under Assumption 2 (m ≥nγ and γ ≤1), we have:
+P(E) ≥1 −2m−2 −2n−2 ≥1 −4n−2γ.
+(81)
+We next show that on E, ˆf(x) and ˆg(y) are bounded away from zero and infinity for any x and y.
+Since µ and ν are positive and continuous on the compact manifolds Mx and My, there exist constants
+0 < c1 ≤c2 < ∞and 0 < c3 ≤c4 < ∞with
+c1 ≤µ(x) ≤c2
+∀x ∈Mx,
+c3 ≤ν(y) ≤c4
+∀y ∈My.
+(82)
+Writing Bµ := (∥µ∥L2)2 and Bν := (∥ν∥L2)2, we have µ(xi)/Bµ ∈[c1/Bµ, c2/Bµ] and ν(yj)/Bν ∈
+[c3/Bν, c4/Bν]. Under (16), we have ρ1 ≤h′
+1 + κ−1/2
+1
+, and ρ2 ≤h′
+2 + κ−1/2
+2
+. Choosing
+h′
+1 ≤
+c1
+4Cx
+0 Bµ
+,
+κ1 ≥
+4Cx
+0 Bµ
+c1
+2
+,
+h′
+2 ≤
+c3
+4Cy
+0 Bν
+,
+κ2 ≥
+4Cy
+0 Bν
+c3
+2
+,
+(83)
+all of which depend only on Mx, My, µ and ν, gives Cx
+0 ρ1 ≤c1/(2Bµ) and Cy
+0 ρ2 ≤c3/(2Bν). Combining
+with (80), on E we obtain
+ˆf(xi) ∈Ix :=
+ c1
+2Bµ
+, 2c2
+Bµ
+
+,
+ˆg(yj) ∈Iy :=
+ c3
+2Bν
+, 2c4
+Bν
+
+,
+∀i ∈[m], ∀j ∈[n],
+(84)
+and the intervals Ix, Iy also contain the targets µ(xi)/Bµ and ν(yj)/Bν. In particular Ix and Iy are fixed
+compact subintervals of (0, ∞), independent of m, n, h1 and h2.
+The map ϕ(z) = z−θ is continuously differentiable on (0, ∞) with ϕ′(z) = −θz−θ−1. For θ ∈[0, 1],
+using (84), we have:
+Lx := sup
+z∈Ix
+|ϕ′(z)| ≤
+2Bµ
+c1
+2
+,
+Ly := sup
+z∈Iy
+|ϕ′(z)| ≤
+2Bν
+c3
+2
+.
+(85)
+Applying the mean value theorem, we have: on E, for any i ∈[m],
+
+1
+( ˆf(xi))θ −(∥µ∥L2)2θ
+(µ(xi))θ
+ =
+ϕ
+  ˆf(xi)
+
+−ϕ
+µ(xi)
+Bµ
+ =
+ϕ′(ξi)
+ ·
+ ˆf(xi) −µ(xi)
+Bµ
+ ≤LxCx
+0 ρ1,
+(86)
+20
+
+
+where ξi lies between ˆf(xi) and µ(xi)/Bµ, hence in Ix by (84). Equivalently, we have:
+1
+( ˆf(xi))θ = (∥µ∥L2)2θ
+(µ(xi))θ + O(ρ1).
+(87)
+An analogous derivation gives, for any j ∈[n],
+1
+(ˆg(yj))θ = (∥ν∥L2)2θ
+(ν(yj))θ + O(ρ2).
+(88)
+Both bounds hold simultaneously for all i ∈[m] and j ∈[n], with absorbed constants depending only on
+Mx, My, µ, ν and θ.
+Bounding S(θ). Applying (87) and then Hoeffding’s inequality, we have on E
+1
+m
+m
+X
+i=1
+1
+( ˆf(xi))θ = 1
+m
+m
+X
+i=1
+(∥µ∥L2)2θ
+(µ(xi))θ + O(ρ1) = (∥µ∥L2)2θ
+Z
+Mx
+1
+(µ(x))θ µ(x) dω(x) + e
+Om
+ r
+log m
+m
+!
++ O(ρ1)
+= (∥µ∥L2)2θ Z(θ)
+x
++ e
+Om(ρ1),
+(89)
+where in the last step we use
+p
+log m/m ≤
+q
+log m/(mhd1
+1 ) ≤ρ1, valid since h1 ≤h′
+1 ≤1, and absorb the
+term O(ρ1), a deterministic bound on E, into e
+Om(ρ1). Similarly,
+1
+n
+n
+X
+j=1
+1
+(ˆg(yj))θ = (∥ν∥L2)2θ Z(θ)
+y
++ e
+On(ρ2).
+(90)
+Combining (89) and (90), we have
+S(θ) −(∥µ∥L2)2θZ(θ)
+x
+(∥ν∥L2)2θZ(θ)
+y
+ =
+
+1
+m
+Pm
+i=1( ˆf(xi))−θ
+1
+n
+Pn
+j=1(ˆg(yj))−θ −(∥µ∥L2)2θZ(θ)
+x
+(∥ν∥L2)2θZ(θ)
+y
+
+=
+
+(∥ν∥L2)2θZ(θ)
+y
+
+1
+m
+Pm
+i=1( ˆf(xi))−θ −(∥µ∥L2)2θZ(θ)
+x
+
+−(∥µ∥L2)2θZ(θ)
+x
+
+1
+n
+Pn
+j=1(ˆg(yj))−θ −(∥ν∥L2)2θZ(θ)
+y
+
+(∥ν∥L2)2θZ(θ)
+y
+· 1
+n
+Pn
+j=1(ˆg(yj))−θ
+
+≤
+(∥ν∥L2)2θZ(θ)
+y
+ 1
+m
+Pm
+i=1( ˆf(xi))−θ −(∥µ∥L2)2θZ(θ)
+x
+ + (∥µ∥L2)2θZ(θ)
+x
+ 1
+n
+Pn
+j=1(ˆg(yj))−θ −(∥ν∥L2)2θZ(θ)
+y
+
+(∥ν∥L2)2θZ(θ)
+y
+· 1
+n
+Pn
+j=1(ˆg(yj))−θ
+= e
+Om,n(ρ1 + ρ2),
+(91)
+where the third line uses the triangle inequality, and the last uses (89) and (90) together with the fact that
+on E the average 1
+n
+Pn
+j=1(ˆg(yj))−θ is bounded away from zero by a constant depending only on My and ν,
+by (84) and (88). An analogous derivation gives
+
+1
+S(θ) −(∥ν∥L2)2θZ(θ)
+y
+(∥µ∥L2)2θZ(θ)
+x
+ =
+e
+Om,n(ρ1 + ρ2).
+(92)
+Approximate scaling. We next show that ˆα(θ) and ˆβ
+(θ) approximately scale M(θ) to have prescribed row
+sums r and column sums c. Recall that, from (5),
+ri =
+n
+( ˆf(xi))θ√
+S(θ) ,
+and
+cj = m
+√
+S(θ)
+(ˆg(yj))θ ,
+∀i ∈[m], ∀j ∈[n].
+(93)
+21
+
+
+Using (78), (93), Kε and M(θ) defined in (11) and (4), we have on E: for any i ∈[m],
+1
+ri
+n
+X
+j=1
+ˆα(θ)
+i M (θ)
+ij ˆβ(θ)
+j
+= ( ˆf(xi))θ√
+S(θ)
+n
+n
+X
+j=1
+u(θ)
+ε (xi)
+(∥µ∥L2)θ
+q
+Z(θ)
+x
+Kε(xi, yj)
+( ˆf(xi) ˆg(yj))θ
+v(θ)
+ε (yj)
+(∥ν∥L2)θ
+q
+Z(θ)
+y
+=
+√
+S(θ)
+(∥µ∥L2∥ν∥L2)θ
+q
+Z(θ)
+x Z(θ)
+y
+· 1
+n
+n
+X
+j=1
+u(θ)
+ε (xi)Kε(xi, yj)v(θ)
+ε (yj)
+1
+(ˆg(yj))θ
+=
+(∥ν∥L2)θ√
+S(θ)
+(∥µ∥L2)θ
+q
+Z(θ)
+x Z(θ)
+y
+· 1
+n
+n
+X
+j=1
+u(θ)
+ε (xi)Kε(xi, yj)v(θ)
+ε (yj)
+1
+(ν(yj))θ + O(ρ2),
+=
+(∥ν∥L2)θ√
+S(θ)
+(∥µ∥L2)θ
+q
+Z(θ)
+x Z(θ)
+y
+ Z
+My
+u(θ)
+ε (xi)Kε(xi, y)v(θ)
+ε (y)(ν(y))1−θ dη(y) + e
+On
+ r
+log n
+n
+!!
++ O(ρ2)
+= (∥ν∥L2)θ√
+S(θ) Z(θ)
+y
+(∥µ∥L2)θ
+q
+Z(θ)
+x Z(θ)
+y
++ e
+On(ρ2) = 1 + e
+Om,n(ρ1 + ρ2)
+(94)
+where the third line replaces (ˆg(yj))−θ using (88), together with the fact that u(θ)
+ε , v(θ)
+ε
+and Kε are bounded
+on the compact manifolds, the fourth line applies Hoeffding’s inequality and used (12), and the last line
+used (91). Under Assumption 2, a union bound over all i ∈[m] shows that (94) holds for all i ∈[m].
+Following an analogous derivation, for all j ∈[n],
+1
+cj
+m
+X
+i=1
+ˆα(θ)
+i M (θ)
+ij ˆβ(θ)
+j
+= 1 + e
+Om,n(ρ1 + ρ2).
+(95)
+Applying the matrix scaling stability lemma. We now apply Lemma B.2 to ˆα(θ) and ˆβ
+(θ), and first bound
+the quantities appearing there. By the definition of s and using (89), and (92),
+s = ∥r∥1 =
+nm
+√
+S(θ) · 1
+m
+m
+X
+i=1
+1
+( ˆf(xi))θ = nm
+
+(∥µ∥L2∥ν∥L2)θ
+q
+Z(θ)
+x Z(θ)
+y
++ e
+Om,n(ρ1 + ρ2)
+
+.
+(96)
+Since u(θ)
+ε
+and v(θ)
+ε
+are positive and continuous on the compact manifolds, and since ˆf and ˆg are bounded
+away from zero and infinity on E, there exist positive constants C
+′
+1(ε) and C
+′
+2(ε) such that C1 and C2 defined
+in Lemma B.2 satisfy
+C1 = min
+i
+(
+ˆα(θ)
+i
+ri
+)
+≥C
+′
+1(ε)
+n
+,
+C2 = min
+j
+( ˆβ(θ)
+j
+cj
+)
+≥C
+′
+2(ε)
+m
+.
+(97)
+Similarly, there exist positive constants C
+′
+3(ε) and C
+′
+4(ε) such that
+C
+′
+3(ε) ≤M (θ)
+ij
+= exp
+ −∥xi −yj∥2
+2/ε
+
+( ˆf(xi) ˆg(yj))θ
+≤C
+′
+4(ε),
+(98)
+so that a and b defined in Lemma B.2 satisfy C
+′
+3(ε) ≤a ≤b ≤C
+′
+4(ε).
+Hence, for any δ ∈(0, 1/2],
+using (96), (97), and (98), the coefficients of (37) and (38) are bounded by positive constants D1(ε) and
+D2(ε), exactly as in (56).
+Applying Lemma B.2 with δ := τ C(ε)(ρ1 +ρ2), where C(ε) is the constant associated with (94) and (95)
+in Definition B.3 and δ ≤1/2 upon choosing n0(ε, τ), h′
+1 and h′
+2 properly, there exists a pair of positive
+vectors (α(θ)′, β(θ)′) that scales M(θ) to row sums r and column sums c, such that
+|α(θ)′
+i
+−ˆα(θ)
+i |
+ˆα(θ)
+i
+= e
+O(ε)
+m,n(ρ1 + ρ2),
+and
+|β(θ)′
+j
+−ˆβ(θ)
+j |
+ˆβ(θ)
+j
+= e
+O(ε)
+m,n(ρ1 + ρ2),
+(99)
+22
+
+
+for any i ∈[m] and any j ∈[n].
+Conclusion.
+By Lemma B.1 and the definition of scaling factors, the two pairs (α(θ), β(θ)) and
+(α(θ)′, β(θ)′) satisfy α(θ)
+i β(θ)
+j
+= α(θ)′
+i
+β(θ)′
+j
+for any i ∈[m] and j ∈[n]. Hence, for any i ∈[m] and j ∈[n],
+W (θ)
+ij
+= α(θ)
+i e−∥xi−yj∥2
+2/εβ(θ)
+j
+= α(θ)′
+i
+e−∥xi−yj∥2
+2/εβ(θ)′
+j
+= ˆα(θ)
+i e−∥xi−yj∥2
+2/ε ˆβ(θ)
+j
+
+1 + e
+O(ε)
+m,n(ρ1 + ρ2)
+
+=
+W(θ)
+ε (xi, yj)
+(∥µ∥L2∥ν∥L2)θ
+q
+Z(θ)
+x Z(θ)
+y
+
+1 + e
+O(ε)
+m,n(ρ1 + ρ2)
+
+.
+(100)
+Since W(θ)
+ε
+is continuous and bounded above on the compact product manifold Mx ×My, the multiplicative
+estimate in (100) implies the additive bound in (17). Finally, this estimate holds on the intersection of E
+with the events underlying (89)–(99); by (81) and the union bound, this intersection has probability at least
+1 −n−τ −4n−2γ, completing the proof.
+References
+[1] Tim Stuart and Rahul Satija. Integrative single-cell analysis. Nature reviews genetics, 20(5):257–272,
+2019.
+[2] Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh Solomon,
+Joshua Gould, Siyan Liu, Stacie Lin, Peter Berube, et al. Optimal-transport analysis of single-cell gene
+expression identifies developmental trajectories in reprogramming. Cell, 176(4):928–943, 2019.
+[3] Ludovic M´etivier, Romain Brossier, Quentin M´erigot, Edouard Oudet, and Jean Virieux. Measuring the
+misfit between seismograms using an optimal transport distance: Application to full waveform inversion.
+Geophysical Supplements to the Monthly Notices of the Royal Astronomical Society, 205(1):345–377,
+2016.
+[4] Ricard Argelaguet, Anna SE Cuomo, Oliver Stegle, and John C Marioni. Computational principles and
+challenges in single-cell data integration. Nature biotechnology, 39(10):1202–1215, 2021.
+[5] Malte D Luecken, Maren B¨uttner, Kridsadakorn Chaichoompu, Anna Danese, Marta Interlandi,
+Michaela F M¨uller, Daniel C Strobl, Luke Zappia, Martin Dugas, Maria Colom´e-Tatch´e, et al. Bench-
+marking atlas-level data integration in single-cell genomics. Nature methods, 19(1):41–50, 2022.
+[6] Hoa Thi Nhu Tran, Kok Siong Ang, Marion Chevrier, Xiaomeng Zhang, Nicole Yee Shin Lee, Michelle
+Goh, and Jinmiao Chen. A benchmark of batch-effect correction methods for single-cell rna sequencing
+data. Genome biology, 21(1):12, 2020.
+[7] C´edric Villani. Topics in optimal transportation, volume 58. American Mathematical Soc., 2021.
+[8] Gabriel Peyr´e and Marco Cuturi. Computational optimal transport: With applications to data science.
+Now Foundations and Trends, 2019.
+[9] Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. Advances in neural
+information processing systems, 26, 2013.
+[10] Richard Sinkhorn and Paul Knopp. Concerning nonnegative matrices and doubly stochastic matrices.
+Pacific Journal of Mathematics, 21(2):343–348, 1967.
+[11] Jason Altschuler, Jonathan Niles-Weed, and Philippe Rigollet. Near-linear time approximation algo-
+rithms for optimal transport via sinkhorn iteration. Advances in neural information processing systems,
+30, 2017.
+[12] Tianyi Lin, Nhat Ho, and Michael I Jordan. On the efficiency of entropic regularized algorithms for
+optimal transport. Journal of Machine Learning Research, 23(137):1–42, 2022.
+23
+
+
+[13] Gonzalo Mena and Jonathan Niles-Weed. Statistical bounds for entropic optimal transport: sample
+complexity and the central limit theorem. Advances in neural information processing systems, 32, 2019.
+[14] Nicolas Courty, R´emi Flamary, Devis Tuia, and Alain Rakotomamonjy. Optimal transport for domain
+adaptation. IEEE transactions on pattern analysis and machine intelligence, 39(9):1853–1865, 2016.
+[15] Nicolas Courty, R´emi Flamary, Amaury Habrard, and Alain Rakotomamonjy. Joint distribution optimal
+transportation for domain adaptation. Advances in neural information processing systems, 30, 2017.
+[16] Aude Genevay, Gabriel Peyr´e, and Marco Cuturi. Learning generative models with sinkhorn divergences.
+In International Conference on Artificial Intelligence and Statistics, pages 1608–1617. PMLR, 2018.
+[17] Jean Feydy, Thibault S´ejourn´e, Fran¸cois-Xavier Vialard, Shun-ichi Amari, Alain Trouv´e, and Gabriel
+Peyr´e. Interpolating between optimal transport and mmd using sinkhorn divergences. In The 22nd
+international conference on artificial intelligence and statistics, pages 2681–2690. PMLR, 2019.
+[18] Zhengyang Shen, Jean Feydy, Peirong Liu, Ariel H Curiale, Ruben San Jose Estepar, Raul San Jose Es-
+tepar, and Marc Niethammer. Accurate point cloud registration with robust optimal transport. Advances
+in Neural Information Processing Systems, 34:5373–5389, 2021.
+[19] Justin Solomon, Fernando De Goes, Gabriel Peyr´e, Marco Cuturi, Adrian Butscher, Andy Nguyen, Tao
+Du, and Leonidas Guibas. Convolutional wasserstein distances: Efficient optimal transportation on
+geometric domains. ACM Transactions on Graphics (ToG), 34(4):1–11, 2015.
+[20] Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh Solomon,
+Joshua Gould, Siyan Liu, Stacie Lin, Peter Berube, et al. Optimal-transport analysis of single-cell gene
+expression identifies developmental trajectories in reprogramming. Cell, 176(4):928–943, 2019.
+[21] Yogesh Balaji, Rama Chellappa, and Soheil Feizi. Robust optimal transport with applications in gener-
+ative modeling and domain adaptation. Advances in Neural Information Processing Systems, 33:12934–
+12944, 2020.
+[22] Milena Gazdieva, Arip Asadulaev, Evgeny Burnaev, and Alexander Korotin. Light unbalanced optimal
+transport. Advances in Neural Information Processing Systems, 37:93907–93938, 2024.
+[23] Thibault S´ejourn´e, Gabriel Peyr´e, and Fran¸cois-Xavier Vialard. Unbalanced optimal transport, from
+theory to numerics. Handbook of Numerical Analysis, 24:407–471, 2023.
+[24] Lenaic Chizat, Gabriel Peyr´e, Bernhard Schmitzer, and Fran¸cois-Xavier Vialard. Scaling algorithms for
+unbalanced optimal transport problems. Mathematics of computation, 87(314):2563–2609, 2018.
+[25] Thibault S´ejourn´e, Jean Feydy, Fran¸cois-Xavier Vialard, Alain Trouv´e, and Gabriel Peyr´e. Sinkhorn
+divergences for unbalanced optimal transport. arXiv preprint arXiv:1910.12958, 2019.
+[26] Thibault S´ejourn´e, Fran¸cois-Xavier Vialard, and Gabriel Peyr´e. Faster unbalanced optimal transport:
+Translation invariant sinkhorn and 1-d frank-wolfe. In International Conference on Artificial Intelligence
+and Statistics, pages 4995–5021. PMLR, 2022.
+[27] Eduardo Fernandes Montesuma, Fred Maurice Ngole Mboula, and Antoine Souloumiac. Recent ad-
+vances in optimal transport for machine learning. IEEE Transactions on Pattern Analysis and Machine
+Intelligence, 47(2):1161–1180, 2024.
+[28] Ronald R Coifman and St´ephane Lafon. Diffusion maps. Applied and computational harmonic analysis,
+21(1):5–30, 2006.
+[29] Boris Landa, Yuval Kluger, and Rong Ma. Entropic optimal transport eigenmaps for nonlinear alignment
+and joint embedding of high-dimensional datasets. arXiv preprint arXiv:2407.01718, 2024.
+[30] Paul Knopp and Richard Sinkhorn.
+A note concerning simultaneous integral equations.
+Canadian
+Journal of Mathematics, 20:855–861, 1968.
+24
+
+
+[31] Bernard W Silverman. Density estimation for statistics and data analysis. Routledge, 2018.
+[32] Bradley Efron and Robert J Tibshirani. An introduction to the bootstrap. Chapman and Hall/CRC,
+1994.
+[33] Oleg V Lepski, Enno Mammen, and Vladimir G Spokoiny. Optimal spatial adaptation to inhomogeneous
+smoothness: an approach based on kernel estimates with variable bandwidth selectors. The Annals of
+Statistics, pages 929–947, 1997.
+[34] Richard Sinkhorn. Diagonal equivalence to matrices with prescribed row and column sums. The Amer-
+ican Mathematical Monthly, 74(4):402–405, 1967.
+[35] David B Dunson, Hau-Tieng Wu, and Nan Wu. Spectral convergence of graph laplacian and heat kernel
+reconstruction in l∞from random samples. Applied and Computational Harmonic Analysis, 55:282–336,
+2021.
+25
