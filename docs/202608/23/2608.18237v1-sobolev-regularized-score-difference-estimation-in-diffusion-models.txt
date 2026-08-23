@@ -1,0 +1,5723 @@
+Title: Sobolev Regularized Score Difference Estimation in Diffusion Models
+
+URL Source: https://arxiv.org/pdf/2608.18237v1
+
+Published Time: Thu, 20 Aug 2026 00:06:32 GMT
+
+Number of Pages: 65
+
+Markdown Content:
+# Sobolev Regularized Score Difference Estimation in Diffusion Models 
+
+Chenghan Xie ∗ Jose Blanchet ∗ Renyuan Xu ∗
+
+August 20, 2026 
+
+Abstract 
+
+Estimating the difference of two Stein’s score functions is a fundamental problem in generative modeling. In particular, score differences arise naturally in transfer learning, where the score difference provides the mechanism for adapting a pre-trained model to a new target distribution, and in diffusion model-based post-training methods such as discriminator guidance. Existing estimators for score differences in these settings either lack of statistical consistency or are difficult to scale up in high-dimensions. We propose a statistically consistent and scalable estimator for score differences based on Sobolev regularization, which plays a crucial role in ensuring consistency and stablizing the training in the small-sample regime. Mathematically, we establish a convergence rate of ˜O(n− s−1 
+
+> d+2 s−2
+
+) where d is the dimension and s denotes the smoothness of the underlying densities, and provide a minimax lower bound of ˜Ω( n− 2( s−1)  
+
+> d+2 s
+
+) (in mean-squared error). Empirically, our estimator exhibits significantly improved stability in small-sample regimes compared to existing methods. We demonstrate its effectiveness on real-world tasks, including transfer learning for ECG signal generation, where it substantially outperforms non-regularized score difference estimators in downstream classification performance. 
+
+# 1 Introduction 
+
+The difference of Stein’s score functions is defined as the gradient of the log-density ratio ∇ log q(·) −∇ log p(·) between a target distribution q and a source distribution p. Conceptually, this difference represents the driving force required to transport samples from a source distribution p to a target distribution q. As a result, the score difference emerges as a fundamental primitive in transfer learning for modern generative modeling [23, 26, 40]. This estimation problem is central in post-training of diffusion models, which adapts pre-trained generative models to align with human preferences, structural constraints, or downstream tasks. A wide range of approaches have been proposed, including RLHF [2, 10], stochastic control–based formulations [13, 36, 37], and classifier-guided or conditioning-based methods. Notably, most of these can be unified as add-on mechanisms to pre-trained dynamics: dYt = sθ(t, Y t)d t − hη(t, Y t)d t + σ(t)d Wt, (1) where sθ(t, ·) is the pre-trained score function approximating ∇ log pt(·), and hη(t, ·) is an additive control term. In frameworks such as discriminator guidance and conditional generation, via Doob’s 
+
+h-transform, the term hη(t, ·) approximates ∇ log qt(·), where qt is a target distribution carrying 
+
+> ∗
+
+Department of Management Science and Engineering, Stanford University. Correspondence to Renyuan Xu: 
+
+renyuanxu@stanford.edu .Code is available at the GitHub repo. Paper is accepted at ICML 2026. 
+
+1arXiv:2608.18237v1 [stat.ML] 18 Aug 2026 information from constraints, classifiers, or preference signals [5, 7, 15, 27]. In diffusion models, post-training is a form of transfer learning, transferring pre-training knowledge to new data-generation tasks. For simplicity, we use “transfer learning” to refer to this broader setting throughout the paper. In transfer learning, the target task typically has far fewer samples than the source task, rendering direct estimation of the target score ∇qt unstable. Fortunately, because the target and source tasks are closely related, the density ratio qt 
+
+> pt
+
+often exhibits exploitable structure. This motivates directly estimating the density ratio and its gradient, since 
+
+∇ log qt(·) − ∇ log pt(·) = ∇(qt/p t)( ·)
+
+qt/p t(·) . (2) Unlike estimating and differencing the two scores separately, this approach exploits shared geometry and is more structure-aware and data-efficient in low-sample regimes (see Figure 1). Despite arising naturally in many settings, obtaining a reliable estimator for this score difference remains challenging. The most prevalent large-scale approaches [17, 26] adopt a “classify-then-differentiate” pipeline: first estimating the log-density ratio via binary classification, and then differentiating the fitted model. However, this approach lacks theoretical guarantees on gradient convergence. As illustrated in Figure 2, standard classifiers tend to overfit high-frequency but low-amplitude noise components in the data. This overfitting yields small ratio errors (left) but catastrophic oscillations after differentiation (right). We address this challenge via Sobolev regularization, which controls the smoothness of the log-density ratio gradient and prevents overfitting to spurious high-frequency noise. With n samples from both the source p and target q, we prove a convergence rate of ˜O(n− s−1 
+
+> d+2 s−2
+
+) for the score difference error (Theorem 3.1, 5.2), where d is the dimension and s is the smoothness parameter. We also provide a minimax lower bound of ˜Ω( n− 2( s−1)  
+
+> d+2 s
+
+) (Theorem 4.1), showing near-optimality. Experiments verify these findings across diverse tasks, including joint domain adaptation via Wasserstein gradient flow (Sec 6.2.1) and transfer learning for diffusion models (Sec 6.2.2), confirming that Sobolev regularization yields stable and consistent score difference estimators. 
+
+Closely related literature. Our work is closely related to two lines of literature: score difference estimation and Sobolev regularization in machine learning. Score difference estimation underlies a broad class of applications related to diffusion models. For example, [26] propose using score difference estimation for transfer learning tasks in diffusion models, which is later refined by [40] with an additional residual fine-tuning step. For post-training problems, the discriminator guidance framework of [17] highlights the central role of score difference estimation. In this approach, a discriminator is trained to distinguish samples from the target distribution and the pre-trained model, and its gradient provides an estimate of the score difference ∇ log qt − ∇ log pt,which is then injected as a control term into the diffusion dynamics. This framework was further extended to noisy data settings in [3]. However, the above papers primarily emphasize methodological development and empirical validation, while theoretical convergence guarantees remain unestablished. On the other hand, several alternative approaches provide convergence guarantees but may still suffer from practical limitations such as scalability and numerical stability. For example, assuming that the ground-truth score difference lies in a reproducing kernel Hilbert space (RKHS), [32] derive a closed-form kernel-based solution. However, this approach incurs prohibitive computational costs, as it requires evaluating kernel distances against the entire training dataset at each inference step, rendering it impractical at scale. Similarly, [23] propose a consistent score difference estimator for Wasserstein gradient flow (WGF) methods, but their local kernel approach faces the same scalability 2Figure 1: Visualization of the score functions . The score difference field (right) is markedly smoother and less variable than the absolute target score (left), demonstrating the structural benefit of directly estimating the score difference. 
+
+Figure 2: Impact of high-frequency noise. Comparison of log r (left) and ∇ log r (right) estimates. Standard classification (blue) captures the function value but fails on the gradient due to overfitting. Our Sobolev-regularized method (red) enforces smoothness, recovering the gradient accurately by filtering out noise. challenges. More recently, [38] address objective bias in discriminator guidance by adopting a score-matching objective in which the regression target is the residual error of a pre-trained score. However, without explicit regularity constraints, the resulting estimator can be dominated by variance, particularly in low-density regions or when the pre-trained score is already relatively accurate. In contrast to these approaches, our Sobolev-regularized score difference estimator retains the computational efficiency of classification-based frameworks, while offering enhanced consistency and robustness via the introduction of a Sobolev regularization term. 3Highlighting the central role of regularization, [16] point out that discriminators in guidance frameworks must be well regularized to ensure generalization, a perspective that closely aligns with our work. Sobolev-type regularization, often realized through gradient penalties, has been widely studied in the literature on generative adversarial networks (GANs) [21, 25, 28], whereas its role in diffusion models remains comparatively underexplored. In these settings, the discriminator can be interpreted as estimating a time-varying density ratio. Moreover, the underlying motivations differ substantially. In those works, gradient penalties are introduced to promote dynamical stability by shifting the eigenvalues of the Jacobian and preventing oscillations around local Nash equilibria. In contrast, our motivation is rooted in statistical estimation: we employ Sobolev regularization to constrain the hypothesis space, ensuring that the estimated score difference remains accurate and robust to overfitting to high-frequency noise. Finally, beyond generative modeling, [6] study Sobolev-penalized deep semi-supervised regression for the joint estimation of a regression function and its gradient, leveraging a large set of unlabeled covariates to approximate the Sobolev penalty. 
+
+# 2 Problem setup and proposed method 
+
+Our goal is to formalize transfer learning from a source p to a target q, by estimating the score difference in a way that is structure-aware, data-efficient, and stable. To focus on the essential building block of our framework, we first consider a bounded state space. The extension to unbounded domains and the inclusion of a time component, tailored to diffusion models, are deferred to Section 5, where the generalization is straightforward. Let [0 , 1] d ⊆ Ω ⊆ Rd, d ∈ N be a bounded and connected domain with sufficiently smooth boundary ∂Ω. Let P, Q ∈ P (Ω) be absolute continuous with respect to Lebesgue measure with densities p, q . For any x ∈ Ω let 
+
+ρ(x) := 12 p(x) + 12 q(x), μ(d x) := ρ(x) d x, 
+
+and define the log-density ratio 
+
+f ⋆(x) := log q(x)
+
+p(x) . (3) For a multi-index α = ( α1, . . . , α d) ∈ Nd, denote |α| := α1 + · · · + αd and Dαf := ∂|α|f∂x α11 ··· ∂x αdd
+
+,interpreted in the weak (distributional) sense. For an integer s ≥ 0, the weighted Sobolev space 
+
+Hs(μ) is given by 
+
+Hs(μ) := 
+
+(f ∈ L2(μ) Dαf ∈ L2(μ), for all multi-indices α with |α| ≤ s
+
+)
+
+.
+
+For the supremum norm, we denote the L∞(μ) norm as the essential supremum with respect to the measure μ:
+
+∥f ∥L∞(μ) := inf C ≥ 0 : μ({x ∈ Ω : |f (x)| > C }) = 0 .
+
+Let μ0 be the uniform distribution on Ω. We assume the following outstanding assumptions. 
+
+Assumption 2.1 (Density functions) . Assume p and q satisfy the following conditions: 1. p, q ∈ C2(Ω), and there exist constants 0 < c < C < ∞ such that c ≤ p(x), q (x) ≤ C for all 
+
+x ∈ Ω. 42. The following Neumann boundary condition holds: 
+
+ρ(x) ∂nf ⋆(x) = 0 for all x ∈ ∂Ω,
+
+where n(x) is the outward unit normal to ∂Ω. 3. Fix s ≥ 2. We assume f ⋆ ∈ Hs(μ0). Under Assumption 2.1, we have f ⋆ ∈ C2(Ω). Hence, there exists M ⋆ > 0 such that max {∥ f ⋆∥L∞(μ0), ∥∇ f ⋆∥L∞(μ0)} ≤ M ⋆.
+
+Motivated by the boundedness of the true density ratio f ⋆, we restrict the function class to ensure stability in the optimization. Specially, fix a constant M ≥ M ⋆, we define a bounded Sobolev subset of H1(μ) as follows: 
+
+HM := f ∈ H1(μ) : ∥f ∥L∞(μ) ≤ M . (4) By construction, this set is closed and convex in H1(μ), and it contains the ground truth f ⋆. Since 
+
+μ and μ0 are equivalent under Assumption 2.1, we keep the notation HM when risks and norms are evaluated with respect to μ.
+
+Learning objective. Our objective is to estimate the score difference 
+
+∇xf ⋆(x) := ∇x log q(x)
+
+p(x) ,
+
+given access only to finite samples from both source and target datasets: 
+
+S = {Xpi }ni=1 i.i.d. 
+
+∼ p, T = {Xqi }ni=1 i.i.d. 
+
+∼ q. (5) When p and q share similar geometric structure, the vector field ∇ log q(x) 
+
+> p(x)
+
+often concentrates on a low-dimensional manifold, making it easier to learn than the full score of q. The standard approach first estimates the log-density ratio and then differentiates it directly [17, 26]. Usually, the estimation of log-density ratio is trained via classification loss. 
+
+Binary classification reformulation. We introduce a label-augmented mixture model, offering a convenient probabilistic representation for learning the log-density ratio. Specifically, denote by 
+
+μp,q the joint law of ( X, Y ) with 
+
+Y ∼ Bernoulli(1 /2) ,X | (Y = 1) ∼ q, X | (Y = 0) ∼ p. (6) In such setting, the posterior classification probability is, for x ∈ Ω, η(x) := P(Y = 1 | X =
+
+x) = q(x) 
+
+> p(x)+ q(x)
+
+The corresponding Bayes logit is log η(x)1−η(x) = log q(x) 
+
+> p(x)
+
+= f ⋆(x). Therefore, if we let 
+
+σ(u) := 11+ e−u and define the cross-entropy loss 
+
+ℓCE (y, u ) := −y log σ(u) − (1 − y) log(1 − σ(u)) ,
+
+then the log-density ratio f ⋆ in (3) minimizes the population cross-entropy risk 
+
+LCE (f ) := E(X,Y )∼μp,q 
+
+ ℓCE (Y, f (X)) 
+
+among all measurable functions f : Ω → R. Using the fixed source–target design in (5), we augment deterministic labels and write D := {(Xpi , 0) }ni=1 ∪ { (Xqi , 1) }ni=1 . The corresponding fixed source–target empirical cross-entropy risk is 
+
+bLCE ,D(f ) := 12n
+
+> n
+
+X
+
+> i=1
+
+ℓCE (0 , f (Xpi )) + 12n
+
+> n
+
+X
+
+> i=1
+
+ℓCE (1 , f (Xqi )) .
+
+5Functional class: Function class: clipped sparse neural networks with bounded gradients. 
+
+We consider a sparse neural network class [11, 30, 34] with the ReLU 3 activation η3(x) := max {x3, 0},applied componentwise for vector inputs. This activation is useful for representing spline-type approximants and is supported by the corresponding approximation theory [24]. Fix M > M ⋆. Let 
+
+TM : R → [−M, M ] be a nondecreasing C1 truncation map such that |TM (u)| ≤ M and |T ′ 
+
+> M
+
+(u)| ≤ 1for all u ∈ R, and such that TM (u) = u whenever |u| ≤ M0, for some M0 ∈ (M ⋆, M ). Thus TM
+
+clips only outside a range strictly containing the target range. Given the depth L, width W , sparsity level S, and parameter bound B, define 
+
+FM (L, W, S, B ) := 
+
+(
+
+g(x) = TM
+
+h W(L)η3(·) + b(L) ◦ · · · ◦  W(1) x + b(1) i
+
+,
+
+W(1) ∈ RW ×d, W(2 ,...,L −1) ∈ RW ×W , W(L) ∈ R1×W ,
+
+> L
+
+X
+
+> l=1
+
+
+
+∥W (l)∥0 + ∥b(l)∥0
+
+
+
+≤ S, 
+
+max  
+
+> l
+
+∥W (l)∥∞ ∨ ∥ b(l)∥∞ ≤ B, ∥g∥L∞(μ) ≤ M, ∥∇ g∥L∞(μ) ≤ M
+
+)
+
+.
+
+(7) Here ◦ denotes function composition, ∥ · ∥ 0 counts nonzero entries, and ∥ · ∥ ∞ denotes the entrywise maximum norm. 
+
+Proposed learning method. To control both function values and gradients, we define the Sobolev seminorm 
+
+R(f ) := ∥∇ f ∥2
+
+> L2(μ)
+
+,
+
+for any s ≥ 1 and f ∈ Hs(μ). For λ > 0, the population Sobolev-regularized risk is defined as 
+
+Jλ(f ) := LCE (f ) + λ R(f ).
+
+The existence of the unique minimizer fλ is provided in Lemma A.1. We estimate this population penalty using the same fixed source–target design. Accordingly, define the fixed source–target empirical Sobolev penalizer: 
+
+bRD(f ) := 12n
+
+> n
+
+X
+
+> j=1
+
+∥∇ f (Xpj )∥22 + 12n
+
+> n
+
+X
+
+> j=1
+
+∥∇ f (Xqj )∥22.
+
+The fixed source–target empirical energy functional is 
+
+bJλ, D(f ) := bLCE ,D(f ) + λ bRD(f ).
+
+Our method proceeds by first estimating the log–density ratio as the minimizer of an empirical energy functional, 
+
+bfλ, F ∈ arg min  
+
+> f∈F
+
+bJλ, D(f ), (8) and then taking its gradient to obtain the desired score difference. We assume that the minimum is attained in F.63 Upper bound analysis 
+
+In this section, we provide a statistical convergence rate for our Soblev regularized estimator, in terms of the number of samples used in optimization, for which the proof is deferred to Appendix A. 
+
+Theorem 3.1 (Convergence rate for Sobolev-regularized logistic empirical risk minimization (ERM)) .
+
+Suppose Assumption 2.1 hold and the smoothness index satisfies s ≤ 4. Consider neural network 
+
+FM (L, W, S, B ) with Nn ≍ n dd+2 s−2 , L = O(1) , W, S, B ≍ Nn, λ ≍ N − s−1 
+
+> d
+> n
+
+. Then the soblev-penalized estimator bfλ, F in (8) satisfies the following upper bound with probability 1 − 2n−2:
+
+∥ bfλ, F − f ⋆∥2 
+
+> H1(μ)
+
+≲ n− s−1 
+
+> d+2 s−2
+
+log n. 
+
+Remark 3.2 . (a). The restriction s ≤ 4 is technical and follows from the cubic quasi-interpolant and ReLU 3 approximation used in the proof, following the construction in [24]. Higher smoothness can be handled by higher-order quasi-interpolants and ReLU r networks with spline order r + 1 ≥ s.(b). Since μ admits a C2 density ρ on Ω, it is equivalent to the uniform distribution μ0. Consequently, the above bound can also be equivalently expressed as 
+
+∥ bfλ, F − f ⋆∥2 
+
+> H1(μ0)
+
+≲ n− s−1 
+
+> d+2 s−2
+
+log n. 
+
+(c). Moreover, since Jλ is strongly convex over HM , a local Rademacher complexity argument yields a sharper rate than the O(n− sd+4 s ) rate obtained for the Sobolev-regularized estimators in [6], where they used global Rademacher complexity for regression problems. 
+
+Proof outline. The proof proceeds in four steps. First, we establish key analytic properties of the population energy functional Jλ, including strong convexity and smoothness (see Theorem 3.3). Second, we quantify the regularization-induced bias at the population level (see Theorem 3.4). Third, we relate the generalized error to the excess energy via localized Rademacher complexity (see Theorem 3.5). Finally, combining these ingredients yields the desired rate. For any functional J : Hs(μ) → R, let DJ (g) be the Fr´ echet derivative of J at g. We have the following result. 
+
+Lemma 3.3 (Strong convexity and smoothness of the penalized risk) . Define cmin := 14 cosh 2(M/ 2) .
+
+Then the penalized risk Jλ(f ) := LCE (f ) + λ R(f ) is Fr´ echet differentiable on HM and satisfies, for all f, g ∈ H M ,
+
+Jλ(f ) − Jλ(g) − DJ λ(g)[ f − g] ≥ cmin 
+
+2 ∥f − g∥2 
+
+> L2(μ)
+
++ λ∥∇ (f − g)∥2
+
+> L2(μ)
+
+, (9) 
+
+Jλ(f ) − Jλ(g) − DJ λ(g)[ f − g] ≤ ∥ f − g∥2 
+
+> L2(μ)
+
++ λ∥∇ (f − g)∥2
+
+> L2(μ)
+
+. (10) Note that the parameter M > 0 used in cmin is the uniform logit bound, i.e. |f (x)| ≤ M for all 
+
+f ∈ F ∪ f ⋆ and μ-a.e. x.Our argument follows the general outline of [6], with an important modification: because the cross-entropy loss fails to be globally strongly convex, uniqueness cannot be obtained directly. Instead, we establish conditional strong convexity restricted to HM . Our proof proceeds by (i) deriving strictly positive pointwise curvature bounds for the logistic loss within [ −M, M ], (ii) lifting the curvature bounds to the functional space via Taylor expansions, and (iii) combining the bounds with the quadratic structure of the Sobolev regularizer. 7Denote ∆ as the Laplacian operator ∆ f (x) := Pdj=1 ∂xj xj f (x), interpreted in the weak sense for 
+
+f ∈ H1(μ). Define the weighted elliptic operator Kh := ∆ h + ∇h · ∇ log ρ. Then Kf ⋆ ∈ L2(μ), and define 
+
+β := 64 ∥K f ⋆∥2 
+
+> L2(μ)
+
+cosh 4  M
+
+> 2
+
+.
+
+Next we quantify the regularization-induced bias. 
+
+Lemma 3.4 (Bias of the population Sobolev solution) . For all λ > 0, the unique minimizer fλ of 
+
+Jλ satisfies 
+
+∥fλ − f ⋆∥2 
+
+> L2(μ)
+
+≤ β λ 2, ∥∇ (fλ − f ⋆)∥2 
+
+> L2(μ)
+
+≤ β λ. 
+
+The proof tests the first-order variational inequality for the constrained minimizer fλ in the direction f − fλ, and then uses the weighted Green identity to relate the regularization part in EL equation to the Laplacian of f ⋆, which controls the bias magnitude. 
+
+Theorem 3.5 (Shifted oracle inequality for the clipped sieve) . Fix 0 < λ < 1. Let F := 
+
+FM (L, W, S, B ) be the clipped and gradient-bounded neural-network sieve, where L = O(1) , W =
+
+O(N ), S = O(N ), and B = O(N ). Let f0 ∈ F be any fixed comparator independent of the data, and fλ as the population minimizer of Jλ. Let 
+
+bfλ, F ∈ arg min  
+
+> f∈F
+
+bJλ, D(f ).
+
+Then for any t > 0, with probability at least 1 − e−t,
+
+Jλ( bfλ, F ) − Jλ(fλ) ≲ Jλ(f0) − Jλ(fλ) + r⋆ + tn , (11) 
+
+where r⋆ is the critical radius of the sub-root function 
+
+ϕ(r) := C0
+
+"
+
+1
+
+n +
+
+r S 3Lrn log( BW n )
+
+#
+
+.
+
+Here C0 depends only on the fixed envelope M and c−1min , but not on n, N, W, S, B .
+
+The proof is deferred to Appendix A.3. The key property facilitating our fast rate analysis is the structural constraint of the hypothesis space HM . Since optimization is performed over a bounded domain, the regularized loss Jλ is strongly convex and the estimator remains bounded. Strong convexity and boundedness ensure that the variance of the error diminishes as the estimator approaches the optimum. This motivates the use of localized, rather than global, complexity measures. In the proof, we formalize this intuition using the framework of [24]. 
+
+# 4 Minimax lower bound 
+
+This section provides a minimax lower bound for the ratio estimation, for which the proof is deferred to Appendix B. Let Cpair be the class of pairs ( p, q ) satisfying Assumption 2.1, and write fp,q := log( q/p ). Let 
+
+Ep,q denote expectation under the fixed source–target design Xpi
+
+> i.i.d.
+
+∼ p, Xqi
+
+> i.i.d.
+
+∼ q.
+
+Theorem 4.1 (Minimax lower bound for score difference estimation) . For any estimator ψ : Rdn ×  Rdn → H1(μ0), we have the minimax lower bound 
+
+inf ψsup (p,q )∈C pair Ep,q 
+
+h
+
+ψ(S, T ) − fp,q 2
+
+> H1(μ0)
+
+i
+
+≳ n−2( s−1) /(2 s+d).
+
+8Technical novelties. Our lower-bound analysis builds on the Local Fano method, but requires several new ingredients to address three structural obstacles specific to our setting. First, we confront a regularity mismatch between the observation and the target quantity: unlike [24], where the observation involves a differential operator that smooths the estimation problem, here we must recover high-order H1 information from lower-order L2 observations. Second, we characterize the information-theoretic limits under a heteroscedastic observation model induced by the joint sampling of the source and target densities. Finally, we handle the global normalization constraint intrinsic to density estimation, showing that local perturbations remain statistically indistinguishable even after enforcing normalization through global partition functions. 
+
+Discussion on the optimality gap. Comparing Theorem 3.1 with Theorem 4.1, we observe a gap between the achievable upper rate ˜O(n− s−1 
+
+> d+2 s−2
+
+) and the minimax lower bound ˜Ω( n− 2( s−1)  
+
+> d+2 s
+
+). We conjecture that this suboptimality is an artifact of the saturation phenomenon associated with single-step Tikhonov-type regularization [1, 8]. Within our framework, the Sobolev penalty λ∥∇ f ∥2
+
+induces a bias–variance trade-off in which the regularization parameter λ simultaneously governs approximation error and statistical stability. In particular, enforcing conditional strong convexity requires λ to be sufficiently large to control the stochastic error–manifested through the 1 /λ factor in the gradient stability bounds. This constraint limits how rapidly the bias can decay, thereby preventing the estimator from attaining the optimal nonparametric rate. Theoretically, the gap between the upper and lower bounds could be closed using iterative regularization schemes, such as iterated Tikhonov regularization [8], which are known to attain optimal convergence rates. However, implementing such methods in a deep learning setting would require training a sequence of neural networks where each subsequent network relies on the previous one, leading to prohibitive computational and memory costs for large-scale applications such as diffusion model and transfer learning. Consequently, while our single-step estimator is not minimax optimal, it is computationally efficient and practically scalable, and already exhibits strong empirical performance and stability in the small-sample regime (see Table 1). 
+
+# 5 Generalization to diffusion models: time dependence and un-bounded domains 
+
+In this section, we extend our framework to transfer learning for diffusion models. Compared to the static setting in Section 2, two additional challenges arise: (i) the density ratio becomes time dependent; and (ii) Gaussian perturbations render the data support unbounded. We address both issues by reformulating the problem on an augmented time-space domain, applying a truncation argument and proposing a projected-rescaled algorithm. 
+
+Augmented time-space formulation under the VP forward model. To formalize the diffusion-model setting, we focus on the variance-preserving (VP) forward noising model. Let 
+
+X0 ∼ p0 and Y0 ∼ q0 denote the source and target initial variables. For t ∈ [0 , T ], assume 
+
+Xt = αtX0 + σtξ, Y t = αtY0 + σtξ′, ξ, ξ ′ ∼ N (0 , I d),
+
+where αt ∈ R and σt > 0 are deterministic scalar VP coefficients. Fix t0 ∈ (0 , T ) as the early-stopping time, commonly used in the diffusion model literature [12]. In this context, the goal is to estimate the score difference ∇xf ⋆(t, x ) := ∇x log( qt(x)/p t(x)) for 
+
+t ∈ [t0, T ]. We consider the corresponding learning problem on the augmented space: ˜Ω := [ t0, T ] × Rd, ˜z := ( t, x ) ∈ ˜Ω.
+
+9We write ρt(x) := 12 (pt(x) + qt(x)), and use μt(dx ) := ρt(x) dx as the reference measure on each time slice. The objective is to learn a function f : ˜Ω → R that minimizes a time-averaged risk. Since the temporal domain [ t0, T ] is compact, the main difficulty arises from the unbounded spatial domain 
+
+Rd. In particular, strong convexity fails globally on Rd. To address this issue, we impose suitable assumptions on the tail behavior of the data distribution, which is a common and reasonable assumption to assume in the diffusion model literature [12, 18, 20]. 
+
+Assumption 5.1 (Compact initial support and VP coefficients) . The initial source and target distributions are compactly supported: there exists R0 < ∞ such that supp( p0) ∪ supp( q0) ⊆ BR0 .
+
+Moreover, the VP coefficients satisfy α, σ ∈ Cs([ t0, T ]) , and there exist constants 0 < σ ≤ σ < 
+
+∞, ω 0 < ∞, such that for all t ∈ [t0, T ], 
+
+σ ≤ σt ≤ σ, max  
+
+> 0≤a≤s
+
+(|∂at αt| + |∂at σt|) ≤ ω0.
+
+Truncation-dependent clipped network class. For R > 0, the network is trained on the rescaled domain [ t0, T ] × B1 with input ( t, ¯x) ∈ Rd+1 . We use 
+
+FR := F(d+1)  
+
+> MR
+
+(L, W, S, B ), MR := CM (1 + R),
+
+where F(d+1)  
+
+> MR
+
+is the clipped sparse ReLU 3 class from Section 3, now with input dimension d + 1. The constant CM is fixed independently of R, n, N, λ and is chosen large enough so that the envelope requirements in Appendix C.2 hold. For functions on [ t0, T ] × B2R, write (π−1 
+
+> R
+
+h)( t, ¯x) := h(t, 2R¯x), (t, ¯x) ∈ [t0, T ] × B1.
+
+In particular, for every R ≥ 1, 
+
+∥π−1 
+
+> R
+
+f ⋆∥L∞([ t0,T ]×B1) + ∥∇ ¯x(π−1 
+
+> R
+
+f ⋆)∥L∞([ t0,T ]×B1) ≤ MR.
+
+This follows from the growth bounds under Assumption 5.1. 
+
+Projected-rescaled empirical objective. Define the Euclidean projection onto B2R by Proj 2R(x) := x
+
+max {1, ∥x∥/(2 R)} .
+
+Then ¯ x := Proj 2R(x)2R ∈ B1. To approximate the time-integrated source–target classification risk, we augment the source and target samples with independent time draws, 
+
+Dext := {(tpi , X pi , 0) }ni=1 ∪ { (tqi , X qi , 1) }ni=1 ,
+
+where tpi , t qi
+
+> i.i.d.
+
+∼ Unif([ t0, T ]), Xpi | tpi ∼ ptpi , Xqi | tqi ∼ qtqi , with all variables independent across the p-sample and q-sample blocks and across indices, and ¯Xpi := Proj 2R(Xpi )2R , ¯Xqi := Proj 2R(Xqi )2R . We estimate the rescaled log-density ratio by 
+
+bfR ∈ arg min  
+
+> f∈F R
+
+bJproj 
+
+> λ, Dext ,2R
+
+(f ),
+
+10 bJproj 
+
+> λ, Dext ,2R
+
+(f ) := 12n
+
+> n
+
+X
+
+> i=1
+
+
+
+ℓCE 
+
+ 0, f (tpi , ¯Xpi ) + λ
+
+4R2 ∥∇ ¯xf (tpi , ¯Xpi )∥22
+
+
+
++ 12n
+
+> n
+
+X
+
+> i=1
+
+
+
+ℓCE 
+
+ 1, f (tqi , ¯Xqi ) + λ
+
+4R2 ∥∇ ¯xf (tqi , ¯Xqi )∥22
+
+
+
+,
+
+(12) The factor 1 /(4 R2) accounts for the spatial rescaling x = 2 R¯x.
+
+Cutoff extension and core-tail decomposition. Let χR : Rd → [0 , 1] be a smooth cutoff satisfying 
+
+χR ≡ 1 on BR, χ R ≡ 0 on Rd \ B2R, ∥∇ χR∥∞ ≲ R−1.
+
+Using the optimizer bfR from (12), define the global estimator on eΩ = [ t0, T ] × Rd by 
+
+ef (R)(t, x ) := χR(x) bfR
+
+
+
+t, Proj 2R(x)2R
+
+
+
+. (13) Define the local loss density associated with H1(μt) by 
+
+L(f, g ) := |f − g|2 + ∥∇ xf − ∇ xg∥22, (14) where all terms are evaluated pointwise. We decompose the time-averaged global error as 
+
+Z Tt0
+
+∥ ef (R) 
+
+> t
+
+− f ⋆t ∥2 
+
+> H1(μt)
+
+dt =
+
+Z Tt0
+
+Z
+
+> BR
+
+L( ef (R), f ⋆) dμ t dt 
+
+| {z }
+
+> Main error
+
++
+
+Z Tt0
+
+Z
+
+> BcR
+
+L( ef (R), f ⋆) dμ t dt 
+
+| {z }
+
+> Tail error
+
+.
+
+(15) The main error is controlled by applying the compact-domain analysis to the pulled-back estimator on [ t0, T ] × B2R. The tail error is controlled by the sub-Gaussian decay of μt under Assumption 5.1, together with the growth bounds for f ⋆ implied by the VP structure. Choosing R = R(n) then balances these two errors and yields Theorem 5.2. 
+
+Theorem 5.2 (Convergence for VP diffusion models on unbounded domains) . Suppose Assump-tion 5.1 holds and the smoothness index satisfies s ≤ 4. For each R > 0, consider the R-dependent clipped and spatial-gradient-bounded time-space class FR = F(d+1)  
+
+> MR
+
+(L, W, S, B ) with MR = CM (1+ R).
+
+Let N ext  
+
+> n
+
+≍ n d+1  
+
+> d+1+2 s−2
+
+, L = O(1) , W, S, B ≍ N ext  
+
+> n
+
+, λ ≍ (N ext  
+
+> n
+
+)− s−1 
+
+> d+1
+
+. Choose R = A√log n, where 
+
+A > 0 is sufficiently large depending only on t0, T, R 0, ω 0, σ, σ . Then, with probability at least 
+
+1 − 3n−2, Z Tt0
+
+∥ ef (R) 
+
+> t
+
+− f ⋆t ∥2 
+
+> H1(μt)
+
+dt ≤ Ce C√log n(log n)K n− s−1 
+
+> d+1+2 s−2
+
+,
+
+where ef (R) 
+
+> t
+
+is defined in (13) and C, K < ∞ are independent of n. As a consequence, for every 
+
+ε > 0, there exists Cε < ∞ such that 
+
+Z Tt0
+
+∥ ef (R) 
+
+> t
+
+− f ⋆t ∥2 
+
+> H1(μt)
+
+dt ≤ Cεn− s−1 
+
+> d+1+2 s−2+ε
+
+.
+
+11 Figure 3: One example of the simulation distributions (All distribution pairs can be found in Appendix D.1). 
+
+# 6 Experiments 
+
+This section presents experiments on both synthetic environments and real-world datasets, demon-strating the promising performance of our proposed method. 
+
+6.1 Estimation error in simulation environment 
+
+In this simulation study, we show the effectiveness of our regularization, in terms of the accuracy of estimating the gradient of the log density ratio ∇ log qp .We construct three distinct pairs of two–dimensional source and target distributions ( p, q ), for which the quantity ∇ log qp can be computed in closed form. Detailed descriptions of the three distribution pairs are provided in Appendix D.1. For each pair we train a three–layer MLP fθ(x) to approximate the log density ratio. We consider two training objectives: a standard classification-based objective, and our Sobolev-penalized classification objective. For each ( p, q ) pair we train the network with N ∈ { 10 , 100 , 1000 }
+
+samples drawn independently from both p and q. After training, we set the gradient estimator directly as gθ(x) := ∇xfθ(x), and estimate its mean squared error using 1000 new samples from both p and q.The errors are reported in Table 1. We first observe that the Sobolev-penalized estimator ( Cls w sob ) consistently outperforms the naive classification baseline ( Cls w/o sob ) across all training sizes. Notably, this relative improvement is most pronounced in the small-sample regime ( e.g. , more than a 50% improvement for N = 20), confirming that the Sobolev penalty effectively stabilizes the estimator when data are scarce. 
+
+6.2 Transfer learning with real-world datasets 
+
+In transfer learning, the goal is to leverage labeled samples from a source distribution to improve prediction on a related target distribution. We observe source data Dp := {(x(i) 
+
+> p
+
+, z (i) 
+
+> p
+
+)}np 
+
+> i=1
+
+drawn 12 Table 1: Accuracy for gradient of log-density ratio estimation. Best results are marked in bold. Improvement indicates the relative reduction in error from Cls w/o sob to Cls w sob. Train Size Cls w/o sob Cls w sob Kernel Improvement (A) (B) (A − B)/A [%] 
+
+ROTATED RIDGE 
+
+20 61 .94 ± 7.98 30 .96 ± 6.92 7.65 ± 1.24 50.02 200 5.91 ± 0.92 4.29 ± 0.61 6.44 ± 0.43 27.36 2000 1.68 ± 0.21 0.96 ± 0.12 5.80 ± 0.06 42.96 
+
+ORTHOGONAL GMM 
+
+20 24 .10 ± 2.73 11 .89 ± 0.80 25 .87 ± 1.42 50.66 200 8.90 ± 2.74 6.31 ± 0.44 23 .78 ± 0.63 29.19 2000 5.03 ± 0.34 3.83 ± 0.17 22 .80 ± 0.21 23.86 
+
+BOUNDED 
+
+20 103 .46 ± 7.16 48 .77 ± 2.62 7.73 ± 0.59 52.86 200 15 .68 ± 2.45 9.86 ± 1.19 3.68 ± 0.09 37.12 2000 2.42 ± 0.17 1.96 ± 0.13 3.55 ± 0.01 18.88 Table 2: Accuracy for gradient of log-density ratio estimation. Values are reported as mean (standard deviation). Best results are marked in bold.                                     
+
+> Train Cls w/o sob Cls w sob Improve Size (A) (B) (A−B)/A [%]
+> ROTATED RIDGE
+> 20 61 .94(7 .98) 30 .96 (6.92 )50.02 200 5.91(0 .92) 4.29 (0.61 )27.36 2000 1.68(0 .21) 0.96 (0.12 )42.96
+> ORTHOGONAL GMM
+> 20 24 .10(2 .73) 11 .89 (0.80 )50.66 200 8.90(2 .74) 6.31 (0.44 )29.19 2000 5.03(0 .34) 3.83 (0.17 )23.86
+> BOUNDED
+> 20 103 .46(7 .16) 48 .77 (2.62 )52.86 200 15 .68(2 .45) 9.86 (1.19 )37.12 2000 2.42(0 .17) 1.96 (0.13 )18.88
+
+from a joint distribution P and target samples Dq := {(x(j) 
+
+> q
+
+, z (j) 
+
+> q
+
+)}nq 
+
+> j=1
+
+drawn from a different joint distribution Q. In practice, labeled target samples are often scarce, making direct training unreliable. Our objective is therefore to infer a labeling function for Dq by transferring information from Dp.
+
+6.2.1 WGF Methods 
+
+When many unlabeled target samples are available, following prior optimal-transport-based adapta-tion methods[23], we use WGF to transport labeled source particles toward the target distribution and then train a classifier on the transported samples. WGF requires the score difference ∇ log q − ∇ log pt. We therefore evaluate the proposed 13 estimators by implementing WGF on the Office–Caltech-10 benchmark [29], which contains four visual datasets: Amazon, Caltech, DSLR, and Webcam. Following standard practice, all samples are projected onto a 100-dimensional PCA subspace. We compare target classification accuracy across four settings: a source-only RBF SVM baseline, and RBF SVMs trained on WGF-transported source samples using (i) kernel-based estimators (LL; [23]), (ii) unregularized classification-based estimators, and (iii) our Sobolev-regularized classification estimator. The results (Table 3) show that directly reusing source classifiers can lead to severe performance degradation (e.g., Amazon → DSLR), whereas joint distribution–based adaptation substantially alleviates this issue. Moreover, Sobolev regularization enables the classification-based method to achieve the strongest overall performance. While kernel-based estimators attain accuracy comparable to our Sobolev-regularized approach in low-dimensional settings, they incur substantially higher computational cost. The kernel-based WGF baseline is intrinsically local, requiring a new gradient estimator to be trained at each WGF iteration through kernel optimization, which repeatedly evaluates interactions with the training samples (see Table 4). In contrast, the classification-based estimator amortizes gradient evaluation: once trained, the score difference at a new point is obtained via a single forward and backward pass of a fixed network. This amortization accounts for the significant speedup and enables scalability to large-scale settings, including diffusion-based generation. Table 3: Comparison of classification accuracy on Office-Caltech-10 Dataset.                                                      
+
+> Dp→ D qBase Cls w/o sob Kernel Cls w sob
+> amz. →cal. 0.7115 0.7863 0.8379 0.8504
+> amz. →dslr 0.2675 0.7580 0.7962 0.7962
+> amz. →web. 0.3932 0.7390 0.8678 0.8203 cal. →amz. 0.9081 0.8716 0.9081 0.8977 cal. →dslr 0.2420 0.8535 0.8344 0.8623
+> cal. →web. 0.3797 0.7763 0.8203 0.8034 dslr →amz. 0.7035 0.8017 0.8716 0.8006 dslr →cal. 0.6572 0.7489 0.8094 0.7427 dslr →web. 0.9492 0.9492 0.9492 0.9525
+> web. →amz. 0.6294 0.6002 0.5877 0.7046
+> web. →cal. 0.3954 0.7070 0.7640 0.6456 web. →dslr 0.8535 0.9618 0.9554 0.9682
+
+Table 4: Average gradient computation time across the 12 transfer tasks shown in Table 3.      
+
+> Method Gradient Calculation Time
+> Baseline N/A Kernel 2.0617 s Cls w/o sob 0.0004 s
+> Cls w sob 0.0004 s
+
+6.2.2 Diffusion Models 
+
+When the amount of unlabeled target data is extremely limited, directly training a generative model on the target task is often unreliable. A more effective alternative is to leverage a large source domain and adapt a pre-trained diffusion model to the target distribution via transfer. In 14 particular, recent work [26] proposes to guide a source-trained diffusion model using an estimated score difference between the source and target distributions. To evaluate the effectiveness of such transfer-based diffusion model methods under limited target data, we consider a benchmark task in electrocardiogram (ECG) generation. Following [26], we use the PTB-XL dataset [39] as the source task and the ICBEB2018 dataset [22] as the target task, whose details can be found in Appendix D.3. 
+
+Evaluation protocol. We assess different methods through their ability to generate target-task samples for downstream classification. (More results on computing time and generation quality can be found in Appendix D.3) Specifically, each method is used to generate a sufficient number of synthetic ECG samples, which are then combined with the limited target samples to train a classifier. Performance is evaluated on the target test set. We compare four approaches: (1) Vanilla Diffusion , which trains a diffusion model directly on limited target data; (2) Finetune Generator ,which adapts a source-trained diffusion model to generate target-label samples; (3) TGDP [26], which trains the guidance function using standard classification objectives; and (4) TGDP-SoB ,which incorporates Sobolev regularization into the TGDP framework. Following the ECG benchmark protocol in [33], we report the Macro-averaged area under the ROC curve (AUC), macro-averaged Fβ -score with β = 2, and macro-averaged Gβ -score with β = 2; where Fβ = (1+ β2)·TP (1+ β2)·TP+ β2·FN+FP , Gβ = TP TP+FP+ β·FN . As shown in Table 5, TGDP substantially outperforms the baseline methods across all evaluation metrics. In addition, the Sobolev-regularized variant (TGDP-SoB) consistently yields further improvements, highlighting the benefit of regularized score difference estimation for diffusion-based transfer under limited target data.                
+
+> Method AUC Fβ=2Gβ=2
+> Vanilla Diffusion 0.844(07) 0.590(09) 0.331(08) Finetune Generator 0.862(05) 0.604(09) 0.351(09) TGDP 0.905(04) 0.662(10) 0.436(12)
+> TGDP-SoB 0.915(05) 0.693(11) 0.453(11)
+
+Table 5: Results on ECG benchmark for downstream classification task. (90% confidence intervals are provided via empirical bootstrapping [33]; 0.915(04) stands for 0.915 ± 0.004.) 
+
+# Impact Statement 
+
+This paper presents work whose goal is to advance the field of machine learning. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+# Acknowledgments 
+
+J. Blanchet gratefully acknowledges support from ONR under award N00014-24-1-2655, and the Na-tional Science Foundation (NSF) under grants 2312204 and 2403007. R. Xu gratefully acknowledges support from the NSF under grants DMS-2602037 and CAREER Award DMS-2614933. 15 References 
+
+[1] Frank Bauer, Sergei Pereverzev, and Lorenzo Rosasco. On regularization algorithms in learning theory. Journal of Complexity , 23(1):52–72, 2007. [2] Kevin Black, Michael Janner, Yilun Du, Ilya Kostrikov, and Sergey Levine. Training diffusion models with reinforcement learning. arXiv preprint arXiv:2305.13301 , 2023. [3] Dat Nguyen Cong, Hieu Tran Bao, and Thanh-Tung Hoang. Guiding noisy label conditional diffusion models with score-based discriminator correction. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 18531–18541, 2025. [4] Nicolas Courty, R´ emi Flamary, Devis Tuia, and Alain Rakotomamonjy. Optimal transport for domain adaptation. IEEE transactions on pattern analysis and machine intelligence , 39(9): 1853–1865, 2016. [5] Alexander Denker, Francisco Vargas, Shreyas Padhy, Kieran Didi, Simon V Mathis, Riccardo Barbano, Vincent Dutordoir, Emile Mathieu, Urszula Julia Komorowska, and Pietro Lio. Deft: Efficient fine-tuning of diffusion models by learning the generalised h-transform. In Neurips ,volume 37, 2024. [6] Zhao Ding, Chenguang Duan, Yuling Jiao, and Jerry Zhijian Yang. Semi-supervised deep sobolev regression: Estimation and variable selection by requ neural network. IEEE Transactions on Information Theory , 2025. [7] Yuanqi Du, Michael Plainer, Rob Brekelmans, Chenru Duan, Frank No´ e, Carla P Gomes, Alan Aspuru-Guzik, and Kirill Neklyudov. Doob’s lagrangian: A sample-efficient variational approach to transition path sampling. In Neurips , volume 37, 2024. [8] Heinz W Engl, Martin Hanke, and Andreas Neubauer. Regularization of Inverse Problems .Kluwer Academic Publishers, 1996. [9] Lawrence C Evans. Partial differential equations , volume 19. American mathematical society, 2022. [10] Ying Fan, Olivia Watkins, Yuqing Du, Hao Liu, Moonkyung Ryu, Craig Boutilier, Pieter Abbeel, Mohammad Ghavamzadeh, Kangwook Lee, and Kimin Lee. Reinforcement learning for fine-tuning text-to-image diffusion models. In Thirty-seventh Conference on Neural Information Processing Systems (NeurIPS) 2023 . Neural Information Processing Systems Foundation, 2023. [11] Max H Farrell, Tengyuan Liang, and Sanjog Misra. Deep neural networks for estimation and inference. Econometrica , 89(1):181–213, 2021. [12] Yinbin Han, Meisam Razaviyayn, and Renyuan Xu. Neural network-based score estimation in diffusion models: Optimization and generalization. arXiv preprint arXiv:2401.15604 , 2024. [13] Yinbin Han, Meisam Razaviyayn, and Renyuan Xu. Stochastic control for fine-tuning diffusion models: Optimality, regularity, and convergence. arXiv preprint arXiv:2412.18164 , 2024. [14] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. Advances in neural information processing systems , 30, 2017. 16 [15] Samuel Howard, Nikolas N¨ usken, and Jakiw Pidstrigach. Control consistency losses for diffusion bridges. arXiv preprint arXiv:2512.05070 , 2025. [16] Hisham Husain and Richard Nock. Generalization for discriminator-guided diffusion models via strong duality. [17] Dongjun Kim, Yeongmin Kim, Se Jung Kwon, Wanmo Kang, and Il-Chul Moon. Refining generative process with discriminator guidance in score-based diffusion models. arXiv preprint arXiv:2211.17091 , 2022. [18] Lingkai Kong, Yuanqi Du, Wenhao Mu, Kirill Neklyudov, Valentin De Bortoli, Dongxia Wu, Haorui Wang, Aaron Ferber, Yi-An Ma, Carla P Gomes, et al. Diffusion models as constrained samplers for optimization with unknown constraints. arXiv preprint arXiv:2402.18012 , 2024. [19] Michel Ledoux and Michel Talagrand. Probability in Banach Spaces: Isoperimetry and Processes .Springer, 1991. [20] Puheng Li, Zhong Li, Huishuai Zhang, and Jiang Bian. On the generalization properties of diffusion models. Advances in Neural Information Processing Systems , 36:2097–2127, 2023. [21] Shanchuan Lin, Xin Xia, Yuxi Ren, Ceyuan Yang, Xuefeng Xiao, and Lu Jiang. Diffusion adversarial post-training for one-step video generation. arXiv preprint arXiv:2501.08316 , 2025. [22] Feifei Liu, Chengyu Liu, Lina Zhao, Xiangyu Zhang, Xiaoling Wu, Xiaoyan Xu, Yulin Liu, Caiyun Ma, Shoushui Wei, Zhiqiang He, et al. An open access database for evaluating the algorithms of electrocardiogram rhythm and morphology abnormality detection. Journal of Medical Imaging and Health Informatics , 8(7):1368–1373, 2018. [23] Song Liu, Jiahao Yu, Jack Simons, Mingxuan Yi, and Mark Beaumont. Minimizing f -divergences by interpolating velocity fields. arXiv preprint arXiv:2305.15577 , 2023. [24] Yiping Lu, Haoxuan Chen, Jianfeng Lu, Lexing Ying, and Jose Blanchet. Machine learning for elliptic pdes: Fast rate generalization bound, neural scaling law and minimax optimality. arXiv preprint arXiv:2110.06897 , 2021. [25] Lars Mescheder, Andreas Geiger, and Sebastian Nowozin. Which training methods for gans do actually converge? In International conference on machine learning , pages 3481–3490. PMLR, 2018. [26] Yidong Ouyang, Liyan Xie, Hongyuan Zha, and Guang Cheng. Transfer learning for diffusion models. Advances in Neural Information Processing Systems , 37:136962–136989, 2024. [27] Jakiw Pidstrigach, Elizabeth Baker, Carles Domingo-Enrich, George Deligiannidis, and Nikolas N¨ usken. Conditioning diffusions using malliavin calculus. arXiv preprint arXiv:2504.03461 ,2025. [28] Kevin Roth, Aurelien Lucchi, Sebastian Nowozin, and Thomas Hofmann. Stabilizing training of generative adversarial networks through regularization. Advances in neural information processing systems , 30, 2017. [29] Kate Saenko, Brian Kulis, Mario Fritz, and Trevor Darrell. Adapting visual category models to new domains. In European conference on computer vision , pages 213–226. Springer, 2010. 17 [30] Johannes Schmidt-Hieber. Nonparametric regression using deep neural networks with relu activation function. 2020. [31] Larry L. Schumaker. Spline Functions: Basic Theory . Cambridge University Press, 3 edition, 2007. [32] Aadithya Srikanth, Siddarth Asokan, Nishanth Shetty, and Chandra Sekhar Seelamantula. Accelerated diffusion using closed-form discriminator guidance. [33] Nils Strodthoff, Patrick Wagner, Tobias Schaeffter, and Wojciech Samek. Deep learning for ecg analysis: Benchmarks and insights from ptb-xl. IEEE journal of biomedical and health informatics , 25(5):1519–1528, 2020. [34] Taiji Suzuki. Adaptivity of deep relu network for learning in besov and mixed smooth besov spaces: optimal rate and curse of dimensionality. arXiv preprint arXiv:1810.08033 , 2018. [35] Kunio Takezawa. Introduction to nonparametric regression . John Wiley & Sons, 2005. [36] Wenpin Tang and Fuzhong Zhou. Fine-tuning of diffusion models via stochastic control: entropy regularization and beyond. arXiv preprint arXiv:2403.06279 , 2024. [37] Masatoshi Uehara, Yulai Zhao, Kevin Black, Ehsan Hajiramezanali, Gabriele Scalia, Nathaniel Lee Diamant, Alex M Tseng, Tommaso Biancalani, and Sergey Levine. Fine-tuning of continuous-time diffusion models as entropy-regularized control. arXiv preprint arXiv:2402.15194 , 2024. [38] Alexandre Verine, Ahmed Mehdi Inane, Florian Le Bronnec, Benjamin Negrevergne, and Yann Chevaleyre. Improving discriminator guidance in diffusion models. In Joint European Conference on Machine Learning and Knowledge Discovery in Databases , pages 222–238. Springer, 2025. [39] Patrick Wagner, Nils Strodthoff, Ralf-Dieter Bousseljot, Dieter Kreiseler, Fatima I Lunze, Wojciech Samek, and Tobias Schaeffter. Ptb-xl, a large publicly available electrocardiography dataset. Scientific data , 7(1):1–15, 2020. [40] Xiyu Wang, Baijiong Lin, Daochang Liu, Ying-Cong Chen, and Chang Xu. Bridging data gaps in diffusion models with adversarial noise-based transfer learning. In Forty-first International Conference on Machine Learning , 2024. 18 Appendix roadmap. Appendix A proves the bounded-domain theory from Section 3. It estab-lishes the variational properties of the Sobolev-regularized population objective, the clipped-network approximation result, the regularization bias bound, the shifted oracle inequality, and the resulting upper rate. Appendix B proves the minimax lower bound in Theorem 4.1 by a local packing construction and Fano’s method. Appendix C proves the diffusion-model extension in Theorem 5.2; the proof combines truncation, rescaling, compact-cylinder bias and oracle bounds, and the core-tail decomposition. Appendix D contains the supplementary experimental details for the synthetic, WGF, and ECG studies. 
+
+# A Proof for Bounded Case (Section 3) 
+
+Appendix A roadmap. The bounded-case proof is organized as follows. After fixing the two-group average notation, Lemma A.1 proves existence and uniqueness of the population minimizer. We then build the approximation tools: Lemma A.2 gives the local B-spline quasi-interpolant, and Proposition A.3 realizes the resulting approximant in the clipped, gradient-bounded neural-network sieve. With these deterministic ingredients in place, Lemma 3.3 proves strong convexity and smoothness of Jλ, while Lemma 3.4 gives the regularization bias. Finally, Theorem 3.5 gives the shifted localized oracle inequality, and Appendix A.4 combines it with the approximation and bias bounds to obtain Theorem 3.1. 
+
+Notation. Recall the bounded-domain fixed source–target design in (5). For any measurable function φ : Ω × { 0, 1} → R, define the avg operator on two-group: 
+
+P φ := 12 EX∼p[φ(X, 0)] + 12 EX∼q[φ(X, 1)] ,
+
+and 
+
+P nφ := 12n
+
+> n
+
+X
+
+> i=1
+
+φ(Xpi , 0) + 12n
+
+> n
+
+X
+
+> i=1
+
+φ(Xqi , 1) .
+
+With this notation, bLCE ,D(f ) = P n{ℓCE (y, f (x)) }..We first show that the minimizer for our energy functional exists and is unique. 
+
+Lemma A.1 (Existence and uniqueness of the population risk minimizer in HM ). Recall LCE (f ) := 
+
+E(X,Y )∼μp,q 
+
+ ℓCE (Y, f (X)) . For any regularization parameter λ > 0, define the Sobolev-regularized population risk 
+
+Jλ(f ) := LCE (f ) + λR(f ).
+
+Then Jλ admits a unique minimizer fλ ∈ H M :
+
+fλ := arg min  
+
+> f∈H M
+
+Jλ(f ).
+
+Proof. We proceed by establishing uniqueness via strong convexity and existence via the properties of the constraint set HM .From Lemma 3.3, the functional Jλ satisfies the following strong convexity inequality for any 
+
+f, g ∈ H M :
+
+Jλ(f ) − Jλ(g) − DJ λ(g)[ f − g] ≥ cmin 
+
+2 ∥f − g∥2 
+
+> L2(μ)
+
++ λ∥∇ (f − g)∥2
+
+> L2(μ)
+
+. (16) 19 Since λ > 0 and cmin > 0, the right-hand side is strictly positive for any f̸ = g (in the H1(μ)norm sense). Suppose there exist two distinct minimizers f1, f 2 ∈ H M with Jλ(f1) = Jλ(f2) = inf f ∈H M Jλ(f ) = m. By the strict convexity, for any t ∈ (0 , 1), we have: 
+
+Jλ(tf 1 + (1 − t)f2) < tJ λ(f1) + (1 − t)Jλ(f2) = m. 
+
+This implies we have found an element with a risk strictly lower than the infimum m, which is a contradiction. Thus, the minimizer must be unique. To apply the Direct Method in the Calculus of Variations [9] on the constrained set, we first establish that the feasible set HM is a weakly closed subset of H1(μ). First, HM is convex. For any f, g ∈ H M and t ∈ [0 , 1], by the triangle inequality: 
+
+∥tf + (1 − t)g∥L∞ ≤ t∥f ∥L∞ + (1 − t)∥g∥L∞ ≤ tM + (1 − t)M = M. 
+
+Thus, the convex combination remains in HM . Second, HM is closed in the strong topology of H1(μ). Let {fn} ⊂ H M be a sequence converging to f in H1(μ). Convergence in H1 implies convergence in 
+
+L2, which in turn implies the existence of a subsequence converging pointwise almost everywhere. Since |fn(x)| ≤ M a.e., the pointwise limit must satisfy |f (x)| ≤ M a.e. Thus, f ∈ H M . Since HM
+
+is a closed and convex subset of a Banach space, it is weakly closed. Next we show coercivity. Although functions in HM are bounded in L∞, they are not a priori bounded in H1(μ) (as gradients can be arbitrarily large). However, fixing a reference g = 0 ∈ H M ,the inequality (16) implies: 
+
+Jλ(f ) ≥ Jλ(0) + DJ λ(0)[ f ] + C(λ)∥f ∥2
+
+> H1(μ)
+
+.
+
+Since the quadratic term dominates the linear functional as ∥f ∥H1 → ∞ , Jλ is coercive. This ensures that any minimizing sequence {fn}∞ 
+
+> n=1
+
+⊂ H M such that Jλ(fn) → inf f ∈H M Jλ(f ) is bounded in the 
+
+H1(μ) norm. Finaly, we take limit via weak lower semicontinuity. Since the minimizing sequence {fn} ⊂ H M
+
+is bounded in the reflexive space H1(μ), by the Banach-Alaoglu theorem, there exists a subsequence 
+
+{fnk } that converges weakly to some limit fλ ∈ H1(μ). Crucially, because HM is weakly closed, the limit must satisfy the constraints: fλ ∈ H M . Finally, since Jλ is continuous and convex, it is weakly lower semicontinuous. Therefore: 
+
+Jλ(fλ) ≤ lim inf  
+
+> k→∞
+
+Jλ(fnk ) = inf  
+
+> f∈H M
+
+Jλ(f ).
+
+Thus, the minimum is attained by fλ within the set HM .
+
+Lemma A.2 (Tensor-product B-spline quasi-interpolation) . Fix integers k, l ∈ N. There exist 
+
+Qk,l : L1([0 , 1] d) → L1([0 , 1] d), Ck,d = C(k, d ) < ∞, Cq = Cq(k, d ) < ∞,
+
+such that 
+
+Qk,l g(x) = Qk,l 
+
+
+
+g 1{u∈[0 ,1] d:∥u−x∥∞≤Ck,d /l }
+
+
+
+(x), g ∈ L1([0 , 1] d), x ∈ [0 , 1] d,
+
+and 
+
+∥Qk,l g∥L∞ ≤ Cq∥g∥L∞ , ∥∇ Qk,l g∥L∞ ≤ Cq∥∇ g∥L∞ , g, ∂ 1g, . . . , ∂ dg ∈ L∞([0 , 1] d). (17) 
+
+If s ∈ N, 0 ≤ r ≤ s, and k ≥ s, then, for C = C(k, s, r, d ),
+
+∥Qk,l g − g∥Hr ≤ Cl −(s−r)∥g∥Hs , g ∈ Hs([0 , 1] d). (18) 20 Proof. We construct Qk,l explicitly and then verify the displayed bounds. The construction has three ingredients. First, we take tensor products of univariate order-k B-splines on the uniform grid with repeated endpoint knots. Second, we choose local coefficient functionals so that the resulting operator reproduces tensor-product polynomials of coordinatewise degree at most k − 1. Third, compact support, uniformly bounded overlap, and the moment conditions give the L∞ and gradient stability estimates, while polynomial reproduction and locality give the Sobolev approximation bound by the Bramble–Hilbert lemma[31]. Let t(l) 
+
+> i
+
+= i/l for 0 ≤ i ≤ l, and repeat the endpoint knots by 
+
+t(l) 
+
+> −k+1
+
+= · · · = t(l) 
+
+> −1
+
+= t(l)0 = 0 , t(l) 
+
+> l
+
+= t(l) 
+
+> l+1
+
+= · · · = t(l) 
+
+> l+k−1
+
+= 1 .
+
+For i = −k + 1 , . . . , l − 1, define the order-k univariate B-spline by 
+
+N (k) 
+
+> l,i
+
+(x) := ( −1) k t(l) 
+
+> i+k
+
+− t(l)
+
+> i
+
+ t(l) 
+
+> i
+
+, t (l)
+
+> i+1
+
+, . . . , t (l)
+
+> i+k
+
+{(x − t)k−1+ }, x ∈ [0 , 1] .
+
+Here the divided difference is defined recursively as follows. For distinct knots a0, . . . , a m,[a0]F := F (a0), [a0, . . . , a m]F := [a1, . . . , a m]F − [a0, . . . , a m−1]Fam − a0
+
+,
+
+with the repeated-knot value understood by continuity, equivalently by the corresponding derivative limit. For interior indices 0 ≤ i ≤ l − k, this gives the explicit formula 
+
+N (k) 
+
+> l,i
+
+(x) = lk−1
+
+(k − 1)! 
+
+> k
+
+X
+
+> j=0
+
+(−1) j
+
+kj
+
+  
+
+x − i + jl
+
+k−1+
+
+,
+
+and the boundary splines are determined by the repeated endpoint knots. For i = ( i1, . . . , i d) ∈{− k + 1 , . . . , l − 1}d, set 
+
+N (k) 
+
+> l, i
+
+(x) := 
+
+> d
+
+Y
+
+> m=1
+
+N (k) 
+
+> l,i m
+
+(xm), x = ( x1, . . . , x d) ∈ [0 , 1] d.
+
+We now define the local coefficient functionals. For each univariate index i, let 
+
+ωl,i := [ t(l) 
+
+> i
+
+, t (l)
+
+> i+k
+
+] ∩ [0 , 1] .
+
+Choose ψ(k) 
+
+> l,i
+
+∈ L∞([0 , 1]), supported on ωl,i , such that 
+
+Z
+
+> ωl,i
+
+uaψ(k) 
+
+> l,i
+
+(u) du = γi,a , 0 ≤ a ≤ k − 1,
+
+where γi,a is the B-spline coefficient of the monomial ua, namely 
+
+ua =
+
+> l−1
+
+X
+
+> j=−k+1
+
+γj,a N (k) 
+
+> l,j
+
+(u), u ∈ [0 , 1] .
+
+Such ψ(k) 
+
+> l,i
+
+exists because this is a finite-dimensional moment system on ωl,i . By scaling from the reference knot configuration, it may be chosen so that 
+
+∥ψ(k) 
+
+> l,i
+
+∥L1([0 ,1]) ≤ Ck
+
+21 uniformly in l and i. For a multi-index i, define Λi(g) := 
+
+Z
+
+> [0 ,1] d
+
+g(u)
+
+> d
+
+Y
+
+> m=1
+
+ψ(k) 
+
+> l,i m
+
+(um) du. 
+
+Thus Λ i(g) depends only on g restricted to 
+
+ωl, i := 
+
+> d
+
+Y
+
+> m=1
+
+ωl,i m ,
+
+and diam( ωl, i) ≤ Ck,d l−1, Λi(g) = Λ i(g1ωl, i ), |Λi(g)| ≤ Ck,d ess sup 
+
+> u∈ωl, i
+
+|g(u)|. (19) Define 
+
+Qk,l g := X
+
+> i∈{− k+1 ,...,l −1}d
+
+Λi(g)N (k) 
+
+> l, i
+
+.
+
+The moment conditions imply 
+
+Qk,l p = p, p ∈ span xa1 
+
+> 1
+
+· · · xad 
+
+> d
+
+: 0 ≤ a1, . . . , a d ≤ k − 1 . (20) The B-splines form a nonnegative partition of unity, have supports of diameter O(l−1), and have uniformly bounded overlap: diam  supp N (k)
+
+> l, i
+
+ ≤ Ck,d l−1, sup 
+
+> x∈[0 ,1] d
+
+X
+
+> i
+
+1supp N (k)
+
+> l, i
+
+(x) ≤ Ck,d . (21) The coefficient bound above therefore gives 
+
+∥Qk,l g∥L∞ ≤ Cq∥g∥L∞ .
+
+For the derivative estimate, differentiating the B-spline basis produces a factor of order l. Since 
+
+Qk,l reproduces constants and is local, neighboring coefficients satisfy 
+
+|Λi(g) − Λj(g)| ≤ Ck,d l−1∥∇ g∥L∞ , |i − j|∞ ≤ 1.
+
+This factor l−1 cancels the derivative scale of the basis functions, and the bounded overlap gives 
+
+∥∇ Qk,l g∥L∞ ≤ Cq∥∇ g∥L∞ .
+
+Finally, for k ≥ s, (20) includes all local polynomials of total degree at most s − 1. Together with the locality, coefficient stability, and coefficient-patch diameter in (19), and the spline-support diameter and finite-overlap bounds in (21), the hypotheses of the standard Bramble–Hilbert estimate for local spline quasi-interpolation are satisfied. Applying this estimate on each patch and summing by finite overlap [31] proves (18). 
+
+Proposition A.3 (Approximation by the clipped and gradient-bounded sieve) . Let Ω ⊂ Rd be a bounded domain with sufficiently smooth boundary, and let μ be the spatial mixture measure corresponding to a pair (p, q ) satisfying Assumption 2.1. Let s ∈ N with 1 ≤ s ≤ 4. Suppose 
+
+f ⋆ ∈ Hs(μ) and 
+
+max ∥f ⋆∥L∞(μ), ∥∇ f ⋆∥L∞(μ) ≤ M ⋆.
+
+22 Then there exists CΩ ≥ 1, depending only on Ω, the density bounds in Assumption 2.1, and the fixed dimension d, such that the following holds. Choose M > C ΩM ⋆, and choose TM so that TM (u) = u
+
+for all |u| ≤ CΩM ⋆. For 
+
+L = O(1) , W = O(N ), S = O(N ), B = O(N ),
+
+there exists ¯fN ∈ F M (L, W, S, B )
+
+such that 
+
+∥ ¯fN − f ⋆∥2 
+
+> H1(μ)
+
+≲ N − 2( s−1)  
+
+> d
+
+∥f ⋆∥2
+
+> Hs(μ)
+
+. (22) 
+
+Proof. Under Assumption 2.1, the weighted Sobolev norm induced by μ is equivalent to the usual Sobolev norm on Ω. Hence it suffices to prove the approximation result in the usual H1(Ω) norm. Let 
+
+CΩ =
+
+> d
+
+Y
+
+> j=1
+
+[αj , α j + ρΩ]be a closed axis-aligned cube containing Ω, with ρΩ > 0. Since Ω has sufficiently smooth boundary, choose a bounded linear extension operator 
+
+E : Hs(Ω) → Hs(CΩ)such that, for a constant CE ≥ 1, 
+
+∥E f ∥Hs(CΩ) ≤ CE ∥f ∥Hs(Ω) 
+
+and max ∥E f ∥L∞(CΩ), ∥∇ (Ef )∥L∞(CΩ) ≤ CE max ∥f ∥L∞(Ω) , ∥∇ f ∥L∞(Ω) .
+
+Define the affine map 
+
+aΩ(x) := 
+
+ x1 − α1
+
+ρΩ
+
+, . . . , xd − αd
+
+ρΩ
+
+
+
+, x ∈ C Ω.
+
+Then aΩ is a bijection from CΩ to [0 , 1] d with linear part RΩ = ρ−1Ω Id, and hence RΩ is invertible. Moreover, 
+
+a−1Ω (z) = ( α1 + ρΩz1, . . . , α d + ρΩzd), z ∈ [0 , 1] d.
+
+Let Cq be the stability constant in Lemma A.2 for cubic splines, and set 
+
+CΩ := max 1, C qCE , ∥RΩ∥op Cq∥R−1Ω ∥op CE .
+
+All constants below may depend on Ω, the density bounds in Assumption 2.1, the extension operator, the affine map aΩ, and the fixed dimension d, but not on N .Let 
+
+l := 
+
+l
+
+N 1/d m
+
+.
+
+Define the spline approximant on Ω by 
+
+FN (x) :=  Q4,l 
+
+ (Ef ⋆) ◦ a−1Ω
+
+ (aΩ(x)) , x ∈ Ω. (23) Here ( Ef ⋆) ◦ a−1Ω is a function on [0 , 1] d, so Q4,l is applied on the unit cube. 23 We first prove the approximation bound. Since aΩ is fixed, Sobolev norms before and after the affine change of variables are equivalent. Therefore 
+
+∥(Ef ⋆) ◦ a−1Ω ∥Hs([0 ,1] d) ≲ ∥E f ⋆∥Hs(CΩ) ≤ CE ∥f ⋆∥Hs(Ω) ≲ ∥f ⋆∥Hs(μ).
+
+By Lemma A.2, with k = 4 and r = 1, 
+
+Q4,l 
+
+ (Ef ⋆) ◦ a−1Ω
+
+ − (Ef ⋆) ◦ a−1Ω H1([0 ,1] d) ≲ l−(s−1) ∥(Ef ⋆) ◦ a−1Ω ∥Hs([0 ,1] d).
+
+Since aΩ is fixed and Ef ⋆ = f ⋆ on Ω, by the definition of FN (23), the same change of variables gives 
+
+∥FN − f ⋆∥H1(Ω) ≲ Q4,l 
+
+ (Ef ⋆) ◦ a−1Ω
+
+ − (Ef ⋆) ◦ a−1Ω H1([0 ,1] d) .
+
+Combining the previous estimates, 
+
+∥FN − f ⋆∥H1(Ω) ≲ l−(s−1) ∥f ⋆∥Hs(μ).
+
+Since l ≍ N 1/d ,
+
+∥FN − f ⋆∥H1(Ω) ≲ N − s−1 
+
+> d
+
+∥f ⋆∥Hs(μ).
+
+By the norm equivalence between H1(Ω) and H1(μ), this also implies 
+
+∥FN − f ⋆∥H1(μ) ≲ N − s−1 
+
+> d
+
+∥f ⋆∥Hs(μ).
+
+We next verify the uniform envelope. By the boundedness of the extension operator, 
+
+∥(Ef ⋆) ◦ a−1Ω ∥L∞([0 ,1] d) = ∥E f ⋆∥L∞(CΩ) ≤ CE M ⋆.
+
+By the L∞-stability of Q4,l in Lemma A.2, 
+
+∥FN ∥L∞(Ω) ≤ Q4,l 
+
+ (Ef ⋆) ◦ a−1Ω
+
+ 
+
+> L∞([0 ,1] d)
+
+≤ CqCE M ⋆ ≤ CΩM ⋆ < M. 
+
+For the gradient, the chain rule gives 
+
+∇ (Ef ⋆) ◦ a−1Ω
+
+(z) = R−⊤  
+
+> Ω
+
+∇(Ef ⋆)( a−1Ω (z)) .
+
+Hence 
+
+∇ (Ef ⋆) ◦ a−1Ω
+
+ 
+
+> L∞([0 ,1] d)
+
+≤ ∥ R−1Ω ∥op CE M ⋆.
+
+Using the gradient stability of Q4,l in Lemma A.2, 
+
+∇Q4,l 
+
+ (Ef ⋆) ◦ a−1Ω
+
+ 
+
+> L∞([0 ,1] d)
+
+≤ Cq ∇ (Ef ⋆) ◦ a−1Ω
+
+ 
+
+> L∞([0 ,1] d)
+
+.
+
+Since 
+
+FN (x) =  Q4,l 
+
+ (Ef ⋆) ◦ a−1Ω
+
+ (aΩ(x)) ,
+
+another application of the chain rule gives 
+
+∥∇ FN ∥L∞(Ω) ≤ ∥ RΩ∥op ∇Q4,l 
+
+ (Ef ⋆) ◦ a−1Ω
+
+ 
+
+> L∞([0 ,1] d)
+
+.
+
+Combining the last three inequalities, 
+
+∥∇ FN ∥L∞(Ω) ≤ ∥ RΩ∥op Cq∥R−1Ω ∥op CE M ⋆ ≤ CΩM ⋆ < M. 
+
+24 Thus the definition of CΩ ensures that both the function value and the gradient of FN are controlled before clipping. It remains to realize FN as a sparse ReLU 3 neural network. The quasi-interpolant 
+
+Q4,l 
+
+ (Ef ⋆) ◦ a−1Ω
+
+
+
+is a linear combination of tensor-product cubic B-splines on [0 , 1] d. For interior indices, 
+
+N (4)  
+
+> l,i
+
+(z) = 13! 
+
+> 4
+
+X
+
+> j=0
+
+(−1) j
+
+4
+
+j
+
+
+
+(lz − (i + j)) 3+ .
+
+The boundary splines have analogous formulas determined by the repeated endpoint knots. Hence every univariate cubic B-spline can be represented exactly by a ReLU 3 subnetwork. Since the dimension d is fixed, each tensor-product cubic B-spline can be represented by a fixed-depth ReLU 3
+
+subnetwork. The number of tensor-product basis functions is 
+
+|Il, 4|d = O(ld) = O(N ).
+
+Composing with the fixed affine map aΩ only modifies the first layer. Therefore FN can be represented by a sparse ReLU 3 network with 
+
+L = O(1) , W = O(N ), S = O(N ), B = O(N ).
+
+The constants hidden in the O(·) notation may depend on Ω, d, the spline order, M ⋆, and fixed problem parameters, but not on N .Finally define ¯fN := TM ◦ FN .
+
+Since 
+
+∥FN ∥L∞(Ω) ≤ CΩM ⋆
+
+and TM (u) = u for all |u| ≤ CΩM ⋆, the clipping is inactive on Ω. Therefore ¯fN = FN on Ω .
+
+Consequently, 
+
+∥ ¯fN ∥L∞(μ) ≤ M, ∥∇ ¯fN ∥L∞(μ) ≤ M, 
+
+and hence ¯fN ∈ F M (L, W, S, B ).
+
+Moreover, 
+
+∥ ¯fN − f ⋆∥H1(μ) = ∥FN − f ⋆∥H1(μ) ≲ N − s−1 
+
+> d
+
+∥f ⋆∥Hs(μ).
+
+Squaring both sides gives 
+
+∥ ¯fN − f ⋆∥2 
+
+> H1(μ)
+
+≲ N − 2( s−1)  
+
+> d
+
+∥f ⋆∥2
+
+> Hs(μ)
+
+.
+
+This proves (22). 25 A.1 Proof of Lemma 3.3 
+
+Proof. We first analyze the cross-entropy loss. Recall that in Section 3 we define 
+
+η(x) := P(Y = 1 | X = x) = q(x)
+
+p(x) + q(x) , cmin := 14 cosh 2(M/ 2) .
+
+For fixed x, define the conditional risk as a function of the scalar logit u:
+
+Gx(u) := −η(x) log σ(u) − (1 − η(x)) log(1 − σ(u)) .
+
+Here G′ 
+
+> x
+
+and G′′  
+
+> x
+
+denote ordinary derivatives with respect to u. A direct calculation yields 
+
+G′′ 
+
+> x
+
+(u) = σ(u)(1 − σ(u)) = 14 cosh 2(u/ 2) .
+
+Since any f ∈ H M satisfies |f (x)| ≤ M almost everywhere, the curvature is uniformly bounded from below and above: 
+
+cmin ≤ G′′ 
+
+> x
+
+(u) ≤ 14 , ∀u ∈ [−M, M ]. (24) Since Gx(u) is smooth with bounded derivatives on this compact interval, standard arguments from the calculus of variations imply that LCE is Fr´ echet differentiable with DL CE (g)[ h] = 
+
+E[G′ 
+
+> X
+
+(g(X)) h(X)]. Applying Taylor’s theorem with integral remainder to Gx, we obtain: 
+
+Gx(u) − Gx(v) − G′
+
+> x
+
+(v)( u − v) = ( u − v)2
+
+Z 10
+
+(1 − t)G′′ 
+
+> x
+
+ v + t(u − v) dt. 
+
+Using the bounds on G′′ 
+
+> x
+
+, this implies 
+
+cmin 
+
+2 (u − v)2 ≤ Gx(u) − Gx(v) − G′
+
+> x
+
+(v)( u − v) ≤ 18 (u − v)2.
+
+Integrating with respect to μ (setting u = f (x), v = g(x)) yields the strong convexity and smoothness estimates for LCE :
+
+cmin 
+
+2 ∥f − g∥2 
+
+> L2(μ)
+
+≤ LCE (f ) − LCE (g) − DL CE (g)[ f − g] ≤ 12 ∥f − g∥2
+
+> L2(μ)
+
+. (25) We then analyze the regularizer. The functional R(f ) = ∥∇ f ∥2 
+
+> L2(μ)
+
+is a standard quadratic form on the Hilbert space H1(μ). It is strictly convex and Fr´ echet differentiable with DR(g)[ h] = 2⟨∇ g, ∇h⟩L2(μ). The polarization identity yields the exact expansion: 
+
+R(f ) − R (g) − DR(g)[ f − g] = ∥∇ (f − g)∥2
+
+> L2(μ)
+
+. (26) Finally, we put together above results. Recall Jλ(f ) = LCE (f ) + λR(f ). By linearity, DJ λ =
+
+DL CE + λD R. Combining the lower bound from (25) and the identity (26), we obtain: 
+
+Jλ(f ) − Jλ(g) − DJ λ(g)[ f − g] ≥ cmin 
+
+2 ∥f − g∥2 
+
+> L2(μ)
+
++ λ∥∇ (f − g)∥2
+
+> L2(μ)
+
+,
+
+which proves (9). Similarly, combining the upper bound from (25) with (26) yields (10). 26 A.2 Proof of Lemma 3.4 
+
+Proof. We proceed in three steps. Step 1: A pointwise calibration inequality along fλ − f ⋆. From (24) we have 
+
+cmin ≤ G′′ 
+
+> x
+
+(u) ≤ 14 for all u ∈ [−M, M ] and all x. 
+
+By the fundamental theorem of calculus, 
+
+G′
+
+> x
+
+(f (x)) − G′
+
+> x
+
+(f ⋆(x)) = 
+
+Z 10
+
+G′′ 
+
+> x
+
+ f ⋆(x) + t(f (x) − f ⋆(x))  (f (x) − f ⋆(x)) d t. 
+
+Since f ⋆ is the Bayes logit, we have G′
+
+> x
+
+(f ⋆(x)) = σ(f ⋆(x)) − η(x) = 0, so 
+
+G′
+
+> x
+
+(f (x)) ( f (x) − f ⋆(x)) = 
+
+Z 10
+
+G′′ 
+
+> x
+
+ f ⋆(x) + t(f (x) − f ⋆(x))  dt
+
+!
+
+(f (x) − f ⋆(x)) 2.
+
+Define 
+
+w(x) := 
+
+Z 10
+
+G′′ 
+
+> x
+
+ f ⋆(x) + t(f (x) − f ⋆(x))  dt. 
+
+By the bounds on G′′ 
+
+> x
+
+, we have cmin ≤ w(x) ≤ 1/4 for all x. Moreover G′
+
+> x
+
+(f (x)) = σ(f (x)) − η(x), so (σ(f (x)) − η(x)) ( f (x) − f ⋆(x)) = w(x) ( f (x) − f ⋆(x)) 2.
+
+Taking expectation with respect to X ∼ μ gives 
+
+E(σ(f (X)) − η(X)) ( f (X) − f ⋆(X))  = Ew(X) ( f (X) − f ⋆(X)) 2,
+
+and hence 
+
+cmin ∥f − f ⋆∥2 
+
+> L2(μ)
+
+≤ E(σ(f (X)) − η(X)) ( f (X) − f ⋆(X))  ≤ 14 ∥f − f ⋆∥2
+
+> L2(μ)
+
+. (27) This is the desired “gradient-distance” inequality along the direction f − f ⋆.Step 2: First-order optimality of fλ and Green’s identity. Since fλ minimizes Jλ(f ) over the convex set HM , and noting that f ⋆ ∈ H M (which holds by the assumption M ≥ M ⋆), fλ satisfies the first-order variational inequality: 
+
+DJ λ(fλ)[ f ⋆ − fλ] ≥ 0.
+
+Equivalently, DJ λ(fλ)[ fλ − f ⋆] ≤ 0, which expands to 
+
+E(σ(fλ) − η)( fλ − f ⋆) + 2 λ (∇fλ, ∇(fλ − f ⋆)) L2(μ) ≤ 0. (28) Since ∇fλ = ∇f ⋆ + ∇(fλ − f ⋆), (∇fλ, ∇(fλ − f ⋆)) L2(μ) = ∥∇ (fλ − f ⋆)∥2 
+
+> L2(μ)
+
++ ( ∇f ⋆, ∇(fλ − f ⋆)) L2(μ).
+
+By the Neumann boundary condition in Assumption 2.1 and Green’s Identity, we have 
+
+−(∇(fλ − f ⋆), ∇f ⋆)L2(μ) = (∆ f ⋆ + ∇f ⋆ · ∇ log ρ, f λ − f ⋆)L2(μ).
+
+27 By the definition Kh := ∆ h + ∇h · ∇ log ρ, Kf ⋆ ∈ L2(μ). Then (∇f ⋆, ∇(fλ − f ⋆)) L2(μ) = −(Kf ⋆, f λ − f ⋆)L2(μ).
+
+Substituting into (28) yields 
+
+E(σ(fλ) − η)( fλ − f ⋆) + 2 λ∥∇ (fλ − f ⋆)∥2 
+
+> L2(μ)
+
+− 2λ(Kf ⋆, f λ − f ⋆)L2(μ) ≤ 0,
+
+or equivalently 
+
+E(σ(fλ) − η)( fλ − f ⋆) + 2 λ∥∇ (fλ − f ⋆)∥2 
+
+> L2(μ)
+
+≤ 2λ(Kf ⋆, f λ − f ⋆)L2(μ). (29) Step 3: Combining the sandwich inequality and Cauchy–Schwarz. Applying the lower bound in (27) with f = fλ, we obtain 
+
+cmin ∥fλ − f ⋆∥2 
+
+> L2(μ)
+
+≤ E(σ(fλ) − η)( fλ − f ⋆).
+
+Combining this with (29), we get 
+
+cmin ∥fλ − f ⋆∥2 
+
+> L2(μ)
+
++ 2 λ∥∇ (fλ − f ⋆)∥2 
+
+> L2(μ)
+
+≤ 2λ(Kf ⋆, f λ − f ⋆)L2(μ)
+
+≤ 2λ ∥K f ⋆∥L2(μ) ∥fλ − f ⋆∥L2(μ). (30) We now extract the desired bounds from (30). 
+
+(i) Value bias. Dropping the nonnegative gradient term on the left-hand side gives 
+
+cmin ∥fλ − f ⋆∥2 
+
+> L2(μ)
+
+≤ 2λ ∥K f ⋆∥L2(μ) ∥fλ − f ⋆∥L2(μ).
+
+If fλ = f ⋆, the conclusion is trivial. Otherwise, dividing both sides by ∥fλ − f ⋆∥L2(μ),
+
+∥fλ − f ⋆∥L2(μ) ≤ 2 ∥K f ⋆∥L2(μ)
+
+cmin 
+
+λ. 
+
+Hence 
+
+∥fλ − f ⋆∥2 
+
+> L2(μ)
+
+≤
+
+ 2 ∥K f ⋆∥L2(μ)
+
+cmin 
+
+2
+
+λ2. (31) 
+
+(ii) Gradient bias. Substituting the bound ∥fλ − f ⋆∥L2(μ) ≤  2 ∥K f ⋆∥L2(μ)/c min 
+
+λ back into (30), we obtain 2λ∥∇ (fλ − f ⋆)∥2 
+
+> L2(μ)
+
+≤ 2λ ∥K f ⋆∥L2(μ) ∥fλ − f ⋆∥L2(μ)
+
+≤ 2λ ∥K f ⋆∥L2(μ) · 2 ∥K f ⋆∥L2(μ)
+
+cmin 
+
+λ = 4 ∥K f ⋆∥2
+
+> L2(μ)
+
+cmin 
+
+λ2.
+
+Dividing by 2 λ (recall λ > 0) yields 
+
+∥∇ (fλ − f ⋆)∥2 
+
+> L2(μ)
+
+≤ 2 ∥K f ⋆∥2
+
+> L2(μ)
+
+cmin 
+
+λ. (32) Using the explicit value cmin = 1 /(4 cosh 2(M/ 2)), we can write 
+
+ 2 ∥K f ⋆∥L2(μ)
+
+cmin 
+
+2
+
+= 64 ∥K f ⋆∥2 
+
+> L2(μ)
+
+cosh 4(M/ 2) , 2 ∥K f ⋆∥2
+
+> L2(μ)
+
+cmin 
+
+= 8 ∥K f ⋆∥2 
+
+> L2(μ)
+
+cosh 2(M/ 2) .
+
+Thus we may take β = 64 ∥K f ⋆∥2 
+
+> L2(μ)
+
+cosh 4  M
+
+> 2
+
+ so that max 
+
+n
+
+64 ∥K f ⋆∥2 
+
+> L2(μ)
+
+cosh 4  M
+
+> 2
+
+, 8 ∥K f ⋆∥2 
+
+> L2(μ)
+
+cosh 2  M
+
+> 2
+
+o
+
+≤ β. 
+
+28 A.3 Proof of Theorem 3.5 
+
+Let {σpi }ni=1 and {σqi }ni=1 be independent i.i.d. Rademacher variables, i.e., 
+
+P(σpi = 1) = P(σpi = −1) = P(σqi = 1) = P(σqi = −1) = 12 , i = 1 , . . . , n. 
+
+For the fixed source–target design, define the empirical Rademacher complexity of a function class 
+
+G with respect to D = {(Xpi , 0) }ni=1 ∪ { (Xqi , 1) }ni=1 by 
+
+Rn(G; D) := Eσ
+
+"
+
+sup 
+
+> g∈G
+
+(
+
+12n
+
+> n
+
+X
+
+> i=1
+
+σpi g(Xpi , 0) + 12n
+
+> n
+
+X
+
+> i=1
+
+σqi g(Xqi , 1) 
+
+)
+
+D
+
+#
+
+.
+
+Here Eσ denotes expectation with respect to the Rademacher variables only, conditional on D.Similarly, Eσp and Eσq denote expectations over the two corresponding Rademacher blocks. 
+
+Proof. Fix t > 0. Define the shifted excess-loss function 
+
+ℓf (x, y ) := ℓCE (y, f (x)) − ℓCE (y, f 0(x)) + λ  ∥∇ f (x)∥22 − ∥∇ f0(x)∥22
+
+ . (33) Then, with P and P n defined above, 
+
+P ℓ f = Jλ(f ) − Jλ(f0),
+
+and 
+
+P nℓf = bJλ, D(f ) − bJλ, D(f0).
+
+Step 1: Local Rademacher complexity bound. For r > 0, define the localized set 
+
+Ur := {f ∈ F : Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) ≤ r} ,
+
+and define the shifted localized loss class 
+
+Gr := {ℓf : Ω × { 0, 1} → R | f ∈ U r} .
+
+Here ℓf is the shifted excess loss in (33). We claim that for r ≳ n−2,
+
+Rn(Gr; D) ≤ ϕ(r) := C0
+
+"
+
+1
+
+n +
+
+r S 3Lrn log( BW n )
+
+#
+
+, (34) and ϕ(4 r) ≤ 2ϕ(r). We first prove the Lipschitz property of the shifted excess loss. Since 
+
+∂uℓCE (y, u ) = σ(u) − y, 
+
+the cross-entropy loss is 1-Lipschitz in u. For any f1, f 2 ∈ U r, using the fixed clipped-gradient envelope 
+
+∥fj ∥L∞(μ) ≤ M, ∥∇ fj ∥L∞(μ) ≤ M, j = 1 , 2,
+
+we obtain 
+
+|gf1 (x, y ) − gf2 (x, y )| = ℓCE (y, f 1(x)) − ℓCE (y, f 2(x)) + λ  ∥∇ f1(x)∥22 − ∥∇ f2(x)∥22
+
+
+
+≤ | f1(x) − f2(x)| + λ (∥∇ f1(x)∥2 + ∥∇ f2(x)∥2) ∥∇ f1(x) − ∇ f2(x)∥2
+
+≤ | f1(x) − f2(x)| + 2 M λ ∥∇ f1(x) − ∇ f2(x)∥2.
+
+29 Thus ℓf is Lipschitz in ( f, λ ∇f ), with Lipschitz constant depending only on M .Next we relate the shifted localization 
+
+Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) ≤ r
+
+to a radius constraint around f0. By Lemma 3.3, for all f ∈ H M ,
+
+Jλ(f ) − Jλ(fλ) ≥ cmin 
+
+2 ∥f − fλ∥2 
+
+> L2(μ)
+
++ λ∥∇ (f − fλ)∥2
+
+> L2(μ)
+
+.
+
+Similarly, 
+
+Jλ(f0) − Jλ(fλ) ≥ cmin 
+
+2 ∥f0 − fλ∥2 
+
+> L2(μ)
+
++ λ∥∇ (f0 − fλ)∥2
+
+> L2(μ)
+
+.
+
+Therefore, if f ∈ U r, then 
+
+∥f − f0∥2 
+
+> L2(μ)
+
+≤ 2∥f − fλ∥2 
+
+> L2(μ)
+
++ 2 ∥f0 − fλ∥2 
+
+> L2(μ)
+
+≤ 4
+
+cmin 
+
+r, 
+
+and 
+
+∥λ∇(f − f0)∥2 
+
+> L2(μ)
+
+≤ 2λ2∥∇ (f − fλ)∥2 
+
+> L2(μ)
+
++ 2 λ2∥∇ (f0 − fλ)∥2 
+
+> L2(μ)
+
+≤ 2λr ≤ 2r, 
+
+where we used 0 < λ < 1. Applying the Ledoux–Talagrand contraction lemma [19, Theorem 4.12] separately to the p-sample block and the q-sample block, and using sup f (af + bf ) ≤ sup f af + sup f bf , we first have 
+
+Rn(Gr; D) = Eσ sup  
+
+> f∈U r
+
+(
+
+12n
+
+> n
+
+X
+
+> i=1
+
+σpi ℓf (Xpi , 0) + 12n
+
+> n
+
+X
+
+> i=1
+
+σqi ℓf (Xqi , 1) 
+
+)
+
+≤ Eσp sup  
+
+> f∈U r
+
+12n
+
+> n
+
+X
+
+> i=1
+
+σpi ℓf (Xpi , 0) + Eσq sup  
+
+> f∈U r
+
+12n
+
+> n
+
+X
+
+> i=1
+
+σqi ℓf (Xqi , 1) .
+
+The same derivative-augmented covering-number argument as in Lemma A.26 of [24] gives, for all 
+
+r ≳ n−2,
+
+Rn(Gr; D) ≲ Rn({f − f0 : f ∈ U r}; D)+ Rn({λ∇f − λ∇f0 : f ∈ U r}; D)
+
+≲ 1
+
+n + 1
+
+√n
+
+Z C√r
+
+> 1/n
+
+r
+
+S
+
+h
+
+log( δ−1) + 3 L log( W B )
+
+i
+
+dδ 
+
+≲ 1
+
+n +
+
+r Sr n
+
+h
+
+log n + 3 L log( W B )
+
+i
+
+≲ 1
+
+n +
+
+r S 3Lrn log( BW n ).
+
+The first inequality follows from the Ledoux–Talagrand contraction lemma applied to the pointwise Lipschitz bound 
+
+|gf1 (x, y ) − gf2 (x, y )| ≤ | f1(x) − f2(x)| + 2 M λ ∥∇ f1(x) − ∇ f2(x)∥2.
+
+Indeed, the logistic cross-entropy loss is 1-Lipschitz in the logit argument, and 
+
+∥∇ f1(x)∥22 − ∥∇ f2(x)∥22 ≤ (∥∇ f1(x)∥2 + ∥∇ f2(x)∥2)
+
+· ∥∇ f1(x) − ∇ f2(x)∥2
+
+≤ 2M ∥∇ f1(x) − ∇ f2(x)∥2.
+
+30 Thus the Rademacher complexity of the shifted loss class is reduced to the complexities of the localized function class and the localized λ-scaled gradient class. The second inequality is the Dudley entropy integral after using the shifted localization 
+
+Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) ≤ r. 
+
+By the strong convexity of Jλ, for 0 < λ ≤ 1, 
+
+∥f − f0∥2 
+
+> L2(μ)
+
++ ∥λ∇(f − f0)∥2 
+
+> L2(μ)
+
+≲ r. 
+
+Hence both localized classes have L2(μ)-radius of order √r.Since μ = ( p + q)/2, for every measurable h,
+
+∥h∥2 
+
+> L2(p)
+
+≤ 2∥h∥2
+
+> L2(μ)
+
+, ∥h∥2 
+
+> L2(q)
+
+≤ 2∥h∥2
+
+> L2(μ)
+
+.
+
+Therefore the same C√r localized radius is valid for the two empirical blocks {Xpi }ni=1 and {Xqi }ni=1 .Combining this radius bound with the derivative-augmented covering-number estimate for sparse ReLU 3 networks gives log N (δ, F, ∥ · ∥ ∞) ∨ log N (δ, ∇F , ∥ · ∥ ∞) ≲ S
+
+h
+
+log( δ−1) + 3 L log( W B )
+
+i
+
+.
+
+Since the empirical L2-metric is dominated by the sup-norm, Dudley’s integral yields the displayed entropy integral with upper limit C√r.Finally, evaluating the integral gives 1
+
+√n
+
+Z C√r
+
+> 1/n
+
+r
+
+S
+
+h
+
+log( δ−1) + 3 L log( W B )
+
+i
+
+dδ ≲
+
+r Sr n
+
+h
+
+log n + 3 L log( W B )
+
+i
+
+,
+
+which is further bounded by r S 3Lrn log( BW n ).
+
+This is exactly the sub-root function ϕ stated in Theorem 3.5: 
+
+ϕ(r) := C0
+
+"
+
+1
+
+n +
+
+r S 3Lrn log( BW n )
+
+#
+
+.
+
+This function is sub-root: it is nonnegative, nondecreasing, and ϕ(r)/√r is nonincreasing on r > 0. Consequently, its critical radius satisfies 
+
+r⋆ ≲ 1
+
+n + S 3L log( BW n )
+
+n .
+
+In particular, when L = O(1), S = O(N ), and B, W = O(N ), we obtain 
+
+r⋆ ≲ N (log N + log n)
+
+n .
+
+Step 2: Peeling and the normalized empirical process. The local Rademacher bound in Step 1 controls the class only on each localized shell 
+
+Gs = {ℓf : Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) ≤ s} .
+
+31 Here and below, ℓf denotes the shifted loss defined in (33). To turn these shell-wise bounds into a uniform bound over the whole class F, we introduce the normalized class 
+
+Gr := 
+
+bℓf : bℓf (x, y ) = ℓf (x, y )
+
+Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) + r , f ∈ F 
+
+
+
+.
+
+The numerator uses the same shifted loss ℓf from (33). The denominator is positive because both excess risks are nonnegative and r > 0. The role of the denominator is to rescale each function according to its own local excess radius. Thus, functions lying farther from the population minimizer are placed in larger shells and are normalized more strongly. Applying the Peeling Lemma (Lemma A.7 in [24]), with the localization functional 
+
+f 7 → Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ),
+
+and using the sub-root bound 
+
+Rn(Gs; D) ≤ ϕ(s),
+
+we obtain 
+
+Rn(Gr; D) ≤ 4ϕ(r)
+
+r .
+
+In words, peeling converts the local Rademacher bounds on the shells 
+
+{Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) ≤ s}
+
+into a single Rademacher bound for the normalized global class. We now pass from the normalized loss class to the centered normalized empirical process. Define 
+
+eGr := 
+
+eℓf : Ω × { 0, 1} → R eℓf (x, y ) = P ℓ f − ℓf (x, y )
+
+Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) + r , f ∈ F 
+
+
+
+.
+
+This is the centered version of the normalized shifted loss in (33). Let {Xp′ 
+
+> i
+
+}ni=1 and {Xq′ 
+
+> i
+
+}ni=1 
+
+be auxiliary independent copies, independent of the data, with Xp′ 
+
+> i
+
+∼ p and Xq′ 
+
+> i
+
+∼ q. By the Symmetrization Lemma (Lemma A.3 in [24]) applied separately to the p-sample and q-sample blocks and then summed, sup  
+
+> eg∈eGr
+
+E
+
+"
+
+12n
+
+> n
+
+X
+
+> i=1
+
+eg(Xp′ 
+
+> i
+
+, 0) + 12n
+
+> n
+
+X
+
+> i=1
+
+eg(Xq′ 
+
+> i
+
+, 1) 
+
+#
+
+≤ 2Rn(Gr; D)
+
+≤ 8ϕ(r)
+
+r .
+
+Therefore, sup  
+
+> eg∈eGr
+
+E
+
+"
+
+12n
+
+> n
+
+X
+
+> i=1
+
+eg(Xp′ 
+
+> i
+
+, 0) + 12n
+
+> n
+
+X
+
+> i=1
+
+eg(Xq′ 
+
+> i
+
+, 1) 
+
+#
+
+≤ 8ϕ(r)
+
+r . (35) Step 3: Verifying the Talagrand conditions. For any f ∈ F , since both f and f0 lie in the clipped and gradient-bounded sieve, 
+
+∥f ∥∞, ∥f0∥∞, ∥∇ f ∥∞, ∥∇ f0∥∞ ≤ M. 
+
+32 Hence, for every ( x, y ), 
+
+|ℓf (x, y )| ≤ | ℓCE (y, f (x)) | + |ℓCE (y, f 0(x)) | + λ  ∥∇ f (x)∥22 + ∥∇ f0(x)∥22
+
+
+
+≤ 2(log(1 + eM ) + M ) + 2 λM 2
+
+≤ 2(log(1 + eM ) + M ) + 2 M 2 =: M∞.
+
+Therefore 
+
+∥eℓf ∥∞ ≤ 2M∞
+
+r =: βTal . (36) We next bound the second moment. From the Lipschitz estimate in Step 1, 
+
+|ℓf (x, y )| ≤ | f (x) − f0(x)| + 2 M λ ∥∇ f (x) − ∇ f0(x)∥2.
+
+Thus 
+
+P ℓ 2 
+
+> f
+
+≤ C0
+
+
+
+∥f − f0∥2 
+
+> L2(μ)
+
++ ∥λ∇(f − f0)∥2
+
+> L2(μ)
+
+
+
+.
+
+Using the strong-convexity bounds from Step 1, 
+
+P ℓ 2 
+
+> f
+
+≤ C0 (Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ)) .
+
+Consequently, 
+
+P eℓ2 
+
+> f
+
+= P [( ℓf − P ℓ f )2](Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) + r)2
+
+≤ P ℓ 2
+
+> f
+
+(Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) + r)2 ≤ C0
+
+r =: σ2Tal .
+
+Moreover, 
+
+P eℓf = 0 .
+
+Step 4: Talagrand concentration and choosing the radius. Apply Talagrand’s inequality to the independent product variables ( Xpi , X qi ), with the normalized centered function (xp, x q) 7 → 12 eg(xp, 0) + 12 eg(xq, 1) .
+
+With probability at least 1 − e−t,sup  
+
+> eg∈eGr
+
+P neg ≤ 2 sup  
+
+> eg∈eGr
+
+E
+
+"
+
+12n
+
+> n
+
+X
+
+> i=1
+
+eg(Xp′ 
+
+> i
+
+, 0) + 12n
+
+> n
+
+X
+
+> i=1
+
+eg(Xq′ 
+
+> i
+
+, 1) 
+
+#
+
++
+
+s
+
+2tσ 2Tal 
+
+n + 2tβ Tal 
+
+n
+
+≤ 16 ϕ(r)
+
+r + C0
+
+r tnr + C0tnr =: ψ(r).
+
+Choose 
+
+r0 := C′ 
+
+> 0
+
+max 
+
+
+
+r⋆, tn
+
+
+
+,
+
+where C′ 
+
+> 0
+
+is chosen so that 
+
+C′ 
+
+> 0
+
+≥ max 128 2, 36 C20 , 6C0 .
+
+33 Since ϕ is sub-root and r⋆ is its critical radius, r 7 → ϕ(r)/√r is nonincreasing and ϕ(r⋆) = r⋆. Hence 
+
+r0 ≥ C′
+
+> 0
+
+r⋆ implies 
+
+ϕ(r0)
+
+r0
+
+≤
+
+ r⋆
+
+r0
+
+1/2
+
+≤ 1
+
+pC′
+
+> 0
+
+.
+
+Thus the first term satisfies 16 ϕ(r0)
+
+r0
+
+≤ 18 .
+
+Moreover, r0 ≥ C′
+
+> 0
+
+t/n , and therefore 
+
+C0
+
+r tnr 0
+
+≤ 16 , C0tnr 0
+
+≤ 16 ,
+
+where the two inequalities follow respectively from C′ 
+
+> 0
+
+≥ 36 C20 and C′ 
+
+> 0
+
+≥ 6C0.Therefore, 
+
+ψ(r0) ≤ 18 + 16 + 16 < 12 .
+
+Step 5: Concluding the shifted oracle bound. Pick r = r0. On the event above, for every f ∈ F ,
+
+h
+
+Jλ(f ) − bJλ, D(f )
+
+i
+
+−
+
+h
+
+Jλ(f0) − bJλ, D(f0)
+
+i
+
+Jλ(f ) − Jλ(fλ) + Jλ(f0) − Jλ(fλ) + r0
+
+= P n eℓf ≤ 12 ,
+
+which implies 
+
+h
+
+Jλ(f ) − bJλ, D(f )
+
+i
+
+−
+
+h
+
+Jλ(f0) − bJλ, D(f0)
+
+i
+
+≤ 12 [Jλ(f ) − Jλ(fλ)] + 12 [Jλ(f0) − Jλ(fλ)] + 12 r0.
+
+Now take f = bfλ, F . By empirical optimality, 
+
+bJλ, D( bfλ, F ) ≤ bJλ, D(f0).
+
+Therefore 
+
+Jλ( bfλ, F ) − Jλ(fλ) ≤
+
+h
+
+Jλ( bfλ, F ) − bJλ, D( bfλ, F )
+
+i
+
+−
+
+h
+
+Jλ(f0) − bJλ, D(f0)
+
+i
+
++ Jλ(f0) − Jλ(fλ)
+
+≤ 12
+
+h
+
+Jλ( bfλ, F ) − Jλ(fλ)
+
+i
+
++ 32 [Jλ(f0) − Jλ(fλ)] + 12 r0.
+
+Rearranging gives 
+
+Jλ( bfλ, F ) − Jλ(fλ) ≤ 3 [ Jλ(f0) − Jλ(fλ)] + r0.
+
+Since r0 ≲ max {r⋆, t/n }, we conclude that 
+
+Jλ( bfλ, F ) − Jλ(fλ) ≲ Jλ(f0) − Jλ(fλ) + r⋆ + tn .
+
+This proves the theorem. 34 A.4 Proof of Theorem 3.1 
+
+Proof. Let 
+
+F := FM (Ln, W n, S n, B n).
+
+By Proposition A.3, there exists ¯fN ∈ F and a constant C1, independent of n, N, λ , such that 
+
+∥ ¯fN − f ⋆∥2 
+
+> H1(μ)
+
+≤ C1N − 2( s−1)  
+
+> d
+
+. (37) Define 
+
+δN := N − s−1 
+
+> d
+
+.
+
+Then 
+
+∥ ¯fN − f ⋆∥L2(μ) ≤ C1/21 δN , ∥∇ ( ¯fN − f ⋆)∥L2(μ) ≤ C1/21 δN .
+
+We first bound the comparator excess Jλ( ¯fN ) − Jλ(fλ). Since fλ minimizes Jλ, this quantity is nonnegative. Moreover, 
+
+Jλ( ¯fN ) − Jλ(fλ) ≤ Jλ( ¯fN ) − Jλ(f ⋆) + Jλ(f ⋆) − Jλ(fλ).
+
+Step 1: Bound Jλ( ¯fN ) − Jλ(f ⋆). Since f ⋆ minimizes the population cross-entropy risk and 
+
+∂2
+
+> u
+
+ℓCE (y, u ) = σ(u)(1 − σ(u)) ≤ 14 ,
+
+we have 
+
+LCE ( ¯fN ) − LCE (f ⋆) ≤ 18 ∥ ¯fN − f ⋆∥2 
+
+> L2(μ)
+
+≤ 18 C1δ2 
+
+> N
+
+.
+
+For the Sobolev penalty, using 
+
+∥∇ ¯fN ∥L∞(μ) ≤ M, ∥∇ f ⋆∥L∞(μ) ≤ M, 
+
+we obtain 
+
+λ ∥∇ ¯fN ∥2 
+
+> L2(μ)
+
+− ∥∇ f ⋆∥2 
+
+> L2(μ)
+
+≤ λ
+
+Z  ∥∇ ¯fN ∥2 + ∥∇ f ⋆∥2
+
+ ∥∇ ( ¯fN − f ⋆)∥2 dμ 
+
+≤ 2M λ ∥∇ ( ¯fN − f ⋆)∥L2(μ)
+
+≤ 2M C 1/21 λδ N .
+
+Therefore 
+
+Jλ( ¯fN ) − Jλ(f ⋆) ≤ 18 C1δ2 
+
+> N
+
++ 2 M C 1/21 λδ N . (38) Step 2: Bound Jλ(f ⋆) − Jλ(fλ). Since f ⋆ minimizes LCE ,
+
+LCE (f ⋆) − LCE (fλ) ≤ 0.
+
+Thus 
+
+Jλ(f ⋆) − Jλ(fλ) ≤ λ
+
+
+
+∥∇ f ⋆∥2 
+
+> L2(μ)
+
+− ∥∇ fλ∥2
+
+> L2(μ)
+
+
+
+.
+
+Then 
+
+∥∇ f ⋆∥2 
+
+> L2(μ)
+
+− ∥∇ fλ∥2 
+
+> L2(μ)
+
+= −2⟨∇ f ⋆, ∇(fλ − f ⋆)⟩L2(μ) − ∥∇ (fλ − f ⋆)∥2
+
+> L2(μ)
+
+.
+
+Hence 
+
+Jλ(f ⋆) − Jλ(fλ) ≤ 2λ ⟨∇ f ⋆, ∇(fλ − f ⋆)⟩L2(μ) .
+
+35 Using the same Green identity as in Lemma 3.4, 
+
+⟨∇ f ⋆, ∇(fλ − f ⋆)⟩L2(μ) = ⟨K f ⋆, f λ − f ⋆⟩L2(μ) ≤ ∥K f ⋆∥L2(μ)∥fλ − f ⋆∥L2(μ).
+
+By Lemma 3.4, 
+
+∥fλ − f ⋆∥L2(μ) ≤ pβλ. 
+
+Therefore 
+
+Jλ(f ⋆) − Jλ(fλ) ≤ 2∥K f ⋆∥L2(μ)
+
+pβ λ 2. (39) Combining (38) and (39), we obtain 
+
+Jλ( ¯fN ) − Jλ(fλ) ≤ 18 C1δ2 
+
+> N
+
++ 2 M C 1/21 λδ N + 2 ∥K f ⋆∥L2(μ)
+
+pβλ 2. (40) Step 3: Apply the shifted oracle inequality. Apply Theorem 3.5 with comparator ¯fN and t = 2 log n.There exists a constant C2, independent of n, N, λ , such that with probability at least 1 − n−2,
+
+Jλ( bfλ, F ) − Jλ(fλ) ≤ C2
+
+
+
+Jλ( ¯fN ) − Jλ(fλ) + r⋆ + log nn
+
+
+
+.
+
+Using (40), we get 
+
+Jλ( bfλ, F ) − Jλ(fλ) ≤ C2
+
+ 18 C1δ2 
+
+> N
+
++ 2 M C 1/21 λδ N + 2 ∥K f ⋆∥L2(μ)
+
+pβλ 2 + r⋆ + log nn
+
+
+
+. (41) Step 4: Convert excess risk to L2 and gradient errors. By Lemma 3.3, for any f, g ∈ H M ,
+
+Jλ(f ) − Jλ(g) − DJ λ(g)[ f − g] ≥ cmin 
+
+2 ∥f − g∥2 
+
+> L2(μ)
+
++ λ∥∇ (f − g)∥2
+
+> L2(μ)
+
+.
+
+Since fλ is the population minimizer, the first-order optimality condition gives 
+
+DJ λ(fλ)[ bfλ, F − fλ] ≥ 0.
+
+Therefore cmin 
+
+2 ∥ bfλ, F − fλ∥2 
+
+> L2(μ)
+
++ λ∥∇ ( bfλ, F − fλ)∥2 
+
+> L2(μ)
+
+≤ Jλ( bfλ, F ) − Jλ(fλ).
+
+Combining this with (41), we obtain 
+
+∥ bfλ, F − fλ∥2 
+
+> L2(μ)
+
+≤ 2C2
+
+cmin 
+
+ 18 C1δ2 
+
+> N
+
++ 2 M C 1/21 λδ N + 2 ∥K f ⋆∥L2(μ)
+
+pβλ 2 + r⋆ + log nn
+
+
+
+, (42) and 
+
+∥∇ ( bfλ, F − fλ)∥2 
+
+> L2(μ)
+
+≤ C2
+
+λ
+
+ 18 C1δ2 
+
+> N
+
++ 2 M C 1/21 λδ N + 2 ∥K f ⋆∥L2(μ)
+
+pβλ 2 + r⋆ + log nn
+
+
+
+. (43) Step 5: Add the regularization bias. By Lemma 3.4, 
+
+∥fλ − f ⋆∥2 
+
+> L2(μ)
+
+≤ βλ 2, ∥∇ (fλ − f ⋆)∥2 
+
+> L2(μ)
+
+≤ βλ. 
+
+Using the triangle inequality, 
+
+∥ bfλ, F − f ⋆∥2 
+
+> L2(μ)
+
+≤ 2∥ bfλ, F − fλ∥2 
+
+> L2(μ)
+
++ 2 ∥fλ − f ⋆∥2
+
+> L2(μ)
+
+,
+
+36 and 
+
+∥∇ ( bfλ, F − f ⋆)∥2 
+
+> L2(μ)
+
+≤ 2∥∇ ( bfλ, F − fλ)∥2 
+
+> L2(μ)
+
++ 2 ∥∇ (fλ − f ⋆)∥2
+
+> L2(μ)
+
+.
+
+Therefore 
+
+∥ bfλ, F − f ⋆∥2
+
+> H1(μ)
+
+≤
+
+ 4C2
+
+cmin 
+
++ 2C2
+
+λ
+
+  18 C1δ2 
+
+> N
+
++ 2 M C 1/21 λδ N + 2 ∥K f ⋆∥L2(μ)
+
+pβλ 2 + r⋆ + log nn
+
+
+
++ 2 βλ 2 + 2 βλ. 
+
+(44) Step 6: Choose λ and N . The critical radius satisfies 
+
+r⋆ ≤ C3
+
+N (log N + log n)
+
+n ,
+
+where C3 depends only on the fixed sieve envelope M and fixed depth L = O(1). Choose 
+
+λ ≍ δN = N − s−1 
+
+> d
+
+.
+
+Since cmin , M , ∥K f ⋆∥L2(μ), β, C1, C2, and C3 are independent of n, the leading terms in (44) are bounded by 
+
+C
+
+
+
+δN + r⋆
+
+δN
+
++ log nnδ N
+
+
+
+.
+
+Since r⋆ ≳ N/n up to logarithmic factors, the term log nnδ N
+
+is dominated by r⋆/δ N . Hence 
+
+∥ bfλ, F − f ⋆∥2 
+
+> H1(μ)
+
+≤ C
+
+"
+
+N − s−1 
+
+> d
+
++ N 1+ s−1 
+
+> d
+
+(log N + log n)
+
+n
+
+#
+
+.
+
+Balancing the two terms gives 
+
+N − s−1 
+
+> d
+
+≍ N 1+ s−1
+
+> d
+
+n ,
+
+and therefore 
+
+N ≍ n dd+2 s−2 .
+
+Consequently, 
+
+λ ≍ N − s−1 
+
+> d
+
+≍ n− s−1 
+
+> d+2 s−2
+
+.
+
+Substituting this choice yields 
+
+∥ bfλ, F − f ⋆∥2 
+
+> H1(μ)
+
+≤ Cn − s−1 
+
+> d+2 s−2
+
+log n. 
+
+This proves the theorem. 37 B Proof of Theorem 4.1: Minimax lower bound 
+
+Proof. Step 1: Local packing on Cpair with enough separation. We construct a finite subset of Cpair 
+
+whose log-density ratios have non-trivial H1-separation. Let η : R → R be the one-dimensional C∞ bump 
+
+η(t) := 
+
+
+
+exp   − 1
+
+> t(1 −t)
+
+, t ∈ (0 , 1) ,
+
+0, t / ∈ (0 , 1) ,
+
+and define 
+
+φ(x) := 
+
+> d
+
+Y
+
+> i=1
+
+η(xi), x = ( x1, . . . , x d) ∈ Rd.
+
+Then φ ∈ C∞(Rd), φ ≥ 0, ∇φ̸ ≡ 0, and supp( φ) ⊂ [0 , 1] d.For an integer m ≥ 1, choose points {xj }j∈{ 1,...,m }d ⊂ Rd such that the cubes xj + [0 , (3 m)−1]d
+
+are disjoint and contained in (0 , 1) d. Define 
+
+φm,j (x) := φ 3m(x − xj ).
+
+By the change of variables u = 3 m(x − xj ) and standard Sobolev scaling, 
+
+∥φm,j ∥2 
+
+> L2(μ0)
+
+≍ m−d, ∥∇ φm,j ∥2 
+
+> L2(μ0)
+
+≍ m2−d, ∥φm,j ∥2 
+
+> Hs(μ0)
+
+≍ m2s−d, (45) where the implicit constants depend only on φ and the density of μ0.By the Varshamov–Gilbert bound [35], there exist τ (1) , . . . , τ (N ) ∈ { 0, 1}md
+
+such that 
+
+N ≥ 2md/8, ∥τ (v) − τ (v′)∥22 ≥ md
+
+8 for all v̸ = v′.
+
+Fix an amplitude am > 0. For each v, choose the unique scalar cv such that 
+
+Z
+
+> Ω
+
+σ
+
+am
+
+X
+
+> j∈{ 1,...,m }d
+
+τ (v) 
+
+> j
+
+φm,j (x) − cv
+
+ dμ 0(x) = 12 ,
+
+and set 
+
+fv(x) := am
+
+X
+
+> j∈{ 1,...,m }d
+
+τ (v) 
+
+> j
+
+φm,j (x) − cv.
+
+The scalar cv exists and is unique because the left-hand side is a continuous strictly decreasing function of cv, with limits 1 and 0 as cv → −∞ and cv → +∞. Since the bump sum is nonnegative, 0 ≤ cv ≤ am sup 
+
+> x∈Ω
+
+X
+
+> j∈{ 1,...,m }d
+
+τ (v) 
+
+> j
+
+φm,j (x) ≲ am.
+
+Writing the constant density of μ0 as ρ0 = |Ω|−1, define 
+
+qv(x) := 2 σ(fv(x)) ρ0, pv(x) := 2(1 − σ(fv(x))) ρ0.
+
+Then Z
+
+> Ω
+
+qv(x) dx = 1 ,
+
+Z
+
+> Ω
+
+pv(x) dx = 1 , pv(x) + qv(x)2 = ρ0,
+
+38 and log qv(x)
+
+pv(x) = fv(x).
+
+We next verify that ( pv, q v) ∈ C pair . Since the supports of φm,j are disjoint, sup 
+
+> x∈Ω
+
+|fv(x)| ≲ am, (46) 
+
+∥fv∥2 
+
+> Hs(μ0)
+
+≲ a2
+
+> m
+
+X
+
+> j∈{ 1,...,m }d
+
+∥φm,j ∥2 
+
+> Hs(μ0)
+
++ c2 
+
+> v
+
+≲ a2
+
+> m
+
+m2s + a2
+
+> m
+
+. (47) Choosing am ≍ m−s with a sufficiently small implicit constant ensures that ∥fv∥Hs(μ0) < ∞ and sup x∈Ω |fv(x)| ≤ M . Since fv is bounded, smooth, and constant in a neighborhood of ∂Ω, it satisfies condition 3 in Assumption 2.1. Moreover, pv and qv are strictly positive and C2, and ∂nfv = 0 on 
+
+∂Ω. Since ( pv + qv)/2 = ρ0, the Neumann condition also holds. For v̸ = v′, disjoint supports and (45) give 
+
+∥∇ fv − ∇ fv′ ∥2 
+
+> L2(μ0)
+
+= a2
+
+> m
+
+X
+
+> j∈{ 1,...,m }d
+
+ τ (v) 
+
+> j
+
+− τ (v′)
+
+> j
+
+2∥∇ φm,j ∥2
+
+> L2(μ0)
+
+≳ a2
+
+> m
+
+mdm2−d ≍ m−2( s−1) .
+
+Thus, for some constant c > 0, 
+
+∥fv − fv′ ∥2 
+
+> H1(μ0)
+
+≥ c m −2( s−1) , v̸ = v′. (48) Step 2: KL upper bound for the fixed source–target observation law. Under the fixed source–target design, candidate v induces pnv ⊗ qnv .For two candidates v and v′,KL( pnv ⊗ qnv ∥pnv′ ⊗ qnv′ ) = nKL( pv∥pv′ ) + nKL( qv∥qv′ )= 2 n
+
+Z
+
+> Ω
+
+KL(Bern( σ(fv(x))) ∥ Bern( σ(fv′ (x)))) dμ 0(x).
+
+For each fixed x,KL(Bern( σ(fv(x))) ∥ Bern( σ(fv′ (x)))) = EY ∼Bern( σ(fv (x))) [ℓCE (Y, f v′ (x)) − ℓCE (Y, f v(x))] .
+
+The derivative of u 7 → EY ∼Bern( σ(fv (x))) [ℓCE (Y, u )] vanishes at u = fv(x), and its second derivative is 
+
+σ(u)(1 − σ(u)). Since ∥fv∥∞ ≤ M uniformly in v, Taylor’s theorem gives KL( pnv ⊗ qnv ∥pnv′ ⊗ qnv′ ) ≲ n ∥fv − fv′ ∥2
+
+> L2(μ0)
+
+. (49) Moreover, 
+
+∥fv − fv′ ∥2 
+
+> L2(μ0)
+
+≲ a2
+
+> m
+
+ X
+
+> j∈{ 1,...,m }d
+
+|τ (v) 
+
+> j
+
+− τ (v′) 
+
+> j
+
+|2
+
+m−d + |cv − cv′ |2
+
+≲ a2 
+
+> m
+
+≍ m−2s.
+
+(50) Combining (49) and (50), KL( pnv ⊗ qnv ∥pnv′ ⊗ qnv′ ) ≲ n m −2s. (51) 39 Step 3: Local Fano reduction and minimax lower bound. Let V be uniformly distributed on 
+
+{1, . . . , N }. Conditional on V = v, draw {Xpi }ni=1 i.i.d.
+
+∼ pv and {Xqi }ni=1 i.i.d.
+
+∼ qv, independently. Any estimator of the form bf := ψ({Xpi }ni=1 , {Xqi }ni=1 )induces the testing rule bV := arg min 
+
+> 1≤v≤N
+
+bf − fv H1(μ0).
+
+By (48), if bV̸ = V , then 
+
+∥ bf − fV ∥H1(μ0) ≥ 12 ∥fV − fbV ∥H1(μ0) ≳ m−(s−1) .
+
+Therefore sup 
+
+> 1≤v≤N
+
+Epnv ⊗qnv
+
+∥ bf − fv∥2
+
+> H1(μ0)
+
+ ≳ m−2( s−1) P( bV̸ = V ). (52) It remains to lower bound P( bV̸ = V ). Choose m ≍ n1/(2 s+d), with a sufficiently large implicit constant. Then (51) gives KL( pnv ⊗ qnv ∥pnv′ ⊗ qnv′ ) ≲ md.
+
+Since log N ≍ md, the local Fano inequality [35] gives 
+
+P( bV̸ = V ) ≥ 1 − I(V ; {Xpi }ni=1 , {Xqi }ni=1 ) + log 2 log N
+
+≥ 1 − N −2 P 
+
+> v,v ′
+
+KL( pnv ⊗ qnv ∥pnv′ ⊗ qnv′ ) + log 2 log N ≥ 12 ,
+
+where the last inequality holds by taking the implicit constant in am ≍ m−s sufficiently small. Combining this bound with (52) and taking the infimum over all estimators ψ,inf  
+
+> ψ
+
+sup 
+
+> 1≤v≤N
+
+Epnv ⊗qnv
+
+∥ψ({Xpi }ni=1 , {Xqi }ni=1 ) − fv∥2
+
+> H1(μ0)
+
+ ≳ n− 2( s−1) 2s+d .
+
+Since all ( pv, q v) belong to Cpair , the same lower bound holds for the minimax risk over Cpair .
+
+# C Proof for the extension to diffusion models 
+
+Appendix C roadmap. The diffusion-model proof is organized as follows. We first fix the truncated time-space notation and the projection-rescaling map on [ t0, T ] × B2R. Lemma C.1 collects the uniform VP-convolution bounds, including sub-Gaussian tails, linear growth of f ⋆,and polynomial bounds on time-space derivatives. The global envelope choice then ensures that 
+
+f ⋆ and the pulled-back network class fit inside the clipped Sobolev class. Lemma C.2 proves existence, uniqueness, and clipping of the truncated population minimizer, and Lemma C.3 controls its regularization bias on the truncated cylinder. Lemma C.4 gives the R-dependent approximation comparator, Lemma C.5 bounds the entropy of the pulled-back vector class, and Lemma C.6 gives the comparator-centered anisotropic oracle inequality. Finally, the proof of Theorem 5.2 combines the truncation event, the oracle bound, the comparator gap, and the tail estimate, then chooses 
+
+N, λ, R to obtain the stated rate. Throughout this appendix, αt denotes the VP coefficient, and we write 
+
+κ := s − 1
+
+d + 1 + 2 s − 2 .
+
+40 for the nonparametric rate exponent. In this section we prove Theorem 5.2. We work on the bounded time-space cylinder [ t0, T ] × B2R, where 
+
+B2R := {x ∈ Rd : ∥x∥ ≤ 2R},
+
+and use a projection-rescaling argument so that the neural network is trained on the fixed compact spatial domain B1.
+
+C.1 Notation 
+
+Throughout Appendix C, for each truncation radius R ≥ 1, we use the R-dependent clipped-gradient time-space class 
+
+FR := F(d+1)  
+
+> MR
+
+(L, W, S, B ), MR := CM (1 + R),
+
+on the fixed input domain [t0, T ] × B1 ⊂ Rd+1 .
+
+The input variable is ( t, ¯x), and time is treated as an ordinary network input. By definition of FR,
+
+∥f ∥L∞([ t0,T ]×B1) ≤ MR, ∥∇ ¯xf ∥L∞([ t0,T ]×B1) ≤ MR, f ∈ F R.
+
+Time-dependent label-augmented model and truncated population risk. For each t ∈
+
+[t0, T ], define a joint distribution μp,q,t on Rd × { 0, 1} by 
+
+Y ∼ Bernoulli(1 /2) , X | (Y = 1) ∼ qt, X | (Y = 0) ∼ pt. (53) We write 
+
+ηt(x) := P(Y = 1 | X = x) = qt(x)
+
+pt(x) + qt(x) .
+
+Recall the pointwise H1-loss density in (14). For any function h : [ t0, T ] × Rd → R, define the truncated population functional on [ t0, T ] × B2R by 
+
+Jλ, 2R(h) := 
+
+Z Tt0
+
+E(X,Y )∼μp,q,t 
+
+h
+
+1{X ∈ B2R}
+
+
+
+ℓCE (Y, h (t, X )) + λ∥∇ xh(t, X )∥2i 
+
+dt. (54) 
+
+Projection-rescaling and pulled-back class. Recall that the projected-rescaled input is ¯x = Proj 2R(x)/(2 R) ∈ B1. For a function f : [ t0, T ] × B1 → R, define its pull-back to [ t0, T ] × B2R
+
+by (πRf )( t, x ) := f
+
+
+
+t, x
+
+2R
+
+
+
+, (t, x ) ∈ [t0, T ] × B2R. (55) For a function h : [ t0, T ] × B2R → R, define (π−1 
+
+> R
+
+h)( t, ¯x) := h(t, 2R¯x), (t, ¯x) ∈ [t0, T ] × B1.
+
+Then 
+
+∇x(πRf )( t, x ) = 12R ∇¯xf
+
+
+
+t, x
+
+2R
+
+
+
+.
+
+Similarly, for ( t, x ) ∈ [t0, T ] × B2R,
+
+f ⋆(t, x ) = ( π−1 
+
+> R
+
+f ⋆)
+
+
+
+t, x
+
+2R
+
+
+
+, ∇xf ⋆(t, x ) = 12R ∇¯x(π−1 
+
+> R
+
+f ⋆)
+
+
+
+t, x
+
+2R
+
+
+
+.
+
+41 Define the pulled-back network class 
+
+F2R := {πRf : f ∈ F R}.
+
+By the envelope definition of FR, every h = πRf ∈ F 2R satisfies 
+
+∥h∥L∞([ t0,T ]×B2R) ≤ MR, ∥∇ xh∥L∞([ t0,T ]×B2R) ≤ MR
+
+2R ≤ CM , R ≥ 1.
+
+Norms. On [ t0, T ] × B2R, unless otherwise stated, we use the μt-weighted spatial energy norm 
+
+∥g∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
+:= 
+
+Z Tt0
+
+Z
+
+> B2R
+
+
+
+|g(t, x )|2 + ∥∇ xg(t, x )∥2
+
+dμ t(x) dt. (56) Here H1(B2R, μ t) is only in the spatial variable x.We also use its L2-part 
+
+∥g∥2  
+
+> L2([ t0,T ]×B2R,μ t)
+
+:= 
+
+Z Tt0
+
+Z
+
+> B2R
+
+|g(t, x )|2 dμ t(x) dt. 
+
+Since pt and qt are Gaussian convolutions, ρt = ( pt + qt)/2 is smooth and strictly positive on the compact cylinder [ t0, T ] × B2R; hence ∥ · ∥ L2([ t0,T ]; H1(B2R,μ t)) is equivalent, for fixed R, to the corresponding Lebesgue spatial energy norm on [ t0, T ] × B2R. On the fixed cylinder [ t0, T ] × B1, we use the Lebesgue norms 
+
+∥u∥2  
+
+> L2([ t0,T ]; H1(B1))
+
+:= 
+
+Z Tt0
+
+Z
+
+> B1
+
+
+
+|u(t, ¯x)|2 + ∥∇ ¯xu(t, ¯x)∥2
+
+d¯x dt, 
+
+and, for integer s ≥ 1, 
+
+∥u∥2  
+
+> Hs([ t0,T ]×B1)
+
+:= X
+
+> a+|γ|≤ s
+
+Z Tt0
+
+Z
+
+> B1
+
+∂at Dγ 
+
+> ¯x
+
+u(t, ¯x) 2 d¯x dt. 
+
+Here L2([ t0, T ]; H1(B1)) is spatial Sobolev only in ¯ x, while Hs([ t0, T ] × B1) is the full time-space Sobolev norm of order s on the same fixed cylinder. 
+
+Bounded Sobolev classes on truncated cylinders. For R > 0 and M > 0, define the bounded Sobolev class on [ t0, T ] × B2R by 
+
+eHM, 2R := 
+
+n
+
+h : [ t0, T ] × B2R → R ∥h∥L2([ t0,T ]; H1(B2R,μ t)) < ∞,
+
+|h(t, x )| ≤ M for a.e. ( t, x ) ∈ [t0, T ] × B2R
+
+o
+
+. (57) 
+
+C.2 Uniform bounds on the pulled-back class and auxiliary lemmas 
+
+We first collect the Gaussian-convolution bounds. 
+
+Lemma C.1 (Basic consequences of the regular VP assumption) . Suppose Assumption 5.1 holds. Set R1 := ω0R0. Then, if X0 ∼ p0 and Y0 ∼ q0, the laws of αtX0 and αtY0 are supported in BR1 .Moreover, there exist constants C, c, K < ∞, depending only on 
+
+d, s, t 0, T, R 0, σ, σ, ω 0,
+
+42 such that the following bounds hold uniformly over t ∈ [t0, T ].First, the mixture measure has sub-Gaussian tails: for every u ≥ 0,
+
+μt({x : ∥x∥ > u }) ≤ C exp {− c(u − R1)2+}. (58) 
+
+More generally, for every m ≥ 0,
+
+Z
+
+> {∥ x∥>u }
+
+(1 + ∥x∥)m dμ t(x) ≤ Cm(1 + u)m exp {− cm(u − R1)2+}. (59) 
+
+Second, the log-density ratio has at most linear growth: 
+
+|f ⋆(t, x )| ≤ C(1 + ∥x∥). (60) 
+
+Its spatial gradient is uniformly bounded: 
+
+∥∇ xf ⋆(t, x )∥ ≤ C. (61) 
+
+Finally, for every integer a ≥ 0 and multi-index b ∈ Nd satisfying a + |b| ≤ s
+
+∂at Dbxf ⋆(t, x ) ≤ C(1 + ∥x∥)K . (62) 
+
+Proof. The support statement follows directly from the VP representation. If X0 ∼ p0 and Y0 ∼ q0,then X0, Y 0 ∈ BR0 almost surely. Since 
+
+|αt| ≤ ω0,
+
+we have 
+
+∥αtX0∥ ≤ ω0R0, ∥αtY0∥ ≤ ω0R0 a.s. ,
+
+so both laws are supported in Bω0R0 = BR1 .
+
+We first prove the tail bounds. If Z0 is supported in BR0 , then 
+
+Zt = αtZ0 + σtξ
+
+satisfies 
+
+∥Zt∥ ≤ R1 + σ∥ξ∥.
+
+Therefore 
+
+P(∥Zt∥ > u ) ≤ P
+
+
+
+∥ξ∥ > (u − R1)+
+
+σ
+
+
+
+≤ C exp {− c(u − R1)2+}.
+
+This holds for both pt and qt, hence for their mixture μt. The polynomial tail-moment bound (59) follows by integration by parts. Indeed, for any nonnegative random variable W ,
+
+E(1 + W )m1{W > u } ≤ (1 + u)mP(W > u ) + m
+
+Z ∞
+
+> u
+
+(1 + r)m−1P(W > r ) dr, 
+
+and applying the preceding sub-Gaussian tail bound gives (59), after adjusting constants. Next we study the density ratio. Since pt is the law of αtX0 + σtξ with X0 ∼ p0 and ξ ∼ N (0 , I ), we have the Gaussian mixture representation 
+
+pt(x) = 
+
+Z
+
+(2 πσ 2 
+
+> t
+
+)−d/ 2 exp 
+
+
+
+− ∥x − αtz∥2
+
+2σ2
+
+> t
+
+
+
+dp 0(z),
+
+43 and similarly qt is represented by replacing p0 with q0. Expanding the square gives 
+
+pt(x) = (2 πσ 2 
+
+> t
+
+)−d/ 2 exp 
+
+
+
+− ∥x∥2
+
+2σ2
+
+> t
+
+
+
+Ip(t, x ),
+
+where 
+
+Ip(t, x ) := 
+
+Z
+
+exp 
+
+ αt⟨x, z ⟩
+
+σ2
+
+> t
+
+− α2 
+
+> t
+
+∥z∥2
+
+2σ2
+
+> t
+
+
+
+dp 0(z).
+
+Similarly, 
+
+qt(x) = (2 πσ 2 
+
+> t
+
+)−d/ 2 exp 
+
+
+
+− ∥x∥2
+
+2σ2
+
+> t
+
+
+
+Iq(t, x ),
+
+where Iq is defined with q0. Hence the common Gaussian factor cancels in the log-density ratio: 
+
+f ⋆(t, x ) = log Iq(t, x ) − log Ip(t, x ).
+
+Since z ∈ BR0 , αt is bounded, and σt ≥ σ, the exponent inside Ip is bounded above and below by affine functions of ∥x∥. Therefore 
+
+| log Ip(t, x )| ≤ C(1 + ∥x∥), | log Iq(t, x )| ≤ C(1 + ∥x∥),
+
+which proves (60). For the gradient, differentiating under the integral gives 
+
+∇x log Ip(t, x ) = αt
+
+σ2
+
+> t
+
+R z exp 
+
+ αt⟨x,z ⟩
+
+> σ2
+> t
+
+− α2 
+
+> t∥z∥2
+> 2σ2
+> t
+
+
+
+dp 0(z)
+
+Ip(t, x ) .
+
+Since the weight in the numerator is nonnegative and p0 is supported on BR0 , the ratio above has norm at most R0. Thus 
+
+∥∇ x log Ip(t, x )∥ ≤ C. 
+
+The same bound holds for Iq. Therefore 
+
+∇xf ⋆(t, x ) = ∇x log Iq(t, x ) − ∇ x log Ip(t, x )is uniformly bounded, proving (61). It remains to show (62). We prove it for log Ip; the argument for log Iq is identical. Define Φ( t, x, z ) := αt⟨x, z ⟩
+
+σ2
+
+> t
+
+− α2 
+
+> t
+
+∥z∥2
+
+2σ2
+
+> t
+
+.
+
+For every integer a ≥ 0 and multi-index b ∈ Nd with a + |b| ≤ s, Assumption 5.1, compactness of [t0, T ], and ∥z∥ ≤ R0 imply 
+
+∂at DbxΦ( t, x, z ) ≤ Ca,b (1 + ∥x∥),
+
+uniformly in t ∈ [t0, T ] and z ∈ BR0 . We now pass the derivative bound from Φ to log Ip. Let 
+
+ν = ( a, b ) be a time–space multi-index and write Dν = ∂at Dbx. Since p0 is supported on BR0 , the bound 
+
+|DηΦ( t, x, z )| ≤ Cη(1 + ∥x∥), 1 ≤ | η| ≤ s, 
+
+holds uniformly over t ∈ [t0, T ] and z ∈ BR0 . Moreover, on every compact set in x, the derivatives 
+
+DηeΦ( t,x,z ), |η| ≤ s, are uniformly bounded on [ t0, T ] × K × BR0 . Hence differentiation under the integral is justified by dominated convergence. 44 For every 1 ≤ | ν| ≤ s, the multivariate Fa` a di Bruno formula gives 
+
+Dν Ip(t, x ) = 
+
+Z
+
+eΦ( t,x,z )Bν (DηΦ( t, x, z ) : 0 < η ≤ ν) dp 0(z),
+
+where η ≤ ν is componentwise and, for variables {uη : 0 < η ≤ ν},
+
+Bν (uη : 0 < η ≤ ν) := ν! X     
+
+> (mη)0<η ≤ν, m η∈N0P
+> 0<η ≤νmηη=ν
+
+Y
+
+> 0<η ≤ν
+
+1
+
+mη!
+
+ uη
+
+η!
+
+mη
+
+.
+
+For each admissible family ( mη)0<η ≤ν , P 
+
+> 0<η ≤ν
+
+mη|η| = |ν|, and hence P 
+
+> 0<η ≤ν
+
+mη ≤ | ν|. Since 
+
+|DηΦ( t, x, z )| ≤ Cη(1 + ∥x∥), each monomial in Bν is bounded by Cν (1 + ∥x∥)|ν|, and the number of monomials depends only on ν. Therefore 
+
+|Bν (DηΦ( t, x, z ) : 0 < η ≤ ν)| ≤ Cν (1 + ∥x∥)|ν|.
+
+Since Ip(t, x ) = R eΦ( t,x,z ) dp 0(z) > 0, it follows directly that 
+
+Dν Ip(t, x )
+
+Ip(t, x ) ≤
+
+R eΦ( t,x,z )Cν (1 + ∥x∥)|ν| dp 0(z)
+
+R eΦ( t,x,z ) dp 0(z) = Cν (1 + ∥x∥)|ν|.
+
+Applying the multivariate chain rule to log Ip, for every 1 ≤ | ν| ≤ s, Dν log Ip is a finite sum of products of terms of the form 
+
+DηIp(t, x )
+
+Ip(t, x ) , 1 ≤ | η| ≤ | ν|.
+
+Therefore the ratio bound above yields 
+
+|Dν log Ip(t, x )| ≤ Cν (1 + ∥x∥)Kν , 1 ≤ | ν| ≤ s. 
+
+Together with the zeroth-order bound for log Ip established above, we obtain 
+
+|Dν log Ip(t, x )| ≤ Cν (1 + ∥x∥)Kν , |ν| ≤ s. 
+
+The same argument applies to log Iq. Since f ⋆ = log Iq − log Ip, enlarging C and K over the finitely many time–space multi-indices with order at most s proves 
+
+∂at Dbxf ⋆(t, x ) ≤ C(1 + ∥x∥)K , a + |b| ≤ s. 
+
+Global choice of the envelope constant. Throughout Appendix C, the constant CM is a deterministic constant fixed once and for all, independently of R, n, N , and λ. We now specify its choice. By Lemma C.1, there exists a constant C⋆ < ∞, independent of R, such that, for all R ≥ 1, sup  
+
+> (t, ¯x)∈[t0,T ]×B1
+
+|(π−1 
+
+> R
+
+f ⋆)( t, ¯x)| + sup  
+
+> (t, ¯x)∈[t0,T ]×B1
+
+∥∇ ¯x(π−1 
+
+> R
+
+f ⋆)( t, ¯x)∥ ≤ C⋆(1 + R). (63) Indeed, ( π−1 
+
+> R
+
+f ⋆)( t, ¯x) = f ⋆(t, 2R¯x), and 
+
+∇¯x(π−1 
+
+> R
+
+f ⋆)( t, ¯x) = 2 R ∇xf ⋆(t, 2R¯x).
+
+45 Thus the linear-growth bound for f ⋆ and the uniform bound for ∇xf ⋆ imply (63). Let Cq denote the stability constant in (17) for the spline quasi-interpolation operator used in Proposition A.3. Since the approximation is performed on the fixed cylinder [ t0, T ] × B1 ⊂ Rd+1 ,
+
+Cq depends only on the dimension, the smoothness index, and the spline order, and is independent of R, n, N , and λ.We choose CM large enough so that 
+
+CM ≥ max 2C⋆, 2CqC⋆, C ⋆ + 1 . (64) Set MR = CM (1 + R). Then the choice (64) has the following consequences, uniformly for all R ≥ 1. First, the rescaled target satisfies sup  
+
+> [t0,T ]×B1
+
+|π−1 
+
+> R
+
+f ⋆| + sup  
+
+> [t0,T ]×B1
+
+∥∇ ¯x(π−1 
+
+> R
+
+f ⋆)∥ ≤ MR. (65) Equivalently, on the original cylinder [ t0, T ] × B2R,sup  
+
+> (t,x )∈[t0,T ]×B2R
+
+|f ⋆(t, x )| ≤ MR.
+
+Moreover, the choice CM ≥ C⋆ + 1 provides the strict slack 
+
+MR − sup  
+
+> (t,x )∈[t0,T ]×B2R
+
+|f ⋆(t, x )| ≥ 1. (66) This slack ensures that f ⋆ lies in the interior of the clipping envelope; in particular, clipping is inactive on f ⋆ and on any approximant that is uniformly within distance 1 of f ⋆.Second, the stability constant in (17) is absorbed into the same envelope. Namely, if Q(π−1 
+
+> R
+
+f ⋆)is the spline quasi-interpolant used in Proposition A.3, then 
+
+∥Q(π−1 
+
+> R
+
+f ⋆)∥L∞([ t0,T ]×B1) + ∥∇ ¯x
+
+ Q(π−1 
+
+> R
+
+f ⋆)∥L∞([ t0,T ]×B1) ≤ MR. (67) Hence the clipped approximation construction on [ t0, T ] × B1 is compatible with the class FR =
+
+F(d+1)  
+
+> MR
+
+(L, W, S, B ) for every R ≥ 1, without changing CM .Consequently, 
+
+F2R ⊆ eHMR,2R, f ⋆ ∈ eHMR,2R. (68) Indeed, if h = πRf ∈ F 2R, then 
+
+∥h∥L∞([ t0,T ]×B2R) = sup  
+
+> (t,x )∈[t0,T ]×B2R
+
+f
+
+
+
+t, x
+
+2R
+
+
+
+≤ MR,
+
+because f ∈ F R. The inclusion f ⋆ ∈ eHMR,2R follows from (65). Finally, throughout the truncated-cylinder analysis we use the logistic curvature lower bound 
+
+cmin (R) := 14 cosh 2(MR/2) . (69) Since MR = CM (1 + R), there exists a constant C < ∞, independent of R, such that 
+
+cmin (R)−1 ≲ eCR . (70) 46 Lemma C.2 (Existence, uniqueness, and clipping on [ t0, T ] × B2R). Suppose Assumption 5.1 holds, and let CM be fixed by the global choice in Appendix C.2. For every R ≥ 1 and every λ > 0, the population functional Jλ, 2R admits a unique minimizer over eHMR,2R with respect to the finite-energy equivalence class, i.e. unique up to dt dx -a.e. equivalence. We denote it by 
+
+fλ, 2R := arg min  
+
+> h∈eHMR,2R
+
+Jλ, 2R(h).
+
+Moreover, 
+
+∥fλ, 2R∥L∞([ t0,T ]×B2R) ≤ ∥ f ⋆∥L∞([ t0,T ]×B2R) ≤ MR. (71) 
+
+Proof. For the direct-method argument, the finite-energy functions are viewed in the Hilbert space 
+
+L2([ t0, T ]; H1(B2R)), equipped with the equivalent weighted energy norm ∥ · ∥ L2([ t0,T ]; H1(B2R,μ t)) 
+
+defined in (56). For fixed R, the density ρt is bounded above and below by positive constants on [ t0, T ] × B2R, so weak compactness in this weighted norm is the same as in the corresponding Lebesgue space. The feasible set eHMR,2R is convex. Let {hm}m≥1 ⊂ eHMR,2R be a minimizing sequence for 
+
+Jλ, 2R. Since |hm| ≤ MR a.e. on [ t0, T ] × B2R, the L2([ t0, T ] × B2R)-part is uniformly bounded. Moreover, the Sobolev penalty in Jλ, 2R controls ∥∇ xhm∥L2([ t0,T ]×B2R). Hence {hm} is bounded in 
+
+∥ · ∥ L2([ t0,T ]; H1(B2R,μ t)) . By weak compactness, there exists a subsequence, still denoted by {hm},and a finite-energy limit hλ such that 
+
+hm ⇀ h λ weakly in the finite-energy Hilbert space. The constraint set is weakly closed. Indeed, weak convergence in the finite-energy Hilbert space implies weak convergence in L2([ t0, T ] × B2R), and the set {h ∈ L2([ t0, T ] × B2R) : |h| ≤ MR a.e. }
+
+is closed and convex in L2([ t0, T ] × B2R), hence weakly closed. Thus hλ ∈ eHMR,2R.The cross-entropy part is convex and weakly lower semicontinuous on the bounded logit interval [−MR, M R], and the quadratic Sobolev penalty is weakly lower semicontinuous. Therefore 
+
+Jλ, 2R(hλ) ≤ lim inf  
+
+> m→∞
+
+Jλ, 2R(hm),
+
+so the minimum is attained. Uniqueness follows from the strict convexity of Jλ, 2R on eHMR,2R. Indeed, on the interval [−MR, M R], the conditional logistic risk has curvature bounded below by 
+
+cmin (R) = 14 cosh 2(MR/2) > 0.
+
+Since pt and qt are Gaussian convolutions, ρt > 0 on B2R for every t ∈ [t0, T ]. Hence equality in the strict convexity inequality forces two minimizers to agree dt dx -a.e. on [ t0, T ] × B2R. Thus 
+
+Jλ, 2R has at most one minimizer. We denote the unique minimizer by fλ, 2R.It remains to prove the clipping property. Let 
+
+M ⋆R := ∥f ⋆∥L∞([ t0,T ]×B2R).
+
+By the global choice of CM , we have M ⋆R ≤ MR. For any h ∈ eHMR,2R, define its clipped version by 
+
+hclip (t, x ) := ( −M ⋆R) ∨  h(t, x ) ∧ M ⋆R
+
+.
+
+Then hclip ∈ eHMR,2R. Indeed, 
+
+|hclip | ≤ M ⋆R ≤ MR,
+
+47 and the chain rule for Lipschitz truncations gives 
+
+∥∇ xhclip ∥L2([ t0,T ]×B2R) ≤ ∥∇ xh∥L2([ t0,T ]×B2R).
+
+For fixed ( t, x ), the conditional cross-entropy risk 
+
+Gt,x (u) := −ηt(x) log σ(u) − (1 − ηt(x)) log(1 − σ(u)) is convex and is uniquely minimized at u = f ⋆(t, x ), because ηt(x) = σ(f ⋆(t, x )). Since |f ⋆(t, x )| ≤ 
+
+M ⋆R, the projection of any u onto [ −M ⋆R, M ⋆R] cannot increase Gt,x (u). Hence 
+
+LCE ,2R(hclip ) ≤ LCE ,2R(h).
+
+Combining this with the contraction of the spatial-gradient seminorm yields 
+
+Jλ, 2R(hclip ) ≤ Jλ, 2R(h).
+
+Applying this to h = fλ, 2R, since fλ, 2R is the minimizer, we find that f clip  
+
+> λ, 2R
+
+is also a minimizer. By uniqueness, 
+
+f clip  
+
+> λ, 2R
+
+= fλ, 2R.
+
+Therefore 
+
+∥fλ, 2R∥L∞([ t0,T ]×B2R) ≤ M ⋆R = ∥f ⋆∥L∞([ t0,T ]×B2R) ≤ MR,
+
+which proves (71). 
+
+Lemma C.3 (Bias on [ t0, T ] × B2R). Let fλ, 2R be the unique minimizer from Lemma C.2. Define the boundary remainder 
+
+bR := 2 MR
+
+Z Tt0
+
+Z
+
+> ∂B 2R
+
+ρt(x)|∂nf ⋆(t, x )| dS (x) dt. 
+
+Then there exists a quantity β(R), independent of λ, such that 
+
+∥fλ, 2R − f ⋆∥2  
+
+> L2([ t0,T ]×B2R)
+
+≤ β(R)λ2 + Cc min (R)−1λbR, (72) 
+
+and 
+
+∥∇ x(fλ, 2R − f ⋆)∥2  
+
+> L2([ t0,T ]×B2R)
+
+≤ β(R)λ + CbR. (73) 
+
+Moreover, 
+
+bR ≤ C(1 + R)K e−cR 2
+
+, β(R) ≤ Ce CR (1 + R)K . (74) 
+
+Proof. Since fλ, 2R minimizes Jλ, 2R over the convex set eHMR,2R, and since f ⋆ ∈ eHMR,2R by Lemma C.2, convexity implies that, for every ε ∈ [0 , 1], 
+
+fλ, 2R + ε(f ⋆ − fλ, 2R) ∈ eHMR,2R.
+
+Therefore the one-sided directional derivative of Jλ, 2R at fλ, 2R along the feasible direction f ⋆ − fλ, 2R
+
+is nonnegative: 
+
+DJ λ, 2R(fλ, 2R)[ f ⋆ − fλ, 2R] ≥ 0.
+
+Equivalently, 
+
+Z Tt0
+
+Z
+
+> B2R
+
+(σ(fλ, 2R) − ηt)( fλ, 2R − f ⋆) dμ t dt + 2 λ
+
+Z Tt0
+
+Z
+
+> B2R
+
+∇xfλ, 2R · ∇ x(fλ, 2R − f ⋆) dμ t dt ≤ 0. (75) 48 The logistic curvature lower bound on [ −MR, M R] gives 
+
+Z Tt0
+
+Z
+
+> B2R
+
+(σ(fλ, 2R) − ηt)( fλ, 2R − f ⋆) dμ t dt ≥ cmin (R)∥fλ, 2R − f ⋆∥2 
+
+> L2([ t0,T ]×B2R)
+
+. (76) Using ∇xfλ, 2R = ∇xf ⋆ + ∇x(fλ, 2R − f ⋆), we obtain from (75) and (76) 
+
+cmin (R)∥fλ, 2R − f ⋆∥2  
+
+> L2([ t0,T ]×B2R)
+
++ 2 λ∥∇ x(fλ, 2R − f ⋆)∥2 
+
+> L2([ t0,T ]×B2R)
+
+≤ −2λ
+
+Z Tt0
+
+Z
+
+> B2R
+
+∇xf ⋆ · ∇ x(fλ, 2R − f ⋆) dμ t dt. (77) For each fixed t, define 
+
+Kth(x) := ∆ xh(x) + ∇xh(x) · ∇ x log ρt(x).
+
+Green’s identity on B2R yields 
+
+−
+
+Z
+
+> B2R
+
+∇xf ⋆ · ∇ x(fλ, 2R − f ⋆) ρt dx =
+
+Z
+
+> B2R
+
+ Ktf ⋆(t, ·)(fλ, 2R − f ⋆) dμ t
+
+−
+
+Z
+
+> ∂B 2R
+
+ρt(fλ, 2R − f ⋆)∂nf ⋆ dS. 
+
+(78) If fλ, 2R − f ⋆ is smooth, this is the usual integration-by-parts formula. For general fλ, 2R − f ⋆ ∈
+
+H1(B2R), the identity follows by approximating fλ, 2R − f ⋆ in H1(B2R) by smooth functions and using the trace theorem, since f ⋆ and ρt are smooth on B2R.Define Θ( R) := 
+
+Z Tt0
+
+∥K tf ⋆(t, ·)∥2 
+
+> L2(B2R,μ t)
+
+dt. 
+
+Since both fλ, 2R and f ⋆ are bounded by MR on [ t0, T ] × B2R, we have 
+
+|fλ, 2R − f ⋆| ≤ | fλ, 2R| + |f ⋆| ≤ 2MR.
+
+The trace of fλ, 2R − f ⋆ on ∂B 2R satisfies the same L∞-bound, because fλ, 2R − f ⋆ ∈ H1(B2R) ∩
+
+L∞(B2R). Hence the boundary contribution in (78) is bounded by bR. Combining (77) with (78) and applying Cauchy–Schwarz gives 
+
+cmin (R)∥fλ, 2R − f ⋆∥2  
+
+> L2([ t0,T ]×B2R)
+
++ 2 λ∥∇ x(fλ, 2R − f ⋆)∥2 
+
+> L2([ t0,T ]×B2R)
+
+≤ 2λpΘ( R)∥fλ, 2R − f ⋆∥L2([ t0,T ]×B2R) + 2 λbR. (79) By Young’s inequality, 2λpΘ( R)∥fλ, 2R − f ⋆∥L2([ t0,T ]×B2R) ≤ cmin (R)2 ∥fλ, 2R − f ⋆∥2  
+
+> L2([ t0,T ]×B2R)
+
++ Cλ 2
+
+cmin (R) Θ( R),
+
+Therefore, 
+
+cmin (R)2 ∥fλ, 2R − f ⋆∥2  
+
+> L2([ t0,T ]×B2R)
+
++ 2 λ∥∇ x(fλ, 2R − f ⋆)∥2  
+
+> L2([ t0,T ]×B2R)
+
+≤ Cλ 2
+
+cmin (R) Θ( R) + 2 λbR.
+
+Dropping the gradient term gives 
+
+∥fλ, 2R − f ⋆∥2  
+
+> L2([ t0,T ]×B2R)
+
+≤ Cc min (R)−2Θ( R)λ2 + Cc min (R)−1λbR.
+
+49 Dropping instead the L2-term and dividing by 2 λ gives 
+
+∥∇ x(fλ, 2R − f ⋆)∥2  
+
+> L2([ t0,T ]×B2R)
+
+≤ Cc min (R)−1Θ( R)λ + CbR.
+
+Set 
+
+β(R) := Cc min (R)−2Θ( R).
+
+Since cmin (R) ≤ 1, this single choice of β(R) controls both estimates above. Thus (72) and (73) follow. It remains to prove the growth estimates in (74). First, we control Θ( R). Since pt and qt are the laws of αtX0 + σtξ and αtY0 + σtξ′, respectively, with X0 ∼ p0, Y0 ∼ q0, and independent standard Gaussian noises, the same Gaussian-factorization argument used in Lemma C.1 gives 
+
+∥∇ x log pt(x)∥ + ∥∇ x log qt(x)∥ ≤ C(1 + ∥x∥),
+
+uniformly over t ∈ [t0, T ]. Since 
+
+∇x log ρt(x) = pt(x)
+
+pt(x) + qt(x) ∇x log pt(x) + qt(x)
+
+pt(x) + qt(x) ∇x log qt(x),
+
+we have 
+
+∥∇ x log ρt(x)∥ ≤ C(1 + ∥x∥).
+
+Together with Lemma C.1, which gives polynomial growth of the derivatives of f ⋆ and a uniform bound on ∇xf ⋆, this implies 
+
+|(Ktf ⋆(t, ·))( x)| ≤ C(1 + ∥x∥)K .
+
+Therefore, Θ( R) = 
+
+Z Tt0
+
+∥K tf ⋆(t, ·)∥2 
+
+> L2(B2R,μ t)
+
+dt ≤ C(1 + R)K .
+
+Hence, 
+
+β(R) = Cc min (R)−2Θ( R) ≤ Ce CR (1 + R)K ,
+
+where we used MR = CM (1 + R) and 
+
+cmin (R) = 14 cosh 2(MR/2) .
+
+Finally, we bound the boundary remainder. By Lemma C.1, 
+
+|∂nf ⋆(t, x )| ≤ ∥∇ xf ⋆(t, x )∥ ≤ C. 
+
+Moreover, the compact-support VP representation implies the pointwise density bound 
+
+ρt(x) ≤ C exp {− c(∥x∥ − R1)2+},
+
+uniformly over t ∈ [t0, T ]. Hence, on ∂B 2R,
+
+ρt(x)|∂nf ⋆(t, x )| ≤ Ce −cR 2
+
+.
+
+Multiplying by the surface area of ∂B 2R, the length of the time interval, and MR = CM (1 + R), we obtain 
+
+bR ≤ C(1 + R)K e−cR 2
+
+.
+
+This completes the proof. 50 Lemma C.4 (Approximation by the R-dependent clipped class) . Suppose Assumption 5.1 holds and s ≤ 4. For every R ≥ 1, there exists a deterministic comparator 
+
+f0,R ∈ F 2R
+
+such that 
+
+∥f0,R − f ⋆∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
+≤ C(1 + R)K N − 2( s−1)  
+
+> d+1
+
+. (80) 
+
+The comparator f0,R is fixed before observing the data. Proof. By the choice of CM in (64), Proposition A.3 applies on the fixed compact time-space domain [t0, T ] × B1 ⊂ Rd+1 . Therefore, there exists 
+
+fR ∈ F R
+
+such that 
+
+∥fR − π−1 
+
+> R
+
+f ⋆∥2  
+
+> H1([ t0,T ]×B1)
+
+≤ C∥π−1 
+
+> R
+
+f ⋆∥2 
+
+> Hs([ t0,T ]×B1)
+
+N − 2( s−1)  
+
+> d+1
+
+. (81) Define 
+
+f0,R := πRfR ∈ F 2R.
+
+Let 
+
+eR := fR − π−1 
+
+> R
+
+f ⋆ on [ t0, T ] × B1, e := f0,R − f ⋆ on [ t0, T ] × B2R.
+
+Then, for x ∈ B2R,
+
+e(t, x ) = eR
+
+
+
+t, x
+
+2R
+
+
+
+, ∇xe(t, x ) = 12R ∇¯xeR
+
+
+
+t, x
+
+2R
+
+
+
+.
+
+By the Gaussian lower-noise bound in Assumption 5.1, there exists ρ⋆ < ∞, independent of R,such that sup  
+
+> t∈[t0,T ]
+
+sup 
+
+> x∈Rd
+
+ρt(x) ≤ ρ⋆.
+
+Hence 
+
+∥e∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
+=
+
+Z Tt0
+
+Z
+
+> B2R
+
+ |e(t, x )|2 + ∥∇ xe(t, x )∥2ρt(x) dx dt 
+
+≤ ρ⋆
+
+Z Tt0
+
+Z
+
+> B2R
+
+ |e(t, x )|2 + ∥∇ xe(t, x )∥2 dx dt. 
+
+Changing variables x = 2 R¯x, we get 
+
+Z
+
+> B2R
+
+|e(t, x )|2 dx = (2 R)d
+
+Z
+
+> B1
+
+|eR(t, ¯x)|2 d¯x, 
+
+and Z
+
+> B2R
+
+∥∇ xe(t, x )∥2 dx = (2 R)d−2
+
+Z
+
+> B1
+
+∥∇ ¯xeR(t, ¯x)∥2 d¯x. 
+
+Since R ≥ 1, (2 R)d−2 ≤ (2 R)d. Therefore, 
+
+∥e∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
+≤ C(2 R)d∥eR∥2  
+
+> L2([ t0,T ]; H1(B1))
+
+≤ C(2 R)d∥eR∥2 
+
+> H1([ t0,T ]×B1)
+
+.
+
+Combining this with (81) yields 
+
+∥f0,R − f ⋆∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
+≤ C(2 R)d∥π−1 
+
+> R
+
+f ⋆∥2 
+
+> Hs([ t0,T ]×B1)
+
+N − 2( s−1)  
+
+> d+1
+
+.
+
+51 It remains to bound (2 R)d∥π−1 
+
+> R
+
+f ⋆∥2 
+
+> Hs([ t0,T ]×B1)
+
+. For every a + |γ| ≤ s,
+
+∂at Dγ 
+
+> ¯x
+
+(π−1 
+
+> R
+
+f ⋆)( t, ¯x) = (2 R)|γ|∂at Dγx f ⋆(t, 2R¯x).
+
+By the derivative-growth bound (62) in Lemma C.1, 
+
+∂at Dγx f ⋆(t, 2R¯x) ≤ C(1 + R)K , (t, ¯x) ∈ [t0, T ] × B1.
+
+Since [ t0, T ] × B1 has finite Lebesgue volume and |γ| ≤ s, we obtain, after increasing K if necessary, (2 R)d∥π−1 
+
+> R
+
+f ⋆∥2  
+
+> Hs([ t0,T ]×B1)
+
+≤ C(1 + R)K .
+
+This gives (80). 
+
+Lemma C.5 (Entropy of the pulled-back vector class) . Let FR = F(d+1)  
+
+> MR
+
+(L, W, S, B ) be the R-dependent clipped-gradient class on [t0, T ] × B1, with input dimension d + 1 , depth L = O(1) , sparsity 
+
+S = O(N ), width W , and weight bound B. Define 
+
+V2R :=   πRf, ∇x(πRf ) : f ∈ F R , (82) 
+
+where, for x ∈ B2R,
+
+¯x := x
+
+2R ∈ B1, (πRf )( t, x ) = f (t, ¯x).
+
+Endow V2R with the norm 
+
+∥(u, v )∥∞ := ∥u∥L∞([ t0,T ]×B2R) + ∥v∥L∞([ t0,T ]×B2R).
+
+Then there exists a constant C < ∞, independent of R, N, n, λ , such that for every 0 < ε < 1,
+
+log N  ε, V2R, ∥ · ∥ ∞
+
+ ≤ CN log 
+
+ BW M R
+
+ε
+
+
+
+. (83) 
+
+Proof. The proof has two steps. First, the pull-back map sends [ t0, T ] × B2R to the fixed cylinder [t0, T ] × B1, and the spatial derivative gains the factor 1 /(2 R) ≤ 1. Hence a cover of the derivative-augmented class {(f, ∇¯xf ) : f ∈ F R} on the fixed cylinder induces a cover of V2R on the larger cylinder. Second, on the fixed cylinder, the output and first input derivatives of a fixed-depth sparse ReLU 3 network depend Lipschitzly on its active parameters. Discretizing these O(N ) active parameters and then taking a union over sparsity patterns gives the stated entropy bound. We first reduce the covering problem on [ t0, T ] × B2R to one on [ t0, T ] × B1. For f ∈ F R, write ¯x = x/ (2 R). Then (πRf )( t, x ) = f (t, ¯x), ∇x(πRf )( t, x ) = 12R ∇¯xf (t, ¯x).
+
+Since x ∈ B2R implies ¯ x ∈ B1, and since R ≥ 1, any ε-cover of 
+
+{(f, ∇¯xf ) : f ∈ F R}
+
+on [ t0, T ] × B1 induces an ε-cover of V2R on [ t0, T ] × B2R. Indeed, if 
+
+∥f − g∥L∞([ t0,T ]×B1) + ∥∇ ¯xf − ∇ ¯xg∥L∞([ t0,T ]×B1) ≤ ε, 
+
+then 
+
+∥πRf − πRg∥L∞([ t0,T ]×B2R) + ∥∇ x(πRf ) − ∇ x(πRg)∥L∞([ t0,T ]×B2R) ≤ ε. 
+
+52 Thus it suffices to control the entropy of the derivative-augmented class 
+
+{(f, ∇¯xf ) : f ∈ F R}
+
+on [ t0, T ] × B1.The class FR is a clipped sparse ReLU 3 network class with O(N ) active parameters. Fix a sparsity pattern and write fθ for the network determined by the active parameter vector θ.Since ReLU 3 networks are differentiable in the input, and since their first input derivatives are piecewise-polynomial functions whose coefficients depend polynomially on the network parameters, the map 
+
+θ 7 → (fθ, ∇¯xfθ)is Lipschitz from the active parameter set into the product sup-norm space on [ t0, T ] × B1. The imposed bounds on the weights, the output, and the input gradient give a Lipschitz constant polynomial in B, W , and MR. Since L = O(1), this polynomial dependence is absorbed into the logarithmic factor below. Therefore, on each fixed sparsity pattern, a standard grid discretization of the O(N ) active parameters gives log N  ε, {(f, ∇¯xf ) : f ∈ F R has the fixed sparsity pattern }, ∥ · ∥ ∞
+
+ ≤ CN log 
+
+ BW M R
+
+ε
+
+
+
+,
+
+where the norm in this display is the product sup norm on [ t0, T ] × B1. The number of possible sparsity patterns contributes at most an additional O(S log W ) term. Since S = O(N ), this term is absorbed into the same bound after increasing the constant. Hence log N  ε, {(f, ∇¯xf ) : f ∈ F R}, ∥ · ∥ ∞
+
+ ≤ CN log 
+
+ BW M R
+
+ε
+
+
+
+,
+
+where again the norm is the product sup norm on [ t0, T ] × B1. Combining this estimate with the covering reduction above proves (83). 
+
+Lemma C.6 (Comparator-centered anisotropic oracle inequality on [ t0, T ] × B2R). Let h0 ∈ F 2R
+
+be any deterministic comparator. Define the scaled truncated empirical objective 
+
+bJλ, Dext ,2R(h) = T − t0
+
+2n
+
+> n
+
+X
+
+> i=1
+
+ℓCE (0 , h (tpi , X pi )) + λ∥∇ xh(tpi , X pi )∥2 1{Xpi ∈ B2R}
+
++ T − t0
+
+2n
+
+> n
+
+X
+
+> i=1
+
+ℓCE (1 , h (tqi , X qi )) + λ∥∇ xh(tqi , X qi )∥2 1{Xqi ∈ B2R}.
+
+Let bhR ∈ arg min 
+
+> h∈F 2R
+
+bJλ, Dext ,2R(h).
+
+Then there exists a constant C < ∞, independent of R, N, n, λ, t , such that, for every t > 0, with probability at least 1 − e−t,
+
+Jλ, 2R(bhR) − Jλ, 2R(fλ, 2R) ≤ 3 [ Jλ, 2R(h0) − Jλ, 2R(fλ, 2R)] + Ce CR (1 + R)K N log( BW M Rn) + tn . (84) 53 Proof. The proof follows the oracle-inequality argument in Appendix A.3, with three changes. First, we center the empirical process at the fixed comparator h0, so that the stochastic term is P [t0,T ]ψh − P n, [t0,T ]ψh and empirical optimality gives P n, [t0,T ]ψbhR ≤ 0. Second, because the objective is evaluated only on [ t0, T ] × B2R, all losses carry the truncation indicator and the fixed time-normalization factor T −t0. Third, the loss depends on both h and ∇xh, so the local Rademacher bound is anisotropic: the cross-entropy curvature controls the value direction, while the Sobolev penalty controls the spatial-gradient direction. After this localized complexity bound is established, the normalized-process and Talagrand concentration step is the same as in Appendix A.3. Recall the bounded-case two-group averages P and P n introduced in Appendix A. In the present time-dependent proof, for measurable ψ, define 
+
+P [t0,T ]ψ = 12 Eτ ∼Unif([ t0,T ]) , X ∼pτ [ψ(τ, X, 0)] + 12 Eτ ∼Unif([ t0,T ]) , X ∼qτ [ψ(τ, X, 1)] ,
+
+and 
+
+P n, [t0,T ]ψ = 12n
+
+> n
+
+X
+
+> i=1
+
+ψ(tpi , X pi , 0) + 12n
+
+> n
+
+X
+
+> i=1
+
+ψ(tqi , X qi , 1) .
+
+For h ∈ F 2R, define the comparator-centered loss 
+
+ψh(τ, x, y ) := (T − t0)1{x ∈ B2R}
+
+"
+
+ℓCE (y, h (τ, x )) − ℓCE (y, h 0(τ, x )) +λ ∥∇ xh(τ, x )∥2 − ∥∇ xh0(τ, x )∥2#
+
+. (85) The expression inside the indicator is only relevant for x ∈ B2R, so the value of any extension of h
+
+outside [ t0, T ] × B2R is irrelevant. The factor T − t0 is inserted so that the empirical and population objectives are normalized consistently with the unnormalized time integral in Jλ, 2R. Thus 
+
+P [t0,T ]ψh = Jλ, 2R(h) − Jλ, 2R(h0),
+
+and 
+
+P n, [t0,T ]ψh = bJλ, Dext ,2R(h) − bJλ, Dext ,2R(h0).
+
+The fixed factor T − t0 is absorbed into constants below. For every h = πRf ∈ F 2R,
+
+∥h∥L∞([ t0,T ]×B2R) ≤ MR, ∥∇ xh∥L∞([ t0,T ]×B2R) ≤ MR
+
+2R .
+
+The same bounds hold for h0. Moreover, MR/(2 R) = O(1) for R ≥ 1. For h1, h 2 ∈ F 2R, the logistic loss is 1-Lipschitz in its logit, and ∥a∥2 −∥ b∥2 ≤ (∥a∥+∥b∥)∥a−b∥.
+
+Therefore, pointwise on B2R,
+
+|ψh1 − ψh2 | ≤ C
+
+
+
+|h1 − h2| + λ MR
+
+R ∥∇ xh1 − ∇ xh2∥
+
+
+
+.
+
+For any real-valued class G on [ t0, T ] × Rd × { 0, 1}, recall that 
+
+Rn(G) = Eε sup 
+
+> g∈G
+
+12n
+
+> n
+
+X
+
+> i=1
+
+εpi g(tpi , X pi , 0) + 12n
+
+> n
+
+X
+
+> i=1
+
+εqi g(tqi , X qi , 1) ,
+
+54 where {εpi , ε qi }ni=1 are independent Rademacher variables conditionally on the sampled data. For vector-valued classes, the same notation denotes the corresponding Rademacher average with the Euclidean inner product in the summands. Applying the vector-valued contraction inequality separately on the p-sample and q-sample blocks and using subadditivity of the supremum, 
+
+Rn
+
+ 
+
+ψh : Jλ, 2R(h) − Jλ, 2R(fλ, 2R)+Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) ≤ r
+
+ 
+
+≤ CRn
+
+ 
+
+h − h0 : Jλ, 2R(h) − Jλ, 2R(fλ, 2R)+Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) ≤ r
+
+ 
+
++ Cλ MR
+
+2R Rn
+
+ 
+
+∇xh − ∇ xh0 : Jλ, 2R(h) − Jλ, 2R(fλ, 2R)+Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) ≤ r
+
+ 
+
+.
+
+No time derivative is involved because the loss depends only on ( h, ∇xh). We next convert the excess-risk localization into the L2-radius needed for Dudley’s entropy integral. The two coordinates have different curvature: the logistic part controls function values through cmin (R), while the Sobolev penalty controls spatial gradients through λ. The localization 
+
+Jλ, 2R(h) − Jλ, 2R(fλ, 2R) + Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) ≤ r
+
+therefore implies an anisotropic local radius for h − h0. Since fλ, 2R minimizes Jλ, 2R over the convex set eHMR,2R, the variational inequality gives 
+
+DJ λ, 2R(fλ, 2R)[ h − fλ, 2R] ≥ 0, h ∈ F 2R ⊆ eHMR,2R.
+
+Hence the strong convexity inequality on [ t0, T ] × B2R yields 
+
+Jλ, 2R(h) − Jλ, 2R(fλ, 2R) ≥ cmin (R)2 ∥h − fλ, 2R∥2  
+
+> L2([ t0,T ]×B2R)
+
++ λ∥∇ x(h − fλ, 2R)∥2 
+
+> L2([ t0,T ]×B2R)
+
+,
+
+and the same bound holds for h0. Combining the two inequalities with the triangle inequality gives 
+
+∥h − h0∥2  
+
+> L2([ t0,T ]×B2R)
+
+≤ Cc min (R)−1r, λ∥∇ x(h − h0)∥2  
+
+> L2([ t0,T ]×B2R)
+
+≤ Cr. 
+
+Consequently, 
+
+∥h − h0∥2  
+
+> L2([ t0,T ]×B2R)
+
++ λ MR
+
+2R (∇xh − ∇ xh0) 
+
+> 2
+> L2([ t0,T ]×B2R)
+
+≤ C(cmin (R)−1 + 1) r, 
+
+where we used MR/(2 R) = O(1) and 0 < λ < 1. The preceding contraction bound shows that it remains to control the following localized vector class: 
+
+WR(r) := 
+
+
+
+h − h0, λ MR
+
+2R (∇xh − ∇ xh0)
+
+
+
+:
+
+h ∈ F 2R,Jλ, 2R(h) − Jλ, 2R(fλ, 2R)+Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) ≤ r
+
+ .
+
+The last display shows that WR(r) is contained in an L2(P [t0,T ])-ball of radius 
+
+Cp(cmin (R)−1 + 1) r
+
+around the fixed center ( h0, λM R(2 R)−1∇xh0). Translation by this fixed center and the scaling of the second component only change covering numbers by constants, because MR/(2 R) = O(1) and 55 λ ≤ 1. Thus the entropy of WR(r) is controlled by the entropy of V2R (defined on (82)). Since the empirical L2(P n, [t0,T ])-metric is bounded by the supremum metric, Lemma C.5 implies log N  ε, WR(r), L 2(P n, [t0,T ]) ≤ CN log 
+
+ BW M R
+
+ε
+
+
+
+.
+
+We now apply Dudley’s entropy integral to the localized class WR(r). Using the entropy bound above and truncating the integral at 1 /n , for r ≳ n−2, gives 
+
+Rn
+
+ 
+
+ψh : Jλ, 2R(h) − Jλ, 2R(fλ, 2R)+Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) ≤ r
+
+ 
+
+≤ Cn + C
+
+√n
+
+Z C√(cmin (R)−1+1) r
+
+> 1/n
+
+s
+
+N log 
+
+ BW M R
+
+ε
+
+
+
+dε. 
+
+Since ε ≥ 1/n on the integration range, the logarithmic factor is bounded by C log( BW M Rn). The condition r ≳ n−2 lets the lower-order 1 /n term be absorbed into the integral bound. Therefore 
+
+Rn
+
+ 
+
+ψh : Jλ, 2R(h) − Jλ, 2R(fλ, 2R)+Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) ≤ r
+
+ 
+
+≤ ϕR(r),
+
+where 
+
+ϕR(r) := C
+
+r (cmin (R)−1 + 1) rN log( BW M Rn)
+
+n .
+
+The function ϕR is sub-root and its critical radius satisfies 
+
+r⋆R ≤ C(cmin (R)−1 + 1) N log( BW M Rn)
+
+n .
+
+We next verify the boundedness and variance conditions for the normalized process. The envelope satisfies 
+
+|ψh| ≤ C MR + λ
+
+ MR
+
+2R
+
+2!
+
+.
+
+Moreover, the pointwise Lipschitz bound above gives 
+
+P [t0,T ]ψ2 
+
+> h
+
+≤ C
+
+"
+
+∥h − h0∥2  
+
+> L2([ t0,T ]×B2R)
+
++ λ2
+
+ MR
+
+2R
+
+2
+
+∥∇ x(h − h0)∥2 
+
+> L2([ t0,T ]×B2R)
+
+#
+
+.
+
+Using the strong-convexity localization bounds, we obtain 
+
+P [t0,T ]ψ2 
+
+> h
+
+≤ C cmin (R)−1 + λ
+
+ MR
+
+2R
+
+2!
+
+[Jλ, 2R(h) − Jλ, 2R(fλ, 2R) + Jλ, 2R(h0) − Jλ, 2R(fλ, 2R)] .
+
+Let 
+
+eψh := P [t0,T ]ψh − ψh
+
+Jλ, 2R(h) − Jλ, 2R(fλ, 2R) + Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) + r .
+
+Then 
+
+∥ eψh∥∞ ≤
+
+C
+
+
+
+MR + λ
+
+ MR
+
+> 2R
+
+2
+
+r , (86) 56 and 
+
+P [t0,T ] eψ2 
+
+> h
+
+≤
+
+C
+
+
+
+cmin (R)−1 + λ
+
+ MR
+
+> 2R
+
+2
+
+r . (87) By the peeling lemma applied to the sub-root bound above, 
+
+Rn
+
+ ψh
+
+Jλ, 2R(h) − Jλ, 2R(fλ, 2R) + Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) + r : h ∈ F 2R
+
+ 
+
+≤ 4ϕR(r)
+
+r .
+
+Applying the Symmetrization Lemma (Lemma A.3 in [24]) to the independent p-sample and q-sample empirical processes separately, and then adding the two bounds, gives 
+
+E
+
+"
+
+sup 
+
+> h∈F 2R
+
+P [t0,T ]ψh − P n, [t0,T ]ψh
+
+Jλ, 2R(h) − Jλ, 2R(fλ, 2R) + Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) + r
+
+#
+
+≤ 8ϕR(r)
+
+r . (88) Using (88), (86), and (87), Talagrand’s inequality implies that, with probability at least 1 − e−t,sup 
+
+> h∈F 2R
+
+P [t0,T ]ψh − P n, [t0,T ]ψh
+
+Jλ, 2R(h) − Jλ, 2R(fλ, 2R) + Jλ, 2R(h0) − Jλ, 2R(fλ, 2R) + r
+
+≤ 16 ϕR(r)
+
+r
+
++C
+
+vuuut
+
+cmin (R)−1 + λ
+
+ MR
+
+> 2R
+
+2
+
+tnr 
+
++C
+
+
+
+MR + λ
+
+ MR
+
+> 2R
+
+2
+
+tnr .
+
+Choose 
+
+r0 := C cmin (R)−1 + MR + λ
+
+ MR
+
+2R
+
+2!
+
+N log( BW M Rn) + tn ,
+
+with C sufficiently large. Since cmin (R)−1 ≥ 1, this choice makes the right-hand side at most 1 /2. Hence, on the same event, for all h ∈ F 2R,(P [t0,T ] − P n, [t0,T ])ψh ≤ 12 [Jλ, 2R(h) − Jλ, 2R(fλ, 2R)] + 12 [Jλ, 2R(h0) − Jλ, 2R(fλ, 2R)] + 12 r0.
+
+Taking h = bhR and using empirical optimality, 
+
+P n, [t0,T ]ψbhR = bJλ, Dext ,2R(bhR) − bJλ, Dext ,2R(h0) ≤ 0,
+
+we obtain 
+
+Jλ, 2R(bhR) − Jλ, 2R(h0) = P [t0,T ]ψbhR
+
+= ( P [t0,T ] − P n, [t0,T ])ψbhR + P n, [t0,T ]ψbhR
+
+≤ (P [t0,T ] − P n, [t0,T ])ψbhR
+
+≤ 12
+
+h
+
+Jλ, 2R(bhR) − Jλ, 2R(fλ, 2R)
+
+i
+
++ 12 [Jλ, 2R(h0) − Jλ, 2R(fλ, 2R)] + 12 r0.
+
+57 Rearranging yields 
+
+Jλ, 2R(bhR) − Jλ, 2R(fλ, 2R) ≤ 3 [ Jλ, 2R(h0) − Jλ, 2R(fλ, 2R)] + r0.
+
+It remains to bound r0.Finally, MR/(2 R) = O(1), MR = CM (1 + R), and cmin (R)−1 ≲ eCR . Thus 
+
+cmin (R)−1 + MR + λ
+
+ MR
+
+2R
+
+2
+
+≤ Ce CR (1 + R)K .
+
+Together with the definition of r0, this proves (84). 
+
+C.3 Proof of Theorem 5.2 
+
+Recall the rate exponent 
+
+κ = s − 1(d + 1) + 2 s − 2 .
+
+Also recall the cutoff estimator ef (R) from (13), the pointwise loss density L from (14), and, for 
+
+x ∈ B2R, the pullback notation (πRf )( t, x ) = f
+
+
+
+t, x
+
+2R
+
+
+
+.
+
+Recall the global error decomposition from (15); in this proof we write 
+
+E( ef (R)) = 
+
+Z Tt0
+
+∥ ef (R) 
+
+> t
+
+− f ⋆t ∥2 
+
+> H1(μt)
+
+dt = Main( R) + Tail( R), (89) where Main( R) = 
+
+Z Tt0
+
+Z
+
+> BR
+
+L( ef (R), f ⋆) dμ t dt, 
+
+and Tail( R) = 
+
+Z Tt0
+
+Z
+
+> BcR
+
+L( ef (R), f ⋆) dμ t dt. 
+
+Step 1: Reduction of the main error to [ t0, T ] × B2R. Recall that χR ≡ 1 on BR, and by definition Proj 2R(x) = x for x ∈ BR. Hence the definition of ef (R) in (13) gives 
+
+ef (R) = πR bfR on [ t0, T ] × BR.
+
+Therefore, Main( R) = 
+
+Z Tt0
+
+Z
+
+> BR
+
+L(πR bfR, f ⋆) dμ t dt ≤
+
+Z Tt0
+
+Z
+
+> B2R
+
+L(πR bfR, f ⋆) dμ t dt. (90) Step 2: The truncated ERM event. Define the truncation event 
+
+AR =
+
+
+
+max  
+
+> 1≤i≤n
+
+∥Xpi ∥ ∨ max  
+
+> 1≤i≤n
+
+∥Xqi ∥ ≤ 2R
+
+
+
+.
+
+By Lemma C.1, the marginal distributions pt and qt have uniformly sub-Gaussian tails. Therefore there exist constants C, c > 0, independent of n and R, such that sup  
+
+> t∈[t0,T ]
+
+max 
+
+n
+
+pt({x : ∥x∥ > u }), q t({x : ∥x∥ > u })
+
+o
+
+≤ C exp 
+
+
+
+− c(u − R1)2+
+
+
+
+.
+
+58 Write tp 
+
+> 1: n
+
+= ( tp
+
+> 1
+
+, . . . , t pn) and tq 
+
+> 1: n
+
+= ( tq
+
+> 1
+
+, . . . , t qn). Conditioning on these sampled times and applying a union bound over the p-sample and q-sample blocks, 
+
+P(AcR | tp
+
+> 1: n
+
+, t q
+
+> 1: n
+
+) ≤
+
+> n
+
+X
+
+> i=1
+
+P(∥Xpi ∥ > 2R | tpi ) + 
+
+> n
+
+X
+
+> i=1
+
+P(∥Xqi ∥ > 2R | tqi ) ≤ 2nC exp 
+
+
+
+− c(2 R − R1)2+
+
+
+
+.
+
+For R ≥ R1, (2 R − R1)+ ≥ R. Hence 
+
+P(AcR) ≤ 2nCe −cR 2
+
+. (91) On AR, we have Proj 2R(Xpi ) = Xpi and Proj 2R(Xqi ) = Xqi .
+
+λ
+
+4R2 ∥∇ ¯xf (tpi , X pi /(2 R)) ∥2 = λ∥∇ x(πRf )( tpi , X pi )∥2,
+
+and the same identity holds for the q-samples. Recalling the projected empirical objective bJproj 
+
+> λ, Dext ,2R
+
+from (12), minimizing it over f ∈ F R is therefore equivalent, on AR, to minimizing the following truncated empirical objective over h ∈ F 2R:
+
+bJλ, Dext ,2R(h) = T − t0
+
+2n
+
+> n
+
+X
+
+> i=1
+
+ℓCE (0 , h (tpi , X pi )) + λ∥∇ xh(tpi , X pi )∥2 1{Xpi ∈ B2R}
+
++ T − t0
+
+2n
+
+> n
+
+X
+
+> i=1
+
+ℓCE (1 , h (tqi , X qi )) + λ∥∇ xh(tqi , X qi )∥2 1{Xqi ∈ B2R}.
+
+(92) Consequently, on AR, πR bfR is an empirical minimizer of (92) over F2R.Step 3: Comparator-centered oracle inequality on [ t0, T ] × B2R. Recall from Lemma C.2 that fλ, 2R
+
+is the minimizer of Jλ, 2R over eHMR,2R. By Lemma C.4, there exists a deterministic comparator 
+
+f0,R ∈ F 2R such that 
+
+∥f0,R − f ⋆∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
+≤ C(1 + R)K N − 2( s−1)  
+
+> d+1
+
+. (93) Applying Lemma C.6 with h0 = f0,R and t > 0, we obtain an event AR,t , with 
+
+P(AcR,t ) ≤ e−t,
+
+on which 
+
+Jλ, 2R(πR bfR) − Jλ, 2R(fλ, 2R) ≤ 3 [ Jλ, 2R(f0,R ) − Jλ, 2R(fλ, 2R)] + Ce CR (1 + R)K N log( BW M Rn) + tn .
+
+(94) Step 4: Bound the comparator objective gap. We bound 
+
+Jλ, 2R(f0,R ) − Jλ, 2R(fλ, 2R)by comparing both terms to f ⋆:
+
+Jλ, 2R(f0,R ) − Jλ, 2R(fλ, 2R) ≤ Jλ, 2R(f0,R ) − Jλ, 2R(f ⋆)+ Jλ, 2R(f ⋆) − Jλ, 2R(fλ, 2R).
+
+59 First, since f ⋆ is the pointwise Bayes logit, it minimizes the population cross-entropy risk. The logistic loss is 1 /4-smooth in the logit; hence 
+
+LCE ,2R(f0,R ) − LCE ,2R(f ⋆) ≤ C∥f0,R − f ⋆∥2 
+
+> L2([ t0,T ]×B2R)
+
+.
+
+For the Sobolev penalty, using the pulled-back gradient envelope 
+
+∥∇ xf0,R ∥L∞([ t0,T ]×B2R) ≤ MR
+
+2R ≲ 1and the uniform spatial-gradient bound for f ⋆ from Lemma C.1, we get 
+
+λ ∥∇ xf0,R ∥2  
+
+> L2([ t0,T ]×B2R)
+
+− ∥∇ xf ⋆∥2 
+
+> L2([ t0,T ]×B2R)
+
+≤ Cλ ∥∇ x(f0,R − f ⋆)∥L2([ t0,T ]×B2R) ≤ C
+
+h
+
+∥f0,R − f ⋆∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
++ λ2i
+
+.
+
+Therefore, by (93), 
+
+Jλ, 2R(f0,R ) − Jλ, 2R(f ⋆) ≤ C(1 + R)K N − 2( s−1)  
+
+> d+1
+
++ Cλ 2. (95) Second, since f ⋆ minimizes the cross-entropy risk, 
+
+LCE ,2R(f ⋆) − LCE ,2R(fλ, 2R) ≤ 0.Jλ, 2R(f ⋆) − Jλ, 2R(fλ, 2R) ≤ λ
+
+
+
+∥∇ xf ⋆∥2  
+
+> L2([ t0,T ]×B2R)
+
+− ∥∇ xfλ, 2R∥2 
+
+> L2([ t0,T ]×B2R)
+
+
+
+.
+
+As in the proof of Lemma C.3, Green’s identity gives the bound 
+
+Jλ, 2R(f ⋆) − Jλ, 2R(fλ, 2R) ≤ C β(R)λ2 + cmin (R)−1λbR + λbR
+
+ .
+
+Combining this with (95) yields 
+
+Jλ, 2R(f0,R ) − Jλ, 2R(fλ, 2R)
+
+≤ C
+
+
+
+(1 + R)K N − 2( s−1)  
+
+> d+1
+
++ λ2 + β(R)λ2 + cmin (R)−1λbR + λbR
+
+
+
+. (96) Step 5: Convert the oracle bound to L2([ t0, T ]; H1(B2R, μ t))-error. Here L2([ t0, T ]; H1(B2R, μ t)) is the spatial energy norm defined in (56); it integrates over time but contains no time derivative. The same variational inequality for the constrained minimizer fλ, 2R, combined with strong convexity of 
+
+Jλ, 2R on eHMR,2R, gives, for every f ∈ F 2R,
+
+Jλ, 2R(f ) − Jλ, 2R(fλ, 2R) ≥ cmin (R)2 ∥f − fλ, 2R∥2 
+
+> L2([ t0,T ]; L2(B2R,μ t))
+
++ λ∥∇ x(f − fλ, 2R)∥2 
+
+> L2([ t0,T ]; L2(B2R,μ t))
+
+.
+
+Since ∥f − fλ, 2R∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
+= ∥f − fλ, 2R∥2 
+
+> L2([ t0,T ]; L2(B2R,μ t))
+
++ ∥∇ x(f − fλ, 2R)∥2 
+
+> L2([ t0,T ]; L2(B2R,μ t))
+
+,
+
+we obtain 
+
+∥f − fλ, 2R∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
+≤ C cmin (R)−1 ∨ λ−1 [Jλ, 2R(f ) − Jλ, 2R(fλ, 2R)] .
+
+60 For the final choice R = A√log n and λ ≍ n−κ, we have 
+
+cmin (R)−1 ≲ eCR = no(1) ,
+
+so λ−1 dominates cmin (R)−1 for all sufficiently large n. Thus, on AR,t ∩ A R, using (94) and (96), 
+
+∥πR bfR − fλ, 2R∥2  
+
+> L2([ t0,T ]; H1(B2R,μ t))
+
+≤ Cλ
+
+h
+
+eCR (1 + R)K N log( BW M Rn) + tn + (1 + R)K N − 2( s−1) 
+
+> d+1
+
++λ2 + β(R)λ2 + cmin (R)−1λbR + λbR
+
+i
+
+.
+
+Using Lemma C.3 to pass from fλ, 2R to f ⋆, we obtain 
+
+Z Tt0
+
+Z
+
+> B2R
+
+L(πR bfR, f ⋆) dμ t dt ≤ C
+
+h eCR (1 + R)K
+
+λN log( BW M Rn) + tn + (1 + R)K
+
+λ N − 2( s−1) 
+
+> d+1
+
++λ + β(R)λ + ( cmin (R)−1 + 1) bR
+
+i
+
+. (97) By (90), the same bound holds for Main( R). Step 6: Tail error. On the annulus B2R \ BR,
+
+ef (R)(t, x ) = χR(x)( πR bfR)( t, x ),
+
+and therefore 
+
+∇x ef (R)(t, x ) = ( ∇xχR)( x)( πR bfR)( t, x ) + χR(x)∇x(πR bfR)( t, x ).
+
+Since 
+
+|χR| ≤ 1, ∥∇ xχR∥∞ ≲ R−1,
+
+and 
+
+∥πR bfR∥L∞([ t0,T ]×B2R) ≤ MR, ∥∇ x(πR bfR)∥L∞([ t0,T ]×B2R) ≤ MR
+
+2R ≲ 1,
+
+we have 
+
+| ef (R)(t, x )| + ∥∇ x ef (R)(t, x )∥ ≤ C(1 + R), x ∈ B2R \ BR.
+
+Together with the value and gradient bounds for f ⋆ from Lemma C.1, this gives 
+
+L( ef (R), f ⋆)( t, x ) ≤ C(1 + R)K , x ∈ B2R \ BR.
+
+Therefore, using the tail bound in Lemma C.1, there exist constants C, K, c 1 > 0 such that 
+
+Z Tt0
+
+Z
+
+> B2R\BR
+
+L( ef (R), f ⋆) dμ t dt ≤ C(1 + R)K e−c1(R−R1)2+ . (98) On Bc
+
+> 2R
+
+, ef (R) = 0. Hence 
+
+L( ef (R), f ⋆) = |f ⋆|2 + ∥∇ xf ⋆∥2.
+
+By Lemma C.1, this is bounded by C(1 + ∥x∥)K . The tail-moment bound in Lemma C.1 gives constants C, K, c 2 > 0 such that 
+
+Z Tt0
+
+Z
+
+> Bc
+> 2R
+
+L( ef (R), f ⋆) dμ t dt ≤ C(1 + R)K e−c2(2 R−R1)2+ . (99) 61 Combining (98) and (99), and taking R ≥ 2R1, we have (R − R1)+ ≥ R/ 2, (2 R − R1)+ ≥ R. 
+
+Thus, setting 
+
+c3 = min {c1/4, c 2} > 0,
+
+and enlarging C, K if necessary, we obtain Tail( R) ≤ C(1 + R)K e−c3R2
+
+. (100) Step 7: Choosing N, λ, R . Choose 
+
+N ≍ n d+1  
+
+> d+1+2 s−2
+
+, λ ≍ n−κ, κ = s − 1
+
+d + 1 + 2 s − 2 . (101) Then N log( BW M Rn)
+
+n ≲ λ2 log n, N − 2( s−1)  
+
+> d+1
+
+≲ λ2. (102) By Lemmas C.3 and C.6, 
+
+β(R) ≤ Ce CR (1 + R)K , cmin (R)−1 ≤ Ce CR .
+
+Substituting these estimates into (97) and using (102), with t = 2 log n, gives Main( R) ≤ Ce CR (1 + R)K (log n)n−κ + Ce CR (1 + R)K bR. (103) Since 
+
+bR ≤ C(1 + R)K e−cR 2
+
+,
+
+the boundary term is exponentially small for the choice of R below. Combining (103) with (100), we obtain 
+
+E( ef (R)) ≤ Ce CR (1 + R)K (log n)n−κ + Ce CR (1 + R)K e−cR 2
+
+. (104) Finally choose 
+
+R = Aplog n, 
+
+with A > 0 sufficiently large so that R ≥ 2R1 for all sufficiently large n, the truncation-event failure probability in (91) is at most n−2, and the exponential remainder in (104) is negligible relative to the main term. On the event 
+
+AR, 2 log n ∩ A R,
+
+whose probability is at least 1 − 2n−2, and hence at least 1 − 3n−2, we have 
+
+E( ef (R)) ≤ Ce C√log n(log n)K n−κ. (105) Since 
+
+eC√log n(log n)K = no(1) ,
+
+it follows that for every ε > 0, there exists Cε < ∞ such that 
+
+E( ef (R)) ≤ Cεn−κ+ε. (106) This completes the proof. 62 Figure 4: Three simulation distributions (left column: source p, right column: target q). Top: 
+
+Same-line GMM with rotated ridge structure. Middle: Orthogonal GMM with misaligned source and target components. Bottom: Bounded source-to-target distribution with compact support. 63 D Supplementary Experiment Results 
+
+D.1 Synthetic Experiments 
+
+We provide details for synthetic source–target pairs here. 
+
+• Rotated ridge. In the ( t, s )-coordinates the source and target are mixtures of two Gaussians with identical covariance but different offsets along the t-axis: the source has components centered at ±a and the target at ±b (with b > a ), while the s-coordinate is shared. The pair (t, s ) is then rotated by an angle P = 30 ◦ into the observed ( x1, x 2)-space. This creates an anisotropic “ridge” structure where p and q differ primarily along a rotated onedimensional direction. 
+
+• Orthogonal GMM. Both p and q are symmetric two-component Gaussian mixtures with spherical covariance. The source means are ±μS , the target means are ±μT , and we choose 
+
+μ⊤ 
+
+> S
+
+μT = 0, i.e. the source and target mixture axes are orthogonal. This case is adopted in Ouyang et al. [26] and probes how well the estimator adapts when the main directions of variation in the source and target are misaligned. 
+
+• Bounded source to bounded target. The source p is the uniform distribution on the square [ −1, 1] 2. The target q is obtained by smoothly reweighting p with a bounded, oscillatory density ratio r(x) = q(x) 
+
+> p(x)
+
+= c 1 + b cos( πx 1) cos( πx 2), where the parameters are chosen so that r(x) ∈ [1 /a, a ] with a = 5. This yields a non-Gaussian, compactly supported setting with a spatially varying but uniformly bounded density ratio. Together, these three examples cover rotated lowdimensional shifts, orthogonal mixture structure, and bounded non-Gaussian modulation, and hence provide a diverse testbed for gradient-of-ratio estimation. 
+
+D.2 WGF experiments 
+
+Setting details. When a large number of unlabeled target samples x(k) 
+
+> q
+
+are available, [4] proposed learning an optimal transport map to align the joint source and target distributions ( PXZ and QXZ ), and subsequently training a classifier on the aligned source samples. Building on this framework, [23] utilized WGF for sample alignment. Their method evolves particles xt to minimize KL[ pt, q ] between the evolving particle-label distribution pt (initialized with source samples Dpt := {(x(i) 
+
+> t
+
+, y (i) 
+
+> p
+
+)}np
+
+> i=1
+
+) and the target density q. Upon convergence after T iterations, a classifier is trained on the transported source samples {(xT , y q)} to predict target labels. Implementing WGF requires estimating the score difference. While [23] employed a local method known as “local linear interpolation” (LL) for this estimation, our proposed approach utilizes a classification-based method with Sobolev regularization to estimate the score difference globally. 
+
+D.3 ECG experiments 
+
+Details for two datasets. PTB-XL contains 21,837 clinical 12-lead ECG recordings of 10-second duration from 18,885 patients, annotated with 71 diagnostic statements in a multi-label setting. The ICBEB2018 dataset consists of 6,877 12-lead ECG recordings with durations ranging from 6 to 60 seconds, each labeled into one of nine diagnostic classes, which form a subset of the PTB-XL label space. We randomly select 10% of the ICBEB2018 samples as the limited target dataset via stratified sampling to preserve label proportions. All ECG signals are resampled to a frequency of 100 Hz. 64 Synthetic quality and training speed evaluation for diffusion models. We evaluate the quality of the generated samples of the target task using the standard Fr´ echet Inception Distance (FID) metric [14]. The FID score measures the Wasserstein-2 distance between the distributions of real and synthetic data within the feature space of an xresnet1d50 classifier [33] pre-trained on the target task. The quantitative results are summarized in Table 6. Our proposed TGDP-SOB not only achieves the best FID of 8.097 but also significantly reduces model parameters to 2.8M and training time to 30 minutes, offering a superior balance between generation quality and computational efficiency. Table 6: The effectiveness of Soblev Penalization on ECG benchmark under synthetic quality. 
+
+Method FID Parameters Training Time 
+
+Vanilla Diffusion 11.171 50.2M 1h Finetune Generator 8.415 50.2M 40min TGDP 8.100 2.8M 30min TGDP-SOB 8.097 2.8M 30min 
+
+65
