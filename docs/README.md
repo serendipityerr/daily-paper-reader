@@ -6,28 +6,22 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-23
-- 运行时间：2026-08-23 19:32:42 UTC
+- 最新运行日期：2026-08-24
+- 运行时间：2026-08-24 20:31:30 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 本次总论文数：0
+- 精读区：0
+- 速读区：0
 
 ### 今日简报（AI）
-今日精读二维布朗运动惩罚，速读扩散模型正则化，共读2篇论文。  
-最值得关注：布朗运动惩罚研究（8.0分）揭示新路径；扩散模型分数估计亦有亮点。  
-建议从精读的布朗运动论文入手，把握核心结论后可再涉速读。
-- 详情：[/202608/23/README](/202608/23/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202608/24/README](/202608/24/README)
 
 ### 精读区论文标签
-1. [Penalisation of Two-Dimensional Brownian Motion](/202608/23/2608.19396v1-penalisation-of-two-dimensional-brownian-motion)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：通过路径依赖加权构造极限路径测度，与扩散过程的路径积分表述紧密相关。
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Sobolev Regularized Score Difference Estimation in Diffusion Models](/202608/23/2608.18237v1-sobolev-regularized-score-difference-estimation-in-diffusion-models)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：分数差估计是基于分数扩散模型求解薛定谔桥的关键组件
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
