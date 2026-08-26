@@ -6,29 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-25
-- 运行时间：2026-08-25 20:55:06 UTC
+- 最新运行日期：2026-08-26
+- 运行时间：2026-08-26 21:42:49 UTC
 - 运行状态：成功
-- 本次总论文数：3
+- 本次总论文数：1
 - 精读区：1
-- 速读区：2
+- 速读区：0
 
 ### 今日简报（AI）
-今日精读聚焦法医影像前沿：基于薛定谔桥的尸检自溶前图像恢复技术获9分高分，显著提升死前诊断价值；另速读两篇分别涉及扩散模型高维聚类与加权拉普拉斯流收敛性。值得优先关注法医诊断视角下的图像恢复方法。下一步可结合该技术思考临床病理与深度学习结合的应用场景，或延伸阅读扩散模型在异常检测中的适配。
-- 详情：[/202608/25/README](/202608/25/README)
+- 今日共生成 1 篇推荐（精读 1 篇，速读 0 篇）
+- 精读：《The Loss Floor of Denoising Score Matching: Fisher Geometry from Schrödinger Bridges》（9.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202608/26/README](/202608/26/README)
 
 ### 精读区论文标签
-1. [Through the Schrödinger Bridge: Benchmarking Antemortem Image Restoration from Postmortem Autolysis to Enhance Forensic Diagnostics](/202608/25/2608.21813v1-through-the-schrdinger-bridge-benchmarking-antemortem-image-restoration-from-postmortem-autolysis-to-enhance-forensic-diagnostics)  
+1. [The Loss Floor of Denoising Score Matching: Fisher Geometry from Schrödinger Bridges](/202608/26/2608.23916v1-the-loss-floor-of-denoising-score-matching-fisher-geometry-from-schrdinger-bridges)  
    标签：评分：9.0/10、query:diff-bridge
-   evidence：利用薛定谔桥将死后自溶图像恢复为生前状态，在两种图像分布间建立随机连接
+   evidence：证明去噪分数匹配的不可约损失等于薛定谔桥导出的Fisher-Rao度量之迹，将基于分数的扩散模型与薛定谔桥问题直接关联。
 
 ### 速读区论文标签
-1. [Diffusion Models for High-Dimensional Clustered Data: Intrinsic-Dimension Adaptivity via Bayesian Classification](/202608/25/2608.19067v1-diffusion-models-for-high-dimensional-clustered-data-intrinsic-dimension-adaptivity-via-bayesian-classification)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：将扩散去噪过程解释为从噪声到簇状数据分布的桥过程，并通过贝叶斯分类给出分数解释。
-2. [Weighted Laplacian Flow: A Deterministic Particle Flow with Provable Convergence](/202608/25/2608.21831v1-weighted-laplacian-flow-a-deterministic-particle-flow-with-provable-convergence)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：确定性粒子流在分布间传输样本，与构造两分布间桥直接相关
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
