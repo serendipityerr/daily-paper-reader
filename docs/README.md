@@ -6,23 +6,19 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-26
-- 运行时间：2026-08-26 21:42:49 UTC
+- 最新运行日期：2026-08-28
+- 运行时间：2026-08-28 04:04:11 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：1
+- 本次总论文数：0
+- 精读区：0
 - 速读区：0
 
 ### 今日简报（AI）
-- 今日共生成 1 篇推荐（精读 1 篇，速读 0 篇）
-- 精读：《The Loss Floor of Denoising Score Matching: Fisher Geometry from Schrödinger Bridges》（9.0/10）
-- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
-- 详情：[/202608/26/README](/202608/26/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202608/28/README](/202608/28/README)
 
 ### 精读区论文标签
-1. [The Loss Floor of Denoising Score Matching: Fisher Geometry from Schrödinger Bridges](/202608/26/2608.23916v1-the-loss-floor-of-denoising-score-matching-fisher-geometry-from-schrdinger-bridges)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：证明去噪分数匹配的不可约损失等于薛定谔桥导出的Fisher-Rao度量之迹，将基于分数的扩散模型与薛定谔桥问题直接关联。
+- 本次无精读推荐。
 
 ### 速读区论文标签
 - 本次无速读推荐。
