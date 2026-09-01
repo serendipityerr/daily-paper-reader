@@ -1,0 +1,3001 @@
+Title: Generative Neural Networks for Sinkhorn Distributionally Robust Hypothesis Testing
+
+URL Source: https://arxiv.org/pdf/2608.22746v1
+
+Published Time: Tue, 25 Aug 2026 01:32:00 GMT
+
+Number of Pages: 41
+
+Markdown Content:
+# Generative Neural Networks for Sinkhorn Distributionally Robust Hypothesis Testing 
+
+Fenglin Zhang, Teyan Liu, Jie Wang ∗
+
+August 25, 2026 
+
+Abstract 
+
+This paper studies the Sinkhorn distributionally robust hypothesis testing (SDRHT) prob-lem, seeking a robust detector against least-favorable distributions in Sinkhorn discrepancy-based ambiguity sets centered at the empirical distributions. Existing approaches solve this prob-lem by solving large-scale conic programs, which are not scalable. To overcome this, we propose a generative framework that learns least-favorable distributions and supports e ffi cient training and end-to-end sampling. For the Sinkhorn discrepancy-based ambiguity sets, we first derive an equivalent conditional-KL-divergence representation with respect to kernel-smoothed reference distributions. This property allows us to prove strong duality for both constrained and uncon-strained minimax SDRHT formulations. Based on the closed-form optimal detector and Brenier’s theorem, we reformulate the max-min dual formulation as a maximization problem over convex potentials whose gradients characterize invertible transport maps between kernel-smoothed dis-tributions and their least-favorable counterparts. We e ffi ciently approximate these potentials using Hyper Input Convex Neural Networks (HyCNNs) equipped with stochastic gradient es-timators and prove the representation power of HyCNNs and the distributional universality of their induced transport maps. Numerical results show that the proposed method achieves su-perior accuracy and robustness across di ff erent sample sizes and dimensions, while avoiding the scalability limitations of classical SDRHT methods. 
+
+Keywords: Sinkhorn distributionally robust optimization, robust hypothesis testing, gen-erative model, least-favorable distribution generation, hyper input convex neural network 
+
+## 1 Introduction 
+
+Hypothesis testing is a fundamental problem in statistics and scientific discovery, aiming to find an optimal detector that, given new data, can discriminate between two competing hypotheses while minimizing decision errors. The Neyman–Pearson lemma [1] yields the optimal likelihood-ratio test when the densities of the underlying distributions are known. In practice, these distri-butions are typically unknown; instead, the decision-maker has only access to their independent 
+
+> ∗
+
+Fenglin Zhang is a ffi liated with School of Artificial Intelligence, The Chinese University of Hong Kong, Shenzhen; Teyan Liu is a ffi liated with Department of Decision Analytics and Operations, College of Business, City University of Hong Kong; Jie Wang is a ffi liated with School of Artificial Intelligence and School of Data Science, The Chinese University of Hong Kong, Shenzhen. Corresponding author: Jie Wang, jwang@cuhk.edu.cn. 
+
+1arXiv:2608.22746v1 [stat.ML] 24 Aug 2026 and identically distributed (i.i.d.) samples. This setting motivates data-driven hypothesis tests that are both statistically reliable and computationally e ffi cient. However, data-driven tests trained on finite samples are vulnerable to distributional misspeci-fication [2]. On the one hand, for some applications like healthcare [3] and anomaly detection [4], where samples are limited and noisy, reliable estimation of the underlying distribution is chal-lenging due to inevitable measurement and statistical errors. On the other hand, real data may be non-stationary or may undergo distributional shifts, leading to di ff erences between training and testing data. To improve the reliability of hypothesis testing, especially in high-stakes scenarios, robust methods are necessary to circumvent these challenges [5, 6]. Distributionally robust optimization (DRO) [7] o ff ers a powerful paradigm for making ro-bust decisions under distributional uncertainty. When applied to hypothesis testing, DRO op-timizes the robust detector against the least-favorable distributions (also known as worst-case distributions) within an ambiguity set consisting of plausible distributions, safeguarding against misspecification and enhancing out-of-sample reliability when applied to new, unseen data [8]. The design of the ambiguity set is crucial for balancing computational tractability and robust out-of-sample performance [9]. Popular choices include Huber’s contamination model [10], f -divergence [11, 12], moments [13, 14], kernels [15, 16], or Wasserstein distance [8, 17]. DRO with ambiguity sets constructed using the Sinkhorn discrepancy has recently received increasing attention [18, 19]. Conventional Wasserstein DRO-based hypothesis testing restricts the worst-case distributions to have the same support as that of the empirical distributions [8]. By adding entropic regularization to the Wasserstein distance, the Sinkhorn discrepancy provides a smooth alternative to the Wasserstein distance [20], and the Sinkhorn discrepancy-based ambi-guity sets naturally encourage continuous distributional estimates. Thus, unlike the Wasserstein distance-based ambiguity set, if a testing sample is outside the support of the observed data, it is still feasible to leverage the likelihood ratio detector to design a robust test. However, finding the least-favorable distributions in Sinkhorn-based hypothesis testing is an infinite-dimensional optimization problem. Existing approaches approximately solve it using sample average approxi-mation and result in large-scale conic programs [21, 22], whose computational cost grows rapidly with the sample size. It is desirable to develop more tractable approaches for solving the robust hypothesis testing problem with Sinkhorn-based ambiguity sets. Parallel to these developments in robust statistics, flow-based generative models have shown remarkable success in learning complex distributions as pushforwards of simple reference distri-butions through invertible and di ff erentiable maps [23, 24, 25]. This framework is not only adept at generating new samples but is also naturally suited for solving optimization problems over probability space, e.g., generating least-favorable distributions in DRO [26, 27, 28]. By parame-terizing a distribution as a flow-based transformation starting from a probability density, one can effi ciently optimize an objective over the probability space using gradient-based methods [29, 30]. In this work, we leverage flow-based generative models to solve the Sinkhorn distribution-ally robust hypothesis testing (SDRHT). Based on the theoretical results of optimal transport, we introduce a generative framework to learn continuous least-favorable distributions within the Sinkhorn-based ambiguity sets by optimizing convex potentials. By parameterizing the convex 2Empirical Distribution  (H 0)   
+
+> Empirical Distribution (H 1)
+> Prop. 1
+> Eq. (4)
+> Least-favorable Distribution
+> Least-favorable Distribution
+> Convex
+> Gradient
+> Mapping
+> (Eq. (7))
+> Ground-truth Classification Boundary
+> Closed-form Optimal Detector
+> Train
+> Convex
+> Networks
+> (Sec. 3.1)
+> by
+> Algorithm 1
+> (Sec. 3.2)
+> Continuous Reference
+> Distribution
+> Continuous Reference
+> Distribution
+> Least-favorable Classification Boundary
+> Classification Criteria
+
+Figure 1: Illustration of the training and testing processes of our least-favorable detector. potentials, our approach converts the original infinite-dimensional optimization into a finite-dimensional and tractable problem. Our main contributions are summarized as follows: • Novel Reformulation: We establish a strong duality result for SDRHT and thereby refor-mulate the original minimax optimization as a max-min problem. As the inner minimized detector can be explicitly derived, this problem is equivalent to a maximum problem over distributions. Leveraging Brenier’s theorem, we further reformulate it as a maximization problem over convex potentials. • Generative Framework: We parameterize the convex potentials by Hyper Input Convex Neural Networks (HyCNNs) and develop stochastic gradient estimators for the objective. This transforms the infinite-dimensional optimization into a finite-dimensional one, en-abling e ffi cient and scalable training and sampling. We also prove the representation power of HyCNNs and the distributional universality of their induced gradient maps. • Empirical Validation: We validate the performance of our method through extensive nu-merical studies on both synthetic datasets and real-world data with di ff erent sample sizes and dimensions, demonstrating its superiority over existing baselines in terms of both accu-racy and robustness. Figure 1 illustrates the training and testing processes of the proposed method using a toy Moons dataset. By exploiting the geometry of the Sinkhorn-based ambiguity set (Proposition 1 and Eq. (4)), the least-favorable distributions ( P⋆
+
+0, P⋆
+
+1) are generated by first applying kernel smooth-ing to the empirical distributions bP0 and bP1 to obtain Pϵ
+
+0 and Pϵ
+
+1, and next robustifying them. In the robustification procedure, we learn convex-gradient maps (see Eq. (7) and Algorithm 1) that generate P⋆
+
+0 and P⋆
+
+1 based on the kernel-smoothed reference distributions Pϵ
+
+0, Pϵ
+
+1. The resulting least-favorable distributions induce a nonlinear robust decision boundary with high accuracy. 3The remainder of this paper is organized as follows. Section 2 presents the models and prop-erties of SDRHT. Section 3 develops a framework for generating least-favorable distributions. Section 4 shows the representation power of HyCNNs. Section 5 reports the numerical results. Section 6 concludes this paper. Proofs and additional technical notes are provided in the online appendix to this paper. 
+
+Notations. For K ∈ N, let [ K] := {1, · · · , K }. We write P ≪ ν if the probability measure P is absolutely continuous with respect to the measure ν. We denote P ⊗ Q by the product measure of two probability measures P and Q. For a transport map T : Ω → Ω, the pushforward of a probability measure P is denoted as T#P, such that T#P(A) = P(T −1(A)) for any measurable set A ⊆ Ω. For a convex function ϕ : Rd → R ∪ {∞} , denote its convex conjugate by ϕ∗(y) = sup x∈Rd {y⊤x − ϕ(x)} for any y ∈ Rd .
+
+## 2 Sinkhorn Distributionally Robust Hypothesis Testing 
+
+In this section, we introduce the Sinkhorn distributionally robust hypothesis testing (SDRHT), de-rive its strong duality property, and obtain its equivalent functional optimization reformulation. Let Ω ⊆ Rd be a closed sample space. Denote P (Ω) as the set of all probability measures on Ω, and M(Ω) as the set of measures on Ω. Denote by Pk ⊂ P (Ω) the ambiguity set under hypotheses Hk , where k ∈ K = {0, 1}. Given a testing sample ω, the composite hypothesis testing decides which one of the following hypotheses is true: 
+
+H0 : ω ∼ P0, P0 ∈ P 0; H1 : ω ∼ P1, P1 ∈ P 1.
+
+A hypothesis test (detector) φ : Ω → R is a measurable function. For any testing sample ω, it accepts the null hypothesis H0 and rejects alternative hypothesis H1 whenever φ(ω) ≥ 0, otherwise accepts H1 and rejects H0. The exact risk of this detector is defined as the sum of type-I and type-II errors (also known as the false positive rate and the false negative rate, respectively). For this non-convex objective, we follow the generating-function approach [8, 31] and optimize the following convex surrogate risk instead: 
+
+Φ(φ; P0, P1) := Eω∼P0 [ℓ ◦ (−φ)( ω)] + Eω∼P1 [ℓ ◦ φ(ω)] ,
+
+where the generating function ℓ is defined as follows. 
+
+Definition 1 (Generating Function) . A generating function ℓ : R → R+ ∪ {∞} is a non-negative, non-decreasing, convex function such that ℓ(0) = 1 and lim t→−∞ ℓ(t) = 0 . ^
+
+For some common choices of the generating function, Table 1 summarizes the corresponding closed-form optimal detectors φopt given distributions P0 and P1 [8, 21], where p0 and p1 rep-resent the probability density functions of P0 and P1. In this paper, we choose the generating function ℓ(t) := exp( t). Given sets of training samples {x(1)  
+
+> k
+
+, · · · , x(nk ) 
+
+> k
+
+} for all k ∈ K, denote the corresponding empirical distributions as bPk = 1
+
+> nk
+
+Pnk 
+
+> i=1
+
+δx(i)
+
+> k
+
+, where nk denotes the number of samples from Pk ∈ P k . The following definition introduces the Sinkhorn discrepancy, an entropy-regularized variant of the 4Table 1: Common choices of generating function (first column), together with their corresponding optimal detector (second column) and surrogate risk (third column). 
+
+ℓ(t) Optimal φ Corresponding optimal 1 − Φ(P0, P1)/2exp( t) log pp0/p 1 H2(P0, P1)log(1 + exp( t)) / log 2 log( p0/p 1) JS( P0, P1)/ log 2 (t + 1) 2 1 − 2p0/(p0 + p1) χ2(P0, P1)(t + 1) + sign( p0 − p1) TV( P0, P1)
+
+> H2: Hellinger divergence; JS: Jensen-Shannon divergence; TV: Total variation distance.
+
+Wasserstein distance that quantifies the distance between distributions [18, 21]. Throughout the paper, we use the quadratic transport cost c(x, z ) := 12 ∥x − z∥22.
+
+Definition 2 (Sinkhorn Discrepancy) . Consider any two distributions P, Q ∈ P (Ω) and reference measure ν ∈ M (Ω) such that Q ≪ ν. For regularization parameter ϵ > 0, the Sinkhorn discrepancy between two distributions P and Q is defined as 
+
+Sϵ(P, Q) = inf  
+
+> γ∈Γ(P,Q)
+
+nE(x,z)∼γ [c(x, z)] + ϵ · D KL (γ∥P ⊗ ν)o ,
+
+where c(x, z) represents the transport cost function, Γ (P, Q) denotes the set of couplings of P and Q,respectively, and DKL (γ∥P ⊗ ν) denotes the relative entropy of distribution γ with respect to measure 
+
+P ⊗ ν, i.e., 
+
+DKL (γ∥P ⊗ ν) = 
+
+Z
+
+> Ω×Ω
+
+log dγ(x, z)dP(x)d ν(z) dγ(x, z). ^
+
+Let the space of detectors be F . We consider the following SDRHT problem, optimizing a detector to minimize the least-favorable risk in ambiguity sets: inf  
+
+> φ∈F
+
+sup   
+
+> P0∈Bρ0(bP0),P1∈Bρ1(bP1)
+
+Φ(φ; P0, P1), (SDRHT) where the ambiguity sets are constructed by the Sinkhorn discrepancy Sϵ(bPk , P), o ff ering a flexi-ble, non-parametric framework to characterize the least-favorable distributions 
+
+Bρk (bPk ) := {P : Sϵ(bPk , P) ≤ ρk }, ∀k ∈ K. (1) We also consider the following soft-constrained counterpart of problem (SDRHT): inf  
+
+> φ∈F
+
+sup  
+
+> P0,P1∈P(Ω)
+
+Φ(φ; P0, P1) −
+
+X
+
+> k∈K
+
+λk Sϵ(bPk , Pk ), (soft-SDRHT) where λk > 0 for all k ∈ K are penalty parameters. 
+
+2.1 Strong Duality 
+
+In this subsection, since the optimal detector admits a closed form for fixed distributions, we prove the strong duality of problems (SDRHT) and (soft-SDRHT) by interchanging the minimiza-tion over detectors and the maximization over distributions. Note that the functional space F
+
+5is infinite-dimensional and naturally convex, but is generally not compact. Hence, the classical Sion’s minimax theorem cannot be used to verify strong duality. Instead, we prove strong duality primarily using the lopsided minimax theorem [7], which does not require F to be compact. For the transport cost and Sinkhorn discrepancy, we introduce the following assumptions. 
+
+Assumption 1. (I) The transport cost function c(x, z) is bP ⊗ ν-measurable and satisfies ν{z : 0 ≤
+
+c(x, z) < ∞} = 1 for bP-almost every x.
+
+(II) Ez∼ν [e−c(x,z)/ϵ ] < ∞ for bP-almost every x.
+
+(III) The cost function c(x, z) is lower semicontinuous in (x, z).
+
+(IV) For every joint distribution γ on Ω × Ω with first marginal distribution P, it has a regular conditional distribution γx given the value of the first marginal equals x.
+
+According to [18], Assumptions 1(I) and (II) ensure that both the Sinkhorn discrepancy and the equivalent reformulation in the following Proposition 1 are well-defined. Assumption 1(III) ensures that the Sinkhorn discrepancy is weakly lower semicontinuous. Assumption 1(IV) ensures that the joint distribution γ can be written as d γ(x, z) = d bP(x)d γx and the law of total expectation holds. Our choice of transport cost c(x, z ) = 12 ∥x − z∥22 naturally satisfies Assumption 1(III). Define the non-negative loss function 
+
+Lk (φ, ω) := ℓ
+
+
+
+(−1) k+1 · φ(ω)
+
+
+
+, ∀k ∈ K. (2) In this paper, we focus on continuous detectors and consider the following assumptions for the loss function. 
+
+Assumption 2 (Loss Function) . (I) For any k ∈ K, φ ∈ F , and βk > 0, the reference distribution 
+
+Pϵk in Lemma 1 satisfies Eω∼Pϵk [exp( βk · Lk (φ, ω))] < ∞ .
+
+(II) There exists Q ∈ P (Ω) with inf φ∈F Eω∼Q
+
+hLk (φ, ω) − λk Sϵ(bPk , Q)i > −∞ for any k ∈ K.
+
+Assumption 2(I) leads to the following Lemma 2. Assumption 2(II) ensures that the optimal value of the dual of problem (soft-SDRHT) is strictly larger than −∞ .The following proposition provides an equivalent conditional-KL-divergence representation of the Sinkhorn-based ambiguity set. 
+
+Proposition 1 (Conditional-KL Representation of the Sinkhorn Ambiguity Set) . The ambiguity sets based on Sinkhorn discrepancy with ϵ > 0 are equivalent to 
+
+B ¯ρk (Pϵk ) := 
+
+Q : inf   
+
+> γ∈Γ(bPk,Q)
+
+Ex∼bPk
+
+
+
+DKL (γx∥K x,ϵ )
+
+
+
+≤ ¯ρk /ϵ 
+
+ , ∀k ∈ K, (3) 
+
+where ¯ρk := ρk + ϵEx∼bPk
+
+
+
+log R 
+
+> Rd
+
+e−c(x,z)/ϵ dz
+
+
+
+, probability density dPϵk (z) := Ex∼bPk
+
+dKx,ϵ (z),
+
+dKx,ϵ (z) := e−c(x,z)/ϵ 
+
+R 
+
+> Rd
+
+e−c(x,u)/ϵ · du · dv(z).
+
+6The proof of Proposition 1 is provided in Appendix B.1. Proposition 1 shows the connec-tion between the ambiguity set based on Sinkhorn discrepancy and those based on the KL diver-gence [12]. Since the reference measure ν ∈ M (Ω), Kx,ϵ is a probability kernel, and its corre-sponding continuous reference distributions in Eq. (3) are probability measures, i.e., 
+
+Pϵk = 1
+
+nknkX
+
+> i=1
+
+Kx(i)  
+
+> k,ϵ
+
+∈ P (Ω), ∀k ∈ K. (4) When Ω = Rd , ν is a Lebesgue measure, and the transport cost is defined as 12 ∥x−z∥22, distribution 
+
+Pϵk is a Gaussian mixture because Kx(i)  
+
+> k,ϵ
+
+= N (x(i) 
+
+> k
+
+, ϵ · Id ) for each k ∈ K and i ∈ [nk ]. Based on Assumptions 1 and 2 and Proposition 1, the following strong duality results hold. 
+
+Theorem 1 (Strong Duality) . For the convex risk function Φ and Sinkhorn discrepancy Sϵ, the follow-ing results hold: 
+
+(I) If Assumptions 1 and 2 (I) hold, then 
+
+Optimal Value of (SDRHT) = max   
+
+> P0∈Bρ0(bP0),P1∈Bρ1(bP1)
+
+inf  
+
+> φ∈F
+
+Φ(φ; P0, P1); (II) If Assumptions 1 and 2 hold, then 
+
+Optimal Value of (soft-SDRHT) = max   
+
+> P0,P1∈P(Ω)
+
+inf  
+
+> φ∈F
+
+Φ(φ; P0, P1) −
+
+X
+
+> k∈K
+
+λk Sϵ(bPk , Pk ),
+
+where λk > 0 for any k ∈ K.
+
+The proof of Theorem 1 is based on the lopsided minimax theorem [7, Theorem 5.15], and is provided in Appendix B.2. We prove this by showing that the Sinkhorn-based ambiguity sets are weakly compact and the expected loss is weakly upper semicontinuous. Theorem 1 allows us to eliminate the detector minimization before optimizing over the least-favorable distributions. Thus, for generating function ℓ(t) = exp( t), problem (soft-SDRHT) is equivalent to max   
+
+> P0,P1∈P(Ω)
+
+Φ(φopt ; P0, P1) −
+
+X
+
+> k∈K
+
+λk Sϵ(bPk , Pk ). (5) where 
+
+Φ(φopt ; P0, P1) = 
+
+X
+
+> k∈K
+
+Eω∼Pk
+
+
+
+exp 
+
+
+
+(−1) k+1 · 12
+
+
+
+log p0(ω) − log p1(ω)
+
+ 
+
+. (6) For a testing sample ω ∈ Ω, it su ffi ces to evaluate the log-density of least-favorable distributions 
+
+P0 and P1 at ω, and then make a decision by our explicitly optimal detector. Thus, the robust detector retains the likelihood-ratio form, but its densities are those of the least-favorable distri-butions. Problem (5) nevertheless remains infinite-dimensional because the least-favorable distri-butions are still optimization variables. In the next subsection, we characterize these distributions using parameterized convex-gradient transport maps. 72.2 Reformulation via Convex-Gradient Transport Maps 
+
+By setting the transport cost to the quadratic function c(x, z) = 12 ∥x − z∥22, we can leverage the following fundamental result from optimal transport [32] to simplify Problem (5). 
+
+Theorem 2 (Brenier’s Theorem) . Let μ, ν be two finite-second-moment probability measures on Rd ,and assume that μ is absolutely continuous with respect to the Lebesgue measure. Then there exists a proper convex function ϕ : Rd → R such that (∇ϕ)#μ = ν. In addition, ∇ϕ is the unique solution to 
+
+inf    
+
+> T:T#μ=ν
+
+Eμ∥x − T (x)∥22,
+
+and γopt ∼ (Id , ∇ϕ)#μ is the unique solution to 
+
+inf   
+
+> γ∈Γ(μ,ν )
+
+Eγ ∥x − y∥22.
+
+Theorem 2 shows that the gradient of a convex potential can characterize the transport map between continuous distributions. Proposition 1 and Theorem 2 enable us to reformulate (5) as an equivalent optimization problem over convex gradient transport maps, i.e., max 
+
+> ϕ0,ϕ 1∈F CVX
+
+Φ(φopt ; P0, P1) −
+
+X
+
+> k∈K
+
+λk Sϵ(bPk , Pk ) : Pk = ( ∇ϕk )#Pϵk
+
+ , (7) where FCVX is the set of convex functions ϕ : Rd → R ∪ { +∞} and the distribution Pϵk for each 
+
+k ∈ K is defined in Eq. (4). Note that we use continuous distributions Pϵk as source distributions of the transport maps for all k ∈ K, thanks to the connection between Sinkhorn discrepancy and KL divergence shown in Proposition 1. For computation, we restrict the convex function ϕk ∈ C2(Rd ) to be strongly convex, and ∇ϕk
+
+to be a global di ff eomorphism for each k ∈ K. In formulation (7), given strongly convex functions 
+
+ϕ0 and ϕ1, the log-density terms in risk function Φ(φopt ; P0, P1) can be explicitly computed by the log-density form of the change-of-variable formula [23]. Specifically, for any sample ωk ∼ Pk ,we have log pk (ωk ) = log pϵk (zk ) − log det ∇2ϕk (zk ) , ∀k ∈ K, (8) where zk = ∇ϕ−1 
+
+> k
+
+(ωk ), and pϵk represents the probability density function of Pϵk for each k ∈ K.Based on the Fenchel–Young inequality, the gradient of a di ff erentiable strongly convex function 
+
+ϕ is the inverse of the gradient of its convex conjugate, i.e., ∇ϕ−1 = ∇ϕ∗. In this case, we have 
+
+zk = arg max z∈Rd {ω⊤ 
+
+> k
+
+z − ϕk (z)}. Similarly, to evaluate the log-density of sample ωk ∼ Pk at the other distribution Pϵ
+
+> |1−k|
+
+, i.e., log p|1−k|(ωk ), we trace ωk back to its corresponding source sample ¯zk in Pϵ
+
+> |1−k|
+
+:¯zk = ∇ϕ−1
+
+> |1−k|
+
+(ωk ) = arg max 
+
+> z∈Rd
+
+
+
+ω⊤ 
+
+> k
+
+z − ϕ|1−k|(z)
+
+
+
+, ∀k ∈ K, (9) and then we have log p|1−k|(ωk ) = log pϵ
+
+> |1−k|
+
+( ¯ zk ) − log det ∇2ϕ|1−k|( ¯ zk ) , ∀k ∈ K. (10) 8Since the potential ϕk in (7) is assumed to be twice di ff erentiable and strongly convex, its Hessian determinant is strictly positive, i.e., det ∇2ϕk (z) = det ∇2ϕk (z), and the log-determinant oper-ators in Eqs. (8) and (10) are well defined. In high-dimensional applications, the exact values of the log-determinant-Hessian operators are computationally expensive, but can be estimated effi ciently by the stochastic Lanczos quadrature (SLQ) in [33, 34]. Although formulation (7) exposes the transport structure of the least-favorable distributions, it remains an infinite-dimensional optimization. Moreover, the induced densities, inverse maps, and log-determinant terms are generally unavailable in closed form. However, this formulation o ff ers a new perspective on generating least-favorable distributions by characterizing the gradients of convex potentials. In the next section, we propose a generative method to solve (7). 
+
+## 3 A HyCNN-Based Generative Method 
+
+Flow-based generative models represent a target distribution as the pushforward of a simple refer-ence distribution through an invertible, di ff erentiable map, allowing e ffi cient density evaluation and sample generation [23]. In flow-based DRO, these models can also generate least-favorable distributions when guided by proper loss functions [26]. For problem (7), a natural approach is to parameterize the convex potentials by the Input Convex Neural Network (ICNN) [34, 35]. In this section, we develop a generative framework that parametrizes convex potentials by a variant of ICNN, i.e., Hyper Input Convex Neural Network (HyCNN) , extending the classical ICNN with more flexible architectures [36]. 
+
+3.1 The Architecture of HyCNN 
+
+In this subsection, we first introduce the HyCNN architecture. Let the number of layers of HyCNN be L, and the output of HyCNN given an input x ∈ Rd be HyCNN (x) ∈ R. Figure 2 illustrates the architecture of HyCNN, including the detailed structure of each block. The forward propagation process of HyCNN can be reformulated as follows 
+
+HyCNN (x) := yL+1 = VLyL + WLx + bL, (11a) 
+
+yl+1 := ¯ σ
+
+
+
+V (1)  
+
+> l
+
+yl + W (1)  
+
+> l
+
+x + b(1)  
+
+> l
+
+, V (2)  
+
+> l
+
+yl + W (2)  
+
+> l
+
+x + b(2) 
+
+> l
+
+
+
+, ∀l ∈ { 0, · · · , L − 1}. (11b) where {V , W , b} are trainable parameters, y0 := 0, and ¯ σ : R2 → R is a scalar activation function that is convex and component-wise non-decreasing, applied element-wise to vector inputs. As shown in Figure 2, in each hidden layer l ≥ 1 of HyCNN, a “passthrough” layer (red arrow) directly connects the input vector with the hidden units. Since the nonnegative sums of convex functions are also convex and the composition of a convex and convex non-decreasing function is also convex, according to Proposition 2.1 in [36], this construction ensures the convexity of HyCNNs. 
+
+Proposition 2 (Convexity of HyCNN [36]) . Suppose that ¯σ : R2 → R is convex and component-wise non-decreasing, and weight matrices {V (1)  
+
+> l
+
+, V (2)  
+
+> l
+
+}L−1 
+
+> l=0
+
+and VL are component-wise nonnegative. Then, 
+
+HyCNN (x) in Eq. (11a) is convex in x.
+
+9B0 ... B1 B2 BL-1  BL
+
++
+
++ 
+
+> Bl
+> the l-th Network
+> Block
+
++ 
+
+> Hidden-layer Connection Positive Matrix Operation
+> General Affine Operation
+
++ Addition  
+
+> Componentwise Activation Passthrough Connection
+
+Figure 2: The architecture of HyCNN In this paper, the non-negativity of weight matrices {V (1)  
+
+> l
+
+, V (2)  
+
+> l
+
+}L−1 
+
+> l=0
+
+and VL is enforced by soft-plus operators. Note that when we choose ¯ σ (a1, a 2) = σ (a1), where σ : R → R is an activation function that is convex and non-decreasing (e.g., ReLU), the HyCNN reduces to the standard ICNN architecture [35]. Thus, HyCNNs can be interpreted as a generalization of ICNNs. When we choose a maxout unit [37] as our activation function, i.e., ¯ σ (a1, a 2) = max( a1, a 2), the result-ing HyCNN is piecewise-a ffi ne but is nondi ff erentiable at ties. Therefore, to ensure the trained HyCNN is di ff erentiable, we use a smooth log-sum-exp approximation of the maxout activation function with parameter τ > 0: ¯στ (a1, a 2) := τ · log 
+
+
+
+ea1/τ + ea2/τ 
+
+
+
+, (12) which is referred to as the smooth maxout activation function below. 
+
+3.2 Approximation for Convex Potentials 
+
+In this subsection, we present the procedure for training HyCNNs. Given sample z ∈ Ω, de-note the two HyCNNs we use for the problem (7) by HyCNN 0(z) and HyCNN 1(z), respectively. Denote the approximated convex function by eϕk for each k ∈ K. To ensure the gradient of convex potentials is invertible, as the smooth maxout activation makes HyCNN k twice contin-uously di ff erentiable, we further add a positive quadratic term to ensure strong convexity, i.e., 
+
+eϕk (z) = HyCNN k (z) + α 
+
+> 2
+
+∥z∥22 where α is a su ffi cient small positive number, such that the Hessian matrix Heϕk ⪰ αI ≻ 0. Unlike block-wise progressive methods that train a series of maps in [26], we directly learn one convex-gradient map for each hypothesis, since a composition of convex-gradient maps may not be the gradient of a convex potential. The training process is given by the following Algorithm 1. For the gradient of the objective function, in Step 5, we propose two N -sample estimators to approximate the gradient of the risk 10 function and the Sinkhorn discrepancy, respectively; see Algorithms 3 and 4 in the next subsection for details. As shown, to generate the samples for estimators, we first draw N samples from the continuous reference distribution Pϵk (Step 2), and then map them to the target distribution space by the gradient of trained convex potentials (Step 3). In Step 6, the stochastic gradient ascent algorithm is used to update the network parameters. 
+
+Algorithm 1 Convex Potentials Approximation based on HyCNNs. 
+
+Require: Number of epochs T , training samples {x(i) 
+
+> k
+
+}nk
+
+> i=1
+
+, reference distributions Pk, 0 = Pϵk .
+
+Output: Convex potential approximations eϕk,T for all k ∈ K.1: Initialize strongly convex potential eϕk, 0 with parameters θk, 0 ∈ Θ for each k ∈ K;2: for t = 0 , · · · , T − 1 do 
+
+3: Draw N i.i.d. samples {z(i) 
+
+> k
+
+}Ni=1 from initial distribution Pk, 0 for each k ∈ K;4: Generate samples {ω(i)
+
+> k,t
+
+}Ni=1 ← {∇ eϕk,t (z(i) 
+
+> k
+
+)}Ni=1 in target distribution Pk,t for each k ∈ K;5: Estimate the gradient of objective function of (7) by Algorithms 3 and 4: 
+
+∇θk,t F(θ0,t , θ1,t ) ← Risk Gradient Estimator ({ω(i)0 }Ni=1 , {ω(i)1 }Ni=1 , eϕ0,t , eϕ1,t , θk,t )
+
+− ∇ θk,t 
+
+X
+
+> k∈K
+
+λk · Sinkhorn Estimator ({x(i) 
+
+> k
+
+}nk
+
+> i=1
+
+, {ω(i)
+
+> k,t
+
+}Ni=1 ), ∀k ∈ K;6: Update θk,t +1 ← θk,t + ηt · ∇ θk,t F(θ0,t , θ1,t ), where ηt is the learning rate; 7: end for 
+
+3.3 Stochastic Gradient Estimation 
+
+Next, we develop stochastic estimators required by Algorithm 1 to solve Problem (7). Let {z(i)0 }Ni=1 
+
+and {z(i)1 }Ni=1 be N independent and identically distributed (i.i.d.) samples from reference distribu-tions Pϵ 
+
+> 0
+
+and Pϵ 
+
+> 1
+
+(see Eq. 4), respectively. These points are subsequently transformed into samples from the target distributions P0 and P1 via transport maps, i.e., ω0 = ∇ϕ0(z0) and ω1 = ∇ϕ1(z1), where the underlying distributions satisfy P0 = [ ∇ϕ0]#Pϵ 
+
+> 0
+
+and P1 = [ ∇ϕ1]#Pϵ
+
+> 1
+
+.
+
+3.3.1 Risk Gradient Estimator 
+
+In this part, we present the gradient estimator of the risk function with respect to the parameters of HyCNNs in Algorithm 1. For every k ∈ K and ωk ∼ Pk , we define the basic element of the risk function as 
+
+hk (ωk , θ0, θ1) := exp 
+
+ 12 (log p|1−k|(ωk ) − log pk (ωk )) 
+
+
+
+, ∀k ∈ K.
+
+As an example, given convex functions eϕ0 and eϕ1 with parameters θ0 and θ1, respectively, the gradients of h0(ω0, θ0, θ1) with respect to θ0 and θ1 are given by 
+
+∂h 0(ω0, θ0, θ1)
+
+∂θ0
+
+= h0(ω0, θ0, θ1)2 ·
+
+ ∂ω0
+
+∂θ0
+
+!⊤
+
+[∇2 eϕ1( ¯ z0)] −1g + ∂∂θ0
+
+log det ∇2 eϕ0(z0)
+
+
+
+, (13a) 
+
+∂h 0(ω0, θ0, θ1)
+
+∂θ1
+
+= − h0(ω0, θ0, θ1)2 ·
+
+ ∂∇ eϕ1( ¯ z0)
+
+∂θ1
+
+⊤
+
+[∇2 eϕ1( ¯ z0)] −1g + ∂∂θ1
+
+log det ∇2 eϕ1( ¯ z0)
+
+
+
+, (13b) 11 where g := ∂ log p1(ω0) 
+
+> ∂¯z0
+
+= ∂[log pϵ   
+
+> 1( ¯ z0)−log det ∇2eϕ1( ¯ z0)]
+> ∂¯z0
+
+, and ¯ zk is defined in Eq. (9) for each k ∈ K. For brevity, the detailed gradient derivation can be found in Appendix C.1. Eqs. (13a) and (13a) indi-cate that directly di ff erentiating the risk requires backpropagation through inverse maps and the log-determinant-Hessian (LDH), which is computationally expensive. Therefore, in the follow-ing, we develop a matrix-free stochastic gradient estimator for the LDH in Algorithm 2, and then present the estimator for the risk function in Algorithm 3. For the gradient of LDH, we first introduce an O(1)-memory estimator for the gradient of the log-determinant [34]. Specifically, for any invertible matrix H with parameters θ:
+
+∂∂θ log det H = tr( H−1 ∂H ∂θ ) = Ev[v⊤H−1 ∂H ∂θ v], (14) where the last equality uses the Hutchinson trace estimator [38] with an isotropic random vector (e.g., Rademacher or standard Gaussian) v ∈ Rd satisfying E[v] = 0 and E[vv ⊤] = I. With exact linear solves, the Hutchinson construction o ff ers an unbiased estimator of the gradient of the log-determinant. In this problem, H is a symmetric positive definite Hessian matrix. Thus, v⊤H−1 in Eq. (14) can be e ffi ciently solved by the following quadratic optimization problem min 
+
+> u
+
+12 u⊤Hu − v⊤u, (15) which has the unique minimizer uopt = H−1v = ( v⊤H−1)⊤. Then, the gradient of the LDH in our problem can be estimated as Ev[ ∂∂θ (u⊤
+
+> opt
+
+Hv)]. In this paper, we summarize this procedure as Algorithm 2. 
+
+Algorithm 2 GLDH Estimator : Estimator for the Gradient of LDH. 
+
+Require: Symmetric positive definite matrix H, parameter θ, and sample size M.1: Initialize estimator E = 0 with the same dimension as θ;2: for m = 1 , · · · , M do 
+
+3: Sample Rademacher random vector v(m) with d dimensions; 4: u(m) ← ConjugateGradient (H, v(m)); 5: u(m) ← StopGradient u(m);6: E ← E + ∇θ
+
+ u(m)⊤ Hv(m)
+
+
+
+;7: end for 
+
+8: Return E/M .In Step 4 of Algorithm 2, the function ConjugateGradient (H, v) := arg min u 12 u⊤Hu − v⊤u
+
+represents that we use the conjugate gradient method to solve the unconstrained optimization problem (15). In Step 5, StopGradient (·) treats its argument as a constant during backpropagation. Thus, in Step 6, only H(θ) is di ff erentiated, and the term ∇θ[u(m)⊤ Hv(m)] can be e ffi ciently computed by Hessian-vector and vector-Jacobian products. Then, the gradient of the risk function (6) can be estimated by Algorithm 3. Both functions 
+
+ConjugateGradient in Step 5 and GLDH Estimator have been defined in Algorithm 2. In Step 6, we compute the value of the log-determinant in hk (ωk , θ0, θ1) exactly when d ≤ 32 and estimate it by the stochastic Lanczos quadrature (SLQ) [33, 34] when d > 32. 12 Algorithm 3 Risk Gradient Estimator : Gradient Estimator for the Risk Function. 
+
+Require: Generated samples {ω(i) 
+
+> k
+
+}Ni=1 and convex potentials eϕk for all k ∈ K, parameter θ.1: Initialize estimator E = 0 with the same dimension as θ;2: for k = 0 , 1 do 
+
+3: for i = 1 , · · · , N do 
+
+4: Compute z(i) 
+
+> k
+
+= ∇ eϕ−1 
+
+> k
+
+(ω(i) 
+
+> k
+
+) and ¯ z(i) 
+
+> k
+
+= ∇ eϕ−1
+
+> |1−k|
+
+(ω(i) 
+
+> k
+
+) by Eq. (9); 5: Compute u(i) 
+
+> k
+
+← ConjugateGradient 
+
+
+
+∇2 eϕ|1−k|( ¯ z(i) 
+
+> k
+
+), ∂ log p|1−k|(ω(i)  
+
+> k)
+> ∂¯z(i)
+> k
+
+
+
+;6: Update the gradient estimator 
+
+E ← E + hk (ω(i) 
+
+> k
+
+, θ0, θ1)2 ·
+
+ ∂
+
+
+
+ω(i) 
+
+> k
+
+− ∇ eφ|1−k|( ¯ z(i) 
+
+> k
+
+)
+
+
+
+∂θ
+
+⊤
+
+u(i)
+
+> k
+
++ GLDH Estimator 
+
+
+
+∇2 eϕk (z(i) 
+
+> k
+
+), θ
+
+
+
+− GLDH Estimator 
+
+
+
+∇2 eϕ|1−k|( ¯ z(i) 
+
+> k
+
+), θ
+
+;7: end for 
+
+8: end for 
+
+9: Return E/N .
+
+3.3.2 Sinkhorn Discrepancy Estimator 
+
+Computing the Sinkhorn discrepancy term Sϵ(bPk , Pk ) exactly (see Definition 2) in the objective function is challenging. In this part, we present a di ff erentiable finite-sample estimator for the Sinkhorn discrepancy. The gradient of this estimator can be computed e ffi ciently by backpropa-gation and is used in Algorithm 1. We first introduce the following proposition regarding the dual formulation of Sinkhorn dis-crepancy [32, 39]. 
+
+Proposition 3. Let P and Q be probability measures with finite second moments. The strong dual formulation of Sinkhorn discrepancy Sϵ(P, Q) is given by 
+
+sup  
+
+> f∈L1(P),g ∈L1(Q)
+
+ Z 
+
+f (x) d P(x) + 
+
+Z
+
+g(z) d Q(z) − ϵ
+
+" "
+
+exp 
+
+ f (x) + g(z) − c(x, z)
+
+ϵ
+
+
+
+− 1
+
+#
+
+dP(x)d Q(z)
+
+
+
+,
+
+Let fϵ and gϵ be the solutions of the dual formulation, which is also known as optimal entropic potentials. Then the transport plan 
+
+γϵ(d x, dz) = exp fϵ(x) + gϵ(z) − c(x, z)
+
+ϵ
+
+!
+
+dP(x)d Q(z)
+
+is the unique solution to the Sinkhorn discrepancy, and the optimal entropic potentials satisfy 
+
+Z
+
+exp fϵ(x) + gϵ(z) − c(x, z)
+
+ϵ
+
+!
+
+dP(x) = 1 , ∀z ∈ Ω, (16a) 13 Z
+
+exp fϵ(x) + gϵ(z) − c(x, z)
+
+ϵ
+
+!
+
+dQ(z) = 1 , ∀x ∈ Ω, (16b) 
+
+for Q-almost every z and P-almost every x, respectively. 
+
+Since the target continuous distribution Pk is computationally intractable, we approximate it as empirical distributions formed by the generated samples, denoted by eP0 = 1
+
+> N
+
+PNi=1 δω(i)0
+
+and 
+
+eP1 = 1
+
+> N
+
+PNi=1 δω(i)1
+
+. Therefore, it su ffi ces to compute the value Sϵ, (nk ,N )(bPk , ePk ). The optimal entropic potentials between discrete distributions bPk and ePk , denoted by fϵ,k, (nk ,N ) and gϵ,k, (nk ,N ), can be obtained by Sinkhorn’s algorithm [20, 39], leading to the following estimator for the barycentric projection of the optimal entropic coupling: 
+
+Tϵ,k, (nk ,N )(x) = 
+
+> 1
+> N
+
+PNi=1 ω(i) 
+
+> k
+
+e
+
+   
+
+> gϵ,k, (nk ,N )(ω(i)
+> k)−c(x,ω(i)
+> k)
+
+
+
+> /ϵ
+> 1
+> N
+
+PNi=1 e
+
+   
+
+> gϵ,k, (nk ,N )(ω(i)
+> k)−c(x,ω(i)
+> k)
+
+
+
+> /ϵ
+
+, ∀k ∈ K.
+
+However, the discrete dual potential gϵ,k, (nk ,N ) is initially defined only on the generated sup-port points and is thus not di ff erentiable for all samples in Ω. To make the optimized empirical Sinkhorn discrepancy di ff erentiable with respect to the generated sample locations, we extend g
+
+to the general continuous sample space for fixed f :
+
+gcϵ,k (ω) = −ϵ log 
+
+
+
+1
+
+nknkX
+
+> j=1
+
+exp 
+
+ fk (x(j) 
+
+> k
+
+) − c(x(j) 
+
+> k
+
+, ω)
+
+ϵ
+
+ , ∀ω ∈ Ω. (17) This extension agrees with the original potential g on the empirical support at convergence while making it di ff erentiable. Therefore, our di ff erentiable estimator for the Sinkhorn discrepancy is given by 
+
+bSϵ, (nk ,N )(bPk , Pk ) := Sϵ, (nk ,N )(bPk , ePk ) = 1
+
+nknkX
+
+> j=1
+
+fϵ,k, (nk ,N )(x(j) 
+
+> k
+
+) + 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+gcϵ,k (ω(i) 
+
+> k
+
+), (18) and its gradient can be computed by backpropagation (see Appendix C.2). Therefore, the pseudo-code for estimating the di ff erentiable Sinkhorn discrepancy is shown in Algorithm 4. Steps 1-6 in Algorithm 4 are essentially Sinkhorn’s algorithm [39], and thus the computational complexity of each iteration is O(nk · N ). This alternating algorithm computes the entropic potentials by iteratively updating f and g while satisfying one of the two optimal marginal conditions in Eq. (16). 
+
+## 4 Representation Power of HyCNNs 
+
+This section provides theoretical analyses of the representation capacity of HyCNNs. Specifically, we focus on their representation power for both convex functions and their gradients, as well as the distributional universality of their induced transport maps. 14 Algorithm 4 Sinkhorn Estimator : Estimator for the Sinkhorn Discrepancy. 
+
+Require: Training samples {x(i) 
+
+> k
+
+}nk 
+
+> i=1
+
+from bPk and generated samples {ω(i) 
+
+> k
+
+}Ni=1 .1: Initialize i = 0 and f (0)  
+
+> ϵ,k
+
+= 0 for each k;2: while not converged do 
+
+3: update g(i+1)  
+
+> ϵ,k
+
+(ωk ) ← − ϵ log 1
+
+> nk
+
+Pnk 
+
+> j=1
+
+exp 
+
+ f (i)    
+
+> ϵ,k (x(j)
+> k)−c(x(j)
+> k,ωk)
+> ϵ
+
+
+
+for each k ∈ K;4: update f (i+1)  
+
+> ϵ,k
+
+(xk ) ← − ϵ log 1
+
+> N
+
+PNj=1 exp 
+
+ g(i+1)     
+
+> ϵ,k (ω(j)
+> k)−c(xk,ω(j)
+> k)
+> ϵ
+
+
+
+for each k ∈ K;5: i ← i + 1; 6: end while 
+
+7: Extend the entropic potential g(i+1)  
+
+> ϵ,k
+
+(ωk ) to continuous space by Eq. (17); 8: Return eSϵ, (nk ,N )(bPk , Pk,t ) computed by Eq. (18). We refer to HyCNNs equipped with smooth maxout activation functions ¯ στ (see Eq. (12)) as 
+
+smooth HyCNNs . We first show the representation power of both standard and smooth HyCNNs. Let L and h denote the number of layers and the width at each hidden layer of HyCNNs, respec-tively. Since we take the strongly convex coe ffi cient α → 0, these results hold in our strongly convex setting. In the following results, we take the strongly convex coe ffi cient α → 0. 
+
+Theorem 3 (Representation Power of (Smooth) HyCNNs) . For any Lf -Lipschitz convex function 
+
+f : Rd → R, compact convex set D ⊂ Rd , and ε > 0, assume that D has a diameter D ∈ (0 , ∞) such that 
+
+∥x1 − x2∥ ≤ D for any x1, x2 ∈ D, and then: 
+
+(I) There exists a hyper input convex neural network [HyCNN with maxout activation functions satisfying sup x∈D | [HyCNN (x) − f (x)| ≤ ε and L · h = O(( DL f 
+
+> ε
+
+)d ).
+
+(II) There exists a smooth HyCNN with a su ffi ciently small parameter τ > 0, denoted by [HyCNN τ ,satisfying sup x∈D | [HyCNN τ (x) − f (x)| ≤ ε and L · h = O(( DL f 
+
+> ε
+
+)d ).
+
+(III) There exists a sequence of smooth HyCNNs, denoted by { [HyCNN τn}∞
+
+> n=1
+
+, satisfying [HyCNN τn → f
+
+uniformly on D, when τ is su ffi ciently small and L · h = O(( DL f 
+
+> ε
+
+)d ).
+
+The proof of Theorem 3 is provided in Appendix B.3. Compared to existing qualitative rep-resentation power theorems of ICNNs [34, 40], Theorem 3 extends this result to HyCNNs and provides quantitative guidelines for hyperparameter selection. Although these properties of (smooth) HyCNNs show that they can uniformly approximate convex potentials on a compact set, convergence of potentials does not generally imply conver-gence of the gradient fields [34]. Theorem 4 shows that the smooth HyCNNs approximate the gradient of convex functions well. 
+
+Theorem 4 (Gradient Convergence of Smooth HyCNNs) . Let f : Rd → R be a Lipschitz continuous convex function, and { [HyCNN τn}∞ 
+
+> n=1
+
+be a sequence of smooth HyCNNs with hyperparameters Ln · hn =
+
+O(εn−d ) for any εn > 0, where [HyCNN τn : Rd → R. Assume that [HyCNN τn → f . Then 
+
+15 (I) For almost every x ∈ Rd , ∇ [HyCNN τn(x) → ∇ f (x).
+
+(II) If f is Lipschitz smooth, the gradient sequence ∇ [HyCNN n converges to ∇f uniformly at a rate of 
+
+O √εn
+
+.
+
+The proof of Theorem 4 is provided in Appendix B.4. Generally, Theorem 4 holds for any di ff erentiable convex function sequence. Note that the uniform convergence assumption in The-orem 4 can be verified using the representation power of smooth HyCNNs on compact sets (see Theorem 3(III)). Based on the results above and Brenier’s theorem, the following Theorem 5 shows that smooth HyCNNs are distributionally universal in our problem. 
+
+Theorem 5 (Distributional Universality of Smooth HyCNNs) . Let μ, ν ∈ P (Ω) be regarded as prob-ability measures on Rd supported on Ω. Assume that μ is absolutely continuous with respect to the 
+
+d-dimensional Lebesgue measure on Rd , and that μ and ν have finite second moments. Then there ex-ists a sequence of smooth HyCNNs, denoted by { [HyCNN τn}∞
+
+> n=1
+
+, such that (∇ [HyCNN τn)#μ ⇒ ν, where ⇒
+
+denotes weak convergence of probability measures on Rd .
+
+The proof of Theorem 5 is provided in Appendix B.5. It demonstrates that smooth HyCNN gradient maps are distributionally universal for approximating target distributions. For a refer-ence distribution Pϵ ∈ P (Ω) and any candidate least-favorable distribution P⋆ ∈ P (Ω) in our problem, assume that both Pϵ and P⋆ have finite second moments, and Pϵ is absolutely continu-ous with respect to the Lebesgue measure on Rd . Then, the gradient map of smooth HyCNNs is distributionally universal for approximating any candidate least-favorable distribution. 
+
+## 5 Experiments 
+
+In this section, we conduct experiments to assess the e ff ectiveness of the proposed method on datasets of varying training sample sizes and dimensions. Specifically, we evaluate its perfor-mance on small sample sizes using a synthetic Gaussian mixture dataset (Section 5.1) and the MNIST dataset (Section 5.2), and on large sample sizes using the Higgs dataset (Section 5.3). We also provide a qualitative illustration of our method on a high-dimensional human face genera-tion task (Section 5.4). All experiments were conducted on a laptop with an NVIDIA GeForce RTX 4060 GPU using Python. Compared to the existing methods, our approach can handle hypothesis testing problems across di ff erent sample sizes and dimensions, achieving higher accuracy and ro-bustness. Codes and experimental results are available at https://github.com/Arthas819/SDRHT. 
+
+5.1 Synthetic Gaussian Mixture Dataset 
+
+In this subsection, we consider a synthetic Gaussian mixture dataset based on [17]. Let the sam-ples under the two hypotheses be generated from distributions 0 .5N (0 .4e, I d ) + 0 .5N (−0.4e, I d )and 0 .5N (0 .4f , I d ) + 0 .5N (−0.4f , I d ), respectively. Here e ∈ Rd is a vector with all entries equal to 1, and f ∈ Rd is a vector with the first ⌈d/ 2⌉ entries equal to 1 and the remaining entries equal to −1. Consider a setting with a small number of training samples n0 = n1 = 10, and then test 16 2 4 6 8 10 
+
+> # observation (m)
+> 0.460 0.465 0.470 0.475 0.480 0.485 0.490 0.495
+> Error Rate
+> SDRO-H SDRO-C WDRO GMM SVM 3NN
+
+(a) d = 4 2 4 6 8 10  
+
+> # observation (m)
+> 0.38 0.40 0.42 0.44 0.46 0.48
+> Error Rate
+> SDRO-H SDRO-C WDRO GMM SVM 3NN
+
+(b) d = 10 2 4 6 8 10  
+
+> # observation (m)
+> 0.15 0.20 0.25 0.30 0.35 0.40 0.45
+> Error Rate
+> SDRO-H SDRO-C WDRO GMM SVM 3NN
+
+(c) d = 30 2 4 6 8 10 
+
+> # observation (m)
+> 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45
+> Error Rate
+> SDRO-H SDRO-C WDRO GMM SVM 3NN
+
+(d) d = 50 2 4 6 8 10  
+
+> # observation (m)
+> 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40
+> Error Rate
+> SDRO-H SDRO-C WDRO GMM SVM 3NN
+
+(e) d = 70 2 4 6 8 10  
+
+> # observation (m)
+> 0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40
+> Error Rate
+> SDRO-H SDRO-C WDRO GMM SVM 3NN
+
+(f) d = 100 
+
+Figure 3: Error rate comparison on GMM dataset, averaged over 100 trials. SDRO-H : SDRHT method with HyCNN; SDRO-C : SDRHT method with standard ICNN. on 1000 new samples from each mixture model. We compare our method against Wasserstein DRO-based hypothesis testing (WDRO) [17], Gaussian Mixture Model (GMM), kernel support vector machine (SVM) with radial basis function (RBF) kernel, and a three-layer neural network (3NN) with hidden layer dimensions (32 , 32 , 32). The details of the WDRO method are provided in Appendix D. All hyperparameters, including λ and ϵ in SDRO-H (SDRHT with HyCNN) and SDRO-C (SDRHT with standard ICNN), ambiguity set radii, and kernel bandwidth in WDRO, are determined by cross-validation. Table 2: Computation time (s) of methods on Gaussian mixture dataset, averaged over 100 trials. 
+
+d
+
+Computation Time (s) SDRO-H SDRO-C WDRO GMM SVM 3NN 
+
+4 1.906 1.749 0.283 0.075 <0.000 0.052 10 1.507 1.802 0.275 0.002 0.001 0.040 30 1.292 1.900 0.271 0.002 <0.000 0.034 50 1.753 1.897 0.285 0.002 0.001 0.033 70 1.614 1.907 0.290 0.002 <0.000 0.026 100 1.725 1.844 0.327 0.002 <0.000 0.028 17 Figure 3 compares the classification error rate of selected methods over varying dimensions 
+
+d ∈ { 4, 10 , 30 , 50 , 70 , 100 }. The horizontal axis in Figure 3 represents that there are m independent observations in a testing sample, and the decision is made by majority rule [17]. As illustrated, Hy-CNN is more suitable for approximating convex potentials in SDRO than standard ICNN (though the performance of SDRO-C remains competitive in Figures 3b-3f), and the SDRO-H method achieves the lowest classification error rate in almost all dimensions. These results demonstrate the superior performance of our method on hypothesis-testing tasks with small sample sizes com-pared to selected baselines. Table 2 shows the average computation time of all methods. Although the training time of SDRO is higher than that of other baselines, it remains under 2s and remains stable as d increases. Figure 4 reports the accuracy of SDRO-H and WDRO across di ff erent hyperparameter com-binations when n0 = n1 = 10 and d = 100. As illustrated, the accuracy under the best parameter combination of WDRO is inferior to that of SDRO-H. The result of SDRO-H indicates that one may improve accuracy by moderately increasing the penalty parameter λ and decreasing the en-tropic regularization parameter ϵ. This is because a small λ leads to excessive conservatism, and a large ϵ induces stronger smoothing and may dilute the correlation between samples and classifi-cation labels. The result of WDRO demonstrates that under an appropriate bandwidth selection, the classification accuracy is not sensitive to λ.5.0e-05 1.0e-04 5.0e-04 1.0e-03 5.0e-03 1.0e-02 5.0e-02 1.0e-01                                                  
+
+> Regularization Parameter
+> 5.0e+01 1.0e+01 5.0e+00 1.0e+00 5.0e-01 1.0e-01 5.0e-02
+> Penalty Parameter
+> 50.02 91.72 61.70 92.73 90.12 94.08 90.15 90.80 86.42 50.40 92.53 89.68 95.12 93.25 93.38 92.85 93.62 50.92 93.88 91.58 94.03 92.62 92.83 80.88 91.72 93.20 94.72 91.45 90.10 94.27 91.72 88.30 91.67 90.10 73.50 90.42 92.55 96.08 88.95 93.08 50.02 51.35 66.92 91.20 93.77 91.83 88.00 92.73 89.55 84.62 94.95 88.42 95.08 90.83 92.30 89.88
+> 40 50 60 70 80 90 100 Accuracy (%)
+
+(a) SDRO-H 1.0e+00 1.5e+00 2.0e+00 2.5e+00 3.0e+00 3.5e+00 4.0e+00 4.5e+00 5.0e+00                                                           
+
+> Kernel Bandwidth h
+> 5.0e+01 1.0e+01 5.0e+00 1.0e+00 5.0e-01 1.0e-01 5.0e-02
+> Penalty Parameter
+> 50.00 50.00 65.00 80.75 80.50 79.67 77.33 75.00 72.92 50.00 50.00 65.00 80.75 80.50 79.67 77.33 75.00 72.92 50.00 50.00 65.00 80.75 80.50 79.67 77.33 75.00 72.92 50.00 50.00 65.00 80.75 80.50 79.67 77.33 75.00 72.92 50.00 50.00 65.00 80.75 80.50 79.67 77.33 75.00 72.92 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00 50.00
+> 40 50 60 70 80 90 100 Accuracy (%)
+
+(b) WDRO 
+
+Figure 4: Average accuracy (%) of SDRO-H and WDRO on the GMM dataset with di ff erent hyper-parameters ( n0 = n1 = 10 , d = 100). To evaluate the adversarial robustness of our model on adversarial examples, we apply adver-sarial perturbations to the test data using the projected gradient descent (PGD) attack [26, 41]. Specifically, for a testing sample ω ∼ Pk , the attacked sample for fixed detector φopt , defined by a point-wise perturbation problem, is given by 
+
+ωattacked := ω + δ∗
+
+ω, δ∗
+
+ω := arg max 
+
+∥δω ∥p ≤∆ Lk (φopt , ω + δω). (19) 18 Table 3: Robustness comparison on the GMM dataset after PGD attack, averaged over m ∈ [10] and 5 trials (accuracy %, n0 = n1 = 10 , d = 50). Bold represents the highest accuracy in each column. 
+
+Method PGD-L2 Attack PGD-L∞ Attack 
+
+∆ = 0.025 ∆ = 0.05 ∆ = 0.075 ∆ = 0.1 ∆ = 0.05 ∆ = 0.1 ∆ = 0.15 ∆ = 0.2 SDRO-H 85.801 85.769 85.736 85.737 85.467 85.165 84.906 84.811 SDRO-C 82.333 82.347 82.332 82.309 82.175 82.018 81.867 81.774 
+
+WDRO 69.693 68.902 68.108 67.924 62.440 54.711 48.096 44.256 
+
+GMM 73.401 72.392 71.367 71.121 63.100 51.579 41.804 36.414 
+
+SVM 64.477 63.628 62.774 62.561 55.957 47.171 40.166 36.166 
+
+3NN 58.187 57.021 55.906 55.638 47.635 37.184 29.483 25.509 In the following, we assess robustness using L2 and L∞ norm constraints, i.e., p = 2 and p → ∞ in Eq. (19). In Table 3, we compare the classification accuracy of all methods across di ff erent levels of ∆. As shown in Table 3, the accuracies of the proposed methods remain higher and more stable than those of the baselines as the attack intensity ∆ increases under both L2 and L∞ constraints, and SDRO-H consistently yields the best test accuracy across all values of ∆.
+
+5.2 MNIST Handwritten Digits Classification 
+
+This subsection considers the MNIST handwritten digits dataset ( d=784). In each trial, we ran-domly select 5 digits as class 0, and the remaining as class 1. We select n′ samples for each digit of each class to form the two training sets, and therefore n0 = n1 = 5 n′. The testing data includes 1000 images from both classes. For this dataset, we further include logistic regression (LR) and Flow-based DRO (FDRO) [26] as baselines. The FDRO method, which characterizes least-favorable distributions from a generative perspective, is suitable for high-dimensional ro-bust hypothesis testing and requires training convolutional autoencoders. In the following, the label ‘SDRO’ represents our SDRHT method with HyCNN. All hyperparameters are determined by cross-validation. 2 4 6 8 10 
+
+> # observation (m)
+> 0.05 0.10 0.15 0.20 0.25 0.30
+> Error Rate
+> SDRO FDRO WDRO LR SVM 3NN
+
+(a) n′ = 2 , n 0 = n1 = 10 2 4 6 8 10  
+
+> # observation (m)
+> 0.00 0.05 0.10 0.15 0.20 0.25
+> Error Rate
+> SDRO FDRO WDRO LR SVM 3NN
+
+(b) n′ = 5 , n 0 = n1 = 25 2 4 6 8 10  
+
+> # observation (m)
+> 0.00 0.05 0.10 0.15 0.20 0.25
+> Error Rate
+> SDRO FDRO WDRO LR SVM 3NN
+
+(c) n′ = 10 , n 0 = n1 = 50 
+
+Figure 5: Error rate comparison on the MNIST dataset, averaged over 100 trials. 19 Figure 5 illustrates that the proposed method achieves a lower error rate than existing well-tuned DRO methods and common classifiers across di ff erent training set sizes. Table 4 shows the average computation time of all methods, illustrating that the training time of SDRO is acceptable and stable as n′ increases. To evaluate robustness, we compare all methods under both L2 and L∞
+
+PGD attacks (see Eq. (19)) in Table 5. As shown, SDRO achieves the highest accuracy across all non-zero attack intensities under both norms, indicating the superior robustness of our method. Under the PGD-L∞ attack, the three DRO-based models demonstrate better robustness than other baselines. Table 4: Computation time (s) of methods on the MNIST dataset, averaged over 100 trials. 
+
+n′ Computation Time (s) SDRO FDRO WDRO LR SVM 3NN 
+
+2 1.943 4.821 0.022 0.008 <0.001 0.167 5 1.477 8.999 0.045 0.011 0.001 0.231 10 1.465 17.153 0.135 0.018 0.001 0.269 Table 5: Robustness comparison on MNIST dataset after PGD attack, averaged over m ∈ [10] and 5 trials (accuracy %, n0 = n1 = 25). 
+
+Method PGD-L2 Attack PGD-L∞ Attack 
+
+∆ = 0.025 ∆ = 0.05 ∆ = 0.075 ∆ = 0.1 ∆ = 0.05 ∆ = 0.1 ∆ = 0.15 ∆ = 0.2 SDRO 95.75 95.70 95.67 95.67 93.53 90.60 87.46 85.47 FDRO 91.04 90.93 90.87 90.87 86.51 80.92 75.28 71.91 
+
+WDRO 94.54 94.47 94.42 94.42 91.18 85.63 79.42 75.56 
+
+LR 91.15 90.98 90.89 90.89 84.79 75.80 67.27 62.34 
+
+SVM 76.67 76.50 76.44 76.44 72.65 69.02 66.21 64.73 
+
+3NN 91.39 91.21 91.11 91.11 82.10 68.34 55.00 48.09 We next visualize how the trained convex functions induce adversarial distributional attacks on their opposite classes. In each trial, we select two digits that are easily confused in handwritten form and place them in separate classes. To generate a more intuitive and clear trajectory, in the training phase, we first train a variational autoencoder, including two parts, Encoder and 
+
+Decoder , to embed all images into a 32-dimensional latent space. Then, the convex potentials are trained on this latent space with a small training sample size. In the generation phase, we randomly select an image zk from each class k ∈ K, encode it into the latent space, denoted by 
+
+ezk := Encoder (zk ), and then map ezk by the gradient of the convex potential of the other class, i.e., ∇ eϕ|1−k|(ezk ), and finally draw the attacked image Decoder 
+
+
+
+∇ eϕ|1−k|(ezk )
+
+
+
+. Figure 6 illustrates the trajectory of injecting adversarial attacks on digits in both classes in 7 trials. As illustrated, our adversarial attack naturally achieves conversions of di ff erent classes of numbers through convex 20 gradient mapping in a few steps.      
+
+> (a) Adversarial attack for Class 0 by ∇eϕ1(b) Adversarial attack for Class 1 by ∇eϕ0
+
+Figure 6: Adversarial attacks on digits by trained convex gradients. The first column displays the original images, while the following six columns show the attacked images from Epochs 1 to 6. 
+
+5.3 High-energy Physics Higgs Dataset 
+
+In this subsection, we evaluate our method on the Higgs dataset, which distinguishes between a signal process where new theoretical Higgs bosons (HIGGS) are produced, and a background process with the identical decay products but distinct kinematics [42]. We consider 21 original features and large training sample sizes. Table 6 reports the accuracy and computation time of our method against other baselines over varying training sample sizes. As shown, the SDRO method achieves the highest accuracy in a relatively low computation time. Note that Table 6 does not include the result of WDRO, since when the sample size is large, WDRO did not produce an acceptable solution within the 1,800-second time limit. This is because WDRO requires solving a linear program with O(n0n1) decision variables (see Appendix D) and becomes computationally prohibitive for large sample sizes. In Table 7, we show that SDRO remains the highest accuracy over 70% across all non-zero attack intensities under both norms. This result demonstrates that our method can still maintain its accuracy even under significant adversarial perturbations compared to other baselines. 21 Table 6: Accuracy (%) and computation time (s) of methods on the Higgs dataset, averaged over observations m ∈ [10] and 10 trials. Bold represents the highest accuracy in each row. 
+
+n0 = n1 Accuracy (%) Computation Time (s) 
+
+(×10 3) SDRO FDRO LR SVM 3NN SDRO FDRO LR SVM 3NN 1 68.09 62.07 59.73 64.13 57.92 1.11 2.09 0.02 0.18 5.09 
+
+2 71.32 65.56 60.45 66.67 58.70 1.06 2.06 0.01 0.58 11.06 
+
+3 72.83 67.20 60.68 67.87 58.97 1.13 2.69 0.01 0.74 9.86 
+
+4 73.88 68.03 60.95 68.88 60.17 1.64 3.65 0.02 1.51 11.21 
+
+5 74.62 68.77 61.01 69.56 61.00 1.79 3.56 0.02 2.20 11.16 
+
+6 75.37 69.15 61.07 70.27 61.54 1.87 3.30 0.02 3.01 13.74 
+
+7 75.71 69.21 61.09 70.67 62.86 2.37 3.35 0.03 4.46 15.90 
+
+8 76.25 69.60 61.22 71.13 63.66 2.47 3.30 0.03 5.66 16.71 
+
+9 76.26 69.71 61.18 71.14 63.85 2.54 3.73 0.02 7.33 18.53 
+
+10 76.66 69.91 61.29 71.59 64.89 2.96 3.52 0.03 8.65 21.41 
+
+> Note: The WDRO method did not produce an acceptable solution within the 1,800-second time limit.
+
+Table 7: Robustness comparison on Higgs dataset after PGD attack, averaged over m ∈ [10] and 5 trials (accuracy %, n0 = n1 = 2 , 000). 
+
+Method PGD-L2 Attack PGD-L∞ Attack 
+
+∆ = 0.025 ∆ = 0.05 ∆ = 0.075 ∆ = 0.1 ∆ = 0.025 ∆ = 0.05 ∆ = 0.075 ∆ = 0.1 SDRO 72.342 71.998 71.887 71.891 73.352 72.758 72.436 72.284 FDRO 66.999 64.888 62.736 60.835 62.780 55.396 48.914 44.461 
+
+LR 62.945 60.913 59.193 57.582 59.708 54.046 48.528 44.412 
+
+SVM 67.669 65.849 64.191 62.716 64.524 58.350 53.250 49.614 
+
+3NN 58.204 54.669 50.782 48.015 50.264 38.658 30.418 26.266 
+
+5.4 Human Face Generation 
+
+In this subsection, similar to [28], we present a qualitative experiment on the human face dataset FFHQ [43] that illustrates how our method generates adversarial-attacked high-dimensional im-ages. We take the gender attribute of the FFHQ dataset as the binary label in the following image generation experiment. We labeled Class 0 as Female and Class 1 as Male . In the training phase, we first map the original 1024 × 1024 images to a 512-dimensional latent space by a pre-trained adversarial latent autoencoder [44]. Then, we train two HyCNNs by Algorithm 1 on the latent space. In the generation phase, we randomly select three images in each class. These samples are first encoded into a latent space, then mapped by our trained convex gradient, and finally recovered in the original space by the pre-trained decoder. For all experiments, we set n0 = n1 = 500 , λ = 1 , ϵ = 0 .1, T = 30, and each HyCNN has a single 22 hidden layer with 128 units. Figure 7 shows the trajectories of generating the attacked images of all selected samples in the gender classification task. In each subfigure, the first column shows the original image, and the other 12 columns represent the images generated using the convex gradi-ent maps trained for 30 epochs, respectively. As illustrated, the samples we generated underwent meaningful modifications to the original images, such that the generated images gradually ac-quired visual characteristics associated with the opposite dataset label after a small number of training epochs. Input Initialization Epoch 1 Epoch 3 Epoch 6 Epoch 9 Epoch 12 Epoch 15 Epoch 18 Epoch 21 Epoch 24 Epoch 27 Epoch 30 
+
+(a) Female to Male Input Initialization Epoch 1 Epoch 3 Epoch 6 Epoch 9 Epoch 12 Epoch 15 Epoch 18 Epoch 21 Epoch 24 Epoch 27 Epoch 30 
+
+(b) Male to Female 
+
+Figure 7: The trajectory of image generation between Female (Class 0) and Male (Class 1). The first column displays the original images, while the following columns show the images generated during 30 epochs. 
+
+## 6 Conclusions and Discussions 
+
+As a fundamental method in statistics, robust hypothesis testing addresses noisy data, distribu-tional shifts, and measurement errors in real-world, uncertain environments. This paper develops a generative framework for Sinkhorn distributionally robust hypothesis testing (SDRHT), over-coming the non-continuity of the least-favorable distributions of WDRO-based testing and the computational challenges of existing SDRHT methods. By exploiting a conditional-KL represen-tation of Sinkhorn ambiguity sets and strong duality, this framework reformulates the infinite-dimensional problem as an optimization over parametrized convex potentials. We further estab-lish approximation guarantees for the potentials and their gradients, as well as the distributional 23 universality of the induced transport maps. Numerical results demonstrate the superior perfor-mance and robustness of our method compared to existing methods on tasks with di ff erent sample sizes and dimensions. There are several topics worth investigating for future work. First, it is interesting to extend our method to multi-class hypothesis testing, exploring its closed-form optimal detector and e ffi -cient algorithms. Then, since the transport map between distributions is the gradient of a convex potential, directly parameterizing the gradient instead of the potential may yield a better approx-imation of the transport map. Finally, for distributions with extremely high dimensions, e.g., high-resolution images, it is important to develop methods that e ffi ciently solve transport maps while maintaining the convexity of potentials. 
+
+## References 
+
+[1] J. Neyman and E. S. Pearson, “On the problem of the most e ffi cient tests of statistical hy-potheses,” Philosophical Transactions of the Royal Society of London. Series A, Containing Papers of a Mathematical or Physical Character , vol. 231, no. 694-706, pp. 289–337, 1933. [2] B. C. Levy, Principles of signal detection and parameter estimation . Springer Science & Business Media, 2008. [3] P. Schober and T. R. Vetter, “Two-sample unpaired t-tests in medical research,” Anesthesia & Analgesia , vol. 129, no. 4, p. 911, 2019. [4] V. Chandola, A. Banerjee, and V. Kumar, “Anomaly detection: A survey,” ACM Computing Surveys (CSUR) , vol. 41, no. 3, pp. 1–58, 2009. [5] P. J. Huber, “A robust version of the probability ratio test,” The Annals of Mathematical Statis-tics , pp. 1753–1758, 1965. [6] G. G ¨ ul and A. M. Zoubir, “Minimax robust hypothesis testing,” IEEE Transactions on Infor-mation Theory , vol. 63, no. 9, pp. 5572–5587, 2017. [7] D. Kuhn, S. Shafiee, and W. Wiesemann, “Distributionally robust optimization,” Acta Nu-merica , vol. 34, pp. 579–804, 2025. [8] R. Gao, L. Xie, Y. Xie, and H. Xu, “Robust hypothesis testing using Wasserstein uncertainty sets,” Advances in Neural Information Processing Systems , vol. 31, 2018. [9] P. Mohajerin Esfahani and D. Kuhn, “Data-driven distributionally robust optimization using the Wasserstein metric: Performance guarantees and tractable reformulations,” Mathematical Programming , vol. 171, no. 1, pp. 115–166, 2018. [10] P. J. Huber, Robust statistical procedures . SIAM, 1996. [11] B. C. Levy, “Robust hypothesis testing with a relative entropy tolerance,” IEEE Transactions on Information Theory , vol. 55, no. 1, pp. 413–421, 2008. 24 [12] A. Ben-Tal, D. Den Hertog, A. De Waegenaere, B. Melenberg, and G. Rennen, “Robust so-lutions of optimization problems a ff ected by uncertain probabilities,” Management Science ,vol. 59, no. 2, pp. 341–357, 2013. [13] E. Delage and Y. Ye, “Distributionally robust optimization under moment uncertainty with application to data-driven problems,” Operations Research , vol. 58, no. 3, pp. 595–612, 2010. [14] W. Wiesemann, D. Kuhn, and M. Sim, “Distributionally robust convex optimization,” Oper-ations Research , vol. 62, no. 6, pp. 1358–1376, 2014. [15] Z. Sun and S. Zou, “A data-driven approach to robust hypothesis testing using kernel MMD uncertainty sets,” in 2021 IEEE International Symposium on Information Theory (ISIT) . IEEE, 2021, pp. 3056–3061. [16] J.-J. Zhu, W. Jitkrittum, M. Diehl, and B. Sch¨ olkopf, “Kernel distributionally robust optimiza-tion: Generalized duality theorem and stochastic approximation,” in International Conference on Artificial Intelligence and Statistics . PMLR, 2021, pp. 280–288. [17] L. Xie, R. Gao, and Y. Xie, “Robust hypothesis testing with Wasserstein uncertainty sets,” 
+
+arXiv preprint arXiv:2105.14348 , 2021. [18] J. Wang, R. Gao, and Y. Xie, “Sinkhorn distributionally robust optimization,” Operations Re-search , 2025. [19] F. Zhang and J. Wang, “Contextual distributionally robust optimization with causal and continuous structure: An interpretable and tractable approach,” arXiv preprint arXiv:2601.11016 , 2026. [20] G. Peyr´ e and M. Cuturi, Computational optimal transport: With applications to data science .Now Foundations and Trends, 2019. [21] J. Wang and Y. Xie, “A data-driven approach to robust hypothesis testing using Sinkhorn uncertainty sets,” in 2022 IEEE International Symposium on Information Theory (ISIT) . IEEE, 2022, pp. 3315–3320. [22] J. Wang, R. Gao, and Y. Xie, “Non-convex robust hypothesis testing using Sinkhorn uncer-tainty sets,” in 2024 IEEE International Symposium on Information Theory (ISIT) . IEEE, 2024, pp. 843–848. [23] C.-H. Lai, Y. Song, D. Kim, Y. Mitsufuji, and S. Ermon, “The principles of di ff usion models,” 
+
+arXiv preprint arXiv:2510.21890 , 2025. [24] Y. Lipman, R. T. Chen, H. Ben-Hamu, M. Nickel, and M. Le, “Flow matching for generative modeling,” arXiv preprint arXiv:2210.02747 , 2022. [25] T. Dai, D. Simchi-Levi, M. X. Wu, and Y. Xie, “Assured autonomy: How operations research powers and orchestrates generative AI systems,” arXiv preprint arXiv:2512.23978 , 2025. 25 [26] C. Xu, J. Lee, X. Cheng, and Y. Xie, “Flow-based distributionally robust optimization,” IEEE Journal on Selected Areas in Information Theory , 2024. [27] J. Wang, “Iterative sampling methods for sinkhorn distributionally robust optimization,” 
+
+arXiv preprint arXiv:2512.12550 , 2025. [28] Z. Xu and J.-J. Zhu, “Gradient flow sampler-based distributionally robust optimization,” 
+
+arXiv preprint arXiv:2510.25956 , 2025. [29] L. Zhu and Y. Xie, “Distributionally robust optimization via iterative algorithms in continu-ous probability spaces,” arXiv preprint arXiv:2412.20556 , 2024. [30] X. Cheng, Y. Xie, L. Zhu, and Y. Zhu, “Worst-case generation via minimax optimization in Wasserstein space,” arXiv preprint arXiv:2512.08176 , 2025. [31] A. Nemirovski and A. Shapiro, “Convex approximations of chance-constrained programs,” 
+
+SIAM Journal on Optimization , vol. 17, no. 4, pp. 969–996, 2007. [32] S. Chewi, J. Niles-Weed, and P. Rigollet, Statistical optimal transport . Springer, 2025. [33] S. Ubaru, J. Chen, and Y. Saad, “Fast estimation of tr(f(a)) via stochastic lanczos quadrature,” 
+
+SIAM Journal on Matrix Analysis and Applications , vol. 38, no. 4, pp. 1075–1099, 2017. [34] C.-W. Huang, R. T. Chen, C. Tsirigotis, and A. Courville, “Convex potential flows: Universal probability distributions with optimal transport and convex optimization,” arXiv preprint arXiv:2012.05942 , 2020. [35] B. Amos, L. Xu, and J. Z. Kolter, “Input convex neural networks,” in International Conference on Machine Learning . PMLR, 2017, pp. 146–155. [36] S. Hundrieser, I. Kong, and J. Schmidt-Hieber, “Hyper input convex neural networks for shape constrained learning and optimal transport,” arXiv preprint arXiv:2604.26942 , 2026. [37] I. Goodfellow, D. Warde-Farley, M. Mirza, A. Courville, and Y. Bengio, “Maxout networks,” in International Conference on Machine Learning . PMLR, 2013, pp. 1319–1327. [38] M. F. Hutchinson, “A stochastic estimator of the trace of the influence matrix for laplacian smoothing splines,” Communications in Statistics-Simulation and Computation , vol. 18, no. 3, pp. 1059–1076, 1989. [39] A.-A. Pooladian and J. Niles-Weed, “Entropic estimation of optimal transport maps,” arXiv preprint arXiv:2109.12004 , 2021. [40] Y. Chen, Y. Shi, and B. Zhang, “Optimal control via neural networks: A convex approach,” 
+
+arXiv preprint arXiv:1805.11835 , 2018. [41] A. Madry, A. Makelov, L. Schmidt, D. Tsipras, and A. Vladu, “Towards deep learning models resistant to adversarial attacks,” arXiv preprint arXiv:1706.06083 , 2017. 26 [42] P. Baldi, P. Sadowski, and D. Whiteson, “Searching for exotic particles in high-energy physics with deep learning,” Nature communications , vol. 5, no. 1, p. 4308, 2014. [43] T. Karras, S. Laine, and T. Aila, “A style-based generator architecture for generative adver-sarial networks,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2019, pp. 4401–4410. [44] S. Pidhorskyi, D. A. Adjeroh, and G. Doretto, “Adversarial latent autoencoders,” in Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2020, pp. 14 104– 14 113. [45] R. Cescon, A. Martin, and G. Ferrari-Trecate, “Sinkhorn ambiguity sets for distribu-tionally robust control: Convexity, weak compactness, and tractability,” arXiv preprint arXiv:2605.03845 , 2026. [46] S. Shafiee, L. Aolaritei, F. D¨ orfler, and D. Kuhn, “Nash equilibria, regularization, and compu-tation in optimal transport-based distributionally robust optimization,” Operations Research ,2025. [47] M. D. Donsker and S. S. Varadhan, “Asymptotic evaluation of certain markov process expec-tations for large time. iv,” Communications on pure and applied mathematics , vol. 36, no. 2, pp. 183–212, 1983. [48] A. Shapiro, D. Dentcheva, and A. Ruszczynski, Lectures on stochastic programming: modeling and theory . SIAM, 2021. 27 Appendix A Summary of Notations 
+
+For integer K ∈ Z+, define [ K] := {1, · · · , K }, which is the set of positive running indices to K. The list of important sets, spaces, and notations used in this paper is shown in Table 8. The list of important functions is shown in Table 9. Table 8: Notations List 
+
+Spaces Description 
+
+Ω Closed sample space, Ω ⊆ Rd .
+
+F Functional space, which is not necessarily compact. 
+
+Basic Sets 
+
+K Indices set of hypotheses, K = {0, 1}.
+
+P (Ω) The set of all probability distributions on Ω.
+
+M (Ω) The set of measures on Ω.
+
+Γ (P, Q) Joint distribution set of marginal distribution P and Q.
+
+Pk The distribution set under hypotheses Hk , Pk ⊂ P (Ω) for each k ∈ K.
+
+FCVX Set of convex functions ϕ : Rd → R ∪ { +∞} .
+
+Parameters 
+
+ϵ Entropic regularization parameter in Sinkhorn discrepancy, ϵ ≥ 0. 
+
+ρk Radius for Sinkhorn-based ambiguity set, for each k ∈ K.
+
+λk Penalty parameter in soft-constraint problem (soft-SDRHT), λk ≥ 0 for each k ∈ K.
+
+Distributions 
+
+bPk Empirical distribution with nk samples for each k ∈ K.
+
+Kx(i)  
+
+> k,ϵ
+
+Kernel extension for any sample point i ∈ [nk ] and each k ∈ K.
+
+Pϵk Mixture of continuous distributions Kx(i)  
+
+> k,ϵ
+
+for all i ∈ [nk ], see Eq. (4). 
+
+ePk Discrete approximation of distribution Pϵk with N samples, for each k ∈ K.
+
+Discrepancies 
+
+Sϵ(P, Q) Sinkhorn discrepancy from distribution P to Q, see Definition 2. 
+
+DKL (P, Q) Kullback–Leibler divergence (KL divergence) from distribution P to Q.
+
+Ambiguity Sets 
+
+Bρk (bPk ) Sinkhorn discrepancy-based ambiguity set centered at bPk for each k ∈ K, see Eq. (1). 
+
+B ¯ρk (Pϵk ) Equivalent KL-based ambiguity set of Bρk (bPk ) centered at Pϵk , see Proposition 1. 28 Table 9: Functions List 
+
+Functions Description 
+
+c : Ω × Ω → R Transport cost function satisfying Assumption 1, we choose c(x, z) := 12 ∥x − z∥22.
+
+ℓ : R → R+ ∪ {∞} Generating function (see Definition 1), we choose ℓ(t) = exp( t). 
+
+φ : Ω → R Detector for hypothesis testing, which is measurable and upper semicontinuous. 
+
+φopt : Ω → R Optimal detector for generating function ℓ(t) = exp( t), φopt = 12 log( p0/p 1). 
+
+ϕ1, ϕ 2 : Rd → R Convex functions, decision variables in the problem (7). 
+
+ϕ∗ : Rd → R ∪ {∞} Convex conjugate of a convex function ϕ : Rd → R ∪ {∞} .
+
+HyCNN k : Rd → R Convex function formed by the HyCNN for each k ∈ K.
+
+eϕk : Rd → R Strongly convex function, eϕk (z) = HyCNN k (z) + α 
+
+> 2
+
+∥z∥22 for each k ∈ K and α > 0. 
+
+Lk : Ω → R Loss function of a given detector φ for sample ω, satisfying Assumption 2. 
+
+Φ : P (Ω)2 → R Convex surrogate risk of the detector φ.
+
+gcϵ,k Continuous extension for the optimal entropic potential gϵ,k, (nk ,N ) in Algorithm 4. 
+
+bSϵ, (nk ,N ) Finite sample estimator for the Sinkhorn discrepancy. 
+
+## B Technical Analyses and Proofs 
+
+B.1 Proof of Proposition 1 
+
+Proof of Proposition 1. By the definition of Sinkhorn discrepancy, for distributions P, Q ∈ P (Ω), it is equivalent to 
+
+Sϵ(P, Q) = inf  
+
+> γ∈Γ(P,Q)
+
+Z
+
+> Ω×Ω
+
+
+
+c(x, z) + ϵ · log dγ(x, z)dP(x)d ν(z)
+
+
+
+dγ(x, z). (20) Taking the reference distribution as the empirical distribution bP ∈ P (Ω), Eq. (20) can be further reformulated to 
+
+Sϵ(bP, Q) = inf  
+
+> γ∈Γ(bP,Q)
+
+Ex∼bP
+
+ Z 
+
+> Ω
+
+
+
+c(x, z) + ϵ log dγx(z)dν(z)
+
+
+
+dz
+
+
+
+= inf  
+
+> γ∈Γ(bP,Q)
+
+ϵ · Ex∼bP
+
+ Z 
+
+> Ω
+
+log dγx(z)
+
+e−c(x,z) · dν(z) dz
+
+
+
+= inf  
+
+> γ∈Γ(bP,Q)
+
+ϵ · Ex∼bP
+
+ Z 
+
+> Ω
+
+log dγx(z)dKx,ϵ (z) dz − log 
+
+Z
+
+> Rd
+
+e−c(x,z)/ϵ dz
+
+
+
+= inf  
+
+> γ∈Γ(bP,Q)
+
+ϵ · Ex∼bP
+
+
+
+DKL (γx∥K x,ϵ )
+
+
+
+− ϵ · Ex∼bP
+
+
+
+log 
+
+Z
+
+> Rd
+
+e−c(x,z)/ϵ dz
+
+
+
+,
+
+(21) where dKx,ϵ (z) := e−c(x,z)/ϵ 
+
+R 
+
+> Rd
+
+e−c(x,u)/ϵ · du · dv(z).
+
+Thus, the ambiguity sets in Eq. (1) is equivalent to inf   
+
+> γ∈Γ(bPk,Q)
+
+ϵ · Ex∼bPk
+
+
+
+DKL (γx∥K x,ϵ )
+
+
+
+≤ ρk + ϵ · Ex∼bPk
+
+
+
+log 
+
+Z
+
+> Rd
+
+e−c(x,z)/ϵ dz
+
+
+
+, ∀k ∈ K,
+
+29 that is, 
+
+B ¯ρk (Pϵk ) := {Q ∈ P (Ω) : inf   
+
+> γ∈Γ(bPk,Q)
+
+Ex∼bPk
+
+
+
+DKL (γx∥K x,ϵ )
+
+
+
+≤ ¯ρk /ϵ }, ∀k ∈ K,
+
+where ¯ ρk := ρk + ϵEx∼bPk
+
+
+
+log R 
+
+> Rd
+
+e−c(x,z)/ϵ dz
+
+
+
+and probability density d Pϵk (z) := Ex∼bPk
+
+dKx,ϵ (z).This completes the proof. 
+
+B.2 Proof of Theorem 1 
+
+To prove Theorem 1, we first establish the weak compactness of the Sinkhorn ambiguity sets and the weak upper semicontinuity of the expected loss. Based on Eq. (3), the following lemma holds. 
+
+Lemma 1 (Weak Compactness of the Ambiguity Sets) . Under Assumption 1, the ambiguity set de-fined in (3) is weakly compact in P (Ω) for any closed set Ω ⊆ Rd , k ∈ K, and ¯ρk ≥ 0.
+
+The proof of Lemma 1 is provided in the following Appendix B.2.1. While [45] also confirms the weak compactness of Sinkhorn ambiguity sets based on the properties of Wasserstein balls, our proof follows directly from the KL representation in Proposition 1 and holds under more general assumptions. 
+
+Lemma 2 (Weak Upper Semicontinuity of the Expected Loss) . Under Assumption 2 (I) , Eω∼Q[Lk (φ, ω)] 
+
+is weakly upper semicontinuous in Q ∈ B ¯ρk (Pϵk ) for any k ∈ K and φ ∈ F .
+
+The proof of Lemma 2 is provided in the following Appendix B.2.2. 
+
+B.2.1 Proof of Lemma 1 
+
+Proof of Lemma 1. To prove B ¯ρk (Pϵk ) is weakly compact, we first show its connection with KL-divergence-based ambiguity set. Since the KL-divergence is a convex function, by Jensen’s in-equality, we have 
+
+DKL (Q∥Pϵk ) ≤ inf   
+
+> γ∈Γ(bPk,Q)
+
+Ex∼bPk
+
+
+
+DKL (γx∥K x,ϵ )
+
+
+
+≤ ρk
+
+ϵ + Ex∼bPk
+
+
+
+log 
+
+Z
+
+> Rd
+
+e−c(x,z)/ϵ dz
+
+
+
+, ∀k ∈ K,
+
+where probability distribution Q ∈ P (Ω). Let 
+
+B′¯ρk (Pϵk ) := {Q : DKL (Q∥Pϵk ) ≤ ¯ρk /ϵ }, ∀k ∈ K.
+
+According to Proposition 3.12 in [7], the KL-divergence-based ambiguity sets B′¯ρk (Pϵk ) for any 
+
+k ∈ K are weakly compact, for any closed set Ω ⊆ Rd and k ∈ K, distribution Pϵk ∈ P (Ω) and ¯ρk ≥ 0. 30 Since B ¯ρk (Pϵk ) ⊆ B′¯ρk (Pϵk ) for any k ∈ K, it su ffi ces to prove that B ¯ρk (Pϵk ) is weakly closed, as weakly closed subsets of weakly compact sets are weakly compact [46, Lemma 1]. Define dMk,ϵ (x, z) := d bPk (x) · dKx,ϵ (z) = e−c(x,z)/ϵ 
+
+R 
+
+> Rd
+
+e−c(x,u)/ϵ · du · dbPk (x) · dv(z), ∀k ∈ K,
+
+According to Eq. (20), we have inf   
+
+> γ∈Γ(bPk,Q)
+
+Ex∼bPk
+
+
+
+DKL (γx∥K x,ϵ )
+
+
+
+= inf   
+
+> γ∈Γ(bPk,Q)
+
+DKL (γ∥Mk,ϵ ), ∀k ∈ K.
+
+According to Proposition 3.12 in [7], to prove the Sinkhorn-based ambiguity set is weakly closed, it su ffi ces to prove that function fk (Q) := inf γ∈Γ (bPk ,Q) DKL (γ∥Mk,ϵ ) is weakly lower semicontinuous in Q for each k ∈ K, which implies that any sublevel set of f (Q), i.e., {Q : f (Q) ≤ c} for any c ∈ R, is weakly closed. Let {Qj }j∈N ⊂ P (Ω) be any sequence of distributions that converges weakly to Q.By the definition of infimum, there exists a sequence of couplings γn ∈ Γ (bPk , Qn) that converges weakly to γ ∈ Γ (bPk , Q) such that 
+
+DKL (γn∥Mk,ϵ ) ≤ fk (Qn) + 1
+
+n , ∀k ∈ K. (22) Then, for each k ∈ K, we have 
+
+fk (Q) ≤ D KL (γ∥Mk,ϵ ) ≤ lim inf  
+
+> j∈N
+
+DKL (γj ∥Mk,ϵ ) ≤ lim inf  
+
+> j∈N
+
+fk (Qj ), ∀k ∈ K,
+
+where the second inequality is due to the weak lower semi-continuity of DKL (γ∥Mk,ϵ ) in γ [7, Proposition 3.12], and the final inequality is due to Eq. (22). Therefore, for each k ∈ K, the function 
+
+fk (Q) is weakly lower semicontinuous in Q which implies that the ambiguity set B ¯ρk (Pϵk ) is weakly closed, and thereby weakly compact. This completes the proof. 
+
+B.2.2 Proof of Lemma 2 
+
+Proof of Lemma 2. We prove Lemma 2 in two steps. Specifically, we prove that the loss function Lk
+
+is uniformly integrable and Eω∼Q
+
+
+
+Lk (φ, ω)
+
+
+
+is weakly upper semicontinuous with respect to the ambiguity set Q ∈ B ¯ρk (Pϵk ) for each k ∈ K and any fixed φ, respectively. 
+
+Step 1 of Lemma 2: Based on the Donsker-Varadhan variational representation of the KL divergence [47], for any measurable function f : Ω → R and probability distribution Q, we have 
+
+Eω∼Q[f ] − log Eω∼Pϵk [ef ] ≤ D KL (Q, Pϵk ) ≤ inf   
+
+> γ∈Γ(bPk,Q)
+
+Ex∼bPk
+
+
+
+DKL (γx∥K x,ϵ )
+
+
+
+≤ ¯ρk
+
+ϵ , ∀k ∈ K. (23) According to the Donsker-Varadhan variational representation part in relation (23), under As-sumption 2(I), for βk > 0, we have 
+
+Eω∼Q[Lk (φ, ω)] ≤ 1
+
+β
+
+
+
+DKL (Q, Pϵk ) + log Eω∼Pϵk [eβk ·Lk (φ, ω)]
+
+
+
+< ∞, ∀k ∈ K, (24) 31 which implies that the inner problem of (SDRHT) is bounded. For a truncation threshold M > 0, let 1{Lk (φ, ω)>M } be an indicator function that equals to 1 if Lk (φ, ω) > M and 0 otherwise. Based on relation (23), we also have 
+
+Eω∼Q[Lk (φ, ω) · 1{Lk (φ, ω)>M }] ≤ 1
+
+β
+
+
+
+DKL (Q, Pϵk ) + log Eω∼Pϵk
+
+
+
+eβk ·Lk (φ, ω)·1{Lk (φ, ω)>M }
+
+ 
+
+, ∀k ∈ K,
+
+and it follows that sup    
+
+> Q∈B¯ρk(Pϵk)
+
+Eω∼Q[Lk (φ, ω) · 1{Lk (φ, ω)>M }] ≤ ¯ρk
+
+ϵβ + 1
+
+β log Eω∼Pϵk
+
+
+
+eβk ·Lk (φ, ω)·1{Lk (φ, ω)>M }
+
+
+
+, ∀k ∈ K.
+
+When M → ∞ , we have 1{Lk (φ, ω)>M } → 0 for Pϵk -almost every ω. Moreover, as both βk and 
+
+Lk (φ, ω) are non-negative, we have 
+
+eβk ·Lk (φ, ω)1{Lk (φ, ω)>M } ≤ eβk ·Lk (φ, ω), ∀k ∈ K,
+
+where eβk ·Lk (φ, ω) is integrable under Assumption 2(I). Hence, by the dominated convergence theo-rem, lim  
+
+> M→∞
+
+log Eω∼Pϵk
+
+
+
+eβk ·Lk (φ, ω)·1{Lk (φ, ω)>M }
+
+
+
+= log Eω∼Pϵk
+
+
+
+e0
+
+
+
+= 0 , ∀k ∈ K.
+
+Thus, we have lim  
+
+> M→∞
+
+sup    
+
+> Q∈B¯ρk(Pϵk)
+
+Eω∼Q
+
+
+
+Lk (φ, ω) · 1{Lk (φ, ω)>M }
+
+
+
+≤ ¯ρk
+
+ϵβ k
+
+, ∀k ∈ K. (25) Since Assumption 2(I) guarantees that this property holds for any βk > 0, let βk → ∞ , and then we have lim  
+
+> M→∞
+
+sup    
+
+> Q∈B¯ρk(Pϵk)
+
+Eω∼Q
+
+
+
+Lk (φ, ω) · 1{Lk (φ, ω)>M }
+
+
+
+≤ inf 
+
+> β> 0
+
+¯ρk
+
+ϵβ k
+
+= 0 , ∀k ∈ K, (26) which completes the proof of uniform integrability. 
+
+Step 2 of Lemma 2: We next prove the weak upper semicontinuity of Eω∼Q[Lk (φ, ω)] in Q ∈
+
+B ¯ρk (Pϵk ). We consider a continuous detector φ and a non-negative, non-decreasing, convex, and continuous generating function ℓ. Then, the loss functions L0 and L1 are non-negative and upper semicontinuous for all k ∈ K. By Lemma 1, the ambiguity set B ¯ρk (Pϵk ) is weakly closed. For each 
+
+k ∈ K, let Qj ∈ B ¯ρk (Pϵk ) for all j ∈ N be any sequence of distributions that converges weakly to Q,and then we have lim sup 
+
+> j∈N
+
+Eω∼Qj
+
+
+
+Lk (φ, ω)
+
+
+
+≤ lim sup 
+
+> j∈N
+
+Eω∼Qj
+
+
+
+min {Lk (φ, ω), M }
+
+
+
++ lim sup 
+
+> j∈N
+
+Eω∼Qj
+
+
+
+(Lk (φ, ω) − M) · 1{Lk (φ, ω)>M }
+
+
+
+≤ Eω∼Q
+
+
+
+min {Lk (φ, ω), M }
+
+
+
++ lim sup 
+
+> j∈N
+
+Eω∼Qj
+
+
+
+(Lk (φ, ω) − M) · 1{Lk (φ, ω)>M }
+
+
+
+≤ Eω∼Q
+
+
+
+min {Lk (φ, ω), M }
+
+
+
++ sup    
+
+> Q∈B¯ρk(Pϵk)
+
+Eω∼Q[Lk (φ, ω) · 1{Lk (φ, ω)>M }], ∀k ∈ K,
+
+(27) where M > 0, the second inequality is due to Proposition 3.3 in [7] for the upper semicontinuous and bounded function min {Lk (φ, ω), M }, and the third inequality follows because Qj ∈ B ¯ρk (Pϵk ) for 32 any j ∈ N and ( Lk (φ, ω) − M) · 1{Lk (φ, ω)>M } ≤ Lk (φ, ω) · 1{Lk (φ, ω)>M }. Taking the limit as M → ∞ on both sides of inequality (27), we obtain lim sup 
+
+> j∈N
+
+Eω∼Qj
+
+
+
+Lk (φ, ω)
+
+
+
+≤ lim  
+
+> M→∞
+
+Eω∼Q
+
+
+
+min {Lk (φ, ω), M }
+
+
+
++ lim  
+
+> M→∞
+
+sup    
+
+> Q∈B¯ρk(Pϵk)
+
+Eω∼Q[Lk (φ, ω) · 1{Lk (φ, ω)>M }]= lim  
+
+> M→∞
+
+Eω∼Q
+
+
+
+min {Lk (φ, ω), M }
+
+
+
+= Eω∼Q
+
+
+
+Lk (φ, ω)
+
+
+
+, ∀k ∈ K,
+
+where the first equality follows from Eq. (26) and the second equality follows from the monotone convergence theorem. This completes the proof. 
+
+B.2.3 Formal Proof of Theorem 1 
+
+Proof of Theorem 1. For Theorem 1(I), the problem (SDRHT) can be reformulated as inf  
+
+> φ∈F
+
+sup    
+
+> Pk∈Bρk(bPk),∀k∈K
+
+X
+
+> k∈K
+
+Eω∼Pk
+
+
+
+Lk (φ, ω)
+
+
+
+.
+
+Note that B ¯ρk (Pϵk ) is weakly compact for any ¯ ρk ≥ 0 thanks to Proposition 1 and Lemma 1, which applies because of Assumption 1. In addition, Eω∼Q
+
+
+
+Lk (φ, ω)
+
+
+
+is non-negative and weakly upper semicontinuous in Q ∈ B ¯ρk (Pϵk ) for all k ∈ K and φ ∈ F , due to Definition 1 and Lemma 2. As 
+
+Φ(φ; P0, P1) is convex in φ and concave in distributions, Theorem 1(II) in [46], an extension of the lopsided minimax theorem [7, Theorem 5.15], ensures that Optimal Value of (SDRHT) = max   
+
+> P0∈Bρ0(bP0),P1∈Bρ1(bP1)
+
+inf  
+
+> φ∈F
+
+Φ(φ; P0, P1).
+
+For Theorem 1(II), the problem (soft-SDRHT) can be reformulated as inf  
+
+> φ∈F
+
+sup  
+
+> P0,P1∈P(Ω)
+
+X
+
+> k∈K
+
+Eω∼Pk
+
+
+
+Lk (φ, ω)
+
+
+
+− λk Sϵ(bPk , Pk ),
+
+where λk > 0 for any k ∈ K. Define 
+
+H(φ, P0, P1) := 
+
+X
+
+> k∈K
+
+Eω∼Pk
+
+
+
+Lk (φ, ω)
+
+
+
+− λk Sϵ(bPk , Pk ).
+
+We next verify the level compactness of H(φ, P0, P1) required for the lopsided minimax theo-rem [7, Theorem 5.15]. By Eqs. (21), (23), and (24), for any fixed φ, we have 
+
+H(φ, P0, P1) ≤
+
+X
+
+> k∈K
+
+
+
+Ck +
+
+ 1
+
+βk
+
+− λk ϵ
+
+
+
+· inf    
+
+> γ∈Γ(bPk,Pk)
+
+Ex∼bPk [DKL (γx∥K x,ϵ )] 
+
+
+
+, (28) where βk > 0 is finite, Ck := 1 
+
+> βk
+
+log Eω∼Pϵk [eβk ·Lk (φ, ω)] + λk ϵ · Ex∼bPk [log R 
+
+> Rd
+
+e−c(x,z)/ϵ dz] for any k ∈ K
+
+is finite by Assumptions 1(II) and 2(I), and is independent of P0 and P1.33 By choosing βk ∈ ( 1  
+
+> λkϵ
+
+, +∞) for each k ∈ K, when inf γ∈Γ (bPk ,Pk ) Ex∼bPk
+
+
+
+DKL (γx∥K x,ϵ )
+
+
+
+→ ∞ , we have H(φ, P0, P1) → −∞ . This implies that for any α ∈ R, there exist finite radii r0 and r1 such that the upper-level set of H(φ, P0, P1) satisfies 
+
+{(P0, P1) : H(φ, P0, P1) ≥ α} ⊆ Br0 (bP0) × Br1 (bP1).
+
+By Lemma 1, the set Br0 (bP0) × Br1 (bP1) is weakly compact. For each k ∈ K, the Sinkhorn discrep-ancy is convex and weakly lower semicontinuous (see the proof of Lemma 1), and Eω∼Pk
+
+
+
+Lk (φ, ω)
+
+
+
+is weakly upper semicontinuous in Pk by Lemma 2. Hence, H(φ, P0, P1) is weakly upper semicon-tinuous and its upper-level set {(P0, P1) : H(φ, P0, P1) ≥ α} is weakly closed. Therefore, for every 
+
+α ∈ R and every fixed φ ∈ F , the upper-level set {(P0, P1) : H(φ, P0, P1) ≥ α}, a closed subset of a weakly compact set, is also weakly compact. In addition, −H(φ, P0, P1) is convex, weakly lower semicontinuous, and thus weakly closed in P0 and P1.Finally, H(·, P0, P1) is convex in φ, and Assumption 2(II) ensures that sup 
+
+> P0,P1
+
+inf  
+
+> φ∈F
+
+H(φ, P0, P1) > −∞ .
+
+Therefore, as all conditions of the lopsided minimax theorem are satisfied, the strong duality of the problem (soft-SDRHT) holds, i.e., Optimal Value of (soft-SDRHT) = sup  
+
+> P0,P1∈P(Ω)
+
+inf  
+
+> φ∈F
+
+Φ(φ; P0, P1) −
+
+X
+
+> k∈K
+
+λk Sϵ(bPk , Pk ). (29) Further, since inf φ∈F H(φ, P0, P1) is weakly upper semicontinuous in P0 and P1, has a finite upper bound by Eq. (28) under proper β, and has weakly compact upper-level sets, the supremum in Eq. (29) is attained by Weierstrass’ theorem, i.e., Optimal Value of (soft-SDRHT) = max   
+
+> P0,P1∈P(Ω)
+
+inf  
+
+> φ∈F
+
+Φ(φ; P0, P1) −
+
+X
+
+> k∈K
+
+λk Sϵ(bPk , Pk ).
+
+This completes the proof. 
+
+B.3 Proof of Theorem 3 
+
+Proof of Theorem 3. As a preparation, when D has a finite diameter D, for any υ ∈ (0 , 1), there exists a υ-net Dυ ⊂ D containing J points such that ∀x ∈ D, ∃xj ∈ Dυ, ∥x − xj ∥ ≤ υ. According to [48], the size of the υ-net is bounded by J ≤ O (( D/υ )d ). We prove Theorem 3(I) in two steps. According to Lemma 1 in [40], all continuous Lipschitz convex functions over convex compact sets can be approximated using the maximum of a ffi ne functions. Thus, in Step 1, we control the discretization error by adjusting the size J of the υ-net. In Step 2, we prove that a HyCNN with maxout activation functions can exactly represent a maximum of a ffi ne functions and determine the quantitative relationship between J and the network hyperparameters ( L, h ). 34 Step 1 of Theorem 3 (I) : For any Lf -Lipschitz function f , we approximate it by the maximum of supporting hyperplanes at points in the υ-net. The supporting hyperplane at ( xj , f (xj )) is defined as 
+
+sj (x) := g⊤ 
+
+> j
+
+(x − xj ) + f (xj ).
+
+where gj ∈ ∂f (xj ). For any x ∈ D, let xj0 ∈ Dυ be the nearest point to x in the υ-net. The pointwise error satisfies sup 
+
+> x∈D
+
+f (x) − max  
+
+> j∈[J]
+
+sj (x) = sup 
+
+> x∈D
+
+f (x) − max  
+
+> j∈[J]
+
+sj (x)
+
+!
+
+≤ sup 
+
+> x∈D
+
+
+
+f (x) − sj0 (x)
+
+
+
+= sup 
+
+> x∈D
+
+
+
+f (x) − f (xj0 ) − g⊤ 
+
+> j
+
+(x − xj0 )
+
+
+
+≤ sup 
+
+> x∈D
+
+
+
+|f (x) − f (xj0 )| + ∥gj ∥ · ∥ x − xj0 ∥
+
+
+
+≤ 2Lf ∥x − xj0 ∥ ≤ 2Lf υ. 
+
+Here, the first equality holds since f is convex, implying sj (x) ≤ f (x) for all j. The first inequality follows because max j∈[J] sj (x) ≥ sj0 (x). The second inequality uses the triangle inequality and Cauchy-Schwarz inequality. The third inequality applies the Lf -Lipschitz continuity of f , which bounds both |f (x) − f (xj0 )| ≤ Lf ∥x − xj0 ∥ and ∥gj ∥ ≤ Lf . The last inequality holds as ∥x − xj0 ∥ ≤ υ.To ensure sup x∈D |f (x)−max j∈[J] sj (x)| ≤ ε for any ε > 0, we have υ ≤ min { ε 
+
+> 2Lf
+
+, 1}. Taking υ = ε/ 2Lf .By J ≤ O (( Dυ )d ), the number of points in the υ-net is given by J ≤ O (( DL f 
+
+> ε
+
+)d ). 
+
+Step 2 of Theorem 3 (I) : Here, we show that the maximum of J affi ne functions can be rep-resented by a HyCNN with L layers and width h. As an intuitive example, we first consider a maximum of two a ffi ne functions and reformulate it as a HyCNN with two layers y1 and y2 (see Figure 2) by introducing an extra a ffi ne term: max 
+
+
+
+a⊤ 
+
+> 1
+
+x + b1, a⊤ 
+
+> 2
+
+x + b2
+
+
+
+= ( a⊤ 
+
+> 3
+
+x + b3) + 
+
+> y1
+
+z }| {
+
+max 
+
+
+
+(a1 − a3)⊤x + ( b1 − b3), (a2 − a3)⊤x + ( b2 − b3)
+
+| {z }
+
+> y2
+
+We extend this intuition to a maximum of J affi ne functions max {a⊤ 
+
+> 1
+
+x + b1, · · · , a⊤ 
+
+> J
+
+x + bJ }. We consider a simple case in which the width of each hidden layer is h = 1. In the following, we first construct a HyCNN with maxout activation functions that use both positive and negative weights, representing a maximum over a ffi ne functions. Then, all weights can be restricted to be nonnegative by the method in the proof of Theorem 1 in [40] without changing the width and depth of the network. Let sj := a⊤ 
+
+> j
+
+x + bj for any j ∈ [2 J], extra a ffi ne terms rj := c⊤ 
+
+> j
+
+x + dj for any 35 j ∈ [2 , · · · , J ], s′ 
+
+> j
+
+= sj − rj for any j ∈ [2 , · · · , J ], and bσ : R2 → R be a maxout activation function. Then max {s1, · · · , s J }
+
+= max {max {s1, · · · , s J−1}, s J }
+
+=rJ + bσ (max {s1, · · · , s J−1} − rJ , s ′ 
+
+> J
+
+)=rJ + bσ (max {max {s1, · · · , s J−2}, s J−1} − rJ , s ′ 
+
+> J
+
+)=rJ + bσ (rJ−1 + bσ (max {s1, · · · , s J−2} − rJ−1, s ′
+
+> J−1
+
+) − rJ , s ′ 
+
+> J
+
+)= · · · 
+
+=rJ + bσ (rJ−1 + bσ (rJ−2 + bσ (· · · + r3 + bσ (r2 + bσ (s1 − r2, s ′
+
+> 2
+
+) − r3, s ′
+
+> 3
+
+) − · · · ) − rJ−2, s ′
+
+> J−1
+
+) − rJ , s ′ 
+
+> J
+
+).
+
+(30) The last equation describes a J-layer HyCNN with width h = 1, where the layers are 
+
+y1 = bσ (s1 − r2, s 2 − r2),y2 = bσ (1 · y1 + r2 − r3, 0 · y1 + s3 − r3),
+
+· · · 
+
+yj = bσ (1 · yj−1 + rj − rj+1 , 0 · yj−1 + sj+1 − rj+1 ),
+
+· · · 
+
+yJ = rJ + yJ−1.
+
+To ensure the coe ffi cients of previous layers in this neural network are nonnegative, following [40], we expand the original input x ∈ Rd in each layer to bx ∈ R2d that includes x and −x, i.e., bx =[x⊤, −x⊤]⊤. When all coe ffi cients of x are nonnegative, the coe ffi cients of −x are 0. When hj < 0, we set the coe ffi cient of bxj+d to −hj and that of xj to 0. Therefore, without loss of generality, we can limit all weights between layers to be nonnegative, thereby ensuring that the neural network is input-convex. The construction in Eq. (30) represents max j∈[J] sj (x) exactly by a HyCNN with width h = 1 and depth L = O(J). By Step 1, choosing h = 1 and L = O(J) gives 
+
+L · h = O(( DL f
+
+ε )d ),
+
+which proves Theorem 3(I). For Theorem 3(II), we first focus on the property of the smooth maxout activation function. Without loss of generality, suppose a1 ≥ a2, we have ¯ σ (a1, a 2) = a1 and ¯στ (a1, a 2) = τ log ea1/τ (1 + e(a2−a1)/τ ) = a1 + τ log 1 + e(a2−a1)/τ  ≤ a1 + τ log 2 ,
+
+where τ > 0 and the last inequality is due to e(a2−a1)/τ ∈ (0 , 1]. This is equivalent to ¯σ (a1, a 2) < ¯στ (a1, a 2) ≤ ¯σ (a1, a 2) + τ log 2 .
+
+Consequently, for a HyCNN and its smooth version, we have sup 
+
+> x∈D
+
+| [HyCNN τ (x) − [HyCNN (x)| ≤ C · τ log 2 36 where C > 0 is a constant depending on the number of maxout activation functions and layers in the network. By Theorem 3(I), for any ε > 0, there exists a HyCNN such that sup 
+
+> x∈D
+
+| [HyCNN (x) − f (x)| ≤ ε
+
+2 .
+
+By selecting a su ffi ciently small τ, e.g., τ ≤ ε  
+
+> 2Clog 2
+
+, we have sup 
+
+> x∈D
+
+| [HyCNN τ (x) − f (x)| ≤ sup 
+
+> x∈D
+
+| [HyCNN τ (x) − [HyCNN (x)| + sup 
+
+> x∈D
+
+| [HyCNN (x) − f (x)| ≤ ε. 
+
+Note that the smooth HyCNN and standard HyCNN share the same order of network architecture complexity. Hence, the hyperparameters of smooth HyCNN can also be chosen as L · h = O(( DL f 
+
+> ε
+
+)d )to guarantee the ε-approximation. This completes the proof of Theorem 3(II). For Theorem 3(III), we select a sequence of smooth HyCNNs on a compact domain [ −n, n ]d
+
+with su ffi ciently small τ and each satisfying Ln · hn = O(( DL f 
+
+> ε
+
+)d ). By setting εn = 1 /n , according to Theorem 3(II), we have sup x∈D | [HyCNN τεn (x) − f (x)| ≤ 1 
+
+> n
+
+where the right-hand-side term converges to 0 as n → ∞ . Hence, we can prove [HyCNN τn converges to f uniformly on D. This completes the proof. 
+
+B.4 Proof of Theorem 4 
+
+Proof of Theorem 4. For Theorem 4(I), one can see Theorem 2 in [34] for a detailed proof. For Theorem 4(II), let the function f be M-Lipschitz smooth, and then we have 
+
+f (y) − f (x) ≤ ∇ f (x)⊤(y − x) + M
+
+2 · ∥ y − x∥2. (31) For any [HyCNN τn in the sequence { [HyCNN τn}∞ 
+
+> n=1
+
+with hyperparameters satisfying Ln · hn = O(εn−d )for any εn > 0, we have 
+
+[HyCNN τn(y) − [HyCNN τn(x) ≥ ∇ [HyCNN τn(x)⊤(y − x), ∀x, y ∈ Rd . (32) By Eqs. (31) and (32), we have 
+
+
+
+∇ [HyCNN τn(x) − ∇ f (x)
+
+⊤
+
+(y − x) ≤
+
+ [HyCNN τn(y) − f (y)
+
+
+
+−
+
+ [HyCNN τn(x) − f (x)
+
+
+
++ M
+
+2 · ∥ y − x∥2.
+
+Let y be obtained by moving x along the direction ∇ [HyCNN τn(x) − ∇ f (x) with a proper step length η, i.e., y − x = η ∇ [HyCNN τn(x)−∇ f (x)   
+
+> ∥∇ [HyCNN τn(x)−∇ f(x)∥
+
+and y ∈ D. Then, for the point-wise supremum value of ∇ [HyCNN τn(x) − ∇ f (x) on compact set D ⊂ Rd , we have sup 
+
+> x∈D
+
+∇ [HyCNN τn(x) − ∇ f (x) ≤ 1
+
+η · sup 
+
+> x∈D
+
+ [HyCNN τn(y) − f (y) −
+
+ [HyCNN τn(x) − f (x)
+
+ 
+
++ M
+
+2η · ∥ y − x∥2
+
+≤ 2εn
+
+η + Mη 
+
+2 ≤ 2pMε n = O(√εn),
+
+where the second inequality is due to Theorem 3(II) and ∥y − x∥2 = η2, the last inequality is due to the basic inequality, and the last equality is due to Ln · hn = O(εn−d ) for any εn > 0. Hence, the gradient sequence ∇ [HyCNN n converges to ∇f uniformly at a rate of O √εn
+
+ when function f is Lipschitz smooth. This completes the proof. 37 B.5 Proof of Theorem 5 
+
+Proof of Theorem 5. Since μ is absolutely continuous and both μ and ν have finite second moments, Brenier’s theorem yields a finite convex function f : Rd → R such that (∇f )#μ = ν. 
+
+Since every finite convex function on Rd is locally Lipschitz, for every n ∈ N, f is Lipschitz on a neighborhood of the compact set 
+
+Dn = [ −n, n ]d .
+
+By Theorem 3 (II), there exists a smooth HyCNN [HyCNN τn 
+
+> n
+
+satisfying sup 
+
+> x∈Dn
+
+[HyCNN τn 
+
+> n
+
+(x) − f (x) ≤ 1
+
+n .
+
+For any fixed compact set K ⊂ Rd , there exists N such that K ⊆ Dn for every n ≥ N . Hence, sup 
+
+> x∈K
+
+[HyCNN τn 
+
+> n
+
+(x) − f (x) ≤ 1
+
+n → 0.
+
+Thus, [HyCNN τn 
+
+> n
+
+→ f locally uniformly, and in particular pointwise on Rd .By Theorem 4 (I), 
+
+∇ [HyCNN τn 
+
+> n
+
+(x) → ∇ f (x)at almost every x ∈ Rd . Since μ is absolutely continuous with respect to the Lebesgue measure, this implies the weak convergence of the pushforward measure holds μ-almost everywhere, i.e., for X ∼ μ,
+
+∇ [HyCNN τn 
+
+> n
+
+(X) → ∇ f (X) almost surely .
+
+Consequently, (∇ [HyCNN τn 
+
+> n
+
+)#μ ⇒ (∇f )#μ = ν, 
+
+where ⇒ denotes weak convergence of probability measures on Rd . This completes the proof. 
+
+## C Technical Note for Training and Testing HyCNN 
+
+In this section, we provide details to compute the gradients of the problem (7) in Algorithm 1. 
+
+C.1 Gradient of the Risk Function Estimation 
+
+In this subsection, we take the k = 0 term in Eq. (6) as an example. For brevity, we omit the superscript ( i). Denote the parameters of the neural network HyCNN k as θk for each k ∈ K. Since our approximated convex function eϕk is strongly convex, we have det ∇2 eϕk (z) > 0 for any k and z.38 (I) Gradient with respect to θ0.
+
+For brevity, let h(θ0, θ1) := exp 
+
+ 12 (log p1(ω0)−log p0(ω0)) 
+
+
+
+, which is the same as h0(ω0, θ0, θ1)in Algorithm 3. Then, we have 
+
+∂h (θ0, θ1)
+
+∂θ0
+
+= h(θ0, θ1)2 ·
+
+ ∂ log p1(ω0)
+
+∂θ0
+
+− ∂ log p0(ω0)
+
+∂θ0
+
+
+
+. (33) For the second item on the right-hand side of Eq. (33), based on Eq. (8), we have 
+
+∂ log p0(ω0)
+
+∂θ0
+
+= ∂∂θ0
+
+log pϵ
+
+> 0
+
+(z0) − ∂∂θ0
+
+log det ∇2 eϕ0(z0) = − ∂∂θ0
+
+log det ∇2 eϕ0(z0), (34) where z0 = ∇ϕ−10 (ω0), the first equality is due to the strong convexity of eϕ0, and the sec-ond equality is due to ∂∂θ0
+
+log pϵ
+
+> 0
+
+(z0) = 0. The log-determinant-Hessian in Eq. (34) can be effi ciently computed by Algorithm 2. For the first item on the right-hand side of Eq. (33), based on the chain rule, we have 
+
+∂ log p1(ω0)
+
+∂θ0
+
+= ∂ω0
+
+∂θ0
+
+!⊤ ∂ ¯z0
+
+∂ω0
+
+!⊤ ∂ log p1(ω0)
+
+∂ ¯z0
+
+. (35) Let vector 
+
+g := ∂ log p1(ω0)
+
+∂ ¯z0
+
+=
+
+∂
+
+
+
+log pϵ
+
+> 1
+
+( ¯ z0) − log det ∇2 eϕ1( ¯ z0)
+
+
+
+∂ ¯z0
+
+,
+
+and this derivative can be computed by automatic di ff erentiation. Let ¯ z0 = ∇ eϕ−11 (ω0). As  
+
+> ∂¯z0
+> ∂ω0
+
+= [ ∇2ϕ1( ¯ z0)] −1, Eq.(35) can be reformulated as 
+
+∂ log p1(ω0)
+
+∂θ0
+
+= ∂ω0
+
+∂θ0
+
+!⊤
+
+[∇2 eϕ1( ¯ z0)] −1g, (36) where [ ∇2 eϕ1( ¯ z0)] −1g can be e ffi ciently solved as the minimizer of a quadratic optimization problem similar to (15) without explicitly computing the inverse of the Hessian matrix. Then,  ∂ω0
+
+> ∂θ0
+
+⊤
+
+[∇2 eϕ1( ¯ z0)] −1g can be computed by vector-Jacobian product in an automatic di ff erentiation framework. In summary, the gradient of h(θ0, θ1) with respect to θ0 is given by 
+
+∂h (θ0, θ1)
+
+∂θ0
+
+= h(θ0, θ1)2 ·
+
+ ∂ω0
+
+∂θ0
+
+!⊤
+
+[∇2 eϕ1( ¯ z0)] −1g + ∂∂θ0
+
+log det ∇2 eϕ0(z0)
+
+
+
+.
+
+(II) Gradient with respect to θ1.
+
+Similar to Eq. (33), we have 
+
+∂h (θ0, θ1)
+
+∂θ1
+
+= h(θ0, θ1)2 ·
+
+ ∂ log p1(ω0)
+
+∂θ1
+
+− ∂ log p0(ω0)
+
+∂θ1
+
+
+
+= h(θ0, θ1)2 · ∂ log p1(ω0)
+
+∂θ1
+
+. (37) Since ¯ z0 = ∇ eϕ−11 (ω0), we have 
+
+∂ log p1(ω0)
+
+∂θ1
+
+= ∂∂θ1
+
+
+
+log pϵ
+
+> 1
+
+( ¯ z0) − log det ∇2 eϕ1( ¯ z0)
+
+
+
+= ( ∂ ¯z0
+
+∂θ1
+
+)⊤ ∂ log pϵ
+
+> 1
+
+( ¯ z0) − log det ∇2 eϕ1( ¯ z0)
+
+∂ ¯z0
+
+− ∂∂θ1
+
+log det ∇2 eϕ1(z) z= ¯ z0
+
+,
+
+(38) 39 where the second equality is based on the total derivative. To evaluate the Jacobian ∂ ¯z0
+
+> ∂θ1
+
+in the first term, we take the total derivative with respect to θ1 on both sides of ∇ eϕ1( ¯ z0) = ω0:
+
+∇2 eϕ1( ¯ z0) · ∂ ¯z0
+
+∂θ1
+
++ ∂∇ eϕ1(z)
+
+∂θ1 z= ¯ z0
+
+= 0,
+
+and it follows that ( ∂ ¯z0
+
+∂θ1
+
+)⊤ = −
+
+
+
+∇2 eϕ1( ¯ z0)
+
+−1 ∂∇ eϕ1( ¯ z0)
+
+∂θ1
+
+.
+
+Therefore, Eq. (38) can be reformulated as 
+
+∂ log p1(ω0)
+
+∂θ1
+
+= −
+
+ ∂∇ eϕ1( ¯ z0)
+
+∂θ1
+
+⊤
+
+∇2 eϕ1( ¯ z0)
+
+−1
+
+g − ∂∂θ1
+
+log det ∇2 eϕ1( ¯ z0),
+
+where the first term can be calculated in the same way as Eq. (36) and the second term can be computed by Algorithm 2 as ¯ z0 is a constant here, thanks to the total derivative. In summary, the gradient of h(θ0, θ1) with respect to θ1 is given by 
+
+∂h (θ0, θ1)
+
+∂θ1
+
+= − h(θ0, θ1)2 ·
+
+ ∂∇ eϕ1( ¯ z0)
+
+∂θ1
+
+⊤
+
+[∇2 eϕ1( ¯ z0)] −1g + ∂∂θ1
+
+log det ∇2 eϕ1( ¯ z0)
+
+
+
+.
+
+C.2 Gradient of the Sinkhorn Discrepancy Estimation 
+
+When the potential f is optimally solved, the total derivative of our Sinkhorn discrepancy esti-mator (18) with respect to the HyCNN parameters is given by 
+
+∂ eSϵ, (nk ,N )(bPk , Pk )
+
+∂θk
+
+= 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+∂g cϵ,k (ω(i) 
+
+> k
+
+)
+
+∂θk f =fϵ,k, (nk ,N )
+
+= 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+
+
+∂ω(i)
+
+> k
+
+∂θk
+
+
+
+> ⊤
+
+· ∂g cϵ,k (ω(i) 
+
+> k
+
+)
+
+∂ω(i)   
+
+> kf=fϵ,k, (nk ,N )
+
+. (39) where the first equality is due to the envelope theorem, ∂ω(i)
+
+> k
+> ∂θk
+
+is the Jacobian of the generated sample with respect to the HyCNN parameters, and the gradient of gcϵ,k with respect to ω(i) 
+
+> k
+
+can be explicitly computed based on Eq. (17). 
+
+C.3 Testing 
+
+In the testing phase, for a testing sample ω ∈ Ω, we first trace its position in distributions Pϵ
+
+> 0
+
+and Pϵ 
+
+> 1
+
+by ¯ z0 = ∇ eϕ−10 (ω) and ¯ z1 = ∇ eϕ−11 (ω), respectively. Then, we evaluate the log-density of least-favorable distributions P0 and P1 at ω by log pk (ω) = log pϵk ( ¯ zk ) − log det ∇2 eϕk ( ¯ zk ), ∀k ∈ K.
+
+Finally, we make decisions by the selected optimal detector φopt = 12 (log p0(ω) − log p1(ω)). 40 D Wasserstein Distributionally Robust Hypothesis Testing Model 
+
+In this section, we provide the model of the WDRO method that is used as a baseline in our exper-imental part. The WDRO method is the soft-constraint version of the Wasserstein distributionally robust hypothesis testing model proposed by [17] (assuming n0 = n1 = n): max 
+
+> p0,p1∈Rn
+> +,γ0,γ1∈Rn×n
+> +
+
+X
+
+> i∈[n]
+
+min {pi
+
+> 0
+
+, pi
+
+> 1
+
+} − 
+
+X
+
+> k∈K
+
+λk ·
+
+X
+
+> i∈[n]
+
+X
+
+> j∈[n]
+
+γk,i,j · c(x(i) 
+
+> k
+
+, x(j) 
+
+> k
+
+)s.t. 
+
+X
+
+> j∈[n]
+
+γk,i,j = bPik ∀i ∈ [n], k ∈ K,
+
+X
+
+> i∈[n]
+
+γk,i,j = pjk , ∀j ∈ [n], k ∈ K,
+
+(40) where λk ≥ 0 is a penalty parameter for each k ∈ K, γk,i,j represents the ij -th entry of γk , and the i-th entry of pk (respectively, bPk ) is specified by pik (respectively, bPik ). This model assumes that the samples in the testing set have the same support as the empirical distribution. To extend the resulting least-favorable distribution to the entire space, a kernel smoothing method is intro-duced. Let p∗ 
+
+> k
+
+be an optimal solution of (40). This method convolves the discrete distribution with a kernel function Gh : Rd → R parameterized by a bandwidth h > 0: 
+
+phk (ω) = 
+
+> n
+
+X
+
+> i=1
+
+p∗ 
+
+> k
+
+(x(i) 
+
+> k
+
+) · Gh(ω − x(i) 
+
+> k
+
+), ∀ω ∈ Ω, k ∈ K,
+
+where we choose the Gaussian kernel function Gh(x) = exp( −∥ x∥2/2h2). Note that the number of decision variables of this linear program is O(n0 · n1). Thus, this finite-dimensional convex program is not sensitive to dimension d, but is sensitive to the number of training data points of the empirical distribution. 41
