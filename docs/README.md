@@ -6,49 +6,31 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-01
-- 运行时间：2026-09-01 23:02:47 UTC
+- 最新运行日期：2026-09-02
+- 运行时间：2026-09-02 22:14:30 UTC
 - 运行状态：成功
-- 本次总论文数：9
-- 精读区：6
-- 速读区：3
+- 本次总论文数：3
+- 精读区：1
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读2篇9.0分论文并速读3篇，核心聚焦Schrödinger桥与最优传输方法。  
-最值得关注的是大温度Schrödinger桥的噪声-去噪框架，以及动力学Swarming模型的桥接应用，两者均为最高分。  
-建议从这两篇高分论文入手，先理解Schrödinger桥如何用于生成建模，再扩展到最优传输的稀疏优化方向。
-- 详情：[/202609/01/README](/202609/01/README)
+今日3篇论文聚焦图像修复与数学理论，精读1篇《ReBridge-Flow》获8分高分，其余为统计收敛与量子方程分支过程速读。  
+最值得关注的是图像修复方向的新方法ReBridge-Flow，通过重新耦合后验桥与流匹配提升修复效果，建议优先精读其核心设计。  
+对普通读者可暂略理论类论文，后续若关注深度修复应用，可追踪该方法的代码与实验对比。
+- 详情：[/202609/02/README](/202609/02/README)
 
 ### 精读区论文标签
-1. [Noising-Denoising by Large Temperature Schrödinger Bridges](/202609/01/2608.25094v1-noising-denoising-by-large-temperature-schrdinger-bridges)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：高温动态薛定谔桥与去噪扩散模型的联系
-2. [Schrödinger Bridges over Kinetic Swarming Models](/202609/01/2608.25281v1-schrdinger-bridges-over-kinetic-swarming-models)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：薛定谔桥问题，用于在指定端点分布之间控制群体
-3. [There and Back Again: Bidirectional Diffusion Bridges for Multimodality Translation](/202609/01/2608.27885v1-there-and-back-again-bidirectional-diffusion-bridges-for-multimodality-translation)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：通过随机微积分构造连接文本与图像两种模态的双向扩散桥
-4. [Discrete Diffusion Bridges for Spatiotemporally Aligned Image Translation and Generation](/202609/01/2608.29997v1-discrete-diffusion-bridges-for-spatiotemporally-aligned-image-translation-and-generation)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：在源域与目标域之间直接构造离散扩散桥
-5. [Hard-Constrained Sampling on Embedded Riemannian Manifolds via Adjoint Schrödinger Bridges](/202609/01/2608.25838v1-hard-constrained-sampling-on-embedded-riemannian-manifolds-via-adjoint-schrdinger-bridges)  
+1. [ReBridge-Flow: Re-Coupling Posterior Bridges in Flow Matching for Image Restoration](/202609/02/2609.00811v1-rebridge-flow-re-coupling-posterior-bridges-in-flow-matching-for-image-restoration)  
    标签：评分：8.0/10、query:diff-bridge
-   evidence：利用伴随薛定谔桥在黎曼流形上进行约束采样
-6. [Di$^2$CycleSB: Towards High-Quality Unsupervised Nighttime Visibility Enhancement via Schrödinger Bridge Transformer](/202609/01/2608.29043v1-di2cyclesb-towards-high-quality-unsupervised-nighttime-visibility-enhancement-via-schrdinger-bridge-transformer)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：无监督Cycle薛定谔桥Transformer用于夜间可见度增强，将随机桥应用于生成建模
+   evidence：面向图像复原的流匹配后验桥重耦合方法，属于生成模型中连接源分布与数据分布的随机桥方法
 
 ### 速读区论文标签
-1. [A Theory of Speciation in Generative Diffusion Models on Compact Riemannian Manifolds](/202609/01/2608.23798v2-a-theory-of-speciation-in-generative-diffusion-models-on-compact-riemannian-manifolds)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：对生成扩散模型随机动力学的分析，与随机桥过程相关
-2. [Generative Neural Networks for Sinkhorn Distributionally Robust Hypothesis Testing](/202609/01/2608.22746v1-generative-neural-networks-for-sinkhorn-distributionally-robust-hypothesis-testing)  
+1. [Uniform Statistical Convergence of Empirical Sinkhorn Potentials with Exponential and Polynomial Dependence on the Regularization Parameter](/202609/02/2608.29152v1-uniform-statistical-convergence-of-empirical-sinkhorn-potentials-with-exponential-and-polynomial-dependence-on-the-regularization-parameter)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：Sinkhorn迭代是求解Schrödinger桥和熵正则化最优传输问题的核心
-3. [SinkSLOT: Sinkhorn via Sparse Lifted Optimal Transport](/202609/01/2608.28262v1-sinkslot-sinkhorn-via-sparse-lifted-optimal-transport)  
+   evidence：对经验Sinkhorn势做一致统计收敛分析，这是求解Schrödinger桥所需的核心熵正则最优传输要素
+2. [Branching stochastic mechanics. I. Clustering and connected correlations within a branching-process representation of the Schrödinger equation](/202609/02/2608.29807v1-branching-stochastic-mechanics-i-clustering-and-connected-correlations-within-a-branching-process-representation-of-the-schrdinger-equation)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：为熵正则最优传输提供改进的Sinkhorn算法，是桥计算中的关键组件
+   evidence：用薛定谔-长泽变换将动力学表示为正前向与后向扩散场之积等于密度，这与薛定谔桥过程的核心双向扩散构造同源。
 
 
 <div class="dpr-home-promo-card">
