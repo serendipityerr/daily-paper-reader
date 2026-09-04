@@ -6,26 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-03
-- 运行时间：2026-09-03 22:36:10 UTC
+- 最新运行日期：2026-09-04
+- 运行时间：2026-09-04 21:49:49 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 本次总论文数：4
+- 精读区：2
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读李群流形上的薛定谔桥，探索概率内在生成；另速读一篇去噪扩散与全局MCMC结合的方法。最值得关注的是通过流形几何与薛定谔桥实现内在生成，以及扩散模型赋予MCMC的全局采样能力。建议先理解李群流形上概率动力学的几何直觉，再深入比较两种生成框架的采样效率。
-- 详情：[/202609/03/README](/202609/03/README)
+今日精读聚焦量子薛定谔桥最优控制与退化扩散模型条件化，速读覆盖矩阵多胞形耦合与流匹配新方法。最值得关注的是9分量子控制研究，及8分扩散模型条件化进展。建议优先精读高分论文，其余两篇可作为拓展了解。
+- 详情：[/202609/04/README](/202609/04/README)
 
 ### 精读区论文标签
-1. [Schrödinger Bridges on Lie Group Manifolds for Probabilistic Intrinsic Generation](/202609/03/2609.02196v1-schrdinger-bridges-on-lie-group-manifolds-for-probabilistic-intrinsic-generation)  
+1. [Optimal control theory for measured quantum Schrödinger bridges](/202609/04/2609.03097v1-optimal-control-theory-for-measured-quantum-schrdinger-bridges)  
    标签：评分：9.0/10、query:diff-bridge
-   evidence：李群流形上构建薛定谔桥进行内生概率生成，是随机桥过程用于生成建模的直接案例
+   evidence：直接研究薛定谔桥和熵最优传输，通过终态条件分布上的Doob/Sinkhorn势实现扩散条件化。
+2. [Conditioning Degenerate Diffusion Models](/202609/04/2609.04090v1-conditioning-degenerate-diffusion-models)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：利用因果最优传输与最小熵控制实现退化扩散模型的条件化
 
 ### 速读区论文标签
-1. [Exact Global MCMC with Denoising Diffusion](/202609/03/2609.00279v1-exact-global-mcmc-with-denoising-diffusion)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：利用正反向扩散的精确路径密度（路径积分表述）构造全局MCMC提议。
+1. [Regularized Coupling Maps on Matrix Polytopes: From Assignment to Graph Matching and Optimal Transport](/202609/04/2608.29299v1-regularized-coupling-maps-on-matrix-polytopes-from-assignment-to-graph-matching-and-optimal-transport)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：正则化最优传输耦合映射研究，提供Sinkhorn类工具但未连接扩散桥
+2. [Beyond Straightness: Non-Crossing Flow Matching via Quantile AlignTree Coupling](/202609/04/2609.03443v1-beyond-straightness-non-crossing-flow-matching-via-quantile-aligntree-coupling)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：用分位数对齐树结构建立源到目标分布的最优传输式层次耦合，以改进生成式匹配
 
 
 <div class="dpr-home-promo-card">
