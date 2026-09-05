@@ -1,0 +1,1703 @@
+Generative Diffusion Surrogates with Analytical Variance Schedule
+Patrick Reichherzer1,2,3*, Gianluca Gregori1, David N. Hosking4,5, Subir Sarkar1
+1Department of Physics, University of Oxford, Oxford OX1 3PU, UK.
+2Department of Astrophysical Sciences, Princeton University, Princeton NJ 08544, USA.
+3Max Planck Institute for Security and Privacy, Bochum 44799, Germany.
+4Department of Applied Mathematics and Theoretical Physics, University of Cambridge, Cambridge CB3
+0WA, UK.
+5Gonville & Caius College, Cambridge CB2 1TA, UK.
+*Corresponding author. E-mail: p.reichherzer@princeton.edu;
+Abstract
+Stochastic transport describes physical systems in which an initially structured distribution spreads under unresolved
+forcing, scattering, or heterogeneous media. Useful surrogates for such systems should be probabilistic, time-resolved, and
+able to represent non-Gaussian distributional structure. Generative diffusion models, which corrupt data with Gaussian
+noise and learn a reverse flow back to structured states, have these properties. Their noise schedules, however, are usually
+chosen heuristically: image and audio generation—the canonical use cases—provide no physical clock. In transport, by
+contrast, the variance, or mean-square displacement, is often known from macroscopic theory or empirical scaling even
+when the full distribution is not. Here we prescribe the forward noising rate as the time derivative of this variance,
+turning generative time into a calibrated transport clock. The variance path is enforced by construction, while the learned
+score field represents how non-Gaussian structure inherited from entrance data is smoothed along that path, requiring no
+intermediate-time physical transport data. For ballistic-to-diffusive transport in turbulent plasmas, the surrogate matches
+test-particle distributions, reproduces the laboratory-measured variance scale, and tracks the simulated kurtosis evolution
+without schedule tuning, enabling calibrated emulation and likelihood-based inference.
+1 Introduction
+Generative diffusion models—as widely used in AI image,
+audio and video generation—work by learning to undo noise.
+Their forward diffusion process corrupts training data by
+successive addition of random noise. A neural network is
+trained to reverse this corruption, so that a highly corrupted
+sample—even pure noise—can be transformed into a sample
+resembling the training data (reverse diffusion process). In
+this paper, we use the same machinery to model physical
+systems that evolve by the physical accumulation of random
+increments, i.e., stochastic transport, in which an initially
+organized distribution is acted on by unresolved fluctuations
+such as turbulent magnetic fields, scattering centers, porous
+heterogeneities, molecular collisions, or random forcing.
+A central design choice in diffusion models is the for-
+ward noise schedule g(τ), which specifies the amount of
+noise added in the forward diffusion process as a function
+of a time-like parameter τ [21, 25, 33, 38]. For the variance-
+exploding (VE) formulation used in this work, the forward
+corruption is
+dxτ = ˜g(τ) dWτ,
+(1)
+where Wτ is a standard Wiener process with independent
+increments. If ˜σ2(τ) denotes the accumulated post-entrance
+variance increment of the surrogate, then
+˜σ2(τ) =
+Z τ
+0
+˜g2(u) du,
+˜g2(τ) = d
+dτ ˜σ2(τ).
+(2)
+Thus, a nondecreasing macroscopic variance law directly
+determines the instantaneous noising rate of the diffusion
+model.
+In image, audio and video generation, g(τ) is usually
+chosen heuristically (e.g., linear or cosine in τ [21, 33]), and
+tuned to maximize output quality or likelihood. For stochas-
+tic transport, by contrast, the variance, interpreted as the
+mean-square displacement of transported particles, is often
+known more directly than the full distribution, either from
+macroscopic transport theory or from measured scaling laws.
+Examples include non-Fickian transport in porous media,
+modeled via fractional kinetics [7, 15]; intracellular subdiffu-
+sion in crowded cytoplasm [18, 45]; superdiffusive dispersion
+in turbulence (Richardson’s law) [37]; and charged-particle
+transport in stochastic magnetic fields. Analogous scaling
+laws also arise in broader stochastic-spreading problems
+1
+arXiv:2609.01705v1  [cs.LG]  1 Sep 2026
+
+
+such as human mobility and rough volatility [9, 17]. Treat-
+ing τ as a normalized physical time, such a law can be
+written as ˜σ2(τ) and used to calibrate the diffusion-model
+clock at the level of the variance.
+In this work, we therefore consider generative diffu-
+sion models with the noise schedule ˜g(τ) anchored to
+a known physical variance law ˜σ2(τ) as surrogates for
+stochastic transport. Anchoring the variance separates the
+scale dynamics from the remaining distributional shape:
+the variance is prescribed analytically, while the learned
+reverse model represents higher-order structure, including
+non-Gaussian structure inherited from the entrance data.
+This calibration fixes the ensemble spreading at the vari-
+ance level, but not the underlying microscopic dynamics:
+the synthetic Gaussian noising process does not, by itself,
+impose finite propagation speed, memory effects, or trajec-
+tory correlations. Figure 1 summarizes the mapping between
+diffusion-model and stochastic-transport terminology used
+throughout this work.
+This variance-clock construction differs from existing
+uses of generative models in scientific surrogate model-
+ing. Diffusion models are increasingly used as scientific
+surrogates [20, 40] including to synthesize particle trajecto-
+ries from test-particle simulations [31], but their generative
+timescale is typically algorithmic, where the forward sched-
+ule is chosen or tuned for objectives such as sample quality,
+likelihood, or sampling efficiency [5, 13, 21, 25, 26, 38].
+A separate line of scientific machine learning incorporates
+physical information by penalizing residuals of governing
+equations or imposing other physics-based constraints [6,
+24, 35, 40]. Path-based generative methods, including flow
+matching, stochastic interpolants, and Schr¨odinger bridges,
+learn vector fields or stochastic processes along prescribed
+probability paths between distributions [1, 4, 12, 14, 30].
+These paths need not coincide with the physical trans-
+port clock, although trajectory data or physical interpolants
+can be incorporated in scientific applications [44]. Other
+approaches solve inverse problems by approximately revers-
+ing a simulator and correcting the result with a learned
+score [22].
+Operationally, we modify only the scalar schedule in the
+standard VE-SDE framework [38]. The schedule ˜g2(τ) is
+derived directly from the macroscopic variance law ˜σ2(τ),
+calibrating the generative clock to physical time at the level
+of the second moment. This preserves existing diffusion-
+model infrastructure while enabling analytic moment track-
+ing. It also permits entrance-only training: the network is
+trained using entrance samples and their synthetic corrup-
+tions along the prescribed variance path without requiring
+physical transport data at intermediate times. Sampling at
+a prescribed readout time τ ⋆therefore gives the surrogate
+marginal associated with ˜σ2(τ ⋆).
+In the following, we develop a framework for integrat-
+ing macroscopic transport laws into generative diffusion
+models. We provide the theoretical basis in § 2.1, apply
+the method to telegraph-type ballistic-to-diffusive transport
+in § 2.2, demonstrate entrance-only training in § 2.3, and
+use the learned model as a differentiable surrogate for lab-
+oratory plasma transport in § 2.4. In § 2.5, we apply the
+Fig. 1 Diffusion–transport terminology map. Individual curves
+show sample trajectories xτ; the blue density field shows the evolving
+marginal pτ. A fixed-τ slice is interpreted as a distribution over noised
+images in diffusion modeling and as the beam one-particle probability
+density function in stochastic transport, connecting the entrance/data
+distribution P0 to the Gaussianized limit P1.
+same construction to heavy-tailed and intermittent trans-
+port, where early-time transport statistics are strongly
+non-Gaussian. The resulting surrogate is indexed by phys-
+ical time and is suitable for calibrated scientific emulation
+and likelihood-based inference.
+2
+
+
+2 Results
+2.1 Central Limit Theorem motivates
+physics-anchored Gaussian surrogates
+In many physical systems, macroscopic transport arises from
+the accumulation of microscopic perturbations, such as scat-
+tering events or stochastic collisions, that are correlated
+over a finite length scale ℓc or, equivalently, a correlation
+time τc. Below this scale, the microphysics may be complex
+and strongly non-Gaussian. If coarse-grained perturbations
+separated by ℓc are weakly dependent and have finite second
+moment, the central limit theorem (CLT) motivates a Gaus-
+sian approximation to the accumulated transport kernel at
+scales large compared with ℓc. After N ∼τ/τc approxi-
+mately decorrelated contributions on the normalized clock
+with finite fourth moment, standardized higher cumulants
+relax; in particular, the excess kurtosis of the accumulated
+kernel falls as 1/N (Methods, § 4.3).
+We use this Gaussianization as a coarse-grained mod-
+eling assumption. Sub-ℓc non-Gaussian structure is repre-
+sented through the entrance distribution P0, while subse-
+quent post-entrance spreading is approximated by a Gaus-
+sian kernel whose variance is prescribed by the macroscopic
+transport law. Thus non-Gaussian structure in the model
+marginals is inherited from P0 and then diluted by the pre-
+scribed variance growth, unless the physical transport kernel
+itself remains strongly non-Gaussian. We exploit this con-
+struction in § 2.5 to propagate intermittency from sub-ℓc
+field statistics, while the anchored variance law supplies the
+scale evolution.
+The Gaussianized spreading above ℓc is encoded by the
+accumulated post-entrance variance ˜σ2(τ). If a macroscopic
+law is written for the total variance, then ˜σ2(τ) should be
+read as the variance increment relative to the entrance vari-
+ance. We implement this variance increment using the VE
+process introduced in Eqs. (1)–(2), now initialized with
+x0 ∼P0.
+With Cov[dWτ] = I dτ, the resulting marginal law at each
+fixed τ can equivalently be written as
+xτ = x0 + ˜σ(τ)ϵ,
+ϵ ∼N(0, I).
+Each synthetic Gaussian increment represents the coarse-
+grained, decorrelated part of the transport only at the level
+of the surrogate. The Markov approximation amounts to
+neglecting memory beyond τc in these coarse-grained incre-
+ments. The marginal distribution pτ(x) generated by Eq. (1)
+is therefore the convolution of P0 with a Gaussian kernel
+(Methods, § 4.1). Starting from P0, each state accumulates
+independent Gaussian displacement with per-coordinate
+variance ˜σ2(τ):
+pτ(x) = (P0 ∗N(0, ˜σ2(τ)I))(x).
+(3)
+Thus the total per-coordinate variance of the model
+marginal is σ2
+0 + ˜σ2(τ), where σ2
+0 = Var(P0) denotes the
+entrance variance.
+The VE process therefore acts as a Gaussian surrogate
+for the post-entrance transport kernel. When the physical
+transport kernel is centered and isotropic, this Gaussian
+is the moment-matched member of the centered isotropic
+Gaussian family and minimizes cross-entropy within that
+family (equivalently, forward KL when the physical ker-
+nel has a density and finite differential entropy) (Meth-
+ods, § 4.2). The associated score is s(x, τ) = ∇x log pτ(x),
+which we approximate by a neural network sθ. Because the
+variance is enforced analytically by the schedule, this net-
+work is not required to learn the second-moment evolution.
+Instead, it represents the modeled evolution of the remain-
+ing distributional shape, including non-Gaussian structure
+inherited from P0. The trained score field makes the sur-
+rogate useful for inversion and likelihood-based inference
+(see § 2.3).
+The Gaussian convolution (3) yields a closed-form relax-
+ation of entrance kurtosis. We quantify tail heaviness using
+the excess kurtosis K := κ4/σ4, where κ4 is the fourth
+cumulant; a Gaussian has K = 0, while heavy-tailed distri-
+butions have K > 0. Let K0 be the entrance excess kurtosis.
+Because the Gaussian kernel contributes no fourth cumu-
+lant, the fourth cumulant of the model marginal is inherited
+from P0, while the variance grows as σ2
+0 + ˜σ2(τ). The model
+excess kurtosis therefore relaxes deterministically as
+KM(τ) = K0
+
+σ2
+0
+σ2
+0 + ˜σ2(τ)
+2
+,
+(4)
+entirely governed by the anchored variance path ˜σ2(τ).
+For centered transport, the mean and variance are fixed
+by construction. The residual mismatch between the phys-
+ical kernel and the Gaussian surrogate therefore lies in
+unresolved distributional shape, including higher cumulants
+when they exist. We quantify the leading mismatch rele-
+vant here using the kurtosis gap, defined in Methods, § 4.3,
+Eq. (11).
+2.2 Variance laws as noise schedules
+In the coarse-grained picture of § 2.1, τc separates corre-
+lated from approximately decorrelated perturbations. For
+telegraph-type transport, the same relaxation scale sepa-
+rates two transport regimes. Here and below, τc is expressed
+on the same normalized clock as τ. Unlike ordinary Fick-
+ian diffusion, where the accumulated variance grows linearly
+(˜σ2 ∝τ), many real systems show a ballistic-to-diffusive
+transition.
+The two regimes have distinct signatures. At short times
+(τ ≪τc), correlations persist: the direction or velocity has
+not yet decorrelated, so displacements grow coherently. This
+is the ballistic regime, where variance grows quadratically
+(˜σ2 ∝τ 2). Once τ ≫τc, many approximately independent
+perturbations have accumulated and the variance grows
+linearly (˜σ2 ∝τ). This is the ordinary diffusive regime.
+A minimal model for this crossover is the Goldstein–
+Kac, or telegraph, process [19]. In one dimension, a particle
+moves at finite speed c while its direction decorrelates on a
+3
+
+
+correlation time tc. In dimensional variables, the correspond-
+ing density q(x, t) satisfies, up to convention-dependent
+normalizations of tc,
+∂2q
+∂t2 + 1
+tc
+∂q
+∂t = c2 ∂2q
+∂x2 .
+(5)
+The second-order time derivative yields finite-speed, per-
+sistent transport with ordinary diffusion as its long-time,
+large-scale limit.
+In this work we do not use the full telegraph kernel as
+the VE surrogate kernel. We use only its mean-square dis-
+placement to define the variance clock. For a point source
+with symmetric initial velocities, the post-entrance variance
+increment has the form
+⟨x2(t)⟩= 2D
+h
+t −tc
+
+1 −e−t/tci
+.
+After normalizing physical time by tobs, so that τ = t/tobs
+and τc
+= tc/tobs, and rescaling the final accumulated
+variance to unity, this becomes
+˜σ2(τ) = C−1 h
+τ −τc
+
+1 −e−τ/τci
+,
+(6)
+where C = 1 −τc(1 −e−1/τc) enforces ˜σ2(1) = 1.
+Applying the anchoring principle (2), the VE noise
+schedule is
+˜g2(τ) =
+d
+dτ ˜σ2(τ) = C−1 h
+1 −e−τ/τci
+.
+(7)
+A VE model equipped with this schedule has the pre-
+scribed ballistic-to-diffusive variance crossover by construc-
+tion. Figure 2 tests whether this prescribed marginal path
+is realized after score training and reverse sampling, and
+how it differs from common heuristic schedules and from a
+finite-speed telegraph kernel.
+Panel 2a compares the accumulated variance of sampled
+models with the analytical telegraph prediction, plotted as
+a running diffusion coefficient. The black dashed curve is
+the telegraph variance law of Eq. (6); the colored curves
+are empirical variances measured from generated samples.
+VE-Telegraph ODE and VE-Telegraph SDE use the same
+anchored schedule, Eq. (7), but different reverse samplers:
+the deterministic probability-flow ODE and the stochastic
+reverse SDE. VE-Linear, VE-Cosine and VE-Karras/EDM
+use standard heuristic VE schedules under the same train-
+ing budget. These schedules are valid generative choices,
+but their parameter τ is not the telegraph physical clock, so
+they do not align with the timing and shape of the ballistic-
+to-diffusive crossover. The telegraph-anchored schedule is
+therefore the variance law used below for the ballistic-to-
+diffusive plasma application (Methods, § 4.7 and § 4.9).
+Panels 2b–d test the higher-order statistics of the same
+sampled marginals. The solid black curve is the closed-form
+prediction of the Gaussian VE surrogate, Eq. (4); the col-
+ored curves are the excess kurtosis measured from trained
+sampled models for three entrance Student-t distributions.
+Agreement of the VE-Telegraph ODE and VE-Telegraph
+Table 1 Physical-time alignment diagnostic for the
+schedule ablation (Fig. 2). For each moment we report
+Q = N−1
+τ
+P
+i(¯yi −yref
+i
+)2/ max[s2
+i , 0.01⟨s2⟩], where ¯yi and s2
+i are
+the across-seed mean and variance. The statistic is evaluated at
+the available logarithmically spaced readout points in
+τ ∈[3 × 10−3, 1] and averaged over 10 training runs and
+K0 ∈{0.5, 1.0, 1.5}. Smaller values indicate closer alignment.
+Model configuration
+Q (variance)
+Q (kurtosis)
+VE-Linear + PF-ODE
+2.0 × 102
+16
+VE-Cosine + PF-ODE
+1.7 × 104
+98
+VE-Karras/EDM + PF-ODE
+1.3 × 105
+2.6 × 102
+VE-Telegraph + PF-ODE
+0.34
+1.5
+VE-Telegraph + Rev-SDE
+1.6
+1.1
+Kac flow + ODE
+2.1
+74
+SDE curves with the solid line shows that the learned
+score and reverse samplers reproduce the intended Gaussian-
+convolution marginal path. This is the non-trivial part of the
+ablation: the variance law is imposed by the scalar schedule,
+but the kurtosis relaxation is not used as a training target.
+The dotted black curve gives a different reference: the
+variance-matched Kac/telegraph kernel derived in Meth-
+ods, § 4.4. This kernel corresponds to a simple particle-level
+model for the telegraph equation: a particle moves at finite
+speed and changes direction at Poisson-distributed times. Its
+parameters are chosen so that it has the same variance path
+as Eq. (6). The comparison therefore shows that distinct
+transport mechanisms can share the same variance law while
+differing in their propagators, approach to the diffusive limit,
+and memory [29]. The Gaussian VE surrogate and the Kac
+kernel have the same mean-square displacement, but differ-
+ent higher moments. The Kac/telegraph kernel has bounded
+support [19] and can transiently exhibit negative excess
+kurtosis. This is a controlled example of higher-cumulant
+mismatch between the physical kernel and the Gaussian
+VE surrogate. The departure is visible in Fig. 2b–d, most
+clearly in panel c, as the gap between the dotted (Kac) and
+solid (VE) theory curves.
+Table
+1
+quantifies
+these
+comparisons
+across
+read-
+out times and entrance kurtoses using a seed-normalized
+squared-deviation statistic Q. The telegraph PF-ODE and
+reverse-SDE samplers give the smallest deviations from
+the anchored VE reference. For the Kac flow, the small
+variance deviation confirms the imposed variance match,
+while the larger kurtosis deviation reflects the different
+higher-cumulant structure of the finite-speed kernel.
+The anchoring principle (2) applies to any known, non-
+decreasing variance path, whether available in closed form or
+as a differentiable numerical representation. Anomalous dif-
+fusion is a natural extension: for power-law scaling ˜σ2(τ) ∝
+τ α, the schedule is ˜g2(τ) ∝ατ α−1 [32, 39]. This includes
+subdiffusive scaling (α < 1), as in some CTRW models, and
+superdiffusive scaling (α > 1); fractional Brownian motion
+provides Gaussian examples with α = 2H. For α < 1, the
+schedule is integrable but singular at τ = 0, so practical
+implementations start from a finite τmin or regularize the
+schedule near the origin. Fractional telegraph models also
+admit closed-form variance expressions [34]. The practical
+constraint is a finite second moment: ideal L´evy flights are
+incompatible, so one anchors to a tempered or truncated law
+4
+
+
+Fig. 2 Schedule ablation under controlled training budget
+(physics-anchored vs. heuristic schedules). a) Running diffu-
+sion coefficient [˜σ2(τ) −˜σ2(0)]/τ measured from model samples as a
+function of normalized time τ. Six different model configurations are
+shown: three heuristic schedules (Linear, Cosine, Karras/EDM), the
+Telegraph schedule (PF-ODE and reverse-SDE), and the Kac flow (a
+non-VE baseline). The analytical prediction of the Telegraph equation
+(Eq. (6)) is marked as a black dashed line.
+b–d) Excess kurtosis K(τ) as functions of τ for three different entrance
+Student-t distributions with K0 ∈{0.5, 1.0, 1.5} (black stars on the left
+edge). The analytical VE prediction is shown as a black line (Eq. (4));
+the dotted black line shows the Kac/telegraph reference computed from
+the analytical kernel moments (Eq. (15), Methods, § 4.4). Implemen-
+tation details are given in Algorithm 1. The standard deviations are
+shown as colored bands around the mean values.
+instead. In these cases, the VE construction should be inter-
+preted as a variance-calibrated marginal surrogate, not as
+a pathwise representation of the underlying non-Markovian
+dynamics.
+2.3 Entrance-only training and
+differentiable inference
+Reverse sampling in a diffusion model must start from a
+terminal state in which the data structure has been washed
+out. In image generation, the forward corruption is simply
+run until this is the case. In our setting, the physical win-
+dow closes earlier, at the detector readout τ ⋆, before the
+entrance structure is gone. We therefore extend the corrup-
+tion beyond the detector along the same anchored variance
+law, until the accumulated variance dominates the entrance
+variance. This continuation, τ ∈(τ ⋆, 1], is the virtual exten-
+sion of the experiment, as illustrated in Fig. 3. It requires no
+data, because corrupting entrance samples to any τ needs
+only Gaussian noise of known variance. Because training
+and sampling share the same τ-anchored marginals pτ, we
+integrate the PF-ODE backward from the fully decorrelated
+state P1 (Fig. 3c) and halt at τ ⋆, obtaining pτ ⋆without
+intermediate data.
+Given entrance samples, samples from pτ ⋆could also be
+produced by direct forward corruption. The trained score
+field supplies what direct corruption alone does not: a dif-
+ferentiable transport map, PF-ODE likelihood estimates
+under the terminal-density assumptions specified in Meth-
+ods, gradient-based parameter inference, and model-based
+backward propagation of observed detector ensembles to
+earlier times. The model is therefore best viewed as a
+stochastic propagator of distributions.
+The physics-anchored schedule ensures that the model
+marginals pτ are indexed by physical time and have the
+prescribed accumulated transport variance ˜σ2(τ) at each τ.
+When the physical transport kernel is close to Gaussian,
+as expected after decorrelation over ℓc, these anchored
+marginals provide a variance-exact approximation to the
+physical marginal. Remaining discrepancies lie in unresolved
+distributional shape, including higher cumulants when they
+exist, and are assessed here using the kurtosis gap (Methods,
+Eq. (11)).
+The training scheme does not require a known analyti-
+cal expression for the forward convolution. It requires only
+samples from a well-defined entrance distribution P0 and
+the ability to add Gaussian corruptions with the prescribed
+variance. For any positive corruption variance, Gaussian
+smoothing gives a regular model marginal, and denois-
+ing score matching targets the score of this full, generally
+non-Gaussian marginal distribution [38, 43].
+We verified entrance-only learning across entrance kur-
+toses using Student-t families with fixed entrance variance.
+As implied by Eq. (4), K(τ) preserves the entrance ordering
+and relaxes deterministically along the telegraph-anchored
+path (Fig. 2b–d). When the physical kernel is approximately
+Gaussian, the model evolution matches the physical one at
+the level of the resolved marginal statistics. Residual kernel
+non-Gaussianity is quantified by the kurtosis gap (Methods,
+Eq. (11)).
+The learned score field can also support parameter infer-
+ence from detector data through the differentiable likelihood
+estimate obtained with the PF-ODE (Eq. (18)). If K0 is not
+5
+
+
+Fig. 3 Physics-anchored diffusion maps experimental timescales to generative processes. a, Initial probability distribution P0 at
+experimental source (τ = 0). b, Target detector distribution Pτ⋆at physical readout τ ⋆(e.g., one correlation time). c, Fully decorrelated terminal
+state P1 at normalized endpoint (τ = 1). The forward physical process evolves P0 →Pτ⋆in real time. The generative model trains on the full
+span P0 →P1 using the physics-anchored schedule ˜g2(τ) = d˜σ2/dτ. The segment beyond the detector is a virtual extension of the experiment.
+At inference, integrating the reverse probability-flow ODE from P1 and halting at τ ⋆recovers the detector-time marginal under the anchored
+surrogate clock without intermediate training data. In regimes where the transport kernel is near-Gaussian, this coincides with the physical
+detector distribution up to higher-cumulant mismatch. This decoupling enables entrance-only training: the network learns shape evolution while
+the schedule analytically satisfies scale. Algorithm 1 formalizes the training and readout-time sampling steps shown schematically in (a–c).
+known, it can be treated as a parameter of the entrance fam-
+ily P0( · ; K0), equivalently by conditioning the score model
+on K0 as described in Methods, § 4.5, and estimated by
+maximizing Eq. (18) from an observation snapshot.
+For the zero-drift VE process in Eq. (1), the reverse-time
+SDE is
+dxτ = −˜g2(τ)∇x log pτ(xτ) dτ + ˜g(τ)d ¯
+Wτ,
+dτ < 0.
+The corresponding probability-flow ODE is
+dxτ = −1
+2 ˜g2(τ)∇x log pτ(xτ) dτ,
+dτ < 0,
+with the score replaced in practice by sθ(xτ, τ). In both
+forms, ˜g2(τ) ties the transport map to the prescribed
+variance law, while the network supplies the unresolved
+distributional structure. The learned score remains useful
+in settings such as inhomogeneous transport or nonlinear
+detector models, where analytic convolution is unavailable.
+2.4 Application to turbulent plasma
+transport
+We now apply the physics-anchored VE model to the
+problem of charged-particle transport in turbulent mag-
+netic fields, a scenario relevant for ultra-high-energy cosmic
+6
+
+
+rays, solar energetic particles, and fusion plasmas. Since
+these systems are challenging to probe directly, scaled lab-
+oratory astrophysics experiments are used to investigate
+transport under controlled conditions [8, 11, 41]. The exper-
+imental technique, proton radiography (Fig. 4a, c), uses a
+proton beam to probe the turbulence, measuring the result-
+ing flux pattern Ψ(r) (in contrast, we use Ψ(r) for the
+azimuthally averaged profile) at a detector. Here r = (x, y)
+are detector-plane coordinates and r = ∥r∥denotes radial
+distance.
+Turbulent magnetic fields have a typical correlation
+length ℓc (the average size of a turbulent cell). We con-
+centrate on the high-rigidity limit, in which the particle
+gyroradius rg = p/(|q|B) is much larger than the correla-
+tion length (rg ≫ℓc). In this limit, the physical picture is
+intuitive (Fig. 4b): a high-energy particle traverses a turbu-
+lent cell (size ℓc) quickly, giving rise to only a small angular
+deflection. The overall transport results from the accu-
+mulation of many such small-angle kicks across numerous
+independent cells. This scenario motivates the telegraph-
+type finite-speed transport framework (§ 2.2). The physical
+time required to cross one cell defines tc = ℓc/v, correspond-
+ing to the normalized correlation time τc = tc/tobs. The
+correlation length ℓc plays the role of the coarse-graining
+scale of § 2.1 that determines the time τc needed to cross
+the coarse-graining scale. The ballistic-to-diffusive crossover
+of § 2.2 therefore applies directly, with the telegraph vari-
+ance law (6) governing the transition. By anchoring the VE
+schedule to this law, the generative model is aligned with
+physical time at the level of the transport variance, without
+heuristic schedule tuning.
+The nature of magnetic turbulence adds an additional
+complication (see Methods, § 4.9 for details). It is often inter-
+mittent, meaning the magnetic field exhibits rare, strong
+fluctuations rather than smooth variations. This results in
+heavy tails in the distribution of magnetic fields P(B⊥),
+characterized by positive excess kurtosis K > 0. The particle
+transport also inherits these heavy tails due to rare large-
+angle scattering events. However, the choice of diagnostic
+determines whether these non-Gaussian features are observ-
+able (Fig. 4e, f). A reliable experimental diagnostic is the
+20% contour of the flux, C20, which measures the broadening
+of the beam core while suppressing the influence of the tails
+(see [11, Appendix C.2] for details). This observable is Gaus-
+sian with K ≈0 because the beam radius is much larger
+than the transverse correlation length. The contour effec-
+tively averages over many independent turbulent patches.
+By the CLT (here applied to spatial averaging across the
+beam, distinct from the temporal accumulation in § 2.1), this
+spatial averaging Gaussianizes the core statistics. For this
+specific observable, the moment-matched Gaussian surro-
+gate is optimal within the class of Gaussian approximations
+(Methods, § 4.2). In contrast, the azimuthally averaged pro-
+file Ψ(r) probes the full displacement PDF, including the
+tails, and remains sensitive to the intermittency inherited
+from the magnetic field statistics (Methods, § 4.8), as shown
+next.
+2.5 Modeling intermittency with the
+anchored VE surrogate
+Section 2.1 introduced the modeling assumption used
+throughout the paper: sub-ℓc non-Gaussian structure is
+represented through the entrance distribution P0, while
+subsequent coarse-grained spreading is approximated by
+a Gaussian transport kernel with physics-anchored vari-
+ance. We now give this construction a concrete physical
+realization.
+In the high-rigidity regime of § 2.4, a particle receives a
+small angular kick when crossing one turbulent cell. This
+kick is proportional to the path-averaged perpendicular
+magnetic field B⊥over a distance of order ℓc. For the
+scalar surrogate, we use one signed transverse component
+and represent P0 by the trained Student-t entrance con-
+dition whose kurtosis is closest to the value measured at
+the coarse-graining scale. Because the anchored surrogate is
+defined only for τ ≥τc, the entrance statistic must be read
+at the corresponding path length ℓ= ℓc: we therefore take
+K0 as the excess kurtosis of the signed transverse velocity
+component of the test-particle ensemble at ℓ= ℓc, giving
+K0 = 1.4±0.2 (mean ± standard error over the 20 indepen-
+dent runs). This is the particle-level realization of the field
+statistic of Methods § 4.8, where the linear kick relation gives
+K(∆v⊥(τc)) = K(B⊥). This identification injects the non-
+Gaussian shape, including the heavy tails inherited from
+intermittent turbulence with K0 >0, at the coarse-graining
+scale ℓc, before subsequent multi-cell spreading. The physics-
+anchored telegraph schedule then fixes the variance growth
+and governs the relaxation toward the diffusive regime at
+the level of the second moment.
+We validate this construction in Fig. 4e and f. The pur-
+ple curve in Fig. 4f shows the sampled kurtosis evolution
+predicted by the VE surrogate using the nearest trained
+entrance-kurtosis condition. The variance scale in Fig. 4e
+is fixed by the telegraph-anchored schedule. Panel f shows
+that the entrance statistics, propagated with the anchored
+variance law, capture the overall trend of the observed kur-
+tosis evolution. In the diffusive regime, the empirical residual
+is |Kphys −KM| = 0.20 ± 0.05. The contribution from
+residual kernel non-Gaussianity is quantified by Eq. (11)
+(Methods, § 4.8).
+3 Discussion
+We have introduced a framework that links macroscopic
+physical transport laws directly to the variance schedule of
+a diffusion model. This physics-anchoring aligns the genera-
+tive and physical timescales by construction, at the level of
+the variance. The variance path is enforced analytically. The
+score network is then needed only for the remaining non-
+Gaussian structure. Because training and sampling share
+the same τ-anchored marginals, the reverse PF-ODE acts
+as a physics-timed denoiser: integrating backward from a
+detector ensemble at τ ⋆recovers earlier surrogate marginals
+and—by stopping early—undoes only late-time noise. Along
+7
+
+
+Fig. 4 Physics-anchored surrogate validation in turbulent plasmas. a) A narrow particle beam probes a magnetized turbulence snapshot,
+inducing stochastic transverse acceleration a. b) Evolution of the PDFs of acceleration, velocity v⊥, and displacement x⊥. c) Experimental
+diagnostic (proton radiography) (see [11]). d) Reverse PF-ODE sampling visualization. e) RMS transverse-speed magnitude v⊥,rms versus physical
+path length ℓ. The simulated variance increases super-diffusively at large ℓbecause deflections then add up correlatedly due to the periodic
+continuation of the magnetic field. f) Excess kurtosis of the signed transverse component vx versus ℓ. Panel f contains test-particle and surrogate
+results only. Black points in panel e: experiment of [11]. Colored bands/lines: test-particle simulation in the MHD field. The purple curve in panel f
+shows the sampled kurtosis evolution of the scalar anchored VE surrogate using the nearest trained single-component entrance-kurtosis condition.
+The surrogate captures the laboratory-measured variance scale and the simulated component-kurtosis evolution without schedule tuning. In panel
+e the model variance is not plotted separately because it is the imposed anchored variance path. Bands in e and f are bootstrap 68% intervals
+resampled over the 20 independent simulation runs.
+this reverse evolution the variance path and the kurto-
+sis relaxation are preserved (Fig. 2), so reconstruction is
+distributional (more detailed than moment inversion only).
+The resulting Gaussian surrogate accurately describes
+diagnostics that average many independent contributions
+(e.g., the laboratory 20% contour via the CLT). For Student-
+t entrance distributions matched in variance and kurtosis,
+the VE model reproduces the predicted entrance-kurtosis
+relaxation (§ 2.5). The kurtosis gap quantifies the contribu-
+tion from a non-Gaussian physical transport kernel.
+8
+
+
+This distinction is sharpest when comparing against the
+Kac/telegraph propagator. Since the test-particle marginals
+show positive excess kurtosis (Fig. 4f), the data favor the
+Gaussian-kernel surrogate in this regime. The observed
+positive non-Gaussianity can be represented through the
+entrance statistics and does not require a bounded-support
+transport kernel.
+Because our contribution is a scalar path ˜σ2(τ), it can be
+used as a drop-in schedule in any VE sampler (e.g., Euler–
+Maruyama, predictor-corrector [38], Heun/second-order, or
+the EDM framework [25]). Figure 2 already demonstrates
+both PF-ODE and reverse-SDE sampling with the same
+schedule. In all physics results we train and sample on the
+same τ-anchored path to keep the generative clock cali-
+brated to physical time at the level of the variance. In
+a non-physical Swiss-roll benchmark, the telegraph path
+provides a competitive precision–recall balance across the
+tested neighborhood sizes (Fig. 5; Methods, § 4.10). A
+theoretical explanation remains an open question.
+Returning to the scientific setting, the learned score field
+provides differentiable likelihood estimates via the PF-ODE
+and can, in principle, support gradient-based inference for
+physical parameters entering the schedule or conditioning
+the score model. This capability extends to complex scenar-
+ios (e.g., heteroscedastic transport or nonlinear detectors)
+where analytic convolution does not exist, while naturally
+maintaining the correct variance scaling (Fig. 4). Note
+that joint identifiability of multiple physical parameters
+requires either multiple temporal snapshots or additional
+constraints.
+The variance-anchoring method we propose comple-
+ments alternative techniques that learn explicit temporal
+variations in transport maps or trajectories, including flow
+matching [4, 30], for which [44] provides a unified overview,
+and reverse-time simulators [22]. Those approaches typically
+use trajectory data or interpolated pairs at multiple interme-
+diate times to learn the complete transport map. Our focus
+on distributional snapshots allows for a highly data-efficient
+paradigm: training requires entrance samples and the pre-
+scribed variance law. This makes our method particularly
+suited to experimental conditions in which intermediate-
+time transport data are unavailable. The trade-off is that
+we predict the distribution of particles, not their indi-
+vidual paths. The Kac flow baseline in Fig. 2 is itself a
+flow-matching model, providing a direct controlled com-
+parison: it matches the telegraph variance but predicts
+sub-Gaussian intermediate marginals inconsistent with the
+observed positive kurtosis (Fig. 4f). The combination of
+physically anchored schedules and path-learning networks is
+likely to lead to models which are compatible both with the
+macroscopic laws and the microscopic correlations. Learned
+or non-Brownian 1-D noising processes [10] offer another
+route to data-adapted schedules that could be combined
+with physics-anchored variance paths.
+The application domains listed in the Introduction
+(anomalous diffusion, rough volatility, intracellular trans-
+port) are natural candidates. For processes with non-
+Gaussian kernels (e.g., CTRW propagators in porous
+media [7]), the leading fourth-order mismatch is quantified
+Fig. 5 Non-physics example. Top: Precision–Recall curves on 2-D
+swiss roll comparing telegraph (τc = 0.2) to karras EDM, linear, and
+cosine schedules. Points along each curve are colored by neighborhood
+size k in the nearest-center k-NN P/R diagnostic defined in Meth-
+ods. Larger k evaluates global structure. Shaded bands show ±1σ over
+five independent sampling seeds. Telegraph provides a competitive
+precision-recall balance across the tested neighborhood sizes. Bottom:
+Examples of generated samples at different times. All curves share one
+model trained once with σ-conditioning; we vary only the sampling
+path (solver, NFE, seeds, and noise bounds are identical), isolating the
+effect of the schedule.
+by the kurtosis gap (11). The entrance-statistics mechanism
+of § 2.5 captures leading non-Gaussian features. Wherever a
+system’s variance growth is governed by a known law, that
+law can serve as the clock of a generative model. Such a
+distributional propagator, calibrated to physical time at the
+variance level, could serve as a transport module within a
+broader scientific world model. The network is then left to
+learn only what the law does not already know.
+9
+
+
+Table 2 Principal notation.
+Symbol
+Meaning
+Units
+Defined
+Generative model
+τ
+normalized time ∈[0, 1]
+—
+§ 1
+τ ⋆
+Readout (detector) time
+—
+§ 1
+˜σ2(τ)
+Acc. post-entrance variance, ˜σ2(1)=1
+—
+Eq. (2)
+˜g(τ)
+Noise schedule, ˜g2 =d˜σ2/dτ
+—
+Eq. (2)
+P0
+Entrance distribution
+—
+Eq. (1)
+pτ
+Marginal at time τ
+—
+Eq. (3)
+sθ
+Learned score ≈∇xlog pτ
+[x]−1
+§ 4.1
+K
+Excess kurtosis κ4/σ4
+—
+Eq. (4)
+T (τ)
+Physical transport kernel
+—
+§ 4.2
+Wτ
+Standard Wiener process
+—
+Eq. (1)
+Physical transport
+τc
+Correlation / crossover time
+—
+§ 2.1
+ℓc
+Correlation length
+µm
+§ 2.1
+rg
+Gyroradius p/(qB)
+µm
+§ 2.4
+Dv
+Velocity-space diffusion coeff.
+m2 s−3
+§ 4.7
+κ
+Spatial diffusion coefficient
+m2 s−1
+§ 4.7
+Brms
+RMS magnetic field
+kG
+Table 4
+4 Methods
+Table 2 collects the principal symbols; each is also defined
+at first use.
+4.1 The VE framework and Gaussian
+convolution
+We adopt the standard VE framework [38]. The for-
+ward SDE and resulting Gaussian convolution are given in
+Eqs. (1) and (3); here we record the training objective. We
+set ˜g2(τ) =
+d
+dτ ˜σ2(τ) so that, by Itˆo isometry, the accumu-
+lated noise has variance ˜σ2(τ). Writing xτ = x0+˜σ(τ)ϵ with
+ϵ ∼N(0, I), denoising score matching [38, 43] trains a score
+network sθ(x, τ) ≈∇x log pτ(x) by minimizing
+E
+sθ(xτ, τ) −(x0 −xτ)/˜σ2(τ)
+2.
+(8)
+At each fixed τ, the network learns the global score of the
+marginal pτ, with adjacent times coupled through shared
+parameters. Equation (16) in § 4.5 gives the ˜g2-weighted
+form used in practice.
+4.2 Optimality within Gaussian surrogates
+Among centered, isotropic Gaussian approximations to the
+physical transport kernel T (τ), the moment-matched Gaus-
+sian uniquely minimizes cross-entropy. When T (τ) has a
+density and finite differential entropy, this is equivalently
+the unique minimizer of forward KL. After convolution with
+P0, the resulting marginal error is controlled by the W2
+contraction bound below.
+From optimal transport theory [42], convolution by an
+independent variable contracts the W2 distance: for any
+kernels ν1, ν2,
+W2(P0 ∗ν1, P0 ∗ν2) ≤W2(ν1, ν2).
+(9)
+Let (Y1, Y2) be an optimal W2-coupling of ν1 and ν2,
+and let X0 ∼P0 independently. Setting Zi = X0 + Yi pro-
+duces marginals P0 ∗νi with ∥Z1 −Z2∥= ∥Y1 −Y2∥(the
+shared X0 cancels), so W 2
+2 (P0 ∗ν1, P0 ∗ν2) ≤E∥Z1 −Z2∥2 =
+W 2
+2 (ν1, ν2). Setting ν1 = T (τ) (physical kernel) and ν2 =
+N(0, ˜σ2(τ)I) (Gaussian surrogate kernel) yields
+W2(P Phys
+τ
+, pτ) ≤W2
+ T (τ), N(0, ˜σ2(τ)I)
+
+,
+(10)
+so the approximation error is controlled by how far the
+physical transport kernel T (τ) deviates from Gaussian.
+4.3 Kurtosis evolution and error
+quantification
+We quantify higher-order statistics using excess kurto-
+sis K = κ4/σ4. From the Gaussian convolution structure,
+the model’s kurtosis obeys the closed-form evolution given
+in Eq. (4) of the main text.
+For the physical process P Phys
+τ
+= P0 ∗T (τ), cumulant
+additivity gives κPhys
+4
+= κ4(P0)+κ4(T ), while the VE surro-
+gate has κM
+4 = κ4(P0). We define the kernel’s excess kurtosis
+as KT (τ) := κ4(T (τ))/˜σ4(τ) (subscript T distinguishes this
+from the marginal kurtosis K). The resulting excess-kurtosis
+difference is
+Kphys(τ) −KM(τ) = KT (τ)
+
+˜σ2(τ)
+σ2
+0 + ˜σ2(τ)
+2
+.
+(11)
+The gap vanishes if the kernel Gaussianizes (KT →0) and
+is suppressed early when ˜σ2 ≪σ2
+0.
+4.4 Kac/telegraph kernel: density,
+moments, and parameter selection
+The Kac flow baseline is built on the Goldstein–Kac tele-
+graph process [14, 19]. A particle moves in one dimension
+at constant speed c and reverses direction at the events of
+a Poisson process with rate a. The initial velocity is ±c
+with equal probability. The resulting displacement kernel at
+time t is
+pK(x, t) = e−at
+2
+
+δ(x −ct) + δ(x + ct)
+
++ a e−at
+2c
+
+I0
+  a
+c η
+
++ ct
+η I1
+  a
+c η
+
+1{|x|<ct},
+(12)
+where η =
+√
+c2t2 −x2 and I0, I1 are modified Bessel func-
+tions of the first kind. The kernel has bounded support |x| ≤
+ct.
+The kernel moments follow from the velocity autocor-
+relation ⟨v(t) v(t + s)⟩= c2e−2as. The fourth moment is
+obtained by integrating x4pK(x, t), including the two point
+masses in Eq. (12). With the abbreviation u := 2at, the
+kernel variance is
+σ2
+K(t) = c2
+2a2
+ u −1 + e−u
+,
+(13)
+10
+
+
+and the kernel excess kurtosis, which plays the role of KT
+in Eq. (11), is
+KKac
+T
+(t) = 3 u2 −4u + 6 −(6 + 2u) e−u
+(u −1 + e−u)2
+−3.
+(14)
+It equals −2 for t →0, where the kernel is a symmetric two-
+point distribution, and relaxes to zero from below as KKac
+T
+≃
+−3/(at) for at ≫1.
+The dotted reference curves in Fig. 2b–d show the
+marginal excess kurtosis of the Kac model. It follows from
+cumulant additivity for P0 ∗pK and combines Eq. (4) with
+the gap term of Eq. (11):
+KKac(τ) = K0 σ4
+0 + KKac
+T
+(τ) ˜σ4(τ)
+(σ2
+0 + ˜σ2(τ))2
+.
+(15)
+The parameters (a, c) are not fitted. On the normalized
+clock, they are fixed by requiring the Kac process to share
+the anchored telegraph variance path. This gives a = 1/(2τc)
+and c2 = C−1/(2τc), for which Eq. (13) reduces to Eq. (6)
+with u = τ/τc and ˜σ2(1) = 1. The Kac baseline is variance-
+matched to the VE-telegraph schedule by construction, and
+Table 1 compares the resulting Gaussian and finite-speed
+constructions.
+The learned Kac-flow baseline follows the conditional-
+flow-matching construction of [14]: a bounded velocity net-
+work is regressed against the analytical conditional Kac
+velocity, and sampling integrates the learned flow ODE
+backward from the terminal marginal.
+4.5 Diffusion model implementation and
+baseline comparisons
+We use the VE framework instead of Variance Preserv-
+ing (VP/DDPM) models because the transport problems
+considered here exhibit growing variance. In scattering pro-
+cesses, the spatial variance grows naturally with time (˜σ2(τ)
+increases), matching the VE formulation dxτ = ˜g(τ) dWτ,
+with ˜g2(τ) = d˜σ2(τ)/dτ. In contrast, VP models constrain
+variance to unity (σ2 = 1) via a mean-reverting drift, which
+would obscure the direct physical interpretation of the trans-
+port coordinates. For finite-speed transport, ˜σ2(τ) follows
+the normalized telegraph law (Eq. 6 in the main text). Base-
+line schedules use linear ˜σ2(τ) ∝τ (pure diffusion at all τ),
+cosine schedules [33], and a Karras/EDM-inspired power-
+law variance schedule ˜σ2(τ) ∝τ ρ with ρ = 7 [25]. All models
+share the same score network architecture (a 10-block
+FiLM-MLP with GroupNorm, using sinusoidal time embed-
+dings [38] and FiLM conditioning; approximately 1.16 ×
+106 learnable parameters). The physics-anchored variant
+fixes ˜σ2(τ) via the physical law; architecture and computa-
+tional cost are unchanged—only the scalar schedule ˜g2(τ)
+differs.
+The score network optionally conditions on entrance
+kurtosis K0 through a small MLP that maps log(K0) (nor-
+malized to zero mean and unit variance) to a 32-dimensional
+embedding, which modulates hidden features via FiLM
+Table 3 Training and sampling configuration. All VE
+variants share identical architecture and budget; only the schedule
+˜g2(τ) differs. The Kac flow baseline uses the same architecture with
+a bounded output layer (c·tanh).
+Item
+Value
+Architecture
+Score network
+10-block FiLM-MLP, GroupNorm
+Hidden channels h
+256
+Time embedding dim
+64 (sinusoidal)
+Kurtosis embedding dim
+32 (MLP + FiLM)
+Learnable parameters
+≈1.16 × 106
+Training
+Entrance data
+Student-t samples, σ2
+0 = 0.08
+Entrance kurtoses K0
+{0.5, 1.0, 1.5} (excess)
+Batch size
+32
+Optimizer / LR
+AdamW / 10−3
+Gradient clipping
+max-norm 1.0
+EMA decay
+0.999
+Epochs × iters
+200 × 200 = 40 000 steps
+Sampling
+PF-ODE solver
+Euler (first-order)
+Discrete steps T
+500
+Requested readout points
+40, log-spaced in [3 × 10−3, 1]
+Samples per readout
+256 × 32 × 32 = 262,144 scalars
+Seeds (uncertainty)
+10
+Compute
+Hardware
+single NVIDIA A100 (40 GB)
+Training wall-clock
+≈10 min per model
+Sampling (256, 40 readouts)
+≈1 min
+layers alongside the 64-dimensional sinusoidal time embed-
+ding. This enables a single trained model to serve multiple
+entrance distributions without retraining.
+The complete training and sampling procedure is sum-
+marized in Algorithm 1; all hyperparameters and archi-
+tecture details are listed in Table 3. Training minimizes
+the ˜g2-weighted denoising score-matching loss,
+L(θ) = Eτ,x0,ϵ
+h
+˜g2(τ)
+ sθ(xτ, τ)−(x0−xτ)/˜σ2(τ)
+2i
+, (16)
+with xτ = x0 + ˜σ(τ)ϵ and ϵ ∼N(0, I). The ˜g2 prefactor is
+standard signal-to-noise weighting [25, 38]; it upweights time
+steps where the schedule is steepest, ensuring the network
+allocates capacity where the marginal changes fastest.
+At inference we draw terminal states from the exact for-
+ward marginal p1 implied by the VE process (i.e. x1 =
+x0 + ˜σ(1)ϵ with x0 ∼P0) and integrate the PF-ODE back-
+ward with an Euler solver (T = 500 steps), halting at
+the desired readout τ ⋆. Uncertainty is quantified over 10
+independent seeds.
+4.6 Likelihood computation and
+differentiable inference
+The probability-flow ODE corresponding to Eq. (1) is
+dx
+dτ = −1
+2 ˜g2(τ) sθ(x, τ).
+(17)
+11
+
+
+Algorithm 1 Physics-anchored VE diffusion: training and
+sampling.
+Input: Variance path ˜σ2(τ) from physical law, with
+˜σ2(1) = 1; entrance samples x0 ∼P0
+Define: ˜g2(τ) = d˜σ2/dτ;
+˜σ(τ) =
+√
+˜σ2(τ)
+Training
+(entrance-only denoising score matching)
+1: repeat
+2:
+Sample x0 ∼P0
+3:
+Sample τ ∼U(0, 1]
+4:
+Sample ϵ∼N(0, I)
+5:
+xτ ←x0 + ˜σ(τ) ϵ
+▷Noisy state at physical time τ
+6:
+L ←˜g2(τ)
+ sθ(xτ, τ) −(x0 −xτ)/˜σ2(τ)
+2
+▷
+˜g2-weighted loss
+7:
+Update θ via AdamW on ∇θL;
+update EMA
+shadow
+8: until converged
+Sampling
+(physics-timed PF-ODE at readout τ ⋆)
+9: Draw x0 ∼P0, ϵ∼N(0, I); set x1 ←x0 + ˜σ(1) ϵ
+▷
+Terminal state from p1
+10: Integrate backward from τ =1 to τ =τ ⋆:
+dx
+dτ = −1
+2 ˜g2(τ) sθ(x, τ)
+11: return xτ ⋆∼pτ ⋆
+▷Anchored surrogate marginal at
+detector time
+Key point: only the scalar schedule ˜g2(τ) changes relative to a standard
+VE model; the network architecture, optimizer, and sampler are unchanged.
+Optionally, the score network conditions on entrance kurtosis K0 via a
+FiLM embedding (see text), enabling a single model for multiple entrance
+distributions.
+The instantaneous change-of-variables formula [38] yields
+the PF-ODE model log-likelihood:
+log pτ ⋆(xτ ⋆) = log p1(x1)−
+Z 1
+τ ⋆
+1
+2 ˜g2(τ) div sθ(xτ, τ) dτ, (18)
+where the divergence is estimated using Hutchinson’s trace
+estimator [23]. This expression yields the exact marginal log-
+likelihood in the limit where sθ matches the true score and
+the terminal density p1 is specified; otherwise it provides a
+differentiable likelihood estimate. Physical parameters that
+enter the schedule (e.g., τc) may be included in ˜σ2(τ; τc),
+while entrance parameters such as K0 may parameter-
+ize P0( · ; K0) or condition sθ; such parameters can then be
+estimated by maximizing Eq. (18).
+4.7 Charged-particle transport through
+magnetized turbulence
+Throughout this paper, τ ∈[0, 1] denotes normalized time.
+Physical time t relates to τ via the total observation window
+(the normalized correlation time is τc = tc/tobs where tc =
+ℓc/v is the cell-crossing time).
+The transverse acceleration of a charged particle along
+its path through magnetized turbulence B is
+a(t) ≡dv⊥
+dt
+≃q v
+m B⊥.
+(19)
+Since v⊥(t) =
+R t
+0 a⊥(s) ds, the velocity variance is a double
+integral of the acceleration autocorrelation:
+σ2
+v⊥(t) =
+Z t
+0
+Z t
+0
+Ca(s−s′) ds ds′ = 2
+Z t
+0
+(t−∆t) Ca(∆t) d∆t.
+(20)
+For t ≪tc the autocorrelation is nearly constant, Ca ≈
+⟨a2⟩, giving σ2
+v⊥≈⟨a2⟩t2 (ballistic). For t ≫tc the fac-
+tor (t−∆t) ≈t over the correlation width and the integral
+saturates, giving σ2
+v⊥≈2 Dv t (diffusive), where
+Dv =
+Z ∞
+0
+Ca(∆t) d∆t ≈⟨a2⟩ℓc
+v .
+(21)
+Equivalently,
+from
+a
+random-walk
+estimate
+one
+obtains Dv ≃q2B2
+rms ℓc v/(2m2). Here, we used the Taylor-
+Green–Kubo formula (see [27], and references therein)
+and Ca(∆t)
+:=
+
+a⊥(t) a⊥(t + ∆t)
+
+is the stationary
+autocorrelation of the transverse acceleration a⊥(t).
+In physical time t (with correlation time tc = ℓc/v), the
+expected crossovers follow:
+σ2
+v⊥(t) ∝
+(
+⟨a2⟩t2,
+t ≪tc
+(ballistic),
+Dv t,
+t ≫tc
+(diffusive).
+(22)
+The corresponding displacement scaling in the telegraph
+(finite-speed) transport picture is:
+σ2
+x⊥(t) ∝
+(
+t2,
+t ≪tc
+(ballistic),
+κ t,
+t ≫tc
+(diffusive),
+(23)
+Upon normalizing τ = t/tobs, these give the short- and
+long-time limits of Eq. (6). Here, κ is the spatial diffusion
+coefficient, ⟨a2⟩is absorbed into Dv via the Green–Kubo
+integral (Dv ≈⟨a2⟩ℓc/v), and κ = v4/(6Dv) absorbs all
+remaining acceleration dependence into a single transport
+coefficient.
+Note that κ can be inferred in two equivalent ways: (i)
+from the long-time slope σ2
+x⊥(t) = 2κ t; or (ii) from the
+measured Dv via small-angle scattering,
+κ = v2
+3 ν =
+v4
+6 Dv
+,
+(24)
+where ν is the pitch-angle scattering rate.
+4.8 Kurtosis inheritance and relaxation in
+turbulent transport
+In the high-rigidity limit (rg ≫ℓc), transport proceeds via
+independent scattering events as particles traverse turbulent
+12
+
+
+cells. Each signed transverse-component kick is proportional
+to the path-averaged transverse field B⊥:
+∆v⊥(τc) ∝B⊥.
+(25)
+This linear relationship preserves kurtosis: K(∆v⊥(τc)) =
+K(B⊥).
+After accumulating N = ℓ/ℓc approximately indepen-
+dent kicks, cumulant additivity gives κ4(vtotal
+⊥
+) = N κ4(B⊥),
+while variance scales as σ2 = N σ2
+kick. Since excess kurtosis
+is normalized by variance squared (K = κ4/σ4),
+K
+ vtotal
+⊥
+
+= N κ4(B⊥)
+(N σ2
+kick)2 = 1
+N K(B⊥),
+(26)
+describing the slow Gaussianization observed as the distri-
+bution propagates through the turbulent medium (Fig. 4f).
+This 1/N decay holds once transport has entered the decor-
+related regime (ℓ≳ℓc). For ℓ≲ℓc (the ballistic/crossover
+regime), finite-speed effects can make the true kernel non-
+Gaussian; in that regime the VE construction serves as a
+variance-correct Gaussian surrogate, with kernel mismatch
+quantified by Eq. (11).
+It is instructive to compare this physical 1/N law with
+the surrogate. Setting σ2
+0 = σ2
+kick and ˜σ2 = (N−1) σ2
+kick in
+Eq. (4) gives KM = K0/N 2: the surrogate carries only the
+entrance contribution to κ4 and therefore relaxes one power
+of N faster than Eq. (26). The kurtosis gap restores the
+difference exactly: the kick-accumulation kernel has KT =
+K0/(N−1), for which Eq. (11) evaluates to K0(N−1)/N 2,
+so that KM plus the gap reproduces the physical K0/N.
+This component-wise comparison is evaluated directly in
+Fig. 4f.
+4.9 MHD-grid turbulence (periodic cube)
+We use a pre-computed realization of a three-dimensional
+solenoidal magnetic field from the Johns Hopkins Turbu-
+lence Databases [2, 16] on a uniform periodic grid of size N 3
+(N = 1024). The vector field is then loaded into CRPropa
+within a MagneticFieldGrid [3]. The box size is set from
+the integral scale quoted for this dataset, ℓint = 0.217 Lbox,
+so that Lbox = ℓc/0.217 = 461 µm for ℓc = 100 µm. The field
+is rescaled so that the mean field magnitude ⟨|B|⟩equals
+the target value (for this realization Brms/⟨|B|⟩= 1.17).
+Reference parameters are listed in Table 4.
+4.10 Swiss roll ablation and k-NN P/R
+analysis
+We evaluate schedule choice on a 2-D swiss roll mani-
+fold. The score network is trained once with σ-conditioning
+(the network learns score functions at many noise levels σ
+simultaneously, without committing to a specific time-to-
+noise mapping) using σ ∼LogNormal(µ = −1, σ = 1)
+and sinusoidal embeddings. At sampling, we vary only the
+path σ(τ)—Telegraph, Karras EDM, Linear, or Cosine—
+using identical Karras-Heun ODE solvers, NFE, seeds, and
+noise bounds [25, 33].
+For evaluation, we draw M ground-truth points from
+the swiss roll and M generated points (same M for all
+schedules). We repeat sampling with five independent seeds
+and report mean ±1σ. For each neighborhood size k ∈
+{1, . . . , 50}, we compute the nearest-center precision/recall
+diagnostic defined below, adapted from [28].
+Let rdata(xi) be the distance from data point xi to its k-
+th nearest neighbor in the real set, and let dg→d(ˆxj) be the
+distance from generated point ˆxj to its nearest real neighbor.
+Precision measures what fraction of generated samples lie
+within the k-NN bubble of their nearest real neighbor:
+Preck = 1
+M
+M
+X
+j=1
+1
+
+dg→d(ˆxj) ≤rdata
+ NNdata(ˆxj)
+
+.
+(27)
+High precision means generated samples stay close to the
+real manifold (no spurious modes). Similarly, let rgen(ˆxj)
+be the distance from generated point ˆxj to its k-th near-
+est generated neighbor, and dd→g(xi) the distance from real
+point xi to its nearest generated neighbor. Recall measures
+what fraction of real samples have a generated neighbor
+within their k-NN bubble:
+Reck = 1
+M
+M
+X
+i=1
+1
+
+dd→g(xi) ≤rgen
+ NNgen(xi)
+
+.
+(28)
+High recall means the generator covers all regions of the
+real distribution (no missing modes). Small k tests strict
+local fidelity (sharpness), while large k tests global structure
+(coverage). At very local scales (small k), EDM attains high
+recall quickly (broad coverage) but at the cost of precision
+(lower fidelity), consistent with early aggressive denoising.
+Telegraph strikes a better local balance. Across five inde-
+pendent sampling seeds, the telegraph path attains higher
+recall than cosine at small k at comparable precision and
+maintains higher precision than EDM at every neighborhood
+size, while cosine retains a modest precision lead at interme-
+diate k; telegraph and cosine both approach high precision
+and near-unit recall for k≳40. Quantitatively, at k=5, tele-
+graph attains recall 0.83 vs. 0.72 for cosine at comparable
+precision (0.43 vs. 0.44); at k=20, cosine leads in precision
+(0.91 vs. 0.86). The linear schedule has precision < 0.16 for
+k≤20.
+Data availability
+The source data underlying all figures and tables, together
+with the pre-computed simulation and ablation outputs gen-
+erated in this study, have been deposited in Zenodo [36].
+The forced-MHD turbulence field used in this study is avail-
+able from the Johns Hopkins Turbulence Database under
+DOI https://doi.org/10.7281/T1930RBS. The experimental
+comparison data were taken from Ref. [11].
+Code availability
+The code used to generate the results and figures has
+been deposited in Zenodo [36] and is available under the
+13
+
+
+Table 4 Reference parameters for the turbulence benchmark and detector geometry. Experimental values are taken from [11] where
+indicated.
+Quantity
+Symbol
+Reference value
+Notes / Source
+RMS magnetic field
+Brms
+∼100 kG
+Proton radiography & FLASH.
+[11]
+Outer/driving scale
+L
+∼400 µm ≈0.35 Lbox
+Set by offset grids. [11, Fig. 1c]
+Correlation length
+ℓc
+50–90 µm
+Lab inference. [11, App. B]
+Spectrum
+EB(k)
+inherited from dataset
+Dissipation scale
+ℓmin
+a few grid cells
+Chosen to match dissipation range.
+[11, Fig. 1c]
+Domain extent
+Ldom
+Lbox (periodic)
+Pinhole radius
+Rpin
+∼100 µm
+Lab geometry. [11, Fig. 3]
+Detector distance
+rdet
+27 cm
+Lab geometry. [11, §2]
+Ring statistic
+largest closed 20% contour
+Defined w.r.t. mean flux inside Rpin.
+[11, App. C.2]
+Ring →velocity
+∆v⊥= (1.65/rdet) ∆rrms v
+Smearing model + geometry.
+[11, Eqs. C10,C20]
+MIT License. Test-particle simulations use the open-source
+CRPropa framework [3].
+Acknowledgments
+We thank Archie F. A. Bott, Robert J. Ewart, and Jonathan
+Citrin for valuable comments.
+Funding
+The work of P.R. was funded through the Walter Benjamin
+Fellowship by the Deutsche Forschungsgemeinschaft (DFG,
+German Research Foundation)—grant numbers 518672034
+and 593157299; P.R. was also supported by a postdoc fellow-
+ship of the German Academic Exchange Service (DAAD);
+The work of G.G. was partially supported by UKRI under
+grants no. ST/W000903/1 and EP/Y035038/1.
+Author contributions statement
+P.R. conceived the method, developed the theoretical frame-
+work, wrote all code, performed the simulations and anal-
+ysis, and wrote the original manuscript. D.N.H. refined
+the theoretical formulation and substantially revised the
+manuscript’s narrative, structure, and presentation. G.G.
+and S.S. provided scientific guidance and contributed to
+the interpretation of the laboratory validation through their
+expertise in the experimental data and associated uncer-
+tainties. All authors discussed the results and reviewed and
+edited the manuscript.
+Competing interests statement
+The authors declare no competing interests.
+References
+[1] Albergo M, Boffi NM, Vanden-Eijnden E (2025)
+Stochastic interpolants: A unifying framework for flows
+and diffusions. Journal of Machine Learning Research
+26(209):1–80
+[2] Aluie
+H,
+et
+al
+(2019)
+Johns
+hopkins
+turbulence
+databases, forced mhd turbulence. https://doi.org/10.
+7281/T1930RBS
+[3] Alves Batista R, Becker Tjus J, D¨orner J, et al
+(2022) CRPropa 3.2 - an advanced framework for high-
+energy particle propagation in extragalactic and galac-
+tic spaces. J. Cosmology Astropart. Phys.2022(9):035.
+https://doi.org/10.1088/1475-7516/2022/09/035
+[4] Baldan G, Liu Q, Guardone A, et al (2025) Physics
+vs Distributions: Pareto Optimal Flow Matching with
+Physics Constraints. arXiv preprint 2506.08604
+[5] Bao F, Li C, Zhu J, et al (2022) Analytic-DPM: an ana-
+lytic estimate of the optimal reverse variance in diffu-
+sion probabilistic models. In: International Conference
+on Learning Representations, 2201.06503
+[6] Bastek JH, Sun W, Kochmann DM (2024) Physics-
+Informed Diffusion Models. arXiv preprint 2403.14404
+[7] Berkowitz B, Scher H, Silliman SE (2000) Anomalous
+transport in laboratory-scale, heterogeneous porous
+media. Water Resources Research 36(1):149–158. https:
+//doi.org/10.1029/1999WR900295
+[8] Bott AFA, Graziani C, Tzeferacos P, et al (2017) Pro-
+ton imaging of stochastic magnetic fields. Journal of
+Plasma Physics 83(6):905830614. https://doi.org/10.
+1017/S0022377817000939
+14
+
+
+[9] Brockmann D, Hufnagel L, Geisel T (2006) The scaling
+laws of human travel. Nature 439(7075):462–465. https:
+//doi.org/10.1038/nature04292
+[10] Chemseddine J, Kornhardt G, Duong R, et al (2025)
+Adapting Noise to Data: Generative Flows from 1D
+Processes. arXiv e-prints https://doi.org/10.48550/
+arXiv.2510.12636
+[11] Chen LE, Bott AFA, Tzeferacos P, et al (2020)
+Transport of High-energy Charged Particles through
+Spatially
+Intermittent
+Turbulent
+Magnetic
+Fields.
+ApJ892(2):114.
+https://doi.org/10.3847/1538-4357/
+ab7a19
+[12] De Bortoli V, Thornton J, Heng J, et al (2021) Diffusion
+Schr¨odinger bridge with applications to score-based
+generative modeling. In: Advances in Neural Informa-
+tion Processing Systems, pp 17695–17709, 2106.01357
+[13] Dockhorn T, Vahdat A, Kreis K (2022) Score-based
+generative modeling with critically-damped Langevin
+diffusion. In: International Conference on Learning
+Representations, 2112.07068
+[14] Duong R, Chemseddine J, Friz PK, et al (2025) Telegra-
+pher’s Generative Model via Kac Flows. arXiv e-prints
+https://doi.org/10.48550/arXiv.2506.20641
+[15] Edery Y, Dror I, Scher H, et al (2015) Anomalous
+reactive transport in porous media: Experiments and
+modeling. Physical Review E 91(5):052130. https://doi.
+org/10.1103/PhysRevE.91.052130
+[16] Eyink G, Vishniac E, Lalescu C, et al (2013) Flux-
+freezing
+breakdown
+in
+high-conductivity
+magneto-
+hydrodynamic turbulence. Nature497(7450):466–469.
+https://doi.org/10.1038/nature12128
+[17] Gatheral J, Jaisson T, Rosenbaum M (2018) Volatility
+is rough. Quantitative Finance 18(6):933–949. https://
+doi.org/10.1080/14697688.2017.1393551
+[18] Golding I, Cox EC (2006) Physical nature of bacte-
+rial cytoplasm. Physical Review Letters 96(9):098102.
+https://doi.org/10.1103/PhysRevLett.96.098102
+[19] Goldstein S (1951) On diffusion by discontinuous move-
+ments, and on the telegraph equation. The Quar-
+terly Journal of Mechanics and Applied Mathematics
+4(2):129–156. https://doi.org/10.1093/qjmam/4.2.129
+[20] Greif R, Jenko F, Thuerey N (2023) Physics-preserving
+ai-accelerated simulations of plasma turbulence. arXiv
+preprint 2309.16400
+[21] Ho J, Jain AN, Abbeel P (2020) Denoising diffu-
+sion probabilistic models. In: Advances in Neural
+Information Processing Systems, pp 6840–6851, URL
+https://proceedings.neurips.cc/paper/2020/hash/
+4c5bcfec8584af0d967f1ab10179ca4b-Abstract.html,
+2006.11239
+[22] Holzschuh B, Vegetti S, Thuerey N (2023) Solving
+inverse physics problems with score matching. In:
+Advances in Neural Information Processing Systems,
+pp 61888–61922, 2301.10250
+[23] Hutchinson MF (1990) A stochastic estimator of the
+trace of the influence matrix for laplacian smoothing
+splines. Communications in Statistics-Simulation and
+Computation 19(2):433–450. https://doi.org/10.1080/
+03610919008812866
+[24] Karniadakis
+GE,
+Kevrekidis
+IG,
+Lu
+L,
+et
+al
+(2021)
+Physics-informed
+machine
+learning.
+Nature
+Reviews
+Physics
+3(6):422–440.
+https://doi.org/10.
+1038/s42254-021-00314-5
+[25] Karras T, Aittala M, Aila T, et al (2022) Elucidating
+the design space of diffusion-based generative mod-
+els. In: Advances in Neural Information Processing
+Systems, pp 26236–26247, 2206.00364
+[26] Kingma D, Salimans T, Poole B, et al (2021) Varia-
+tional diffusion models. Advances in neural information
+processing systems 34:21696–21707
+[27] Kubo R (1957) Statistical-Mechanical Theory of Irre-
+versible Processes. I. General Theory and Simple Appli-
+cations to Magnetic and Conduction Problems. Journal
+of the Physical Society of Japan 12(6):570–586. https:
+//doi.org/10.1143/JPSJ.12.570
+[28] Kynk¨a¨anniemi T, Karras T, Laine S, et al (2019)
+Improved Precision and Recall Metric for Assessing
+Generative Models. In: Advances in Neural Information
+Processing Systems, pp 3927–3936, https://doi.org/10.
+48550/arXiv.1904.06991
+[29] Liang N, Oh SP (2026) Beyond the diffusion coeffi-
+cient: Propagators and memory in cosmic ray trans-
+port. arXiv e-prints https://doi.org/10.48550/arXiv.
+2604.11898
+[30] Lipman Y, Chen RTQ, Ben-Hamu H, et al (2023)
+Flow matching for generative modeling. In: Interna-
+tional Conference on Learning Representations, URL
+https://openreview.net/forum?id=PqvMRDCJT9t,
+2210.02747
+[31] Martin J, L¨ubke J, Li T, et al (2025) Generation
+of Cosmic-Ray Trajectories by a Diffusion Model
+Trained on Test Particles in 3D Magnetohydrodynamic
+Turbulence. ApJS277(2):48. https://doi.org/10.3847/
+1538-4365/adb432
+[32] Metzler R, Klafter J (2000) The random walk’s
+guide to anomalous diffusion: a fractional dynamics
+approach. Phys. Rep.339(1):1–77. https://doi.org/10.
+1016/S0370-1573(00)00070-3
+15
+
+
+[33] Nichol AQ, Dhariwal P (2021) Improved denoising
+diffusion probabilistic models. In: Meila M, Zhang
+T (eds) Proceedings of the 38th International Con-
+ference on Machine Learning, vol 139. PMLR, pp
+8162–8171, URL https://proceedings.mlr.press/v139/
+nichol21a.html, 2102.09672
+[34] Orsingher E, Beghin L (2009) Fractional diffusion
+equations and processes with randomly varying time.
+The Annals of Probability 37(1):206–249. https://doi.
+org/10.1214/08-AOP401
+[35] Raissi M, Perdikaris P, Karniadakis GE (2019) Physics-
+informed neural networks: A deep learning framework
+for solving forward and inverse problems involving non-
+linear partial differential equations. Journal of Compu-
+tational Physics 378:686–707. https://doi.org/10.1016/
+j.jcp.2018.10.045
+[36] Reichherzer P (2026) Code and data for: Generative
+diffusion surrogates with analytical variance schedule.
+https://doi.org/10.5281/zenodo.21994203, URL https:
+//doi.org/10.5281/zenodo.21994203
+[37] Richardson LF (1926) Atmospheric diffusion shown on
+a distance-neighbour graph. Proceedings of the Royal
+Society of London Series A 110(756):709–737. https:
+//doi.org/10.1098/rspa.1926.0043
+[38] Song Y, Sohl-Dickstein J, Kingma DP, et al (2021)
+Score-based generative modeling through stochastic
+differential equations. In: International Conference on
+Learning Representations, URL https://openreview.
+net/forum?id=PxTIG12RRHS, 2011.13456
+[39] Thiel F, Sokolov IM (2014) Scaled Brownian motion
+as a mean-field model for continuous-time random
+walks. Phys. Rev. E89(1):012115. https://doi.org/10.
+1103/PhysRevE.89.012115
+[40] Thuerey N, Holl P, Mueller M, et al (2021) Physics-
+based deep learning. arXiv preprint 2109.05237
+[41] Tzeferacos P, Rigby A, Bott AFA, et al (2018) Lab-
+oratory evidence of dynamo amplification of magnetic
+fields in a turbulent plasma. Nature Communications
+9:591. https://doi.org/10.1038/s41467-018-02953-2
+[42] Villani C (2009) Optimal Transport: Old and New.
+Springer, https://doi.org/10.1007/978-3-540-71050-9
+[43] Vincent P (2011) A connection between score match-
+ing and denoising autoencoders. Neural Computa-
+tion 23(7):1661–1674. https://doi.org/10.1162/NECO
+a 00142
+[44] Wald C, Steidl G (2025) Variational and Informa-
+tion Flows in Machine Learning and Optimal Trans-
+port, Flow Matching: Markov Kernels, Stochastic Pro-
+cesses and Transport Plans, Springer Nature Switzer-
+land, Cham, pp 185–254. https://doi.org/10.1007/
+978-3-031-92731-7 4
+[45] Weiss M, Elsner M, Kartberg F, et al (2004) Anomalous
+subdiffusion is a measure for cytoplasmic crowding in
+living cells. Biophysical Journal 87(5):3518–3524. https:
+//doi.org/10.1529/biophysj.104.044263
+16

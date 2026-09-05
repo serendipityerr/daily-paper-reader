@@ -6,32 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-04
-- 运行时间：2026-09-04 21:49:49 UTC
+- 最新运行日期：2026-09-05
+- 运行时间：2026-09-05 21:15:44 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：2
+- 本次总论文数：2
+- 精读区：0
 - 速读区：2
 
 ### 今日简报（AI）
-今日精读聚焦量子薛定谔桥最优控制与退化扩散模型条件化，速读覆盖矩阵多胞形耦合与流匹配新方法。最值得关注的是9分量子控制研究，及8分扩散模型条件化进展。建议优先精读高分论文，其余两篇可作为拓展了解。
-- 详情：[/202609/04/README](/202609/04/README)
+今日速读2篇论文，聚焦扩散模型与Fokker-Planck优化的理论进展。  
+两篇均获6.0分，值得关注生成式扩散替代方案的方差调度设计，以及微观-宏观对应的双视角优化框架。  
+建议下一步从中选一篇精读，加深对扩散采样或优化原理的理解。
+- 详情：[/202609/05/README](/202609/05/README)
 
 ### 精读区论文标签
-1. [Optimal control theory for measured quantum Schrödinger bridges](/202609/04/2609.03097v1-optimal-control-theory-for-measured-quantum-schrdinger-bridges)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：直接研究薛定谔桥和熵最优传输，通过终态条件分布上的Doob/Sinkhorn势实现扩散条件化。
-2. [Conditioning Degenerate Diffusion Models](/202609/04/2609.04090v1-conditioning-degenerate-diffusion-models)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：利用因果最优传输与最小熵控制实现退化扩散模型的条件化
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Regularized Coupling Maps on Matrix Polytopes: From Assignment to Graph Matching and Optimal Transport](/202609/04/2608.29299v1-regularized-coupling-maps-on-matrix-polytopes-from-assignment-to-graph-matching-and-optimal-transport)  
+1. [Generative Diffusion Surrogates with Analytical Variance Schedule](/202609/05/2609.01705v1-generative-diffusion-surrogates-with-analytical-variance-schedule)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：正则化最优传输耦合映射研究，提供Sinkhorn类工具但未连接扩散桥
-2. [Beyond Straightness: Non-Crossing Flow Matching via Quantile AlignTree Coupling](/202609/04/2609.03443v1-beyond-straightness-non-crossing-flow-matching-via-quantile-aligntree-coupling)  
+   evidence：生成扩散替代模型以物理方差调度连接随机输运中的概率分布
+2. [Two Adjoint Perspectives on Fokker-Planck Optimization: A Microscopic-Macroscopic Correspondence](/202609/05/2609.02072v1-two-adjoint-perspectives-on-fokker-planck-optimization-a-microscopic-macroscopic-correspondence)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：用分位数对齐树结构建立源到目标分布的最优传输式层次耦合，以改进生成式匹配
+   evidence：统一Fokker-Planck动力学的宏观/微观伴随形式，对薛定谔桥控制和采样尤为重要。
 
 
 <div class="dpr-home-promo-card">
