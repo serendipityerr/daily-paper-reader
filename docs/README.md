@@ -6,29 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-05
-- 运行时间：2026-09-05 21:15:44 UTC
+- 最新运行日期：2026-09-06
+- 运行时间：2026-09-06 21:33:55 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：1
 - 精读区：0
-- 速读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今日速读2篇论文，聚焦扩散模型与Fokker-Planck优化的理论进展。  
-两篇均获6.0分，值得关注生成式扩散替代方案的方差调度设计，以及微观-宏观对应的双视角优化框架。  
-建议下一步从中选一篇精读，加深对扩散采样或优化原理的理解。
-- 详情：[/202609/05/README](/202609/05/README)
+今日仅速读1篇论文，聚焦离散扩散模型的信息几何分析。  
+值得关注的是产品引用离散扩散中“交互增长复杂度”与“最优调度”的理论关联。  
+建议进一步精读该文，梳理信息几何方法对实际调度设计的启示。
+- 详情：[/202609/06/README](/202609/06/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Generative Diffusion Surrogates with Analytical Variance Schedule](/202609/05/2609.01705v1-generative-diffusion-surrogates-with-analytical-variance-schedule)  
+1. [The information geometry of product-reference discrete diffusion: Interaction growth complexity and optimal scheduling](/202609/06/2608.28949v1-the-information-geometry-of-product-reference-discrete-diffusion-interaction-growth-complexity-and-optimal-scheduling)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：生成扩散替代模型以物理方差调度连接随机输运中的概率分布
-2. [Two Adjoint Perspectives on Fokker-Planck Optimization: A Microscopic-Macroscopic Correspondence](/202609/05/2609.02072v1-two-adjoint-perspectives-on-fokker-planck-optimization-a-microscopic-macroscopic-correspondence)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：统一Fokker-Planck动力学的宏观/微观伴随形式，对薛定谔桥控制和采样尤为重要。
+   evidence：乘积参考离散扩散是连接参考乘积分布与目标分布的离散马尔可夫桥，论文的IGC刻画与最优调度可直接迁移到离散扩散桥设计。
 
 
 <div class="dpr-home-promo-card">
