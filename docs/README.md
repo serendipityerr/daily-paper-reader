@@ -6,26 +6,22 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-06
-- 运行时间：2026-09-06 21:33:55 UTC
+- 最新运行日期：2026-09-07
+- 运行时间：2026-09-07 21:48:08 UTC
 - 运行状态：成功
-- 本次总论文数：1
+- 本次总论文数：0
 - 精读区：0
-- 速读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日仅速读1篇论文，聚焦离散扩散模型的信息几何分析。  
-值得关注的是产品引用离散扩散中“交互增长复杂度”与“最优调度”的理论关联。  
-建议进一步精读该文，梳理信息几何方法对实际调度设计的启示。
-- 详情：[/202609/06/README](/202609/06/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202609/07/README](/202609/07/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [The information geometry of product-reference discrete diffusion: Interaction growth complexity and optimal scheduling](/202609/06/2608.28949v1-the-information-geometry-of-product-reference-discrete-diffusion-interaction-growth-complexity-and-optimal-scheduling)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：乘积参考离散扩散是连接参考乘积分布与目标分布的离散马尔可夫桥，论文的IGC刻画与最优调度可直接迁移到离散扩散桥设计。
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
