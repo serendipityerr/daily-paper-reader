@@ -1,0 +1,462 @@
+Title: One Model, Two Worlds: Bidirectional Sonar-Optical Translation
+
+URL Source: https://arxiv.org/pdf/2609.06253v1
+
+Published Time: Wed, 09 Sep 2026 00:56:03 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# One Model, Two Worlds: Bidirectional Sonar–Optical Translation 
+
+## Shengji Jin 1 Trung Tien Dong 1 Ahmed Lamidi 1 Chen Chen 2 Xiaomin Lin 1 Yi Sheng 11University of South Florida 2University of Central Florida 
+
+{jins, dongt, ahmedlamidi, xlin2, sheng1 }@usf.edu chen.chen@ucf.edu 
+
+## Abstract 
+
+Translating between imaging sonar and optical cameras is valuable for underwater perception, but supporting both directions with separate models duplicates storage and com-putation. A unified bidirectional model is therefore attrac-tive, yet existing approaches largely treat the two direc-tions symmetrically despite their fundamentally different image-formation physics. We argue that sharing a genera-tive model does not require sharing the physics. We intro-duce the Direction-Asymmetric Realism Bridge (DARB) ,which retains a shared diffusion-bridge trunk while routing direction-specific physical priors through asymmetric path-ways: range-aware modulation for sonar-to-optical transla-tion and polar ray-dependent processing for optical-to-sonar translation. We further show that symmetry in training is also costly: applying a common realism schedule reduces sonar-to-optical PSNR by 2.60 dB. Our Adaptive Realism Supervision (ARS) instead determines when, where, and how strongly perceptual supervision is applied from recon-struction quality and gradient balance. Together, DARB and ARS enable one bidirectional model to match the sonar-to-optical specialist within 0.11 dB PSNR, outperform the optical-to-sonar specialist by 0.70 FID, and surpass two independently trained BBDMs on seven of eight metrics. 
+
+## 1. Introduction 
+
+Underwater platforms routinely pair imaging sonar with opti-cal cameras because the two sensing modalities compensate for each other’s limitations [12, 23]. Imaging sonar remains effective in turbid or poorly illuminated water, but its speck-led, polar-geometry returns are difficult for human operators to interpret; optical cameras, in contrast, provide intuitive visual content but deteriorate rapidly under scattering and attenuation [1, 2]. This complementarity makes cross-modal translation valuable in both directions. Translating sonar into optical-like imagery can facilitate human supervision and interpretation, whereas translating optical imagery into sonar can generate additional acoustic training data, for which annotated corpora remain scarce [3]. Supporting both capa-bilities onboard, however, with two independent translation Sonar RGB                  
+
+> First-return contour
+> 00.5 1
+> Range d
+> 00.5 1
+> βRβGβB
+> Backscatter
+> UAM
+> Fan mask
+> Shadow
+> Near Far
+> SPADE + RCASM
+> θ
+> DARB
+> Sonar →RGB
+> h←h(1 + γ(d)) + β(d)
+> RGB →Sonar
+> h← GN( h) (1 + γ(m)) + β(m)
+
+Figure 1. Overview of DARB. A single diffusion bridge serves both directions, each conditioned on a prior read out of its own source image. Sonar →RGB (orange): the first-return contour gives a per-beam range field, applied by UAM. RGB →Sonar (green): the fan-shaped support mask drives SPADE, and RCASM propagates occlusion along each bearing in polar coordinates. 
+
+models would duplicate computation and storage. A uni-fied bidirectional model therefore offers a more practical solution for embedded underwater platforms, where payload, memory, and compute are tightly constrained. Such a translator requires a framework in which neither direction is privileged. Conditional formulations privilege one: the source conditions a process synthesising the target, so the roles are not exchangeable. Diffusion bridges instead anchor the process at both endpoints, the natural substrate for a unified model [24, 28, 47]. Existing unified bridges, however, remain data-driven: the two directions share every parameter and differ by a discrete label, so what separates them is left to be inferred from samples. We keep the shared substrate and put back only what the physics requires. Sonar and optical images arise from fundamentally dif-ferent image-formation processes and encode different phys-ical properties of the same scene. Sonar observations are shaped by acoustic propagation, beam geometry, speckle, and shadowing, whereas optical appearance is governed by light transport, reflection, scattering, and attenuation. The two directions must therefore recover different missing infor-mation: sonar-to-optical translation must infer photometric appearance and fine texture that are not acoustically ob-served, while optical-to-sonar translation must synthesize acoustic responses and spatial structures that RGB imagery 1arXiv:2609.06253v1 [cs.CV] 5 Sep 2026 does not specify. We introduce the Direction-Asymmetric Realism Bridge (DARB) , which shares one diffusion-bridge trunk and makes asymmetric only what the imaging physics forces to be asymmetric. Spatially, this means routing a direction-specific physical prior into the decoder of each pathway (Fig. 1). The optical path reads a per-beam range field that the sonar already carries and modulates features by it pointwise, as radiance decays and backscatter accumulates with range; the acoustic path reads the fan-shaped support of valid returns and the ray geometry along which a strong return shadows everything behind it, a relation that is local only in polar coordinates. A pointwise scaling and a path-dependent scan are not two settings of one operator, which is why the routing is direction-specific and the trunk is not. Temporally, the same principle applies to the auxiliary perceptual objective that recovers realism, which should not act on both directions in the same way or from the same moment. Applying it uniformly from the start of training interferes with reconstruction before the bridge has learned a stable cross-modal mapping, and we observe that doing so lowers sonar-to-optical PSNR by 2.60 dB. The critical issue is therefore not the formulation of the realism objective but its schedule, which has to answer three questions: when the objective starts, which samples it acts on, and how strongly. Exhaustively tuning these three coupled scheduling pa-rameters would require a costly three-dimensional search and undermine the practical appeal of a unified framework. We therefore introduce Adaptive Realism Supervision (ARS) ,which derives the supervision schedule from the evolving state of the model. A ratio between the gradient norms of the reconstruction and perceptual terms, read separately for each direction, answers the first and third: the objective is admitted as soon as reconstruction is the larger of the two forces, or after a fixed grace period if that does not happen, and is then weighted in proportion to that ratio. The second is answered per sample, realism being asked only of those the bridge already reconstructs well. Which of the two direc-tions has to wait is decided by that measurement rather than by us. In summary, our contributions are: • Direction-Asymmetric Routing: We introduce DARB, a unified diffusion bridge for bidirectional sonar–optical translation that shares one trunk while routing a direction-specific physical prior into each pathway, capturing both formation processes without two independent translators. • Adaptive Realism Supervision (ARS): ARS replaces a three-dimensional search over when realism supervision starts, which samples it acts on and how strongly , with quantities already measured during training: gradient bal-ance sets when and how strongly, per-sample reconstruc-tion quality sets which. • Specialist-Level Performance with One Model: On DeeperSense, DARB matches the Sonar →RGB special-ist to within 0.11 dB PSNR, surpasses the RGB →Sonar specialist by 0.7 FID, and beats two independently trained bridges on seven of eight metrics, so unified deployment need not cost translation quality. 
+
+## 2. Related Work 
+
+We review how the field converged on one network, why sonar and optics break its assumption, and what follows per direction. 
+
+2.1. The “One Model” Consensus 
+
+Serving both directions with a single network has been pur-sued across successive generations of translation models. Adversarial formulations solved paired and unpaired trans-lation [17, 19, 25, 48] and multi-domain generators con-solidated several mappings into one network [7, 8], but a directional mapping fixes its input and output spaces, so both directions still require two generator pathways. Con-ditional diffusion [15, 26, 34] inherits the same asymmetry: the source steers a reverse process that synthesises the tar-get [35, 45], and the two roles are not exchangeable. Diffu-sion bridges remove it by anchoring the stochastic process at both endpoints [24, 28, 47], which makes the interme-diate trajectory symmetric [43]. Deterministic transports obtain the same property for free, since a learned ODE in-tegrates in either direction [22, 27, 29, 36–38]; stochastic bridges need an explicit mechanism, and three have appeared: BiBBDM supervises both endpoints with a six-channel ob-jective [43], BDBM masks one endpoint per sample and encodes direction by channel position [21], and CM-Diff pairs a domain-label embedding with modality-specific en-coders [16]. Measured by parameter efficiency, the unified bidirectional model is a settled problem. While the capability to translate in both directions is estab-lished, the distance between those domains remains largely unexamined. The domain pairs used to validate these uni-fied models, sketches and shoes, semantic layouts and faces, infrared and visible light, are co-registered images formed by the same projection [16, 21, 43]. In such near-bijective settings the representations one direction needs largely serve the other, which is what makes one set of weights suffi-cient. Even at that short distance the two directions have not converged into a single problem: the infrared and vis-ible literature has developed along separate lines for each direction, one pursuing structural detail and the other ther-mal realism [16]. Asymmetric treatment is therefore already recognised at the level of methods, yet no unified model has been designed to internalise it within shared weights, across domains that do not even share an imaging equation. 
+
+2.2. The “Two Worlds” Reality 
+
+A forward-looking sonar does not photograph a scene; it times echoes. Each azimuthal beam records intensity inte-grated over a vertical fan of rays. Consequently, elevation is collapsed, and a single pixel in the resulting range-bearing 2image corresponds to an arc of three-dimensional points rather than a single spatial coordinate [4, 33]. Three distinct properties arise from this active sensing mechanism. First, returned amplitudes carry multiplicative speckle whose dis-tribution is a property of the surface but whose realisation is random [18]. Second, occlusion appears as shadows ex-tending outward along the ray from the transducer, governed by sensor geometry rather than the image plane [39]. Third, the echo carries no wavelength information, whereas optical appearance is dictated by the water column, where attenua-tion and backscatter are wavelength- and range-dependent, making colour a property of the medium as much as of the object [1, 2]. In terms of information content, these physical discrep-ancies fracture the bidirectional task into two fundamentally asymmetric problems. Because elevation is integrated and wavelength is absent, translating optical images to sonar represents a many-to-one mapping; the network must learn what to discard while synthesising a random speckle reali-sation unconstrained by the input. Conversely, translating sonar to optical imagery is a heavily under-determined one-to-many mapping, requiring the hallucination of photometric texture absent from the source. Existing work accordingly treats the two as separate tasks: sonar-to-optical synthesis for diver monitoring [41], sonar synthesis for data augmen-tation [39, 42], and surveys that analyse one direction at a time [3, 44]. Sonar and optical imagery share none of this, which is what makes them two worlds rather than two views. 
+
+2.3. Navigating the Gap between “Two Worlds” 
+
+This physical asymmetry raises three challenges, and exist-ing work approaches each from one side only: unified mod-els treat the two directions as one problem, while physics-informed generators solve one direction at a time. The first is the spatial prior. Feature modulation injects structure with-out bottlenecking the input [31, 32], and physics-informed generation goes further by building the formation model into the generator, for infrared synthesis [30] and for ultra-sound, where the diffusion process itself is modelled as wave propagation [10]. The principle transfers to our setting; the priors do not, each being bound to a single target domain and unidirectional by construction. The second is auxiliary super-vision. Perceptual and adversarial objectives recover textures that reconstruction losses smooth away [5, 20, 46], and dif-fusion training weights them along the noise axis [6, 13] or anneals them over the schedule. Existing unified schedules apply one such rule to all samples regardless of direction. The third is evaluation. The structural similarity index rests on local correlation [40], so it collapses on content that is statistically accurate but spatially decorrelated, a known failure mode for resampled textures [9] and for coherent sensor speckle [44]. Bridging two physically incongruent worlds forces all three to be made per direction: which prior each requires (Sec. 3.2), when each is supervised (Sec. 3.3), and against which reference each is read (Sec. 4.4). 
+
+## 3. Method 
+
+Let (a, b ) be a co-registered sonar and optical pair, encoded by a frozen autoencoder into latents of identical shape. We seek a single model that serves a 7 → b and b 7 → a at the cost of one model. Write d ∈ { 0, 1} for the requested direction, x0 for the target latent and y for the source, so that 
+
+(x0, y ) = ( b, a ) when d = 0 and (a, b ) when d = 1 .The latent Brownian bridge we build on is symmetric in 
+
+d by construction (Sec. 3.1). DARB reintroduces asymmetry in exactly two places: the operators each direction is routed through (Sec. 3.2) and the schedule under which a realism term is applied to it (Sec. 3.3). Everything else is shared. Fig. 2 shows the architecture; the training procedure is given in the supplement. 
+
+3.1. Preliminaries: the Latent Brownian Bridge 
+
+In the shared latent space of a frozen autoencoder [11, 34], a Brownian bridge interpolates directly between the two latents rather than between data and pure noise [24]. With 
+
+mt = t/T and ϵ ∼ N (0 , I),
+
+xt = (1 − mt) x0 + mt y + σt ϵ, σ2 
+
+> t
+
+= 2 mt(1 − mt).
+
+(1) so the state recovers x0 at t = 0 and y at t = T . The model 
+
+Oθ predicts the displacement to the target, and ∥·∥ 1 denotes a mean over elements throughout: 
+
+Ot = mt (y − x0) + σt ϵ, Lbr = Ot − O θ (xt, t, d ) 1.
+
+(2) Subtracting the prediction from the state gives an explicit draft at any step: 
+
+ˆx0 = xt − O θ (xt, t, d ), ˆx0 − x0 = Ot − O θ . (3) The right-hand identity is exact and carries no mt factor, so the draft inherits the training error uniformly along the bridge. An ϵ-parameterisation instead amplifies that error by 
+
+σt/(1 − mt), which reaches 44 .7 at the far endpoint. The displacement form therefore gives an ˆx0 stable enough to attach an auxiliary objective to (Sec. 3.3). Eqs. (1) to (3) never reference d: the symmetry belongs to the stochastic process, not to the physical problem, so a unified model has to put the asymmetry back deliberately. 
+
+3.2. Direction-Asymmetric Routing 
+
+Isolating the direction signal. The conventional route folds the direction d into the timestep embedding as a label term, where a binary signal shares one projection with a continu-ous, high-variance one. We keep that term but additionally give d its own modulation stage in every residual block. Af-ter the timestep modulation, the feature map passes through a second, direction-only affine transform: 
+
+h ← GN( h) (1 + st) + bt
+
+ (1 + sd) + bd,
+
+(sd, b d) = Md(ed), (4) 3SPADE_i + RCASM_i 
+
+> (d=1, R2S)
+
+Direction-Asymmetric Realism Bridge (DARB) z_ Sonar 
+
+> 3×64×64
+> z_RGB
+> 3×64×64
+
+UAM: S onar → R GB Physics   
+
+> Intensity
+> Depth d
+> Depth d Conv
+> Feature h
+> γβ
+> Modulated H
+> Activation low high
+
+SPADE + RCASM: R GB → S onar Physics      
+
+> Conv
+> Feature h
+> γβ
+> H_SPADE
+> Fan_Mask m
+> 1. SPADE — spatial γ, β from fan mask 2. RCASM — causal along range r Output H
+> zero-init residual (near occludes far)
+> Up Path (Each output_block) ResBlock_1 ResBlock_N
+> Latent Brownian Bridge
+> Unified UNet Down Path Mid Block Up Path VQGAN Encoder VQGAN Encoder
+> VQGAN Decoder VQGAN Decoder
+> SPADE_i + RCASM_i
+> (d=1, R2S)
+> Up Path (Each output_block) ResBlock_1 ResBlock_N UAM_i
+> (d=0, S2R)
+> UAM_i
+> (d=0, S2R)
+
+Figure 2. DARB. A single trunk serves both directions. The direction scalar d enters through its own zero-initialised AdaGN branch and selects which physical operators the forward pass is routed through: UAM for the optical target, SPADE and RCASM for the acoustic one. 
+
+where ed is the direction embedding and Md is zero-initialised, so training begins as an exactly symmetric bridge and departs from it only where the data demands. The branch costs 12 .9 M parameters, the smallest of the asymmetries we introduce. One direction is drawn per batch rather than per sample, so a single read of d can route the entire forward pass through the physical operators below. 
+
+Optical physics asks for value-domain modulation (UAM). Underwater optical appearance follows a forma-tion model in which radiance decays multiplicatively with range and is compounded by additive backscatter [1, 2]: 
+
+Ic = Jce−βcds + Bc(1 − e−βcds ), with ds the scene depth and βc a wavelength-dependent coefficient. The variable this model needs is one the sonar records: we extract ds from the sonar itself, as the range of the first return along each beam, precomputed per pair and normalised to [0 , 1] . In the sonar-to-optical direction the source is the sonar, so the prior draws on nothing beyond the input. The Underwater Attenuation Module conditions the op-tical path on this field by mirroring the model’s form, one multiplicative and one additive term per channel: 
+
+UAM( h, d s) = h ⊙  1 + γ(ds) + β(ds), (5) where γ and β come from a lightweight convolutional stack and are zero-initialised. UAM applies this modulation with-out normalising h first: attenuation acts on absolute intensity, and normalisation would discard the very scale the module exists to modulate. The depth field is resampled bilinearly, since it is a smooth scene signal rather than a boundary. 
+
+Acoustic physics asks for geometric routing (SPADE and RCASM). The acoustic path faces constraints of a differ-ent kind. The first is the fan-shaped support of valid re-turns, across the four captures of training data. We impose it with Spatially Adaptive Normalization (SPADE) [31], con-ditioned on the per-image binary support mask: the feature map is normalised without learned affine parameters and then rescaled and shifted by a zero-initialised stack driven by the mask. The mask is resampled with nearest neighbours, because bilinear interpolation would soften the one edge the constraint exists to draw. The second is acoustic occlusion. A strong return at range 
+
+r and bearing θ shadows every larger range along that bear-ing: a prefix relation along a ray whose direction rotates with bearing. A translation-invariant convolution has one kernel orientation for the whole image, so this relation is not expressible in the Cartesian plane. The Ray-Casting Acoustic Shadow Module (RCASM) therefore changes co-ordinates. It warps the feature map h and the support mask 
+
+m onto a canonical polar (r, θ ) grid wide enough to cover every sensor in the data, applies a one-dimensional causal convolution along r, padded only on the near side so that no far-range information leaks backwards, and returns the result as a residual through a zero-initialised projection P:
+
+h ← h + W−1
+
+P ϕ Conv causal 
+
+> k×1
+
+W(h); W(m) 
+
+, (6) with W the Cartesian-to-polar transform. The warped mask rides along so that the convolution knows where the true fan of each image lies within the canonical grid. 
+
+Why the two cannot be one operator. The two priors place contradictory demands, not merely different ones. UAM must not normalise, because attenuation lives in the abso-lute scale of the features, while SPADE must normalise first, because its modulation is defined on whitened fea-tures. Attenuation is also pointwise, whereas shadowing is path-dependent, conditioned on all nearer ranges along a bearing; a pointwise operator stays pointwise in any coordi-nates, which is why only the acoustic prior needs a change of them. Routing the forward pass through direction-specific operators while keeping the diffusion trunk shared is what lets one model satisfy both sets of demands at once. 43.3. Adaptive Realism Supervision (ARS) 
+
+The bridge loss fixes structure but smooths away the high-frequency speckle and texture that make a cross-modal sam-ple look real. Perceptual objectives [20, 46] recover it, but one transplanted unchanged into a shared bidirectional trunk degrades both directions at once (Sec. 4.3). What fails is not the objective but its schedule: when the term starts, which samples it acts on, and how strongly. ARS answers all three from quantities the training loop already produces. Both readings are taken at Wout , the last trainable weight of the output head, where the two objectives meet. Every P
+
+steps we retain the training graph, take two local backward passes, and form the force ratio 
+
+sd = ∥∇ Wout Lbr ∥∥∇ Wout Lperc ∥ , (7) clipped to [smin , s max ] and held per direction as a moving average. The probe differentiates one weight matrix rather than running a second training step. 
+
+When it starts. For the first Ewin epoch-equivalents of a direction the perceptual term is formed but not applied. As that window closes, the median of sd is compared against unity, the point at which the two forces are equal: a direction whose reconstruction gradient is the larger admits the term at once, and a direction whose perceptual gradient already dominates defers it to a fixed epoch Edef . Unity is the only scale-free threshold for a ratio of two measured quantities. The measurement therefore decides which direction waits, not how long (Sec. 4.3). 
+
+Which samples it acts on. A perceptual term is informative only on a draft that already carries a layout. Rather than legislate where such drafts sit on the diffusion axis, ARS reads them off the batch: the draft error ei = ∥ˆx(i)0 − x(i)0 ∥1
+
+is the current training residual, so selection costs no extra forward or backward pass, and the κ samples of smallest error receive the term: 
+
+K = arg min 
+
+> |K| =κ
+
+P 
+
+> i∈K
+
+ei. (8) The alternative, a fixed cut t ≤ tc, would settle that region before training and impose the same one on both directions. 
+
+How strongly it acts. The weight is set in proportion to the same ratio, 
+
+λd = clip  k s d, λ min , λ max 
+
+. (9) The proportionality is what makes this more than a heuris-tic. Writing ρd for the share of the update at Wout that the perceptual term contributes and substituting λd = ks d,
+
+ρd = λd∥∇L perc ∥∥∇L br ∥ + λd∥∇L perc ∥ = k
+
+1 + k , (10) so one constant fixes the realism budget as a fraction of the reconstruction force, identically in both directions and independently of how loss scales drift as the learning rate de-cays. A fixed λ has neither property, holding one direction’s balance at the other’s cost and drifting over training. 
+
+The objective. With D the frozen decoder, xpix the original image whose latent is x0, e the current epoch and e(d) 
+
+> ⋆
+
+the onset of direction d,
+
+L = Lbr + λd 1
+
+h
+
+e ≥ e(d)
+
+> ⋆
+
+i 1
+
+κ
+
+X
+
+> i∈K
+
+ℓperc 
+
+ D(ˆ x(i)0 ), x pix ,(i).
+
+(11) The reference is the original image rather than its recon-struction D(x0), so the decoder’s own error stays inside the target instead of cancelling out. What remains fixed is the budget k, the deferred onset Edef and the clamp on λd; none is searched on the unified model, k being back-solved once from the two single-direction optima and Edef acting only when the ratio declines to fire. Searching instead means a grid over onset, selection and dose in each direction sepa-rately; the supplement lists our values. 
+
+3.4. Training and Inference 
+
+Sampling follows the standard bridge reverse process with d
+
+held fixed, so a single trained model serves either direction. To keep the asymmetry bounded, everything not named in Sec. 3.2 is shared: the trunk weights, the bridge schedule, the sampler and its step count, and every constant of ARS, including the budget k, the threshold, the window and the deferred onset. Two quantities do differ between directions, the onset e(d) 
+
+> ⋆
+
+and the weight λd, but neither is specified. Both are what one rule returns when applied to each direction separately, and a direction whose force ratio behaved like the other’s would receive the same schedule. We do not construct asymmetry by hand; we route the priors the physics requires and let the schedule follow the measurement. Sharing a trunk does not make the two directions interfere, as Sec. 4.1 shows; it leaves less spare capacity per direction, which is why realism must be metered, not applied outright. 
+
+## 4. Experiments 
+
+We ask how one model compares with specialists and other bridges, which of its parts matters, and how far the compari-son carries. 
+
+Data and baselines. We use DeeperSense [41], which pro-vides co-registered forward-looking sonar and optical pairs across four captures of differing native resolution. We resize all images to 256 × 256 , hold out 1181 pairs and train on the remaining 9448. Baselines span adversarial translation (Pix2Pix [19], MUNIT [17], UNSB [22]), conditional gen-eration (ControlNet [45], Palette [35], OT-CFM [38]) and diffusion bridges (BBDM [24], BDBM [21], BiBBDM [43]); all but BDBM and BiBBDM need one model per direction, 5Method #Models Ep./dir. Sonar → RGB RGB → Sonar PSNR ↑ SSIM ↑ LPIPS ↓ FID ↓ PSNR ↑ SSIM ↑ LPIPS ↓ FID ↓                                                                                                                                   
+
+> Two models, one trained per direction
+> pix2pix [19] 2100 23.36 0.856 0.183 70.22 23.24 0.583 0.215 106.21 MUNIT [17] 2100 22.39 0.848 0.281 126.49 18.28 0.397 0.491 160.33 OT-CFM [38] 2100 30.14 0.929 0.071 29.68 31.14 0.735 0.061 28.98 BBDM [24] 2100 30.61 0.936 0.047 14.04 32.15 0.762 0.050 17.29 Ours, direction-specific 2100 32.40 0.943 0.034 10.87 32.16 0.773 0.045 15.21
+> One model serving both directions
+> BDBM [21] 1100 13.83 0.795 0.274 55.69 17.22 0.307 0.168 42.29 BiBBDM [43] 1100 30.87 0.934 0.047 12.19 31.91 0.756 0.049 16.27 BiBBDM 1200 31.77 0.937 0.040 11.66 32.14 0.763 0.046 14.98 DARB (ours) 150 30.12 0.926 0.044 12.87 31.39 0.767 0.048 15.56
+> DARB (ours) 1100 32.29 0.941 0.035 11.08 32.10 0.769 0.044 14.51
+> ∆vs. BBDM +1 .68 +0 .005 −0.012 −2.96 −0.05 +0 .007 −0.006 −2.78 ∆vs. BiBBDM at 2×+0 .52 +0 .004 −0.005 −0.58 −0.04 +0 .006 −0.002 −0.47 ∆vs. direction-specific −0.11 −0.002 +0 .001 +0 .21 −0.06 −0.004 −0.001 −0.70
+> Table 1. Bidirectional sonar and optical translation on DeeperSense , 1181 held-out pairs. Methods reported in one direction only are in the supplement. Ep./dir. is the budget each direction receives, so an alternating model is listed at half its raw epoch count. Bold marks the best single-model result and underline the best result overall.
+
+and UNSB, ControlNet and Palette are reported for one di-rection only, in the supplement. Every bridge uses the same autoencoder, schedule and sampler as DARB, so the com-parison isolates how direction is expressed. Each baseline runs under its released configuration; for BDBM this means the noise-prediction objective. 
+
+Training details. DARB uses a frozen VQGAN [11] with a downsampling factor of four, 1000 diffusion steps in training and 200 sampling steps at inference, and requires 296.94 M trainable parameters, a 37% reduction relative to two BBDM bridges at 237.10 M each. We train with Adam at 1e-4 and an effective batch size of 32 on a single RTX 5090. Every model receives 29,500 gradient updates per direction. Each configuration is trained once under a single seed; remaining hyperparameters are in the supplement. 
+
+Evaluation. We report PSNR, SSIM [40], LPIPS [46] and FID [14] on decoded RGB images. LPIPS is also an auxiliary training objective in DARB, so FID is the only perceptual measure no model was trained against and we read it as pri-mary. All four are reported per direction and never averaged, because the attainable range of a metric can differ between the domains; Sec. 4.4 measures that range for SSIM. 
+
+4.1. Quantitative results. 
+
+Tab. 1 asks what one model gives up against progressively stronger alternatives. The adversarial and flow-based base-lines are furthest behind: OT-CFM, the strongest, trails DARB by 2.15 dB PSNR and 18 .60 FID in the sonar-to-optical direction, because they synthesise the target from noise or a compressed code, whereas a bridge starts at the source image. Against BBDM, the strongest per-direction bridge, DARB gains 1.68 dB PSNR and 2.96 FID forward and 2.78 FID in reverse, and trails only by 0.05 dB in reverse PSNR. Serving both directions from one trunk therefore costs one cell in eight, at 37% fewer parameters. Among single-model methods, DARB leads BiBBDM in all eight cells at a matched budget and in seven of eight when BiBBDM trains twice as long, the exception being reverse PSNR at 0.04 dB. BiBBDM lets direction enter only through which endpoint is supervised, while DARB reserves 
+
+12 .9 M for a direction-specific pathway. BDBM reaches only 13 .83 dB and 55 .69 FID forward under its released noise-prediction objective, which Sec. 3.1 identifies as ill-conditioned as t approaches T . The strictest comparison is two direction-specific models with the same routing and supervision, which bound what a shared trunk can recover: DARB stays within 0.11 dB PSNR and 0.002 SSIM of them forward and is ahead on both perceptual metrics in reverse, at 0.044 against 0.045 LPIPS and 14 .51 against 15 .21 FID. Halving the per-direction budget costs 2.17 dB, so the match does not follow from an arbitrary stopping point. Per-image metrics do not say whether the acoustic in-tensities are right, so we pool the generated sonar over the held-out set (Fig. 4). At full range only BDBM separates, placing 39% of its pixels between intensities 50 and 120 
+
+where the reference has 4% . The ordering is read above intensity 9, below which every latent method displaces the saturated background by one intensity level: DARB’s total variation distance to the reference is 0.024 , against 0.042 for the next closest bridge and 0.34 for BDBM, unchanged for any floor between 3 and 25 . The acoustic direction is there-fore distributionally close, not merely structurally plausible. 
+
+4.2. Qualitative results. 
+
+Fig. 3 shows both directions on one held-out pair. BDBM misses the colour of both domains at once, casting the optical scene green and filling the region outside the fan with grey, 60.170        
+
+> Sonar → RGB
+> OT-CFM
+> 0.148 BBDM
+> 0.468 BDBM
+> 0.136 BiBBDM
+> 0.031
+> DARB (ours) GT
+> 0.095
+> RGB → Sonar
+> 0.099 0.196 0.104 0.072
+> Two Models One Model Figure 3. Both directions on one held-out pair. Column groups separate methods that need one trained model per direction from those that serve both with one. Per-image LPIPS is inset. Sonar renderings share a colour map and scale.
+
+the signature of one output distribution covering two do-mains. The float (red) is absent from OT-CFM and BDBM, displaced in BBDM and BiBBDM; only DARB places it where the reference does. The diver’s head (orange) is occluded by bubbles, and only DARB recovers it. In the acoustic direction the shadow behind a strong return (green) appears only in DARB, the geometric propagation RCASM is built for. DARB carries the lowest per-image LPIPS in both directions, 0.031 and 0.072 .
+
+4.3. Ablation 
+
+Effect of the direction path. Replacing the joint AdaGN of the shared trunk with a separate direction branch costs 
+
+12 .9 M parameters, 4.3% of the model, and gains 0.66 dB in the sonar-to-optical direction and 0.15 dB in the reverse, with LPIPS improving on both sides and FID moving by 
+
+−1.81 in the reverse direction and +0 .13 in the forward one (Tab. 2). Carried inside the timestep embedding, a binary direction label competes with a continuous high-variance signal; given its own branch it does not. 
+
+Effect of the physical priors. On a dedicated model the UAM prior gains 1.84 dB and 0.010 SSIM in the sonar-to-optical direction at a cost of 4.43 FID, and the acoustic pair gains 0.22 dB and 0.006 SSIM in the reverse at a cost of 
+
+0.76 FID. Two operators of different form produce the same trade, because a prior fixes what the scene should look like and in doing so suppresses the high-frequency content that FID rewards. Recovering it is what the realism term is for. 
+
+The realism schedule. Confining the perceptual term to a fixed diffusion-time window, t ≤ T / 4, degrades every cell of the dedicated models, by 0.47 dB and 0.57 FID forward and 0.15 dB and 0.60 FID in reverse, yet gains 2.24 dB and 
+
+2.42 FID forward and 3.62 FID in reverse on the shared trunk. The restriction therefore treats divided capacity rather than a defect of the objective, and it is the schedule ARS replaces. Delaying the term instead of opening it at the first epoch improves all eight cells of the shared model, by up to 
+
+3.15 dB and 4.83 FID, and unlike the fixed window it helps the dedicated models too, so what remains is which of two onsets each direction receives. ARS reads that from the force ratio of Eq. (7): over the first Ewin epoch-equivalents the median is 1.18 for RGB to sonar and 0.44 for sonar to RGB, so the first direction admits the term as soon as the window closes while the second is deferred to Edef . Which direction waits is decided by that measurement, not by us; how long it waits is a fixed budget. 
+
+4.4. Metric Behaviour and Cross-Dataset Transfer 
+
+Why is SSIM asymmetric. SSIM separates the two direc-tions of DARB by 0.172 , 0.941 against 0.769 , where PSNR separates them by 0.19 dB. What differs is the target, not the quality of the prediction. Image the same patch twice: the objects and their shadows come back, the speckle does not. Call the part that returns m and the rest u, so two captures are x = m + u and y = m + v with u and v independent. SSIM’s cross-covariance then keeps only σ2 
+
+> m
+
+while both variances keep σ2 
+
+> m
+
++ σ2
+
+> u
+
+:
+
+SSIM ref = σ2
+
+> m
+
+σ2 
+
+> m
+
++ σ2
+
+> u
+
+= 11 + r , r = σ2
+
+> u
+
+/σ 2
+
+> m
+
+. (12) Nothing can recover u, so this is what a perfect estimator earns. Speckle makes u large in sonar; sensor noise makes it small in optics. The two directions therefore sit under different ceilings; we measure both. Among 10 ,629 captures we pair frames by a 32 × 32 descriptor, coarse enough to average speckle away, and score each pair at 256×256, the resolution of Tab. 1; pairing on one modality and scoring the other keeps each number honest. Over 400 pairs, two real captures of one patch score 0.980 optically and 0.793 
+
+acoustically (Fig. 5). The ceilings differ by 0.186 and our two directions by 0.172 ; every method in Tab. 1 sits below both. The columns measure distance to different ceilings and cannot be averaged. 7Sonar → RGB 
+
+Configuration PSNR ↑ SSIM ↑ LPIPS ↓ FID ↓
+
+> Dedicated model
+
+Bridge only 30.61 0.936 0.047 14.04 
+
++ UAM prior 32.45 0.946 0.042 18.47 
+
+,→ realism, always on 31.48 0.938 0.036 11.13 
+
+,→ realism, gated in t 31.01 0.935 0.038 11.70 
+
+,→ realism, gated in epoch 32.40 0.943 0.034 10.87 
+
+> Shared model, both priors on, cumulative
+
+Shared trunk, joint AdaGN 31.08 0.936 0.044 14.20 
+
++ separate AdaGN 31.74 0.939 0.041 14.33 
+
++ realism, always on 29.14 0.924 0.057 14.15 
+
++ realism, gated in t 31.38 0.938 0.038 11.73 
+
++ realism, gated in epoch 32.29 0.941 0.035 11.08 
+
+RGB → Sonar 
+
+Configuration PSNR ↑ SSIM ↑ LPIPS ↓ FID ↓
+
+> Dedicated model
+
+Bridge only 32.15 0.762 0.050 17.29 
+
++ SPADE & RCASM prior 32.37 0.768 0.052 18.05 
+
+,→ realism, always on 32.13 0.768 0.047 15.07 
+
+,→ realism, gated in t 31.98 0.768 0.047 15.67 
+
+,→ realism, gated in epoch 32.16 0.773 0.045 15.21 
+
+> Shared model, both priors on, cumulative
+
+Shared trunk, joint AdaGN 32.08 0.760 0.051 18.85 
+
++ separate AdaGN 32.23 0.765 0.049 17.04 
+
++ realism, always on 32.03 0.764 0.052 19.34 
+
++ realism, gated in t 31.82 0.764 0.046 15.72 
+
++ realism, gated in epoch 32.10 0.769 0.044 14.51 Table 2. Ablation, read separately in each direction. 1181 held-out pairs, 100 epochs per direction. Upper block: one model per direction, the three ,→ rows being alternative realism schedules on top of the physical prior. Lower block: one model serving both directions with both priors routed by direction, rows cumulative, the last being DARB, the same model in both panels. The schedules differ in weight as well as in timing, so the comparison is between whole schedules rather than single knobs. 0 80 160 10 −5    
+
+> 10 −3
+> 10 −1
+> Fraction of pixels
+> (a) Full range Ground truth
+> DARB (ours)
+> BBDM OT-CFM BiBBDM BDBM †
+> 20 70 120
+> Pixel intensity
+> −0.5 0.0 0.5
+> Deviation (%)
+> (b) Return region
+
+Figure 4. Intensity statistics of generated sonar , pooled over the held-out set. BDBM (†) is omitted from (b), where its deviation runs off scale. real pairs DARB all methods         
+
+> 0.980
+> 0.941 0.769
+> Optical : 0.963 Sonar : 0.791
+> Sonar →RGB RGB →Sonar
+> SSIM 0.75 0.85 0.95
+> 0.980
+> 0. 793
+
+Figure 5. What SSIM can resolve in each direction. Top: one matched pair. Bottom: the mean over 400 pairs; the grey span covers all of Tab. 1.                                                
+
+> PSNR ↑SSIM ↑LPIPS ↓FID ↓
+> Sonar →RGB
+> BiBBDM 12.93 0.557 0.678 270.5
+> +10 ep 13.97 0.542 0.621 260.3 DARB 13.68 0.576 0.649 270.4
+> +10 ep 15.87 0.645 0.521 236.6
+> RGB →Sonar
+> BiBBDM 14.88 0.391 0.557 171.2
+> +10 ep 15.75 0.387 0.510 161.6 DARB 15.30 0.428 0.514 191.2
+> +10 ep 18.48 0.515 0.309 148.9
+
+Table 3. Cross-Dataset Transfer , 308 held-out pairs differing in field of view, water body and target class. Plain rows are zero-shot, indented rows add ten epochs per direction. 
+
+Cross-Dataset Transfer. Redeploying an underwater plat-form changes the field of view, the water body and the target class at once, and Tab. 3 evaluates both unified models on a collection that differs in all three. Without adaptation DARB leads on every per-image metric in both directions and trails by 20 .0 FID in the acoustic one, so per-image and distribu-tional agreement do not transfer together. Zero-shot is not the operating point, however: a platform entering new water is calibrated once, on whatever data the first survey returns, so the question is what a small fixed budget buys. Ten epochs per direction answer it differently for the two models. In SSIM, fine-tuning moves BiBBDM down in both directions, by 0.015 and 0.004 , and moves DARB up in both, by 0.069 
+
+and 0.087 ; the two models improve not at different rates but in different directions, on the same data under the same protocol. The acoustic FID deficit reverses over the same epochs, from 20 .0 behind to 12 .7 ahead. Routing the physi-cal priors therefore leaves a model that recalibrates within a commissioning budget rather than relearns the domain. 
+
+## 5. Conclusion 
+
+We address bidirectional sonar and optical translation with a single network, on the principle that unified deployment does not require identical treatment. DARB shares one diffusion-bridge trunk and introduces asymmetry only where the physics forces it: spatially, each direction is routed through the operator its formation model calls for; tempo-rally, Adaptive Realism Supervision reads when the per-ceptual objective starts, which samples it acts on and how strongly, from the training loop itself. One network matches the sonar-to-optical specialist to within 0.11 dB PSNR, low-ers optical-to-sonar FID by 0.70 , and improves on two inde-pendently trained bridges in seven of eight metrics at 37% 
+
+fewer parameters. Neither the onset nor the weight was set by hand; both are what one rule returns on each side. The bridge needs co-registered pairs, which deployments rarely provide; extending measured rather than designed asymme-try to unregistered settings is the natural next step. 8References 
+
+[1] Derya Akkaynak and Tali Treibitz. A revised underwater image formation model. In 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 6723–6732. IEEE, 2018. 1, 3, 4 [2] Derya Akkaynak and Tali Treibitz. Sea-thru: A method for removing water from underwater images. In 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 1682–1691. IEEE, 2019. 1, 3, 4 [3] Martin Aubard, Ana Madureira, Lu´ ıs Teixeira, and Jos´ e Pinto. Sonar-based deep learning in underwater robotics: Overview, robustness, and challenges. IEEE Journal of Oceanic Engi-neering , 50(3):1866–1884, 2025. 1, 3 [4] Murat D Aykin and Shahriar Negahdaripour. Three-dimensional target reconstruction from multiple 2-d forward-scan sonar views by space carving. IEEE Journal of Oceanic Engineering , 42(3):574–589, 2016. 3 [5] Yochai Blau and Tomer Michaeli. The perception-distortion tradeoff. In 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 6228–6237. IEEE, 2018. 3 [6] Jooyoung Choi, Jungbeom Lee, Chaehun Shin, Sungwon Kim, Hyunwoo Kim, and Sungroh Yoon. Perception priori-tized training of diffusion models. In 2022 IEEE/CVF Con-ference on Computer Vision and Pattern Recognition (CVPR) ,pages 11462–11471. IEEE, 2022. 3 [7] Yunjey Choi, Minje Choi, Munyoung Kim, Jung-Woo Ha, Sunghun Kim, and Jaegul Choo. Stargan: Unified generative adversarial networks for multi-domain image-to-image trans-lation. In 2018 IEEE/CVF conference on computer vision and pattern recognition , pages 8789–8797. IEEE, 2018. 2 [8] Yunjey Choi, Youngjung Uh, Jaejun Yoo, and Jung-Woo Ha. Stargan v2: Diverse image synthesis for multiple domains. In 
+
+2020 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 8185–8194. IEEE, 2020. 2 [9] Keyan Ding, Kede Ma, Shiqi Wang, and Eero P Simoncelli. Image quality assessment: Unifying structure and texture similarity. IEEE transactions on pattern analysis and machine intelligence , 44(5):2567–2581, 2020. 3 [10] Marina Dom´ ınguez, Yordanka Velikova, Nassir Navab, and Mohammad Farid Azampour. Diffusion as sound propaga-tion: Physics-inspired model for ultrasound image genera-tion. In International conference on medical image computing and computer-assisted intervention , pages 613–623. Springer, 2024. 3 [11] Patrick Esser, Robin Rombach, and Bjorn Ommer. Taming transformers for high-resolution image synthesis. In Proceed-ings of the IEEE/CVF conference on computer vision and pattern recognition , pages 12873–12883, 2021. 3, 6 [12] Fausto Ferreira, Diogo Machado, Gabriele Ferri, Samantha Dugelay, and John Potter. Underwater optical and acoustic imaging: A time for fusion? a brief overview of the state-of-the-art. OCEANS 2016 MTS/IEEE Monterey , pages 1–6, 2016. 1 [13] Tiankai Hang, Shuyang Gu, Chen Li, Jianmin Bao, Dong Chen, Han Hu, Xin Geng, and Baining Guo. Efficient dif-fusion training via min-snr weighting strategy. In 2023 IEEE/CVF International Conference on Computer Vision (ICCV) , pages 7407–7417. IEEE, 2023. 3 [14] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bern-hard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. 
+
+Advances in neural information processing systems , 30, 2017. 6[15] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffu-sion probabilistic models. Advances in neural information processing systems , 33:6840–6851, 2020. 2 [16] Bin Hu, Chenqiang Gao, Shurui Liu, Junjie Guo, Fang Chen, Fangcen Liu, and Junwei Han. Cm-diff: A single generative network for bidirectional cross-modality translation diffusion model between infrared and visible images. arXiv preprint arXiv:2503.09514 , 2025. 2 [17] Xun Huang, Ming-Yu Liu, Serge Belongie, and Jan Kautz. Multimodal unsupervised image-to-image translation. In 
+
+European conference on computer vision , pages 179–196. Springer, 2018. 2, 5, 6 [18] Yifan Huang, Weixiang Li, and Fei Yuan. Speckle noise reduction in sonar image based on adaptive redundant dictio-nary. Journal of marine science and engineering , 8(10):761, 2020. 3 [19] Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, and Alexei A Efros. Image-to-image translation with conditional adversarial net-works. In 2017 IEEE conference on computer vision and pattern recognition (CVPR) , pages 5967–5976. Ieee, 2017. 2, 5, 6 [20] Justin Johnson, Alexandre Alahi, and Li Fei-Fei. Perceptual losses for real-time style transfer and super-resolution. In 
+
+European conference on computer vision , pages 694–711. Springer, 2016. 3, 5 [21] Duc Kieu, Kien Do, Toan Nguyen, Dang Nguyen, and Thin Nguyen. Bidirectional diffusion bridge models. In Proceed-ings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 , pages 1139–1148, 2025. 2, 5, 6 [22] Beomsu Kim, Gihyun Kwon, Kwanyoung Kim, and Jong Chul Ye. Unpaired image-to-image translation via neural schr¨ odinger bridge. In International Conference on Learning Representations , pages 19312–19331, 2024. 2, 5 [23] Hong-Gi Kim, Jungmin Seo, and Soo Mee Kim. Underwater optical-sonar image fusion systems. Sensors , 22(21):8445, 2022. 1 [24] Bo Li, Kaitao Xue, Bin Liu, and Yu-Kun Lai. Bbdm: Image-to-image translation with brownian bridge diffusion models. In 2023 IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , pages 1952–1961. IEEE, 2023. 1, 2, 3, 5, 6 [25] Xiaomin Lin, Nitin J Sanket, Nare Karapetyan, and Yian-nis Aloimonos. Oysternet: Enhanced oyster detection using simulation. arXiv preprint arXiv:2209.08176 , 2022. 2 [26] Xiaomin Lin, Vivek Mange, Arjun Suresh, Bernhard Neu-berger, Aadi Palnitkar, Brendan Campbell, Alan Williams, Kleio Baxevani, Jeremy Mallette, Alhim Vera, et al. Odyssee: Oyster detection yielded by sensor systems on edge electron-ics. In 2025 IEEE International Conference on Robotics and Automation (ICRA) , pages 5290–5297. IEEE, 2025. 2 
+
+9[27] Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching for generative modeling. 
+
+arXiv preprint arXiv:2210.02747 , 2022. 2 [28] Guan-Horng Liu, Arash Vahdat, De-An Huang, Evangelos Theodorou, Weili Nie, and Anima Anandkumar. I 2SB: Image-to-image schr¨ odinger bridge. In Proceedings of the 40th International Conference on Machine Learning , pages 22042– 22062. PMLR, 2023. 1, 2 [29] Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and transfer data with rectified flow. arXiv preprint arXiv:2209.03003 , 2022. 2 [30] Fangyuan Mao, Jilin Mei, Shun Lu, Fuyang Liu, Liang Chen, Fangzhou Zhao, and Yu Hu. Pid: Physics-informed diffusion model for infrared image generation. Pattern Recognition ,169:111816, 2026. 3 [31] Taesung Park, Ming-Yu Liu, Ting-Chun Wang, and Jun-Yan Zhu. Semantic image synthesis with spatially-adaptive nor-malization. In 2019 IEEE/CVF conference on computer vision and pattern recognition (CVPR) , pages 2332–2341. IEEE, 2019. 3, 4 [32] Ethan Perez, Florian Strub, Harm De Vries, Vincent Du-moulin, and Aaron Courville. Film: Visual reasoning with a general conditioning layer. In Proceedings of the AAAI conference on artificial intelligence , 2018. 3 [33] Mohamad Qadri, Kevin Zhang, Akshay Hinduja, Michael Kaess, Adithya Pediredla, and Christopher A Metzler. Aoneus: A neural rendering framework for acoustic-optical sensor fusion. In ACM SIGGRAPH 2024 conference papers ,pages 1–12, 2024. 3 [34] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨ orn Ommer. High-resolution image syn-thesis with latent diffusion models. In 2022 IEEE/CVF con-ference on computer vision and pattern recognition (CVPR) ,pages 10674–10685. ieee, 2022. 2, 3 [35] Chitwan Saharia, William Chan, Huiwen Chang, Chris Lee, Jonathan Ho, Tim Salimans, David Fleet, and Mohammad Norouzi. Palette: Image-to-image diffusion models. In ACM SIGGRAPH 2022 conference proceedings , pages 1–10, 2022. 2, 5 [36] Yuyang Shi, Valentin De Bortoli, Andrew Campbell, and Arnaud Doucet. Diffusion schr¨ odinger bridge matching. Ad-vances in neural information processing systems , 36:62183– 62223, 2023. 2 [37] Xuan Su, Jiaming Song, Chenlin Meng, and Stefano Ermon. Dual diffusion implicit bridges for image-to-image translation. 
+
+arXiv preprint arXiv:2203.08382 , 2022. [38] Alexander Tong, Kilian Fatras, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid Rector-Brooks, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based gener-ative models with minibatch optimal transport. arXiv preprint arXiv:2302.00482 , 2023. 2, 5, 6 [39] Yusheng Wang, Chujie Wu, Yonghoon Ji, Hiroshi Tsuchiya, Hajime Asama, and Atsushi Yamashita. 2d forward looking sonar simulation with ground echo modeling. In 2023 20th International Conference on Ubiquitous Robots (UR) , pages 724–729. IEEE, 2023. 3 [40] Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Simoncelli. Image quality assessment: from error visibility to structural similarity. IEEE transactions on image processing ,13(4):600–612, 2004. 3, 6 [41] Bilal Wehbe, Nimish Shah, Miguel Bande, and Christian Backe. Sonar-to-rgb image translation for diver monitoring in poor visibility environments. In OCEANS 2022, Hampton Roads , pages 1–9. IEEE, 2022. 3, 5 [42] Yinjie Xu, Zhiqiang Xu, Tao Xue, and Gaofei Xu. Forward-looking so nar image generation based on stable diffusion model. In Journal of Physics: Conference Series , page 012043. IOP Publishing, 2026. 3 [43] Kaitao Xue, Bo Li, Ziyi Liu, Zhifen He, Bin Liu, Congx-uan Zhang, and Yu-Kun Lai. Bibbdm: Bidirectional image translation with brownian bridge diffusion models. IEEE Transactions on Pattern Analysis and Machine Intelligence ,2025. 2, 5, 6 [44] Jiexin Zhang, Jianjiang Zhou, Minglei Li, Huiyu Zhou, and Tianzhu Yu. Quality assessment of sar-to-optical image trans-lation. Remote Sensing , 12(21):3472, 2020. 3 [45] Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding conditional control to text-to-image diffusion models. In 
+
+2023 IEEE/CVF International Conference on Computer Vi-sion (ICCV) , pages 3813–3824. IEEE, 2023. 2, 5 [46] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. The unreasonable effectiveness of deep features as a perceptual metric. In 2018 IEEE/CVF conference on computer vision and pattern recognition , pages 586–595. IEEE, 2018. 3, 5, 6 [47] Linqi Zhou, Aaron Lou, Samar Khanna, and Stefano Ermon. Denoising diffusion bridge models. In International Confer-ence on Learning Representations , pages 8160–8171, 2024. 1, 2 [48] Jun-Yan Zhu, Taesung Park, Phillip Isola, and Alexei A Efros. Unpaired image-to-image translation using cycle-consistent adversarial networks. In 2017 IEEE international conference on computer vision (ICCV) , pages 2242–2251. Ieee, 2017. 2 
+
+10

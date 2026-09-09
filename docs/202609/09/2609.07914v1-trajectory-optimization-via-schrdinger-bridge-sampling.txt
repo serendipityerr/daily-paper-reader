@@ -1,0 +1,1075 @@
+Title: Trajectory Optimization via Schrödinger Bridge Sampling
+
+URL Source: https://arxiv.org/pdf/2609.07914v1
+
+Published Time: Wed, 09 Sep 2026 03:28:35 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+> 1
+
+# Trajectory Optimization via Schrödinger Bridge Sampling 
+
+Mattia Mosso 1, ∗ Yang Liu 2, ∗ Heng Yang 3
+
+Abstract —We take a new look at the relation between finite-horizon trajectory optimization and Schrödinger bridge sampling. Viewed as inference, KL-regularized trajectory optimization is solved by sampling from a Gibbs–Boltzmann distribution whose energy is the trajectory cost, and the adjoint Schrödinger bridge sampler (ASBS) is a simulation-free diffusion sampler designed for exactly such unnormalized targets. Hard equality path and terminal constraints, by contrast, confine the admissible decision variables to a measure-zero feasibility manifold, on which the target must be redefined intrinsically. In particular: (a) we ana-lyze two complementary parametrizations; a rollout parametrization, in which the dynamics are elimi-nated and only the remaining constraints shape the manifold, and a double-shooting parametrization, in which states and controls are sampled jointly and the dynamics themselves become part of the manifold; (b)
+
+we establish regularity conditions under which both admissible sets are smooth embedded manifolds; (c)
+
+under compactness and path-connectedness assump-tions, we sample from the resulting intrinsic Gibbs measures via Riemannian ASBS, treating strict inequal-ities through exponential slack variables. Experiments, including contact-rich locomotion and manipulation, demonstrate the effectiveness of both regimes. 
+
+1. I NTRODUCTION 
+
+# THIS paper concerns two problems of rather different origin. Trajectory optimization seeks a state–control trajectory of minimal cost subject to dy-namics and task constraints, and is a computational workhorse of model-based robotics. The Schrödinger bridge problem [1] seeks the controlled diffusion that most economically transports a tractable source distribution onto a prescribed target, and has recently matured into a family of practical diffusion samplers [2]. Our aim is to make the relation between the two precise, and then to exploit it. Concretely, consider a        
+
+> ∗Equal contribution.
+> 1School of Aerospace Engineering, Georgia Institute of Tech-nology. Email: mmosso3@gatech.edu
+> 2College of Science and Engineering, University of Minnesota. Email: liu03222@umn.edu
+> 3School of Engineering and Applied Sciences, Harvard Univer-sity. Email: hankyang@seas.harvard.edu
+
+deterministic, nonlinear, time-varying, discrete-time dynamical system 
+
+xt+1 = ft(xt, ut), t ∈ N[0: T−1], (1) where xt ∈ Rn is the state and ut ∈ Rm is the control input. For a finite horizon T, a state-control trajectory is denoted by 
+
+τ = ( x0, u0, x1, u1, . . . , xT−1, uT−1, xT ) ∈ Rnτ , (2) with nτ := (T + 1)n + Tm . We study the finite-horizon trajectory optimization problem, formally defined as min  
+
+> τ
+
+J (τ) :=
+
+> T−1
+
+# ∑
+
+> t=0
+
+ℓt(xt, ut) + ℓT (xT ) (3a) s.t. (1), x0 = ¯x0, (3b) 
+
+ht(xt, ut) = 0, t ∈ N[0: T−1], hT (xT ) = 0, (3c) where ℓt(·, ·) ≥ 0 and ℓT (·) ≥ 0 are running and terminal costs, the smooth maps ht : Rn × Rm → Rrt
+
+and hT : Rn → RrT encode, e.g., exact goal reaching, waypoint passage, actuation geometry, or safety specifications (strict inequalities are treated in Sec. 4.4 via slack variables). We distinguish two regimes of (3) throughout: the soft-constrained regime, in which the maps in (3c) are absent or their violation is merely penalized within J , and the hard-constrained regime, in which (3c) must hold exactly. Gradient-based solvers, from DDP/iLQR to con-strained direct-transcription NLP methods [3]–[5], are local—they refine a single initial guess into one locally optimal trajectory— although constrained for-mulations can enforce (3c) at convergence. Sampling-based approaches such as model predictive path integral control (MPPI) [6] explore the control space more globally, parallelize naturally, and query the dynamics model only to evaluate trajectory costs, thereby avoiding dynamics derivatives. These meth-ods, however, together with more recent inference-based solvers [7], handle (3c) through soft penalties, so that feasibility is traded against cost and never formally guaranteed. Two questions therefore struc-ture this paper: what, precisely, is the relation between trajectory optimization and diffusion-based sampling , and arXiv:2609.07914v1 [eess.SY] 7 Sep 2026 2
+
+can the global, distributional exploration of the latter be retained while satisfying hard constraints exactly? 
+
+The starting point is a characterization of trajectory optimization as inference [7, Thm. 1]: instead of a single decision variable Θ (here, a control sequence or a full trajectory), one optimizes a distribution over decision variables, regularized by the Kullback– Leibler (KL) divergence to a prior p0. The optimal distribution admits the closed-form expression 
+
+p⋆(Θ) = 1
+
+Z p0(Θ) exp 
+
+
+
+− 1
+
+λ E(Θ)
+
+
+
+, (4) where E is an energy induced by J and λ > 0 a temperature, so that p⋆ concentrates on minimizers as 
+
+λ → 0+. Generating draws from the unnormalized density (4) is precisely the problem addressed by ASBS [2]. In the hard-constrained regime, by contrast, the admissible decision variables form a feasibility manifold , a measure-zero subset of the ambient space. This motivates adopting the Riemannian Adjoint Schrödinger Bridge sampler (R–ASBS) [8] as the sampling engine for the hard-constrained case, for which we develop the supporting theory. 
+
+Contributions. (i) We investigate the relation be-tween trajectory optimization and Schrödinger bridge sampling. In rollout coordinates, soft-constrained problems reduce to Euclidean Gibbs–Boltzmann sampling solved directly by ASBS, while hard-constrained problems become Gibbs–Boltzmann sam-pling on feasibility manifolds (Thm. 1) solved by R– ASBS. (ii ) For the hard-constrained case, we establish regularity conditions (Props. 1 and 2) under which the corresponding feasible sets are smooth embedded manifolds; compactness and path-connectedness are imposed as standing assumptions matching the R– ASBS hypotheses; strict inequalities are handled through exponential slacks. (iii ) We demonstrate both regimes on diverse robotic tasks (Sec. 5). 2. R ELATED WORK 
+
+Optimization-based trajectory optimization. Be-yond the local solvers recalled in Sec. 1, the nu-merical machinery for (3) comprises interior-point [9], sequential-quadratic [10], and successive-convex [11], [12] programming, together with augmented-Lagrangian methods [13], in shooting or direct-transcription form. Global alternatives, such as mixed-integer programming [14] and convex relax-ations [15], offer optimality certificates at a computa-tional cost that grows quickly with problem size. 
+
+Sampling-based trajectory optimization. Originat-ing in path-integral control [16], [17], this family in-cludes MPPI, predictive sampling [18], cross-entropy [19] and Stein variational [20] methods, model-based diffusion [21], and tempered sequential Monte Carlo (TSMC) [7], whose inference formulation (4) underlies Sec. 4. These methods generally encode task constraints through costs; recent constrained Stein variants instead enforce them explicitly [22], [23]. 
+
+Diffusion models for planning and control. Dif-fusion models trained on demonstrations synthesize trajectories [24], policies [25], and dynamics [26], with constraints imposed through guidance or projection steps [27]; their applicability therefore rests on the availability of trajectory datasets. 
+
+Constrained and manifold sampling. Sampling on implicitly defined manifolds is classically performed with constrained Hamiltonian Monte Carlo [28], which is asymptotically exact but suffers from slow mixing and requires a constraint solve at every step of the chain. Mirror, reflected, and barrier constructions [29]–[31] address constrained generative modeling from data. 3. A DJOINT SCHRÖDINGER BRIDGE SAMPLING 
+
+We review background on the sampling machinery of [2], [8]. Throughout, ⟨· , ·⟩ and ∥ · ∥ denote the Euclidean inner product and norm on the ambient space Rd, respectively. 
+
+3.1. Euclidean ASBS 
+
+Given a continuously differentiable energy E :
+
+Rd → R, the objective is to sample from the Gibbs– Boltzmann distribution 
+
+ν(dx) = 1
+
+Z exp (−E(x)) dx, x ∈ Rd, (5) without evaluating the normalizing constant Z. Dif-fusion samplers learn a control field uθ 
+
+> t
+
+driving the Itô stochastic differential equation (SDE) dXt = σtuθ 
+
+> t
+
+(Xt) dt + σt dWt, X0 ∼ μ, (6) so that X1 ∼ ν, where μ is a tractable source and σt : [0, 1 ] → R+ a noise schedule 1. Let 
+
+pu and pbase denote the path measures of the controlled and uncontrolled (u ≡ 0) processes. The Schrödinger bridge (SB) problem [1] seeks the minimum-energy control—equivalently, by Gir-sanov’s theorem, the minimum Kullback–Leibler 
+
+> 1We restrict the exposition to the zero-drift reference process. 3
+
+divergence DKL (pu∥pbase )—achieving the terminal constraint, min  
+
+> u
+
+Epu
+
+h Z 1012 ∥ut(Xt)∥2 dt
+
+i
+
+s.t. X1 ∼ ν. (7) Notably, (7) is equivalent [2, Thm. 3.1] to the un-constrained terminal-cost stochastic optimal control (SOC) problem min  
+
+> u
+
+Epu
+
+h Z 1012 ∥ut(Xt)∥2 dt + log ˆφ1(X1)
+
+ν(X1)
+
+i
+
+, (8) where φt, ˆ φt are the SB potentials, satisfying φ1 ˆφ1 = ν
+
+and φ0 ˆφ0 = μ, and the optimal control is u⋆ 
+
+> t
+
+=
+
+σt∇ log φt. ASBS [2] solves (8) by alternating two simulation-free regressions. Adjoint matching [32] exploits the additivity of the Gaussian reference kernel to characterize the optimal control as 
+
+u⋆ = arg min 
+
+> u
+
+E∥ut(Xt) + σt(∇E + ∇ log ˆ φ1)( X1)∥2,(9) where the expectation is over pbase  
+
+> t|0,1
+
+p ¯u 
+
+> 0,1
+
+with ¯u =
+
+stopgrad (u): endpoints (X0, X1) are drawn from the current controlled process p ¯u
+
+> 0,1
+
+, and intermediate states from the (Gaussian) base bridge pbase 
+
+> t|0,1
+
+. Corrector matching estimates the endpoint bias term ∇ log ˆ φ1,induced by a general non-memoryless source μ, via 
+
+∇ log ˆ φ1 = arg min 
+
+> h
+
+Epu
+
+> 0,1
+
+h
+
+h(X1) + X1 − X0
+
+R 10 σ2 
+
+> t
+
+dt
+
+> 2
+
+i
+
+.(10) Alternating (9) and (10) converges to the SB solution when each stage reaches its critical point [2, Thm. 3.2]. Crucially, neither differentiation through simulated trajectories nor samples from ν are required. App. B summarizes the resulting procedure. 
+
+3.2. Riemannian ASBS: Intrinsic Sampling on M
+
+We now summarize the manifold extension [8] of this machinery, which will form the basis of our hard-constrained formulation. Specifically, consider 
+
+M := {x ∈ Rd : c(x) = 0}, c : Rd → Rdc , (11) with c smooth and Jc(x) ∈ Rdc ×d of full row rank on 
+
+M, so that M is a smooth, boundaryless embedded submanifold of dimension d − dc. We further assume 
+
+M is compact and path-connected. Let Tx M denote the tangent space at x, Px := Id − Jc(x)⊤(Jc J⊤ 
+
+> c
+
+)−1 Jc(x)
+
+the orthogonal projector onto Tx M, ∇M the Rieman-nian gradient, and dvol M the volume form induced by the ambient metric. The intrinsic target is 
+
+νM(dx) = 1
+
+ZM
+
+exp (−E(x)) dvol M(x), x ∈ M .(12) Define the controlled diffusion intrinsically on M,dXt = σtut(Xt) dt + σt dWM 
+
+> t
+
+,
+
+X0 ∼μM, ut(x) ∈ Tx M, (13) where WM 
+
+> t
+
+is Brownian motion on M (with gen-erator 12 ∆M) and μM an easy-to-sample probability distribution on M. Since drift and noise act through the tangent bundle, feasibility is enforced at the level of the state space ( X0 ∈ M =⇒ Xt ∈ M for all t,almost surely). The ASBS structure transfers to M [8, Thm. 1]: the corrector ∇M log ˆ φM 
+
+> 1
+
+again removes the bias of a non-memoryless source, but is now an intrinsic tangent field. The exact manifold analogue of (9) is more delicate. On a curved space, differentiating the diffusion semigroup replaces the identity transport of 
+
+Rd with the adjoint of a damped stochastic parallel transport Wt,1 along reference paths. Since heat kernels, reference bridges, and damped transports are intractable on general manifolds, R– ASBS replaces them with computable geometric surrogates: a short-time Varadhan/Log-map approx-imation of the heat-kernel score, a noisy-geodesic approximation of the reference bridge, and Levi– Civita parallel transport along the sampled bridge. However, the manifolds arising in trajectory opti-mization are implicitly defined by nonlinear equality constraints, for which those primitives are unavail-able. Extended R–ASBS [8, Alg. 2] replaces them with three projection-based operations 2 : (i) the retraction is the nearest-point projection ΠM onto 
+
+c(x) = 0, computed by Newton iterations; (ii )
+
+backward parallel transport of the terminal adjoint is simplified by projection-as-transport (PAT), the sequential composition of tangent projectors along the discretized path, T1→t0 (v) ≈ PXt0 PXt1 · · · PXtN−1 v;
+
+(iii ) the corrector target is the projected chord 
+
+−PX1 (X1 − X0)/ R 10 σ2 
+
+> t
+
+dt, i.e., the tangent projection of the Euclidean corrector in (10). The complete procedure is given in Alg. 2, App. B. 4. T RAJECTORY OPTIMIZATION VIA SCHRÖDINGER 
+
+BRIDGE SAMPLING 
+
+This section makes the relation announced in Sec. 1 clear. Sec. 4.1 introduces rollout coordinates and shows that, in the soft-constrained regime, (3) reduces to a Euclidean Gibbs–Boltzmann sampling problem solved verbatim by ASBS. The remainder of the 
+
+> 2Owing to these geometric approximations, formal convergence guarantees for R–ASBS are not available. 4
+
+section develops the hard-constrained regime, in which the decision variable is confined to a manifold of the form (11). All formal proofs are collected, with additional remarks, in App. A. 
+
+4.1. Rollout Coordinates and the Soft-Constrained Case 
+
+With the initial state fixed at ¯x0, the natural minimal decision variable is the open-loop control se-quence z := ( u0, . . . , uT−1) ∈ RTm . The dynamics are eliminated through the rollout map Φ : RTm → Rnτ ,which recursively sets xt+1 = ft(xt, ut) from x0 = ¯x0
+
+and returns the full trajectory τ = Φ(z).In the soft-constrained regime ( ht, hT absent, or penalized within the cost), the decision variable is fully Euclidean, and the KL-regularized problem behind (4) takes, for a strictly positive prior density 
+
+p0 on RTm , the explicit form min   
+
+> p∈P (RTm )
+
+Ez∼p [J (Φ(z))] + λ DKL (p∥p0), (14) with P (RTm ) the Borel probability measures on RTm .Since J ≥ 0 and p0 is a strictly positive density, the partition function Zλ := R 
+
+> RTm
+
+p0(z) e− 1   
+
+> λJ(Φ(z))
+
+dz ∈
+
+(0, 1 ], and (14) admits the unique minimizer [7, Thm. 1] 
+
+p⋆
+
+> λ
+
+(z) = 1
+
+Zλ
+
+p0(z) e− 1  
+
+> λJ(Φ(z))
+
+, (15) the instance of (4) with Θ = z. Setting ˜E(z) := 1
+
+λ J (Φ(z)) − log p0(z) (16) identifies (15) with the unnormalized target (5), i.e., trajectory optimization reduces, with no further structure, to the sampling problem of Sec. 3.1. ASBS alternates (9) and (10), touching the dynamics only through rollout derivatives of ˜E in the adjoint-matching target 3, and its samples concentrate on low-cost control sequences as λ → 0+.
+
+4.2. Hard Constraints 
+
+Hard constraints change the geometry. Stacking the path and terminal maps along the rollout defines 
+
+G : RTm → RR,
+
+G(z) = 
+
+
+
+h0( ¯x0, u0)
+
+...
+
+hT−1(xT−1(z), uT−1)
+
+hT (xT (z)) 
+
+ , (17) 
+
+> 3A surrogate gradient serves where the simulator is not differ-entiable.
+
+with R := ∑T−1 
+
+> t=0
+
+rt + rT , and the feasible set in rollout coordinates is X := G−1(0) ⊂ RTm . Note that 
+
+G contains no dynamics rows; the dynamics are satisfied by construction, and only the remaining constraints shape the manifold. 
+
+Proposition 1 (Regularity of the rollout feasible set) .
+
+Let ft, h t (t = 0, . . . , T − 1), and h T be smooth. Assume X̸ = ∅ and rank JG (z) = R for all z ∈ X .Then X is a smooth embedded submanifold of RTm 
+
+of dimension Tm − R. 
+
+The rank requirement is not automatic 4 and cou-ples all stages through the rollout; a more tractable stagewise sufficient condition is given in Cor. 1, App. A. Since X has codimension R ≥ 1, it is a Lebesgue-null subset of RTm The KL-regularized problem must therefore be re-posed on M. In the Euclidean problem (14), the structural role of the full-support prior p0 is to render the tilted density normalizable on the ambient space. On a compact manifold (cf. Asm. 1) this role is superfluous and we regularize directly toward the uniform law, min   
+
+> p∈P (M)
+
+Ex∼p[E(x)] + λ DKL (p∥ ¯μM), (18) where M is a generic manifold of the form (11) and ¯μM := vol M(M)−1 vol M the uniform law. We then have the following result. 
+
+Theorem 1 (Optimization as inference on M).
+
+Let M ⊂ Rd be a smooth, compact, boundaryless embedded submanifold, with volume measure vol M
+
+induced by the ambient metric and finite total volume VM := vol M(M) ∈ (0, ∞). Let E : M → R,E ∈ C1(M) denote the trajectory cost expressed in the chosen coordinates, and λ > 0. Then: 
+
+(i) (Well-posedness.) The partition function ZM := R 
+
+> M
+
+exp (− 1 
+
+> λ
+
+E(x)) dvol M(x) satis-fies 0 < ZM < ∞.
+
+(ii) (Gibbs–Boltzmann form.) Problem (18) has the unique minimizer 
+
+νM(dx) = 1
+
+ZM
+
+e− 1  
+
+> λE(x)
+
+dvol M(x). (19) (iii) (Low-temperature concentration.) Let 
+
+M⋆ := arg min x∈M E(x), which is nonempty by compactness. For every 
+
+> 4Inconsistent, redundant, or singular path and terminal con-straints may violate it. 5
+
+open set U ⊇ M ⋆, νM(M \ U) → 0 as 
+
+λ → 0+.
+
+We equip X with the Riemannian metric inherited from the ambient rollout-coordinate Euclidean space and denote the induced volume form by dvol X .Constrained trajectory optimization then becomes sampling from the intrinsic Gibbs measure on X ,
+
+p⋆ 
+
+> X
+
+(dz) = 1
+
+ZX
+
+e− 1  
+
+> λJ(Φ(z))
+
+dvol X (z), (20) which is the instance of (19) for M = X and E =
+
+J ◦ Φ. Under Asms. 1 and 2 (Sec. 4.4), Extended R–ASBS applies directly with c := G and manifold energy EX (z) = 1 
+
+> λ
+
+J (Φ(z)) ; samples z ∼ p⋆ 
+
+> X
+
+are mapped to feasible trajectories by τ = Φ(z).
+
+Advantages and limitations. Rollout coordinates realize the smallest possible sampling dimension (Tm , codimension R only), and dynamic feasibility can never be violated, not even transiently during Newton projections. The price is that both the energy and the constraint map (17) are T-fold compositions of the dynamics. Their derivatives chain the stage Jacobians At := ∂x ft, Bt := ∂u ft: for s < t, ∂xt 
+
+> ∂us
+
+(z) = 
+
+At−1 At−2 · · · As+1 Bs, so gradient magnitudes can grow (or vanish) exponentially with the horizon whenever the linearized dynamics are unstable or stiff [33]. 
+
+4.3. Double-Shooting Coordinates: Dynamics as Manifold Constraints 
+
+The complementary formulation samples states and controls jointly . The decision variable is the full trajectory (2), and the dynamics enter as explicit equality constraints, defining the dynamics manifold 
+
+Md := {τ ∈ Rnτ : (1) holds ∀t ∈ N[0: T−1]}. Adding the initial condition and the path and terminal equality constraints of (3) yields the constrained trajectory manifold 
+
+Mp := {τ ∈ M d : x0 = ¯x0,
+
+ht(xt, ut) = 0 ∀t, hT (xT ) = 0}. (21) The next proposition formalizes that Md is globally parametrized by the initial state and the control sequence and that the regularity of Mp is inherited from that of X .
+
+Proposition 2 (Rollout embedding and regularity of Md and Mp). Let f t, h t (t = 0, . . . , T − 1), and hT be smooth, and extend the rollout map to Φ :
+
+Rn+Tm → Rnτ by treating x 0 as free. Then: 
+
+(i) Φ is a smooth embedding with Φ(Rn+Tm ) = 
+
+Md. In particular, Md is a smooth embedded submanifold of Rnτ of dimension n + Tm, and no rank assumption is required: the defect constraints are regular everywhere. 
+
+(ii) If, in addition, X̸ = ∅ and rank JG (z) = Rfor all z ∈ X (the assumptions of Prop. 1), then 
+
+Mp = Φ({ ¯x0} × X ) is a smooth embedded submanifold of Rnτ , diffeomorphic to X , of dimension Tm − R. 
+
+Advantages and limitations. In double-shooting coordinates, the constraint map stacking (ct)t and 
+
+(ht, hT ) is local in time, i.e., each row involves only variables from adjacent stages. The energy gradient 
+
+∇τ J decomposes stagewise, curing the exploding-gradient pathology. The downside is sampling hard-ness, since the ambient dimension inflates to nτ and the manifold codimension to (T + 1)n + R, so every step must retract onto a large nonlinear manifold. 
+
+4.4. Standing Assumptions and Strict Inequalities 
+
+R–ASBS requires compact, path-connected mani-folds. Smoothness and embeddedness are guaranteed by Props. 1 and 2; since X and Mp are diffeomorphic, compactness and path-connectedness hold for one iff they hold for the other, but they cannot, in general, be derived from the problem data and are therefore imposed as a standing assumption. 
+
+Assumption 1 (Compactness and path-connect-edness) . The feasible set X (equivalently, Mp) is nonempty, compact, and path-connected. 
+
+Closedness is automatic ( X is the preimage of 
+
+{0} under the continuous map G), so compactness reduces to boundedness. Boundedness holds, for instance, when the decision variable ranges over a compact ambient reparametrization, e.g., angles identified on the torus via unit-vector coordinates. R–ASBS additionally requires an initial law for the intrinsic diffusion (13). 
+
+Assumption 2 (Sampling access to a feasible source) .
+
+We have sampling access to a source probability measure μM supported on X (equivalently, Mp). 
+
+In practice this requires only an initial trajectory close enough to feasibility for the nearest-point projec-tion ΠM to converge. Starting from this feasible but suboptimal source, R–ASBS transports mass to p⋆ 
+
+> X6
+> Fig. 1. Cost of the sampled trajectories during training: mean over the 2000 draws at each evaluation (thick) and lowest-cost draw (thin). The bottom rows show time steps from the corresponding minimum-cost trajectories.
+
+(equivalently p⋆ 
+
+> Mp
+
+), whose samples remain feasible and, as λ → 0+, concentrate on the trajectories that are optimal with respect to the soft objectives collected in J (Thm. 1(iii)). 
+
+Strict inequality constraints. Strict path inequal-ities gt(xt, ut) < 0 can be encoded by intro-ducing slack variables st ∈ Rqt and imposing 
+
+gt(xt, ut) + exp (st) = 0 componentwise. Since 
+
+∂st
+
+ gt + exp (st) = diag (exp (st)) is nonsingular for every finite st, the augmented constraints are regular in the slack directions, and the joint constraint map retains full row rank whenever the equality block does. Thus, at the level of manifold regularity, strict inequalities reduce to equality constraints on an augmented space. Observe that this construction rep-resents only the strict interior gt < 0, not the closed set gt ≤ 0. Boundary-active solutions correspond to 
+
+st → − ∞, which breaks the boundedness required by Asm. 1 and causes numerical ill-conditioning. We therefore target problems whose optima lie strictly in the interior of the feasible set, as in Sec. 5.3. 5. N UMERICAL EXPERIMENTS 
+
+Sec. 4 identifies two regimes: a Euclidean one, in which soft-constrained trajectory optimization is directly amenable to ASBS, and a hard-constrained one, in which the intrinsic target (19) is provably well-posed and the R–ASBS hypotheses hold. This section probes their validity empirically beyond it. All simulations were implemented in Python using JAX [34] on a Lambda workstation with an AMD Ryzen Threadripper PRO 5975WX (32 cores) and two NVIDIA Ada6000 GPUs. The source code is available at Github. 
+
+5.1. Soft-Constrained Tasks via Euclidean ASBS 
+
+Both tasks are simulated with the analytical contact engine ComFree [35], whose compliant contact model keeps every integration step differentiable: the energy gradient ∇zJ is obtained by reverse-mode differenti-ation through the entire rollout, rather than by finite differences or zeroth-order estimation, and agrees with central finite differences across four decades of perturbation size. Fig. 1 reports 2000 sampled trajectories per evaluation, together with the selected lowest-cost trajectory z⋆ := arg min z(i) J  z(i), i =
+
+1, . . . , 2000. 
+
+5.1.1. Cheetah Locomotion: We first consider the planar half-cheetah of the DeepMind Control Suite [36], on a horizon of T = 150 control knots, each held for 10 integration steps, the sampled variable is z ∈ R900 while every rollout resolves 1500 contact steps. The running cost penalizes the deviation of the forward speed from the benchmark target through its smoothed reward, together with small control-effort and control-smoothness terms, and is accumulated at every integration step. 
+
+5.1.2. Quadruped Locomotion: The second task is the spatial quadruped of the same suite [36], whose 
+
+m = 12 actuators drive four legs that alternate stance and flight. With the same T = 150 knots, each now held for 4 integration steps, the sampled variable is 
+
+z ∈ R1800 . The running cost is the benchmark Move objective. 
+
+5.2. Hard Equality Constraints via R–ASBS 5.2.1. 2D PointMaze: We evaluate the R–ASBS trajectory sampler on a planar PointMaze navigation problem inspired by the OGBench benchmark [37]. A two-dimensional point mass must move from a fixed initial state x0 = ¯x0 to a prescribed terminal location under the dynamics xt+1 = xt + ∆t u t. Two classes of hard equality constraints are imposed: exact terminal arrival, xT = x⋆ 
+
+> T
+
+, and constant speed along the path, 
+
+∥ut∥2 = v20 for all t. The maze itself is encoded through the running cost. Fig. 2 shows 500 sampled trajectories (blue), together with the selected lowest-cost trajectory θ⋆ := arg min θ(i) J  Φ(θ(i)), i =
+
+1, . . . , 500. We compare against constrained nonlinear programming (NLP; scipy.optimize.minimize )and Riemannian gradient descent (RGD) [38], both run from the same prior and in double-shooting coordinates. 
+
+5.2.2. Multi-Drone Cooperative Transport: The com-plexity increases substantially in the scenario of Fig. 4 (a), where a team of M = 3 unmanned aerial vehicles (UAVs) cooperatively carries a cable-suspended payload with position and velocity 
+
+pLt , vLt ∈ R3. The payload must move from a starting 7       
+
+> Fig. 2. Constant-speed PointMaze, with walls in white. The marks
+> •and ⋆denote the initial state and the hard terminal goal.
+> Fig. 3. Push-T at successive time steps (prior ■, best ■, obstacle
+> •).
+
+configuration to a final target, passing through required intermediate waypoints, while avoiding collisions with moving obstacles and between drones, low-altitude flight, and excessive payload swing. Rather than sampling UAV positions and enforcing the fixed cable lengths li as constraints, each cable direction is parametrized by a polar angle ϑit and an azimuth angle ψit, so that UAV i’s position is reconstructed as pit = pLt + liqit(ϑit, ψit) with qit the corresponding unit vector. The state collects payload position/velocity, cable angles, and angular rates (n = 18); the control ut ∈ R3+2M commands the payload acceleration and the cable angular accel-erations, with magnitude limits enforced via tanh. The sampled variable is u[0: T−1], and the trajectory is propagated through nonlinear time-varying dy-namics that couple payload swing, cable geometry, and a position- and time-dependent wind field. The hard equality constraints comprise the full initial and terminal state, and passage of the payload through two waypoints at prescribed times t1 and t2; the remaining specifications enter as soft running costs. Fig. 4 (b) reports the selected lowest-cost trajectory out of 2500 sampled ones. 
+
+5.2.3. Push-T Task: Inspired by the contact-mode formulation in [39], we model the planar motion of a T-shaped slider under prescribed pusher contact. The state is xt = [ bx,t, by,t, αt] ∈ R3, and each control 
+
+ut = [et, st, vx,t, vy,t] ∈ R4 specifies a boundary segment, a contact location, and a bounded local contact velocity. We use a soft Gumbel–Softmax relaxation for the segment selector and compute the slider motion using a quasi-static sticking-contact model. For a horizon of T = 200, the target pose is imposed through three hard terminal equality constraints, while control smoothness and obstacle avoidance are treated as soft costs (Fig. 3), which reports the selected lowest-cost trajectory out of 500 sampled ones. 
+
+5.3. Strict Inequality Constraints 
+
+We next evaluate the slack construction introduced in Sec. 4.4. An autonomous underwater vehicle (AUV) inspects a subsea pipeline and must move from a prescribed initial condition to a terminal target while passing through one inspection gate, remaining inside a safe inspection annulus around the pipeline, avoiding a central adverse-flow region, staying above the seafloor, and maintaining a safety distance from two divers working near the pipe (Fig. 4 (b)). The AUV state is xt = [pt, vt]⊤ ∈ R6 (iner-tial position and water-relative velocity), and the sampled control is the open-loop raw acceleration sequence u ∈ R3T with bounded physical acceler-ation acmd  
+
+> t
+
+= amax tanh (ut); the rollout dynamics include a position- and time-dependent ocean current with an adverse pipe-core component, nonlinear hydrodynamic drag, and a small vertical bias. The strict annular inspection region is described by two inequalities, 
+
+gout (pt) = d2pipe (pt) − R2max < 0, 
+
+gin (pt) = R2min − d2pipe (pt) < 0, where dpipe (pt) is the distance to the pipe axis; seafloor clearance is imposed through gfloor (pt) = 
+
+hfloor (pxt , pyt ) + hmin − pzt < 0 for a smooth height field hfloor , and diver avoidance through gdiv, k(pt) = 
+
+r2 
+
+> k
+
+− ∥ pt − ok∥2 < 0 for fixed work zones centered at 
+
+ok, k = 1, 2. Fig. 4 (a) reports the selected lowest-cost trajectory out of 2500 sampled ones. 6. C ONCLUSION 
+
+We studied the connection between finite-horizon trajectory optimization and diffusion Schrödinger bridge sampling, and subsequently presented asampling-based framework for hard-constrained in-stances. Numerical experiments demonstrated the efficacy of the proposed method. A limitation, left for future work, is that the computational complexity increases with the time horizon, or more precisely with the number of time steps T.8    
+
+> Fig. 4. (a)AUV pipeline inspection and (b)Multi-drone cooperative payload transport, each in front, top, and side views. Each panel also shows a batch of sampled feasible trajectories and highlights the mean of the feasible source distribution (dashed line).
+
+ACKNOWLEDGMENT 
+
+The authors would like to thank Shucheng Kang for his helpful discussions and comments. They also express their gratitude to Luigi Tesio for his assistance in designing Fig. 4. APPENDIX ASUPPLEMENTARY MATERIALS 
+
+Proof of Thm. 1. Since M is compact and E is con-tinuous, E attains a finite minimum E⋆ := min M E
+
+and maximum Emax := max M E. Hence e−Emax /λ ≤
+
+e−E(x)/λ ≤ e−E⋆ /λ for all x ∈ M , and integrating against vol M yields 
+
+VM e−Emax /λ ≤ ZM ≤ VM e−E⋆ /λ =⇒ 0 < ZM < ∞.Equivalently, ˜Z := ZM/VM = R 
+
+> M
+
+e−E/λ d ¯ μM ∈
+
+(0, ∞), and νM in (19) has bounded, strictly posi-tive density dνM 
+
+> d ¯ μM
+
+= ˜Z−1e−E/λ with respect to ¯ μM;in particular νM and ¯μM are mutually absolutely continuous. For (ii), observe that Ex∼p[E(x)] is finite for every p ∈ P (M) (as E is bounded), whereas 
+
+DKL (p∥ ¯μM) = +∞ unless p ≪ ¯μM; the value 
+
+p = ¯μM attains a finite objective, so it suffices to minimize over p ≪ ¯μM, for which also p ≪ νM.By the chain rule for Radon–Nikodym derivatives,  
+
+> dp
+> dνM
+
+= dp
+
+> d ¯ μM
+
+˜Z e E/λ, hence 
+
+DKL (p∥νM) = 
+
+Z 
+
+> M
+
+log dp
+
+dνM
+
+dp
+
+=
+
+Z
+
+> M
+
+
+
+log dp 
+
+> d ¯ μM
+
++ log ˜ Z + 1 
+
+> λ
+
+E
+
+
+
+dp
+
+= DKL (p∥ ¯μM) + log ˜ Z + 1 
+
+> λ
+
+Ep[E].Multiplying by λ and rearranging expresses the objective of (18) as Ep[E] + λDKL (p∥ ¯μM) =
+
+λDKL (p∥νM) − λ log ˜ Z.Because DKL (p∥νM) ≥ 0 with equality iff p = νM,the objective is minimized uniquely at p = νM, with value −λ log ˜ Z = −λ log (ZM/VM), proving (ii). For (iii), fix an open U ⊇ M⋆. As M \ U is compact and E > E⋆ on it, EU := min M\ U E >
+
+E⋆; set δ := ( EU − E⋆)/2 > 0. The sublevel set 
+
+B := {x ∈ M : E(x) < E⋆ + δ} is open and nonempty (it contains M⋆), hence vol M(B) > 0. Using e−E/λ ≤ e−EU /λ on M \ U, and ZM ≥R 
+
+> B
+
+e−E/λ dvol M ≥ vol M(B) e−(E⋆ +δ)/λ,
+
+νM(M \ U) = 
+
+R 
+
+> M\ U
+
+e−E/λ dvol M
+
+ZM
+
+≤ vol M(M \ U)
+
+vol M(B) e−δ/λ −−− → 
+
+> λ→0+
+
+0, since EU − (E⋆ + δ) = δ > 0. This proves (iii). 
+
+Proof of Prop. 1. Since each ft is smooth, the recur-sively generated states xt(z) are finite compositions of smooth maps and hence smooth in z; since ht, hT
+
+are smooth, G in (17) is smooth. By assumption, rank JG (z) = R for every z ∈ G−1(0), so 0 is a regular value of G. The regular value theorem then implies that X = G−1(0) is a smooth embedded subman-ifold of RTm of codimension R, i.e., of dimension 
+
+Tm − R.
+
+Proof of Prop. 2. (i) Given z = ( x0, u0, . . . , uT−1) ∈
+
+Rn+Tm , the state sequence is generated recursively 9
+
+by xt+1 = ft(xt, ut), t = 0, . . . , T − 1. This defines the rollout map Φ : Rn+Tm → Rnτ ,
+
+Φ(z) = ( x0, u0, x1, u1, . . . , xT ).Since each ft is smooth, the recursively generated states x1(z), . . . , xT (z) are smooth 5, and therefore Φ
+
+is smooth. Moreover, let P : Rnτ → Rn+Tm be the projection that extracts (x0, u0, . . . , uT−1) from a full trajectory. Then by definition P ◦ Φ = Id Rn+Tm . Hence the Fréchet derivative satisfies 
+
+D(P ◦ Φ)( z) = DP (Φ(z)) DΦ(z) = In+Tm ,so DΦ(z) possesses a left inverse, implying DΦ(z) is injective for every z; Φ is an injective immersion. Also, 
+
+P restricted to Φ(Rn+Tm ) is a continuous inverse of 
+
+Φ, so Φ is a homeomorphism onto its image (with the subspace topology) and hence a smooth embedding. Its image is exactly Md: any τ ∈ M d satisfies the recursion, so τ = Φ(P(τ)) , and conversely every rollout satisfies the dynamics. In particular, Φ is a diffeomorphism from Rn+Tm onto Md, so Md is a smooth embedded submanifold of Rnτ of dimension 
+
+n + Tm ; the argument imposes no rank condition on the dynamics, whose defect constraints are thus regular everywhere. This proves (i).
+
+(ii ) By Prop. 1, X = G−1(0) is a smooth embed-ded submanifold of RTm of dimension Tm − R, so 
+
+{ ¯x0} × X is a smooth embedded submanifold of 
+
+Rn+Tm of the same dimension, diffeomorphic to X .For z = ( ¯x0, u) with u ∈ RTm , the trajectory Φ(z)
+
+satisfies the dynamics and the initial condition by con-struction, and u ∈ X is equivalent to Φ(z) satisfying all path and terminal equality constraints; therefore 
+
+Mp = Φ({ ¯x0} × X ). Since Φ is an embedding, its restriction to the embedded submanifold { ¯x0} × X is again an embedding, so Mp is a smooth embedded submanifold of Rnτ , diffeomorphic to X , with dim Mp = dim X = Tm − R = Tm −
+
+> T−1
+
+# ∑
+
+> t=0
+
+rt − rT .
+
+Corollary 1 (A stagewise sufficient condition for regularity) . Let ft, h t (t = 0, . . . , T − 1), and h T
+
+be smooth and fix x 0 = ¯x0 as in Sec. 4.1. Let Gp : RTm → RRp , R p := ∑T−1 
+
+> t=0
+
+rt, collect the path-constraint blocks of G in (17) , i.e., all rows except the terminal block h T (xT (z)) . Assume r t ≤ m and 
+
+rank ∂uht(xt, ut) = rt for every t = 0, . . . , T − 1                    
+
+> 5Notice that the independent variables x0and utare linear projections of z(e.g., x0(z)=Px0z=[In×n0n×Tm ]z). The intermediate states xt(z)are thus finite compositions of smooth transition maps. Differentiability is understood w.r.t. z.
+
+and every rollout satisfying the path constraints. Let Xp := G−1 
+
+> p
+
+(0) ⊂ RTm be the reduced path-constrained rollout set, and define the terminal reduced map K : Xp → RrT , K(z) = hT (xT (z)) .Assume rank d K(z) Tz Xp = rT for all z ∈ Xp
+
+such that K (z) = 0. Then rank JG (z) = R for all z ∈ X , i.e., the rank assumption of Prop. 1 holds; if moreover X̸ = ∅, then X and Mp are smooth embedded submanifolds (Props. 1 and 2 (ii ))of dimension dim X = dim Mp = Tm − Rp − rT .Proof. For each t = 0, . . . , T − 1, define 
+
+Gp,t(z) = ht(xt(z), ut). Since xt(z) depends only on 
+
+x0, u0, . . . , ut−1, it does not depend on the current control ut. Therefore, ∂Gp,t 
+
+> ∂ut
+
+= ∂uht(xt, ut). Moreover, for j > t, ∂Gp,t 
+
+> ∂uj
+
+= 0. Hence the Jacobian of Gp with respect to the control variables (u0, . . . , uT−1) has block lower-triangular structure: 
+
+JGp =
+
+
+
+∂uh0 0 · · · 0
+
+∗ ∂uh1 · · · 0... ... . . . ...
+
+∗ ∗ · · · ∂uhT−1
+
+ .By assumption, each diagonal block ∂uht has full row rank rt. Selecting rt linearly independent columns from each diagonal block gives an invertible Rp × Rp
+
+lower-triangular submatrix. Therefore, rank JGp (z) = 
+
+Rp on G−1 
+
+> p
+
+(0). Thus 0 is a regular value of Gp, and the regular value theorem implies that Xp = G−1 
+
+> p
+
+(0)
+
+is a smooth embedded submanifold of RTm with codi-mension Rp and tangent spaces TzXp = ker JGp (z).Now fix z ∈ X = {z ∈ X p : K(z) = 0} and note that d K(z) is the restriction of the ambient Jacobian JhT ◦xT (z) to TzXp. Suppose there is a linear dependence v⊤ JGp (z) + w⊤ JhT ◦xT (z) = 0 for some 
+
+v ∈ RRp and w ∈ RrT ; we must show that v = 0 and 
+
+w = 0. Applying this row vector to any ξ ∈ TzXp =
+
+ker JGp (z) yields w⊤ dK(z) ξ = 0 for all such ξ; since dK(z)|Tz Xp is surjective by assumption, w = 0, and then v = 0 because JGp (z) has full row rank. Hence the stacked Jacobian JG (z) = JGp (z)⊤ JhT ◦xT (z)⊤⊤
+
+has full row rank R = Rp + rT for every z ∈ X , which is precisely the rank assumption of Prop. 1. If X̸ = ∅,Prop. 1 then gives that X is a smooth embedded submanifold of RTm of dimension Tm − Rp − rT,and Prop. 2 (ii ) transports the statement to Mp =
+
+Φ({ ¯x0} × X ), of the same dimension. Cor. 1 replaces the single coupled rank condition of Prop. 1 with T stagewise checks on the small matrices 10 
+
+∂uht(xt, ut) ∈ Rrt ×m. The terminal condition remains genuinely nontrivial, since after the path constraints are satisfied, the surviving feasible directions must still be able to move the terminal constraint in all rT
+
+independent directions. APPENDIX BALGORITHM STRUCTURES 
+
+Algorithm 1 Adjoint Schrödinger Bridge Sampling 
+
+Require: energy E, source μ, schedule σt with ¯σ2 := R 10 σ2 
+
+> t
+
+dt, time grid 0 = t0 < · · · < tN = 1, epochs per stage (Ku, Kh), buffer size B, up-dates per epoch L, step size η, clipping radius 
+
+γ
+
+ROLLOUT (u, X0): Euler–Maruyama integration of (6) over the grid, returning X1 
+
+> 1:
+
+initialize θ, and ψ such that hψ ≡ 0 
+
+> 2:
+
+for stage = 1, 2, . . . do 
+
+Adjoint matching : fit uθ against hψ 
+
+> 3:
+
+for Ku epochs do  
+
+> 4:
+
+D ← ∅ 
+
+> 5:
+
+while |D| < B do  
+
+> 6:
+
+X0 ∼ μ, X1 ← ROLLOUT ( ¯uθ , X0) 
+
+> 7:
+
+a ← clip γ
+
+ ∇E(X1) + hψ(X1) 
+
+> 8:
+
+D ← D ∪ { (X0, X1, a)} 
+
+> 9:
+
+end while  
+
+> 10:
+
+for L updates do  
+
+> 11:
+
+draw (X0, X1, a) ∼ D , t ∼ U [0, 1 ] 
+
+> 12:
+
+Xt ∼ pbase  
+
+> t|0,1
+
+(·| X0, X1) 
+
+> 13:
+
+θ ← θ − η∇θ ∥uθ 
+
+> t
+
+(Xt) + σt a∥2 
+
+> 14:
+
+end for  
+
+> 15:
+
+end for 
+
+Corrector matching : fit hψ against uθ 
+
+> 16:
+
+for Kh epochs do  
+
+> 17:
+
+D ← ∅ 
+
+> 18:
+
+while |D| < B do  
+
+> 19:
+
+X0 ∼ μ, X1 ← ROLLOUT (uθ , X0) 
+
+> 20:
+
+s ← (X1 − X0)/ ¯ σ2 
+
+> 21:
+
+D ← D ∪ { (X1, s)} 
+
+> 22:
+
+end while  
+
+> 23:
+
+for L updates do  
+
+> 24:
+
+draw (X1, s) ∼ D  
+
+> 25:
+
+ψ ← ψ − η∇ψ∥hψ(X1) + s∥2 
+
+> 26:
+
+end for  
+
+> 27:
+
+end for  
+
+> 28:
+
+end for  
+
+> 29:
+
+return uθ ▷ X1 ∼ ν under (6) 
+
+Algs. 1 and 2 state the Euclidean sampler of Sec. 3.1 and the manifold sampler of Sec. 3.2, each for a generic energy E and source μ. In Alg. 1, the two regressions (9) and (10) are run in alternation, each for a fixed number of epochs. Within an epoch, endpoints are simulated once into a buffer and reused across gradient steps, so the number of energy-gradient evaluations is set by the buffer size rather than by the number of parameter updates. 
+
+Algorithm 2 Extended R–ASBS 
+
+Require: constraint map c with tangent projector 
+
+Px and retraction ΠM, energy E, nominal point 
+
+znom with c(znom ) ≈ 0, source covariance Σ
+
+and width κ, noise level σ, grid tj = j∆t with 
+
+∆t = 1/ N, epochs K, batch size B, step sizes 
+
+(ηu, ηh), number of final samples M
+
+All quantities are batched over B i.i.d. copies; losses are batch averages  
+
+> 1:
+
+initialize θ, ψ 
+
+> 2:
+
+for K epochs do  
+
+> 3:
+
+Xt0 ← FEASIBLE SOURCE (znom , Σ, κ) 
+
+> 4:
+
+for j = 0, . . . , N − 1 do ▷ Euler–Maruyama  
+
+> 5:
+
+ζj ∼ N (0, I) 
+
+> 6:
+
+vj ← PXtj
+
+ σ∆t u θ 
+
+> tj
+
+(Xtj ) + σ√∆t ζj
+
+ 
+
+> 7:
+
+Xtj+1 ← ΠM(Xtj + vj) 
+
+> 8:
+
+end for  
+
+> 9:
+
+atN ← PXtN
+
+ ∇E(XtN ) + hψ(XtN ) 
+
+> 10:
+
+for j = N − 1, . . . , 0 do ▷ PAT  
+
+> 11:
+
+atj ← PXtj atj+1 
+
+> 12:
+
+end for  
+
+> 13:
+
+ℓu(θ) ← 1 
+
+> N
+
+∑N−1 
+
+> j=0
+
+PXtj uθ 
+
+> tj
+
+(Xtj ) + σatj 
+
+> 2
+> 14:
+
+θ ← θ − ηu∇θ ℓu(θ) 
+
+> 15:
+
+X′ 
+
+> 1
+
+← lines 3–7 from Xt0 with updated θ 
+
+> 16:
+
+s ← − PX′ 
+
+> 1
+
+(X′ 
+
+> 1
+
+− Xt0 )/σ2 
+
+> 17:
+
+ψ ← ψ − ηh∇ψ∥PX′ 
+
+> 1
+
+hψ(X′
+
+> 1
+
+) − s∥2 
+
+> 18:
+
+end for  
+
+> 19:
+
+draw X(i) 
+
+> 1
+
+, i = 1, . . . , M, by lines 3–7 under uθ 
+
+> 20:
+
+return {X(i) 
+
+> 1
+
+}Mi=1 and X⋆ 
+
+> 1
+
+= arg min i J  X(i)
+
+> 1
+
+ 
+
+> 21:
+
+procedure FEASIBLE SOURCE (znom , Σ, κ) 
+
+> 22:
+
+ε ∼ N (0, I) 
+
+> 23:
+
+ξ ← znom + κ Pznom Σ1/2 ε ▷ in T znom M 
+
+> 24:
+
+return ΠM(ξ) ▷ Newton retraction  
+
+> 25:
+
+end procedure 
+
+Following the initialization of [2], the corrector is initialized at hψ ≡ 0, so that the first adjoint stage regresses on ∇E alone; the terminal gradient is norm-11 
+
+clipped at a radius γ, which bounds the regression targets when ∇E is heavy-tailed without altering the stationary target. Here ¯u = stopgrad (u) as in (9): buffers are populated under the current control without dif-ferentiating through the simulation, so no gradient traverses the sampling SDE. The source μM of Asm. 2 is the part of the procedure that cannot be delegated to the sampler, and F EASIBLE SOURCE makes its construction explicit. It starts from a nominal point znom that satisfies the constraints only approximately, perturbs it in the tangent space at znom with a Gaussian of covariance 
+
+κ2Σ (line 23), and retracts the result onto M (line 24). Projecting the perturbation onto Tznom M leaves the retraction only the second-order residual to remove, and κ sets the width of the source, i.e., the size of the residual the Newton iterations must absorb. No optimization problem is solved to obtain znom : in roll-out coordinates the dynamics hold by construction, so it suffices to interpolate a reference path through the prescribed waypoints and terminal state, invert the nominal dynamics along it to obtain a control sequence, and, when strict inequalities are encoded by slacks (Sec. 4.4), close the slacks in closed form as st = log (−gt) evaluated on the nominal rollout. Samples whose retraction does not converge within the iteration budget are not rejected; their constraint residual is monitored instead, and in all instances of Sec. 5 it stays at the retraction tolerance. The same pair (znom , Σ) also defines the Gaussian term of the energy E in our implementation, so that the source doubles as a prior centered on the nominal trajectory. REFERENCES [1] C. Léonard, “A survey of the Schrödinger problem and some of its connections with optimal transport,” Discrete Contin. Dyn. Syst. , vol. 34, no. 4, pp. 1533–1574, 2014. [2] G.-H. Liu, J. Choi, Y. Chen, B. K. Miller, and R. T. Q. Chen, “Adjoint Schrödinger bridge sampler,” in Adv. Neural Inf. Process. Syst. (NeurIPS) , vol. 38, 2025. [3] D. H. Jacobson and D. Q. Mayne, Differential Dynamic Programming . New York, NY, USA: American Elsevier Publishing Co., 1970. [4] W. Li and E. Todorov, “Iterative linear quadratic regulator design for nonlinear biological movement systems,” in Proc. Int. Conf. Informat. Control, Autom. Robot. , vol. 1. SciTePress, 2004, pp. 222–229. [5] J. T. Betts, Practical Methods for Optimal Control and Estimation Using Nonlinear Programming , 2nd ed. SIAM, 2010. [6] G. Williams, A. Aldrich, and E. A. Theodorou, “Model predictive path integral control: From theory to parallel computation,” J. Guid. Control Dyn. , vol. 40, no. 2, pp. 344–357, Feb. 2017. [7] H. Yang, “Tempered sequential Monte Carlo for trajectory and policy optimization with differentiable dynamics,” in 
+
+Proc. Robot.: Sci. Syst. (RSS) , Sydney, Australia, July 2026. [8] M. Mosso, J. Choi, and H. Yang, “Hard-constrained sampling on embedded Riemannian manifolds via adjoint Schrödinger bridges,” arXiv preprint arXiv:2608.25838 , 2026. [9] A. Wächter and L. T. Biegler, “On the implementation of an interior-point filter line-search algorithm for large-scale nonlinear programming,” Math. Program. , vol. 106, no. 1, pp. 25–57, Mar. 2006. [10] P. E. Gill, W. Murray, and M. A. Saunders, “SNOPT: An SQP algorithm for large-scale constrained optimization,” SIAM Rev. , 2005. [11] Y. Mao, M. Szmuk, and B. Açıkme¸ se, “Successive convex-ification of non-convex optimal control problems and its convergence properties,” in Proc. IEEE Conf. Decis. Control (CDC) , Dec. 2016, pp. 3636–3641. [12] Y. Li, H. Han, S. Kang, J. Ma, and H. Yang, “On the surprising robustness of sequential convex optimization for contact-implicit motion planning,” in Robotics: Science and Systems (RSS) , 2025. [13] T. A. Howell, B. E. Jackson, and Z. Manchester, “ALTRO: A fast solver for constrained trajectory optimization,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS) , Nov. 2019, pp. 7674–7679. [14] T. Marcucci, J. Umenberger, P. A. Parrilo, and R. Tedrake, “Shortest paths in graphs of convex sets,” SIAM J. Optim. ,2024. [15] S. Kang, X. Xu, J. Sarva, L. Liang, and H. Yang, “Fast and certifiable trajectory optimization,” in International Workshop on the Algorithmic Foundations of Robotics (WAFR) , 2024. [16] H. J. Kappen, “Linear theory for control of nonlinear stochas-tic systems,” Phys. Rev. Lett. , vol. 95, no. 20, p. 200201, Nov. 2005. [17] E. Theodorou, J. Buchli, and S. Schaal, “A generalized path integral control approach to reinforcement learning,” J. Mach. Learn. Res. , vol. 11, no. 104, pp. 3137–3181, 2010. [18] T. Howell, N. Gileadi, S. Tunyasuvunakool, K. Zakka, T. Erez, and Y. Tassa, “Predictive sampling: Real-time behaviour synthesis with MuJoCo,” arXiv:2212.00541, 2022. [19] M. Kobilarov, “Cross-entropy motion planning,” Int. J. Robot. Res. , vol. 31, no. 7, pp. 855–871, June 2012. [20] A. Lambert, F. Ramos, B. Boots, D. Fox, and A. Fishman, “Stein variational model predictive control,” in Proc. Conf. Robot Learn. (CoRL) , ser. Proceedings of Machine Learning Research, vol. 155, 2021, pp. 1278–1297. [21] C. Pan, Z. Yi, G. Shi, and G. Qu, “Model-based diffusion for trajectory optimization,” in Adv. Neural Inf. Process. Syst. (NeurIPS) , 2024. [22] T. Power and D. Berenson, “Constrained Stein variational trajectory optimization,” IEEE Trans. Robot. , vol. 40, pp. 3602– 3619, 2024. [23] J. Li and G. Chalvatzaki, “Globalized constrained Stein vari-ational inference for diverse feasible robot motion planning,” arXiv:2607.12732, July 2026. [24] M. Janner, Y. Du, J. Tenenbaum, and S. Levine, “Planning with diffusion for flexible behavior synthesis,” in Proc. Int. Conf. Mach. Learn. (ICML) , ser. Proceedings of Machine Learning Research, vol. 162, 2022, pp. 9902–9915. [25] C. Chi, S. Feng, Y. Du, Z. Xu, E. Cousineau, B. C. M. Burchfiel, and S. Song, “Diffusion Policy: Visuomotor policy learning via action diffusion,” in Proc. Robot.: Sci. Syst. (RSS) , 2023. [26] H. Qi, H. Yin, A. Zhu, Y. Du, and H. Yang, “Inference-time enhancement of generative robot policies via predictive world modeling,” IEEE Robotics and Automation Letters , 2026. [27] J. K. Christopher, S. Baek, and F. Fioretto, “Constrained synthesis with projected diffusion models,” in Adv. Neural Inf. Process. Syst. (NeurIPS) , vol. 37, 2024, pp. 89 307–89 333. [28] M. A. Brubaker, M. Salzmann, and R. Urtasun, “A family of MCMC methods on implicitly defined manifolds,” in Proc. Int. Conf. Artif. Intell. Statist. (AISTATS) , 2012. 12 
+
+[29] G.-H. Liu, T. Chen, E. A. Theodorou, and M. Tao, “Mirror diffusion models for constrained and watermarked genera-tion,” in Adv. Neural Inf. Process. Syst. (NeurIPS) , vol. 36, 2023, pp. 42 898–42 917. [30] A. Lou and S. Ermon, “Reflected diffusion models,” in Proc. Int. Conf. Mach. Learn. (ICML) , ser. Proceedings of Machine Learning Research, vol. 202, 2023, pp. 22 675–22 701. [31] N. Fishman, L. Klarner, V. De Bortoli, E. Mathieu, and M. J. Hutchinson, “Diffusion models for constrained domains,” 
+
+Trans. Mach. Learn. Res. , 2023. [32] C. Domingo i Enrich, M. Drozdzal, B. Karrer, and R. T. Q. Chen, “Adjoint matching: Fine-tuning flow and diffusion gen-erative models with memoryless stochastic optimal control,” in Proc. Int. Conf. Learn. Represent. (ICLR) , 2025. [33] R. Pascanu, T. Mikolov, and Y. Bengio, “On the difficulty of training recurrent neural networks,” in Proc. Int. Conf. Mach. Learn. (ICML) , vol. 28, no. 3. Atlanta, GA, USA: PMLR, 2013, pp. 1310–1318. [34] J. Bradbury, R. Frostig, P. Hawkins, M. J. Johnson, Y. Katariya, C. Leary, D. Maclaurin, G. Necula, A. Paszke, J. VanderPlas, S. Wanderman-Milne, and Q. Zhang, “JAX: composable trans-formations of Python+NumPy programs,” 2018, [Online]. Available: https://github.com/jax-ml/jax. [35] C. Borse, Z. Xie, W.-C. Huang, and W. Jin, “ComFree-Sim: A GPU-parallelized analytical contact physics engine for scalable contact-rich robotics simulation and control,” 
+
+arXiv:2603.12185 , 2026. [36] S. Tunyasuvunakool, A. Muldal, Y. Doron, S. Liu, S. Bohez, J. Merel, T. Erez, T. Lillicrap, N. Heess, and Y. Tassa, “dm_control: Software and tasks for continuous control,” 
+
+Software Impacts , 2020. [37] S. Park, K. Frans, B. Eysenbach, and S. Levine, “OGBench: Benchmarking offline goal-conditioned RL,” in Proc. Int. Conf. Learn. Represent. (ICLR) , 2025. [38] N. Boumal, An Introduction to Optimization on Smooth Mani-folds . Cambridge, U.K.: Cambridge Univ. Press, 2023. [39] S. Kang, G. Liu, and H. Yang, “Global contact-rich plan-ning with sparsity-rich semidefinite relaxations,” in Robotics: Science and Systems , 2025.
