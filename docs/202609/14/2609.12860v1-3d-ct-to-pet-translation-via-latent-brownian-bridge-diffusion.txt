@@ -1,0 +1,275 @@
+Title: 3D CT-to-PET Translation via Latent Brownian Bridge Diffusion
+
+URL Source: https://arxiv.org/pdf/2609.12860v1
+
+Published Time: Mon, 14 Sep 2026 01:24:08 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# 3D CT-to-PET Translation via Latent Brownian Bridge Diffusion 
+
+Sarita Mourya ∗1, Francesco Di Feola †1, Pierangelo Veltri ‡, Paolo Soda †§ †Department of Diagnostics and Intervention, Radiation Physics, Biomedical Engineering, Ume˚ a University, Sweden  
+
+> §
+
+Unit of Artificial Intelligence and Computer Systems, Department of Engineering, Universit` a Campus Bio-Medico di Roma  
+
+> ∗
+
+Department of Medical and Surgical Sciences, Universit` a ”Magna Græcia” di Catanzaro Catanzaro, Italy  
+
+> ‡
+
+Department of Computer Science, Modeling, Electronics and Systems Engineering (DIMES) University of Calabria, Italy 
+
+> †
+
+francesco.feola@umu.se †paolo.soda@umu.se, §p.soda@unicampus.it 
+
+> ∗
+
+sarita.mourya@studenti.unicz.it ‡pierangelo.veltri@dimes.unical.it 
+
+> 1
+
+These authors share first authorship. 
+
+Abstract —Computed tomography (CT) and positron emission tomography (PET) provide complementary anatomical and func-tional information for cancer diagnosis and treatment planning. However, the widespread use of PET is limited by high radiation exposure, elevated costs, and restricted availability. To address these limitations, deep learning-based CT-to-PET translation has emerged as a promising approach for synthesizing PET-like infor-mation directly from CT images, although accurately modeling the large cross-modal gap remains challenging. In this work, we propose a 3D CT-to-PET translation framework based on latent Brownian Bridge Diffusion (BBDM). The method consists of two stages. First, a Variational Autoencoder (VAE) is trained on paired CT–PET patches, integrating contrastive learning to improve latent alignment between anatomical and metabolic representations. Second, a BBDM is trained in the latent space to translate CT latent representations into their corresponding PET counterparts. The translated PET latents are then decoded and stitched to reconstruct the final 3D PET volume. We eval-uate the proposed approach on two publicly available datasets. Quantitative results based on image fidelity and lesion-level PET-specific metrics demonstrate improved performance compared with competing methods. In particular, the proposed approach improves PET signal fidelity, better preserves clinically relevant uptake patterns, and shows improved performance in preserving small-lesion metabolic activation, paving the way for virtual imaging applications. Code is available at: https://github.com/ arco-group/3D-CT2PET-via-Latent-Brownian-Bridge-Diffusion. 
+
+Index Terms —CT-to-PET Translation; Brownian Bridge Diffu-sion; Medical Image Synthesis; Lesion-aware Image Translation 
+
+I. I NTRODUCTION 
+
+Computed Tomography (CT) and Fluorodeoxyglucose Positron Emission Tomography (FDG-PET, shortly PET in the following) provide complementary anatomical and functional information that is central to oncological diagnosis and treat-ment planning. While CT captures structural abnormalities, PET measures metabolic activity and has shown improved di-agnostic accuracy for the characterization of malignant lesions, particularly in lung cancer screening and staging [11], [19], [21]. Despite its clinical value, PET remains limited by higher radiation exposure, elevated operational costs, and restricted availability, especially in low-resource settings where access to PET imaging is still scarce [20]. These limitations have mo-tivated growing interest in computational approaches capable of estimating functional information directly from routinely acquired anatomical imaging while reducing both radiation burden and economic barriers. In this context, deep learning-based image-to-image translation has recently emerged as a promising framework for CT-to-PET synthesis, where a model learns a mapping from a source domain X to a target domain Y [18]. Existing studies suggest that CT and PET share latent relationships between anatomical structures and metabolic activity [23], supporting the feasibility of learning-based cross-modal translation. Synthetic PET should therefore not be interpreted as a replacement for acquired PET, but rather as a probabilistic estimate of plausible metabolic activity inferred from CT data. Such synthesized information may provide complementary functional cues to support downstream clinical and computational workflows, including lesion analy-sis, patient triage, and computer-aided diagnosis. Early CT-to-PET translation approaches mainly relied on Generative Adversarial Networks (GANs) [6], [15], demon-strating the potential of deep generative models for PET synthesis. However, GAN-based approaches often struggle to model the highly complex relationship between structural and functional information, leading to unstable training dynamics, hallucinated uptake patterns, and limited anatomical consis-tency [1]. Moreover, several existing methods operate on 2D slices [4], [5], neglecting the inherently volumetric nature of PET/CT acquisitions and limiting their ability to capture inter-slice dependencies and whole-body contextual informa-tion. More recently, Diffusion Models (DMs) [8] have shown strong performance in image synthesis tasks by progressively denoising corrupted samples through an iterative stochastic process. Compared with GANs, DMs generally provide im-proved generation stability and higher fidelity reconstructions, making them attractive for medical imaging applications. To mitigate the increased computational cost, latent diffusion models (LDMs) [9] perform the denoising process in a low-dimensional latent-space, making them more practical for 3D arXiv:2609.12860v1 [cs.CV] 11 Sep 2026 medical imaging data. Given a source image x ∈ X and a target image y ∈ Y , most diffusion-based frameworks for-mulate image-to-image translation as conditional generation, modeling p(y | x). While effective in some settings, this for-mulation lacks an explicit mapping between source and target domains and often struggles to bridge large distributional gaps between distinct imaging modalities. To address this limitation, the Brownian Bridge Diffusion Model (BBDM) [7] formulates image-to-image translation as a stochastic Brownian Bridge process with boundary conditions defined by the source image 
+
+x and the target image y. A recent study explored BBDM for CT-to-PET translation using 2D slice-based processing [5], showing promising results for PET synthesis. In this work, we propose X-Bridge, a 3D CT-to-PET trans-lation approach based on latent Brownian Bridge diffusion. We first train a variational autoencoder (VAE) on paired CT/PET patches and integrate contrastive learning to improve latent alignment between anatomical and metabolic representations. Then, we train a BBDM in the latent space to translate CT latent representations into the corresponding PET latent targets. By operating directly in a 3D latent representation space, our approach captures volumetric contextual informa-tion while reducing the computational burden associated with full-resolution diffusion modeling. Experimental results on two publicly available PET/CT datasets demonstrate improved quantitative performance and better preservation of small-lesion metabolic activation compared with competing methods. II. M ETHODS 
+
+Let x ∈ Rh×w×d denote a CT volume and y ∈ Rh×w×d
+
+the corresponding PET volume, where h, w, and d denote the spatial dimensions. The goal of CT-to-PET translation is to learn a mapping 
+
+ˆy = f (x) ≈ y, (1) where f (·) estimates PET metabolic activity from anatomical CT information. To address the computational complexity associated with volumetric medical imaging, we adopt apatch-based formulation. Cubic 3D patches are extracted from paired CT/PET volumes using a sliding-window strategy and processed independently during training and inference. As shown in Fig. 1 (a), our approach consists of two main components: a variational autoencoder (VAE) and a Brownian Bridge Diffusion Model (BBDM). First, we train the VAE to learn a latent representation of CT and PET patches while contrastive learning promotes cross-modal latent alignment (Fig. 1 (b)). Second, we train the BBDM in the latent space of the VAE to translate CT latent embeddings into the corresponding PET latent representations (Fig. 1 (c)). During inference, translated latent patches are decoded and stitched together to reconstruct the final synthetic PET volume. Given an input CT volume x, we extract cubic patches xp ∈
+
+Rl×l×l using a sliding-window strategy with patch size l and stride s:
+
+xp = x(i : i + l, j : j + l, k : k + l), (2) where i, j, and k denote the starting indices along each spatial axis and are incremented with stride s, i.e., i, j, k ∈{0, s, 2s, . . . }. When s < l , adjacent patches overlap by l − s
+
+voxels, enabling smoother transitions during reconstruction. After translation, all synthetic PET patches are stitched to-gether to reconstruct the final PET volume ˆy. Overlapping regions are averaged to reduce boundary artifacts and improve spatial consistency. 
+
+A. Latent Representation Learning 
+
+Fig. 1-(b) illustrates the proposed VAE framework [14], composed of an encoder E and a decoder D. Given paired CT and PET patches xp and yp are processed using the same encoder branch with shared weight, which maps both modalities into a latent space: 
+
+zxp = E(xp), zyp = E(yp). (3) To regularize the latent space, we employ the Kullback– Leibler (KL) divergence loss: 
+
+LKL = DKL (q(z|x) ∥ N (0 , I)) . (4) Since CT and PET encode substantially different anatomical and metabolic information, their latent representations are not naturally aligned. To reduce this modality gap, we employ an InfoNCE-based contrastive objective between paired CT and PET latent embeddings: 
+
+Lcc = − 1
+
+B
+
+> B
+
+X
+
+> m=1
+
+log 
+
+ e  
+
+> 
+> cos (z(m)
+> xp ,z (m)
+> yp )/τ
+> 
+
+PBn=1 e  
+
+> 
+> cos (z(m)
+> xp ,z (n)
+> yp )/τ
+> 
+
+ (5) where B denotes the batch size, cos (·, ·) is the cosine simi-larity, and τ is the temperature parameter. This objective en-courages aligned CT/PET latent embeddings while separating unrelated samples, facilitating the subsequent latent translation process. The decoder D reconstructs PET patches from the latent representation: 
+
+ˆyp = D(zyp ). (6) To preserve reconstruction fidelity, we employ a L1 recon-struction loss: 
+
+Lrecon = ∥yp − ˆyp∥1. (7) Additionally, we employ a perceptual loss [13] to preserve high-level structural information and a patch-based adversar-ial loss [12] to improve perceptual realism and fine-grained details. The overall training objective is defined as: 
+
+LT = α⊤L, (8) where 
+
+α = [1 , β, γ, δ, λ ]⊤ (9) and 
+
+L =
+
+
+
+Lrecon 
+
+LKL 
+
+Ladv 
+
+Lpercep 
+
+Lcc 
+
+ . (10) Here, β, γ, δ, and λ control the contribution of each loss term. Fig. 1. Overview of the proposed X-Bridge approach. (a) Inference pipeline. CT patches are encoded into latent representations, translated into PET latent embeddings using BBDM, decoded, and stitched to reconstruct the target PET volume. (b) VAE training. Paired CT and PET patches are encoded using a shared encoder, while contrastive latent alignment and reconstruction objectives are jointly optimized. (c) BBDM training. The pretrained VAE encoder is frozen and used to project CT and PET patches into the latent space, where BBDM learns the conditional CT-to-PET translation process. 
+
+B. Latent Brownian Bridge Diffusion 
+
+Fig. 1-(c) illustrates the proposed Brownian Bridge Dif-fusion Model (BBDM) [7]. Building on the latent repre-sentation learning described in Section II-A, the diffusion process operates directly in the latent space using the CT latent representation zxp and the corresponding PET latent representation zyp extracted by the pretrained VAE encoder, whose parameters are frozen during diffusion training. Unlike conventional conditional diffusion models, BBDM explicitly models a stochastic bridge between source and target distri-butions. In our setting, the diffusion trajectory is constrained by the CT latent embedding zxp and the target PET latent embedding zyp , enabling a progressive translation between anatomical and metabolic representations. To improve com-putational efficiency, the diffusion process is performed in the compressed latent space rather than on full-resolution images. Following [7], the forward Brownian bridge process is defined as: 
+
+qBB (zt | zyp , z xp ) = N  zt; (1 − mt)zyp + mtzxp , δ tI ,
+
+(11) where mt controls the interpolation between source and target latent representations and δt defines the variance schedule. The diffusion model is trained using the Brownian Bridge noise prediction objective: 
+
+Ezyp ,z xp ,ϵ 
+
+
+
+cϵt mt(zxp − zyp ) + pδtϵ − ϵθ (zt, t ) 2
+
+(12) where cϵt denotes a timestep-dependent weighting coefficient, typically defined based on the Brownian Bridge variance term 
+
+δt. ϵ ∼ N (0 , I) and ϵθ denotes the noise prediction network. During inference, the trained BBDM progressively translates CT latent embeddings into PET latent representations, which are subsequently decoded by the VAE decoder to reconstruct the synthetic PET patches. To accelerate inference while preserving generation quality, we adopt the DDIM sampling strategy [10]. III. M ATERIALS 
+
+Internal dataset. Experiments were conducted using the FDG-PET-CT-Lesions dataset [17], a publicly available col-lection of 1,014 whole-body FDG-PET/CT scans acquired at the University Hospital T¨ ubingen between 2014 and 2018. The dataset includes subjects diagnosed with malignant lymphoma, non-small cell lung cancer, and malignant melanoma, as well as PET-negative control subjects without evidence of malignant findings. The dataset was split into a training set comprising 864 paired CT–PET scans and an internal test set of 150 paired scans, guaranteeing that patches extracted from a patient study are only in the training or test set. 
+
+External dataset. External validation was performed using the ENHANCE.PET 1.6k dataset [16], a publicly available multi-center collection of whole-body FDG-PET/CT scans acquired across different institutions and scanner vendors. The dataset comprises 1,579 paired PET/CT studies collected from subjects with lung cancer, lymphoma, melanoma, and PET-negative controls. Since data from the University Hospital T¨ ubingen overlap with the internal dataset used in this study, these cases were excluded from external validation to avoid data leakage. The final external cohort consists of 579 paired PET/CT scans acquired at the University Hospital Leipzig and Azienda Ospedaliero Universitaria Careggi. 
+
+Preprocessing. CT volumes were resampled to match the spatial resolution and voxel spacing of the corresponding PET scans using trilinear interpolation. Rigid registration was sub-sequently applied to correct residual misalignments caused by patient motion or acquisition differences. PET intensities were converted to standardized uptake values (SUVs) and clipped to the range [0 , 20] . Finally, both CT and PET volumes were normalized to the range [0 , 1] using min-max normalization. In this work, we focus on the lung region. Lung masks were automatically extracted using the MOOSE segmentation framework [22] and used to isolate the lung volumes for model training and evaluation. IV. E XPERIMENTAL SETUP 
+
+To evaluate X-Bridge, we compare our approach against three competing methods: a 3D GAN-based CT-to-PET trans-lation approach [6], a 3D latent diffusion model (LDM), and CPDM [5], which combines 2D VQGAN latent representa-tions with Brownian Bridge diffusion for slice-wise CT-to-PET translation. 
+
+A. Implementation details 
+
+Following the patch-based strategy described in Section II, cubic patches of size 32 ×32 ×32 were extracted using a sliding window with a stride of 16. The VAE was trained using the Adam optimizer with a learning rate of 1 × 10 −4 and a batch size of 128 for 300 epochs. The training objective LT combines the different loss terms using β = 1 × 10 −7, γ = 0 .1, δ = 0 .3,and λ = 0 .05 . The diffusion model was subsequently trained using the Adam optimizer with a learning rate of 1×10 −4 and a batch size of 32 for 300 epochs. The number of diffusion timesteps was set to 1000, while 200 DDIM denoising steps were used during inference. All experiments were performed on a NVIDIA A40 GPU. The source code is available here. 
+
+B. Evaluation Metrics 
+
+We used two complementary quantitative analyses: standard image quality metrics and PET-specific signal fidelity metrics based on standardized uptake values (SUVs). 
+
+Standard Image Quality Assessment Metrics: We used the Peak Signal-to-Noise Ratio (PSNR) and the Structural Similarity Index Measure (SSIM) [25]. PSNR assesses image quality based on the ratio between the maximum possible pixel intensity ( M AX ˆy ) and the mean squared error (MSE) between 
+
+ˆy and y while the SSIM evaluates the perceptual similarity between two images by considering their luminance, contrast, and structural information, ranging from 0 to 1. 
+
+PET signal fidelity: To assess the clinical reliability of synthetic PET images, we evaluated the agreement between PET-derived quantitative biomarkers computed on synthetic and ground-truth PET volumes. Specifically, we considered the maximum standardized uptake value ( SU V max ), mean stan-dardized uptake value ( SU V mean ), metabolic tumor volume (M T V α), and total lesion glycolysis ( T LG α). Let R ⊂ y
+
+denote a region of interest (ROI) within the PET volume y.The uptake metrics are defined as: 
+
+SU V max = max  
+
+> v∈R
+
+y(v), SU V mean = 1
+
+|R| 
+
+X
+
+> v∈R
+
+y(v), (13) where |R| denotes the number of voxels in the ROI. The metabolic tumor volume is computed as: 
+
+M T V α = |R α|, Rα = {v ∈ R | y(v) > α }, (14) while total lesion glycolysis is defined as: 
+
+T LG α = 1
+
+|R α|
+
+X
+
+> v∈R α
+
+y(v)
+
+!
+
+· M T V α. (15) To further evaluate lesion-level uptake preservation, we com-puted the Dice score between thresholded synthetic and ground-truth PET lesion masks: 
+
+Dice α = 2|M syn α ∩ M gt α ||M syn α | + |M gt α | , (16) where M syn α and M gt α denote the binary lesion masks obtained by thresholding the synthetic and ground-truth PET volumes at SUV threshold α.We considered two absolute uptake thresholds, α = 1 .5
+
+and α = 2 .5, commonly used to characterize low-uptake and malignant lesions [2], [3]. V. R ESULTS AND DISCUSSION 
+
+This section presents an in-depth evaluation of X-Bridge through both quantitative and qualitative analyses. In CT-to-PET translation, lesion uptake regions typically occupy only a small fraction of the whole image volume, making the preservation of small lesions and high-intensity metabolic patterns particularly challenging. Therefore, we first focused on a lesion-level analysis to evaluate the ability of each model to preserve lesion morphology and metabolic activity. CPDM LDM Pix2PixX-Bridge 10 20 30 40           
+
+> PSNR
+> (a)
+> ***
+> CPDM LDM Pix2PixX-Bridge 0.0 0.2 0.4 0.6 0.8 1.0 1.2
+> SSIM
+> (b)
+> ***
+> CPDM LDM Pix2PixX-Bridge 0.0 0.2 0.4 0.6 0.8 1.0 1.2
+> Dice 1.5
+> (c)
+> ***
+> CPDM LDM Pix2PixX-Bridge 0.0 0.2 0.4 0.6 0.8 1.0 1.2
+> Dice 2.5
+> (d)
+> ***
+> CPDM LDM Pix2PixX-Bridge 010 20 30 40
+> SUV max
+> (e)
+> ***
+> CPDM LDM Pix2PixX-Bridge 0.0 2.5 5.0 7.5 10.0 12.5 15.0 17.5
+> SUV mean
+> (f)
+> ***
+
+Fig. 2. Lesion-level comparison of PET volumes synthesized by CPDM, LDM, Pix2Pix, and X-Bridge. Violin plots report (a) PSNR, (b) SSIM, (c) Dice 1.5, (d) Dice 2.5, (e) SUV max , and (f) SUV mean . Violin width indicates sample density, yellow markers denote medians, and red dashed/dotted lines represent mean ± standard deviation. Asterisks indicate statistically significant differences ( p < 0.05 ) between X-Bridge and competing methods using the Wilcoxon signed-rank test with Bonferroni correction. 
+
+A. Lesion-level analysis 
+
+Fig. 2(a–f) reports lesion-level results using image recon-struction, lesion overlap, and PET uptake metrics. X-Bridge achieves higher PSNR, SSIM, Dice 1.5, Dice 2.5, SUV max , and SUV mean values compared to competing methods, showing improved lesion generation fidelity and better preservation of metabolic uptake patterns. In particular, the higher Dice 1.5
+
+and Dice 2.5 values indicate a more accurate reconstruction of metabolically active lesion areas and improved preservation of high-uptake lesion regions. Fig. 3 further supports these findings, showing that X-Bridge achieves substantially higher MTV and TLG values at both SUV thresholds (1.5 and 2.5). In contrast, the competing methods exhibit lower values, indicating a reduced preservation of metabolically active lesion Fig. 3. Radar comparison of median lesion-level MTV and TLG measured at SUV thresholds 1.5 and 2.5 for LDM, CPDM, Pix2Pix, and X-Bridge, shown on a logarithmic radial scale. Closer agreement with the real-value distribution indicates better preservation of metabolically active lesion extent and uptake burden 
+
+volume and uptake burden during PET synthesis. Turning to Fig. 4, we report lesion-level performance stratified by lesion-size quartiles using PSNR, SSIM, Dice 1.5, and Dice 2.5. X-Bridge achieves improved lesion synthesis fidelity across all lesion-size groups, with the largest advantage observed for small lesions. PSNR decreases for all approaches as lesion size increases, reflecting the greater complexity of translating larger lesion regions. Nevertheless, X-Bridge maintains the highest PSNR across most lesion-size groups. SSIM gener-ally improves for larger lesions due to the increased spatial context available during translation, while X-Bridge achieves higher structural similarity, including for small lesions where preserving lesion morphology is particularly challenging. Dice-based metrics further highlights X-Bridge’s advan-tage. Dice 1.5 values consistently remains above 0.8 across all quartiles, indicating stable preservation of metabolically active regions, while competing methods achieves substantially lower overlap, especially in the lower quartiles. At the stricter Dice 2.5 threshold,all methods decline because compact high-uptake regions are harder to preserve; however, X-Bridge remains the only approach achieving meaningful overlap for medium-to-large lesions, whereas the competing methods re-main close to zero across most quartiles. In Fig. 5, we re-port qualitative examples, showing axial, coronal, and sagittal views of lesion regions together with the annotated lesion contours. Compared with competing methods, X-Bridge better preserves lesion shape, uptake distribution, and boundary consistency. In particular, the 2D slice-based CPDM exhibits substantial inconsistencies across views, highlighting its lim-ited ability to preserve coherent 3D lesion-level information. 
+
+B. External validation and volume-level performance 
+
+Table I reports volume-level PSNR and SSIM on the internal and external datasets; lesion-level evaluation was not possible externally because annotations were unavailable. X-Bridge Q1 Q2 Q3 Q4 12 13 14 15 16            
+
+> PSNR
+> Model CPDM LDM Pix2Pix X-Bridge Q1 Q2 Q3 Q4 0.1 0.2 0.3 0.4 0.5 0.6
+> SSIM
+> Q1 Q2 Q3 Q4 0.0 0.2 0.4 0.6 0.8
+> Dice 1.5
+> Q1 Q2 Q3 Q4 0.00 0.05 0.10 0.15 0.20 0.25
+> Dice 2.5
+> (a) (b) (c) (d)
+
+Fig. 4. Lesion-size analysis of generated PET volumes. Plots report lesion-level (a) PSNR, (b) SSIM, (c) Dice 1.5, and (d) Dice 2.5 stratified by lesion-size quartiles: small (Q1), medium (Q2), large (Q3), and very large (Q4), for CPDM, LDM, Pix2Pix, and X-Bridge. Real PET 
+
+> Sagittal  Coronal  Axial
+
+CPDM  LDM  Pix2Pix  X-Bridge 
+
+Fig. 5. Qualitative comparison of Real PET, LDM, CPDM, Pix2Pix and X-Bridge, shown from left to right in axial, coronal, and sagittal views with lesion boundaries overlaid in red. TABLE I WHOLE -LUNG IMAGE QUALITY EVALUATION AND EXTERNAL VALIDATION ACROSS MODELS . I NTERNAL AND EXTERNAL ROWS REPORT MEAN PSNR  
+
+> AND
+
+SSIM, AND THE LAST TWO ROWS SHOW THE RELATIVE DIFFERENCE :
+
+∆(%) = 100 × (Avg Internal − Avg External )/Avg External .                                
+
+> Dataset Metric CPDM LDM Pix2Pix X-Bridge
+> Internal PSNR 26.7 26.3 33.30 29.99 SSIM 0.810 0.580 0.849 0.779 External PSNR 26.6 26.1 29.40 29.91 SSIM 0.804 0.600 0.718 0.802
+> ∆PSNR (%) 0.38 0.77 13.27 0.27 SSIM (%) 0.87 -3.33 18.25 2.87
+
+outperforms LDM and CPDM across both datasets and per-forms comparably to Pix2Pix. It achieves the highest external PSNR (29.91), while Pix2Pix records slightly higher internal PSNR and SSIM. Relative variation analysis further demon-strates X-Bridge’s cross-dataset robustness, with the smallest PSNR variation ( ∆ = 0 .27% ), compared with larger shifts for CPDM and Pix2Pix. Although CPDM shows stable SSIM across datasets, its absolute performance remains below that of X-Bridge and Pix2Pix, whereas Pix2Pix exhibits the largest SSIM degradation ( 18 .25% ), indicating lower robustness to distribution shifts. Overall, X-Bridge offers a favorable balance between global image fidelity and cross-dataset generalization. VI. C ONCLUSION 
+
+In this work, we proposed X-Bridge, a 3D CT-to-PET trans-lation approach that combines contrastive latent representation learning with Brownian Bridge diffusion. The experimental results showed that the proposed approach preserves smaller lesions and compact high-uptake regions more effectively compared to existing methods based on GAN and diffu-sion. This is particularly relevant in CT-to-PET translation, where metabolically active lesion regions occupy only a small and highly imbalanced fraction of the whole image volume. Lesion-level analyses demonstrated that X-Bridge achieves improved preservation of clinically relevant metabolic activity across SUV-, Dice-, MTV-, and TLG-based metrics, while maintaining competitive global image fidelity. External vali-dation further confirmed the robustness of the proposed latent Brownian Bridge formulation under cross-dataset evaluation. Despite promising results, some limitations remain. First, our sliding-window reconstruction uses uniform averaging in over-lapping patches, which may cause minor discontinuities when adjacent predictions differ. Future work will explore adaptive blending to improve smoothness while preserving local details. secondly, evaluation is currently limited to the lungs regions: broader validation is needed in other organs and whole-body imaging, where structural and metabolic properties may differ. We will also extend X-Bridge with long-tail generative learning to improve synthesis of rare lesion patterns and small high-uptake regions. We will also explore uncertainty-aware CT-to-PET translation methods to account the task’s inherently under-constrained nature, as well as bridge-based diffusion methods for multimodal conditional generation across com-plementary imaging modalities [24]. ACKNOWLEDGMENT 
+
+Resources are provided by the National Academic Infras-tructure for Supercomputing in Sweden (NAISS) and the Swedish National Infrastructure for Computing (SNIC) at Alvis @ C3SE, partially funded by the Swedish Research Council through grant agreements no. 2022-06725 and no. 2018-05973. This work was partially supported by: i) Project PNRR-MCNT2-2023-12377755 (CUP: C83C24000220007) -Rafforzamento e potenziamento della ricerca biomedica del SSN, finanziato dall’Unione europea – NextGenerationEU, ii) Kempe Foundation project JCSMK24-0094, iii) University Campus Bio-Medico di Roma, project IDEA. REFERENCES [1] A. Ben-Cohen et al., “Cross-modality synthesis from CT to PET using FCN and GAN networks for improved automated lesion detection,” Engineering Applications of Artificial Intelligence , doi: 10.1016/j.engappai.2018.11.013, 2019. [2] X. Li et al., “Prognostic and predictive values of metabolic parameters of 18F-FDG PET/CT in patients with non-small cell lung cancer treated with chemotherapy,” Molecular Imaging , vol. 18, 2019. [3] J. W. Fletcher et al., “PET/CT standardized uptake values (SUVs) in clinical practice and assessing response to therapy,” NIH Public Access ,2010. [4] B. Xu et al, “Whole-body CT-to-PET synthesis using a customized transformer-enhanced GAN,” Physics in Medicine & Biology , 2025, doi: 10.1088/1361-6560/add8dd. [5] D. T. Nguyen et al., “CT to PET translation: A large-scale dataset and domain-knowledge-guided diffusion approach,” in Proc. IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , 2025, doi: 10.1109/WACV61041.2025.00153. [6] V. Guarrasi et al., “Whole-body image-to-image translation for a virtual scanner in a healthcare digital twin,” 2025, arXiv:2503.15555. [Online]. Available: https://arxiv.org/abs/2503.15555 [7] B. Li et al., “BBDM: Image-to-image translation with Brow-nian bridge diffusion models,” in Proc. IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023, doi: 10.1109/CVPR52729.2023.00194. [8] J. Ho et al., “Denoising diffusion probabilistic models,” in Advances in Neural Information Processing Systems , 2020. [9] R. Rombach et al., “High-resolution image synthesis with latent diffu-sion models,” in Proc. IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. [10] J. Song et al., “Denoising diffusion implicit models,” 2020, arXiv:2010.02502. [Online]. Available: https://arxiv.org/abs/2010.02502 [11] G. Veronesi et al., “Positron emission tomography in the diagnostic work-up of screening-detected lung nodules,” European Respiratory Journal , 2015. [12] P. Isola et al., “Image-to-image translation with conditional adversarial networks,” in Proc. IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2017, doi: 10.1109/CVPR.2017.632. [13] J. Johnson et al., “Perceptual losses for real-time style transfer and super-resolution,” in Computer Vision – ECCV 2016 . Cham, Switzerland: Springer, 2016, doi: 10.1007/978-3-319-46475-6-43. [14] D. P. Kingma and M. Welling, “Auto-encoding variational Bayes,” 2013, arXiv:1312.6114. [Online]. Available: https://arxiv.org/abs/1312.6114 [15] M. Salehjahromi et al., “Synthetic PET from CT improves diagnosis and prognosis for lung cancer: Proof of concept,” Cell Reports Medicine , vol. 5, no. 3, p. 101463, 2024. [16] D. Ferrara et al., “Sharing a whole-/total-body 18 F-FDG PET/CT dataset with CT-derived segmentations: An ENHANCE.PET initiative,” 
+
+Research Square , 2024, doi: 10.21203/rs.3.rs-7169062. [17] S. Gatidis et al. “A whole-body FDG-PET/CT dataset with manually annotated tumor lesions,” Scientific Data , 2022, doi: 10.1038/s41597-022-01718-3. [18] Y. Pang et al., “Image-to-image translation: Methods and applications,” 
+
+IEEE Transactions on Multimedia , vol. 24, pp. 3859–3881, 2021. [19] S. S. Shim et al., “Non-small cell lung cancer: Prospective comparison of integrated FDG PET/CT and CT alone for preoperative staging,” 
+
+Radiology , vol. 236, no. 3, pp. 1011–1019, 2005. [20] World Health Organisation and Our World in Data, “Positron emission tomography (PET) imaging units per million people,” 2022. [Online]. Available: https://archive.ourworldindata.org/20260304-094028/grapher/availability-of-positron-emission-tomography-pet-imaging.html [21] M. J. Garcia-Velloso et al., “Assessment of indeterminate pulmonary nodules detected in lung cancer screening: Diagnostic accuracy of FDG PET/CT,” Lung Cancer , 2016. [22] L. K. Shiyam Sundar et al., “Fully automated, semantic segmentation of whole-body 18 F-FDG PET/CT images based on data-centric artificial intelligence,” Journal of Nuclear Medicine , vol. 63, no. 12, pp. 1941– 1948, 2022. [23] S. A. Esfahani et al., “PET/MRI and PET/CT radiomics in primary cervical cancer: A pilot study on the correlation of pelvic PET, MRI, and CT derived image features,” Molecular Imaging and Biology , 2022. [24] D. Molino et al., “XGeM: A multi-prompt foundation model for mul-timodal medical data generation,” Computerized Medical Imaging and Graphics , p. 102718, 2026. [25] F. Di Feola et al., “A comparative study between paired and unpaired image quality assessment in low-dose CT denoising,” in Proc. IEEE 36th International Symposium on Computer-Based Medical Systems (CBMS) ,2023.
