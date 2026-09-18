@@ -6,31 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-17
-- 运行时间：2026-09-17 22:21:30 UTC
+- 最新运行日期：2026-09-18
+- 运行时间：2026-09-18 22:06:25 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：0
-- 速读区：2
+- 本次总论文数：1
+- 精读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今天速读2篇、精读0篇，两篇均获7.0分，主题集中在生成模型与滤波、图信号建模。
-
-最值得关注的方向是"生成模型用于基于模拟的滤波"和"图信号生成建模的稳定滤波器"，两者都在探讨生成模型如何与滤波方法结合。
-
-普通读者可先读这两篇的摘要与实验对比部分，判断哪条路线更贴近自己的应用场景，再决定是否深入精读。
-- 详情：[/202609/17/README](/202609/17/README)
+1) 今日精读1篇8.0分论文《Bridging Modalities on the Cortex: Surface-based MRI to PET Translation with a Diffusion Bridge》，聚焦皮层表面上的MRI到PET跨模态转换。
+2) 最值得看的方向是"扩散桥"模型如何借助皮层表面几何信息完成MRI→PET的模态翻译，对多模态脑影像融合与缺失模态补全有参考价值。
+3) 普通读者可先了解MRI与PET各自成像特点，再关注这类方法能否减少对PET扫描的依赖。
+- 详情：[/202609/18/README](/202609/18/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Bridging Modalities on the Cortex: Surface-based MRI to PET Translation with a Diffusion Bridge](/202609/18/2609.20147v1-bridging-modalities-on-the-cortex-surface-based-mri-to-pet-translation-with-a-diffusion-bridge)  
+   标签：评分：8.0/10、query:diff-bridge
+   evidence：基于表面的扩散桥用于MRI到PET转换
 
 ### 速读区论文标签
-1. [Generative models for simulation based filtering: Formulations and Empirical Comparisons](/202609/17/2609.16317v1-generative-models-for-simulation-based-filtering-formulations-and-empirical-comparisons)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：通过前向-后向随机微分方程实现薛定谔桥用于滤波
-2. [Stable Filters for Generative Modeling of Graph Signals](/202609/17/2609.18759v1-stable-filters-for-generative-modeling-of-graph-signals)  
-   标签：评分：7.0/10、query:diff-bridge
-   evidence：图感知薛定谔桥生成模型的稳定性
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
