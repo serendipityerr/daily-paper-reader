@@ -6,28 +6,22 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-19
-- 运行时间：2026-09-19 21:42:07 UTC
+- 最新运行日期：2026-09-20
+- 运行时间：2026-09-20 21:44:34 UTC
 - 运行状态：成功
-- 本次总论文数：1
+- 本次总论文数：0
 - 精读区：0
-- 速读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日速读1篇生成流模型论文，精读0篇，聚焦生成流中的噪声配对策略。
-
-唯一值得一看的是《Beyond Random Couplings: Contrastive Noise Alignment in Generative Flows》（6.0/10），核心看点是用对比式噪声对齐替代随机耦合，属生成流耦合设计方向。
-
-普通读者可先看该文的耦合对比实验与结论，6.0分属中等，建议等后续精读或更多同类工作再决定是否深入。
-- 详情：[/202609/19/README](/202609/19/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202609/20/README](/202609/20/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Beyond Random Couplings: Contrastive Noise Alignment in Generative Flows](/202609/19/2609.18488v1-beyond-random-couplings-contrastive-noise-alignment-in-generative-flows)  
-   标签：评分：6.0/10、query:diff-bridge
-   evidence：生成流中重分配噪声与数据耦合的最优传输
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
