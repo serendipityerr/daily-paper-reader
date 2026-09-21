@@ -1,0 +1,1077 @@
+Title: Entropy Estimates from Stochastic Interpolants
+
+URL Source: https://arxiv.org/pdf/2609.18093v1
+
+Published Time: Thu, 17 Sep 2026 00:42:20 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Entropy Estimates from Stochastic Interpolants 
+
+Phillip M. Rauscher 
+
+Department of Chemical & Biomolecular Engineering Tandon School of Engineering, New York University 
+
+(p.rauscher@nyu.edu) (Dated: September 17, 2026) We present a general method for estimating entropy differences between arbitrary probability distributions using stochastic interpolants. The marginal distributions which bridge the base and target obey a continuity equation, which allows a straightforward calculation of the entropy difference in terms of an inner product of the probability flow velocity and score fields. This formulation has several advantages: (i) no computationally expensive divergence calculations of either field are required, (ii) the score field need not even be learned directly if model transferability is not required, and (iii) on-the-fly estimates are produced nearly for free during training. When tractable base distributions are chosen (e.g. Gaussian chain, ideal gas, etc.), statistical thermodynamic entropies are then immediately recovered. Notably, the analysis relies only on the definition of the Gibbs-Shannon entropy, rather than any particular statistical mechanical ensemble, so that generalized non-equilibrium entropies may be computed. The method is demonstrated on several systems of increasing complexity: (i) a 40-dimensional Gaussian mixture model, (ii) the classical XY model of N spins arranged in one dimension, (iii) the 13-atom Lennard-Jones cluster, and (iv) an active Brownian polymer. 
+
+I. INTRODUCTION 
+
+Generative models have shown great promise in the physical sciences for tasks such as material design [1, 2], crystal structure prediction [3, 4], equilibrium conformational sampling [5–11], and free energy calculations [12–15]. These advances have further benefited from symmetry and geometry-aware formulations [16–19] and large-scale pre-training efforts [8, 20], so that the use of generative models in molecular science is becoming increasingly practical. The methods mentioned above generally focus on sampling from equilibrium, or Boltzmann, distributions of the form: 
+
+ρ(x) ∝ exp 
+
+[
+
+−U(x)
+
+kBT
+
+]
+
+(1) where U(x) is an energy function, kB is Boltzmann’s constant, and T the temperature. The major challenges in this case are that the normalization constant for Eq. 1 is not known a priori and that the phase space of x is high dimensional with (possibly) large energy barriers. Even so, knowing the general form of 
+
+ρ(x) allows for a variety of mathematical manipulations and sophisticated computational strategies to be employed [21–23]. But what if our system is not at equilibrium? In such cases, the probability law in Eq. 1 will not hold in general; indeed for strongly nonequilibrium systems, the temperature itself may not be well-defined. The general dynamical structure of nonequi-librium systems relies not on a free energy, but on energy and entropy as separate quantities which generate the reversible and irreversible dynamics, respectively [24–26]. Therefore, in order to apply generative models to arbitrary nonequilibrium sys-tems, we require a means of estimating entropies directly without recourse to the Boltzmann distribution. Here, we address this challenge within the framework of stochastic interpolants, enabling simulation- and divergence-free estimates of general Gibbs-Shannon entropies. The main contributions are as follows: 1. We formulate a novel expression for entropy changes along probability flows as an inner product of the velocity and denois-ing score fields, both of which may be learned without expensive divergence calculations. When one of the distributions is chosen appropriately, thermodynamic entropies follow immediately. 2. We demonstrate data-driven, simulation-free methods for estimating entropy differences between arbitrary probability distributions and test transferability of learned models. We further show that these estimates are available for negligible cost during training. 3. We apply the method to several reference systems, including a classical spin model defined on a Riemannian manifold, 
+
+(S1)⊗N , with symmetry group Z 2 × O(2), which is efficiently trained using equivariant optimal transport. Other reference systems include Gaussian mixture models and a 13-atom Lennard-Jones cluster. 4. We present the first estimate for the configurational entropy of a tangentially-driven active polymer, without introducing any auxiliary representations or approximations, and without applying any coarse-graining operations. 5. We discuss the consequences of model overfitting or “memorization” [27–29] and demonstrate the convergence to exact results as dataset size increases. arXiv:2609.18093v1 [cond-mat.stat-mech] 16 Sep 2026 2 
+
+> II. BACKGROUND
+
+The vast majority of methods for calculating thermodynamic potentials from simulations (apart from internal energy) are focused on free energies rather than entropies. This is because the Boltzmann distribution, Eq. 1, and its isobaric and/or grand canonical variations, allow for a wide array of mathematical manipulations. Examples include umbrella sampling, metadynamics, adaptive biasing force methods, and basis function sampling [22, 23]. On the other hand, thermodynamic entropies can be obtained by multicanonical methods, such as Wang-Landau sampling [30–32] or statistical temperature molecular dynamics [33], which are iterative methods designed to sample an artificial “flat” energy distribution. These methods directly obtain the density of states, allowing for powerful temperature-transferable analysis, but struggle with convergence for large systems and nonequilibrium implementations have not been developed (to the best of our knowledge). Taking a very different approach, Avinery et al. [34] showed that entropies can be effectively estimated in a thermodynamically-agnostic manner with compression algorithms. Although such an approach is clearly amenable to arbitrary data sets, the appli-cation to physical systems requires several intermediate steps, including choosing a particular representation, coarse-graining and discretizing the degrees of freedom, and generating ideally random and ordered systems for comparison. Within the context of activate matter, a variety of methods have emerged to estimate entropy production . These include the information-theoretic strategy of Ro et al. [35], who estimated the relative probabilities of forward and reverse trajectories by way of cross-parsing complexity and subsequently exploited fluctuation theorems to obtain local entropy production. Such an approach, while elegant, still relies on results from stochastic thermodynamics, which all assume some form of thermalized system in the form of a constant-temperature heat bath, limiting their range of applicability. A more general method applicable to steady-state conditions is that of Boffi and Vanden-Eijnden [36]. Those authors analyzed a general stochastic equation of motion and studied the entropy change of the associated Fokker-Planck equation, developing a score-matching strategy enabling entropy production rate estimates. The equations derived in that work are nearly identical to those we present below; the key difference is that our work analyzes an auxiliary dynamics within the context of a generative flow model (see Section III B), and therefore does not require that the system of interest obey any particular equation of motion, stochastic or otherwise. On the other hand, entropy production is not immediately available within our framework, since we generally do not have access to a deterministic drift. In the field of generative modeling, continuous normalizing flows [37–39] have shown excellent capability in molecular structure generation. As they also enable exact calculation of sample (log) likelihoods by the continuous change-of-variables formula, they also allow for robust importance sampling and reweighting to faithfully reproduce the Boltzmann distribution, Eq. 1; such models are aptly named “Boltzmann generators” [5, 9, 20]. In fact, these methods already enable ensemble-free entropy calculations since the change in Gibbs-Shannon entropy of two distributions is nothing but the mean change in negative log-likelihood (NLL), although this connection is rarely made explicit. One notable exception is the flow matching mutual information (FMMI) strategy of Butakov et al. [40], who also introduce a simulation-free method of evaluating the change-of-variables formula. In both of the latter cases, one is required to evaluate the divergence of the probability flow velocity, which is computationally expensive.   
+
+> III. METHOD A. Time-Dependent Gibbs-Shannon Entropy
+
+Consider an arbitrary probability density function parameterized by time, 
+
+ρt (x) : Rd → R≥0, with x ∈ Rd and t ∈ [0, 1]. The Gibbs-Shannon entropy associated with this distribution is defined: 
+
+St = −
+
+> ∫
+> Rd
+
+ρt (x) ln 
+
+ρt (x)dx (2) For a physical system of N particles, the thermodynamic entropy is simply Eq. 2 multiplied by the Boltzmann constant kB with 
+
+x = ( q3N , p3N ) the phase space coordinate. So long as 
+
+ρt (x) varies sufficiently smoothly with t, we can calculate the difference in entropy between two distributions, say 
+
+ρ1(x) and 
+
+ρ0(x), by direct time integration: 
+
+∆S = S1 − S0 = 
+
+> ∫10
+
+(
+
+∂t St ) dt (3) Evaluating the time derivative of Eq. 2, we have 
+
+∂t St = −
+
+> ∫
+> Rd
+
+∂t
+
+ρt (x) [ ln 
+
+ρt (x) + 1]dx = −
+
+> ∫
+> Rd
+
+∂t
+
+ρ (ln 
+
+ρ)dx (4) where the second equality follows from the fact that total probability is normalized to unity at all times. Note that we have made implicit the dependence on x and t where there is no risk of confusion. 3 
+
+> B. Stochastic Interpolants
+
+As formulated by Albergo et al. [41] a stochastic interpolant is a stochastic process defined as follows: 
+
+xt = I(x0, x1,t) + 
+
+γ(t)z (5) where I(0, x0, x1) = x0, I(1, x0, x1) = x1,
+
+γ(0) = 
+
+γ(1) = 0, z ∼ N (0, Id ), and (x0, x1) ∼
+
+ν, with 
+
+ν a joint distribution that marginal-izes on 
+
+ρ0 (
+
+ρ1) when integrated with respect to dx 1 (dx 0). The random variable xt is governed by a probability density 
+
+ρt (x) that smoothly bridges 
+
+ρ0(x) and 
+
+ρ1(x), and obeys a continuity equation: 
+
+∂t
+
+ρ = −∇ · (b
+
+ρ) (6) where b = b(t, x) = E[ ˙xt |xt = x] is the probability flow velocity with the expectation taken over 
+
+ρt (x). In practice such expecta-tions are obtained in one of two ways. First, one may sample xt directly by drawing samples of (x0, x1) ∼
+
+ν and z ∼ N (0, Id ),which is convenient for model training. Second, if the velocity field is known (or parameterized), one may use a generative process Xt (whose law coincides with that of xt ); this process solves the following ordinary differential equation: 
+
+dX t
+
+dt = b(t, Xt ), Xt=0 ∼
+
+ρ0. (7) It is also possible to realize the process Xt as a solution to a stochastic differential equation with drift bF (t, x) = b(t, x)+ 
+
+ε(t)s(t, x)
+
+where 
+
+ε(t) > 0 is a diffusion coefficient and s(t, x) is the score: 
+
+s(t, x) = ∇ ln 
+
+ρ =
+
+γ−1(t) × E [z|xt = x] (8) In this case, Eq. 6 becomes a Fokker-Planck equation; the results which follow remain valid in either case.  
+
+> C. Entropy Differences
+
+We now substitute Eq. 6 into Eq. 4, and integrate by parts to find: 
+
+∂t St = −
+
+> ∫
+> Rd
+
+ρ (b · ∇ ln 
+
+ρ) dx = −E [b · s] (9) The total entropy difference is then found by integration over t, which can be freely exchanged with that over x (by virtue of the regularity of 
+
+ρt (x), see [41]) to yield: 
+
+∆S = − 
+
+> ∫10
+
+E [b · s]dt = −E
+
+[∫ 10
+
+(b · s) dt 
+
+]
+
+(10) This is the key result which enables us to efficiently estimate entropies (or more precisely, differences in entropy), since both 
+
+b(t, x) and s(t, x) may be estimated, e.g. as neural networks, if we can draw samples from both 
+
+ρ0 and 
+
+ρ1. Importantly, both fields may be learned without expensive divergence calculations, which greatly accelerates both training and sampling. The application to physical systems is discussed later on. The result given in Eq. 9 is essentially identical to that of Boffi and Vanden-Eijnden [36] (see their Eq. 19), but applied to the dynamics of a probability flow rather than a physical system; connections to that work also appear in the next section.  
+
+> D. Continuous Change of Variables Formula
+
+The result in Eq. 9 is also closely related to the continuous change-of-variables formula used to obtain sample likelihoods in flow matching. Using the identity ∇ ln 
+
+ρ = ∇
+
+ρ/
+
+ρ and then integrating by parts, we find: 
+
+∂t St =
+
+> ∫
+> Rd
+
+ρ (∇ · b) dx = E [∇ · b] (11) 
+
+∆S = 
+
+> ∫10
+
+E [∇ · b]dt = E
+
+[∫ 10
+
+(∇ · b)dt 
+
+]
+
+(12) 4Eq. 12 is a spatially-averaged version of the continuous change-of-variables formula, which gives the change in log-likelihood of a sample along a flow path [5]. The connection with entropy is therefore self-evident, but usually implicit. While this formula is widely used, it is generally expensive to calculate and approximations (e.g. Hutchinson’s trace estima-tor) suffer from slow convergence in high dimensions [16]. Therefore, the inner product formulation of Eqs. 9 and 10 offers significant computational savings. However, it is important to note that the quantity ∫ 10 (b · s)dt cannot be used to obtain sample likelihoods: the right-hand sides of Eqs. 9 and 11 are only equal under the expectation, but do not have the same distribution. In practice, the time integrals in Eqs. 10 and 12 may be realized either by solving Eq. 7 (or the related SDE) for an ensemble of initial conditions, X0 ∼
+
+ρ0. This enables the use of transferable models [8, 13, 20], which may be trained on one system, for instance at a particular density or system size, and used to generate samples from another related one. However, if samples from the target distribution are available, Eqs. 10 and 12 can also be evaluated in a more efficient generation-free manner by taking the expectation over (x0, x1) ∼
+
+ν, z ∼ N (0, Id ), and t ∼ U(0, 1), as suggested by Butakov et al. [40].  
+
+> E. Imperfect Learning
+
+In general, the learned velocity and score fields, which we denote ˆ b(t, x) and ˆ s(t, x), respectively, include some approximation error, which is compounded by the inner product ˆ b · ˆs in Eq. 9. In general, we find that the score can be particularly challenging to learn. In such cases, we can insulate our results from inaccuracies in ˆ s(t, x) by computing the entropy accumulation as follows: ∂t St = −E[b · s] ≈ − E[ˆb(t, x) · s(t, x)] = 1
+
+γ(t)
+
+> ∫
+> Rd
+
+ˆb(t, x) · E [z|xt = x]
+
+ρt (x)dx 
+
+= 1
+
+γ(t) E [ˆb(t, xt ) · z] (13) where the expectations are taken over (x0, x1) ∼
+
+ν and z ∼ N (0, Id ) independently as usual. Integration over time yields the entropy difference ∆S as a further expectation over t ∼ U(0, 1).The factor of 1 /
+
+γ(t) in Eq. 13 leads to large variances near the endpoints. To handle these numerically, we employ antithetic sampling as proposed by Albergo et al. [41]. In general, we find that Eq. 13 has higher variance than Eq. 9 but significantly smaller bias, leading to more accurate results. In fact, computational expense is markedly reduced since no score model needs to be trained at all. The primary drawback of neglecting the score is a lack of transferability: the latent variable z is only available when the law of the interpolant 
+
+ρt (x) is sampled via xt , which depends explicitly on samples x1; such samples may not be available for systems of interest. On the other hand, the score model can be evaluated along the trajectories Xt generated by Eq. 7 without reference to the latent variable. One could imagine a hybrid approach in which the generated samples X1 are used to evaluate Eq. 13, but there are two difficulties with such a strategy. First, it exacerbates any inaccuracies in the velocity model, accumulating errors across entire trajectories; this is the reason why Boltzmann generators use a reweighting scheme following integration of Eq. 7 [5, 9]. Second, the interpolant xt depends on the joint distribution 
+
+ν(x0, x1). Optimal transport or pre-alignment alters this distribution in manner that may not be the same for different systems, or even identical systems but with larger dimension (i.e. more particles). Therefore, inconsistencies may arise between the presumed velocity field and the true interpolant density 
+
+ρt (x). 
+
+> F. (Nearly) Free Estimates During Training
+
+Because the computational expense of calculating Eqs. 9 and 13 is so small, the predicted entropy change can be monitored during training. Since forward passes of ˆ b(t, x) and ˆ s(t, x) and sampling of latent variable z are already required for calculating the loss(es), any extra inner products then require only O(d) operations. If both velocity and score are trained, the two estimates can be compared to assess model consistency and in particular convergence of the score model. The saturation of the entropy estimate might also be useful in determining when training should be stopped or modified. Intuitively, if the model is no longer able to add or remove information (i.e. change entropy), then the training parameters may no longer be appropriate.  
+
+> G. Physical Systems
+
+To connect with physical systems, we typically choose x ∈ R3N as N particle positions, 
+
+ρ0(x) as a non-interacting reference system (e.g. ideal gas), and 
+
+ρ1(x) taken from the system of interest. Then upon evaluating Eqs. 9 and 12, we have ∆S = Sex ,the excess entropy. It is trivial to sample from ideal systems, while interacting ones can be accessed by standard simulations, e.g. Monte Carlo or molecular dynamics methods. Note that the reference system need not be strictly ideal or de-correlated, but 5can instead be chosen for computational or theoretical convenience. For example, to estimate the configurational entropy of an active macromolecules, we will take the reference system to be a polymer with bond stretching and bending interactions, but neglecting excluded volume; the partition function is more complicated, but still analytically tractable, enabling direct estimates of the microscopic entropy, while also making modle training more efficient. Moreover, the phase space state x need not be Euclidean or physical space, but can exist on general Riemannian manifolds [18, 19, 42] to describe spin models, which we will also demonstrate.  
+
+> H. Equilibrium and Nonequilibrium Ensembles
+
+Interestingly, the relationships derived above rely only on the definition of the Gibbs-Shannon entropy Eq. 2 and the standard properties of probability flows: no explicit invocation of any particular statistical mechanical ensemble is required. As a result, the method may be used to compute nonequilibrium entropies, which may prove valuable in the context of multiscale modeling since these quantities are the drivers of irreversible dynamics. Indeed Eq. 2 has long been proposed as a general nonequilibrium entropy [26, 43], including for situations where the standard assumptions of local equilibrium and/or thermalization are ques-tionable. For these reasons, we believe that this method, which we term “entropy estimates from stochastic interpolants” (EESI), may offer significant advantages over other methods which presuppose Boltzmann-distributed ensembles. On the other hand, if we return to equilibrium ensembles, general free energies are easily calculated within this framework by standard thermodynamic relations [21]. Concretely, the (Helmholtz) free energy difference between the two populations characterized by 
+
+ρ0(x) and 
+
+ρ1(x) follows from ∆F = ∆U − T ∆S, where ∆U = U1 − U0 is the average energy change between base and target systems. We will use these equilibrium free energies to validate the method before moving to nonequilibrium scenarios.  
+
+> IV. RESULTS
+
+We now apply the proposed method to a series of systems of increasing complexity, starting with three equilibrium cases where results can be validated against direct sampling, analytical formulae, or traditional thermodynamic integration. We then apply the method on a well-studied active nonequilibrium system. Architectural details and hyperparameters are reported in Appendix A and the results are summarized in Table I, with all quantities expressed in units of nats. For simplicity, the same exact architecture and hyperparameters are used for learning both score and velocity fields except for the first example (Gaussian Mixture Model). Emphasizing the efficiency of the method, all calculations were run on a desktop workstation (see Section A 5).  
+
+> A. Gaussian Mixture Model
+
+We first consider the entropy of a Gaussian mixture model (GMM) with n = 16 modes and dimension d = 40; the values for the centers and covariances are exactly those given by Midgley et al. [44] and also used by He et al. [15]. The base (or prior) distribution is the standard multivariate normal whose Shannon entropy is S0 = ( d/2) ln (2
+
+πe). Although no such analytical result is available for the GMM target density, the entropy can be accurately estimated by computing S1 = −Ex∼ 
+
+> ρ1
+
+[ln 
+
+ρ1(x)] via direct sampling. Details of model architecture and training are provided in Appendix A 1.                                                                    
+
+> TABLE I. Comparative entropy difference between base (ideal) and target (real) systems ( ∆S=S1−S0) as calculated by the various methods described here. The reference values for the GMM, XY, and Lennard-Jones/Polymer systems are obtained by direct sampling, analytical solution, and thermodynamic integration, respectively. See Appendix A for details. Uncertainties in the means are reported as 95% confidence intervals determined by bootstrap error analysis. *The generative inner product uses Eq. 10 while the non-generative applies Eq. 13.
+> Method GMM XY Chain Lennard-Jones Active Polymer
+> 16 modes, d=40 d=10 d=13 ×3d=20 ×3
+> Reference −118 .19 ±0.01 −5.144 −34 .17 ±0.02 −4.61 ±0.01
+> Inner Product *Generative −114 .7±0.4−4.84 ±0.03 −33 .9±0.2−4.95 ±0.09
+> (EESI) Non-Generative −117 .81 ±0.15 −5.12 ±0.07 −34 .14 ±0.11 −4.78 ±0.08
+> Divergence Generative −117 .70 ±0.03 −5.19 ±0.03 −33 .71 ±0.11 −4.81 ±0.07
+> Non-Generative −117 .85 ±0.15 −5.33 ±0.04 −34 .07 ±0.10 −4.66 ±0.06
+
+6The results are presented in Table I, with most methods exhibiting errors of less than 0.5 nats, which falls within a commonly-used target accuracy for quantum chemical calculations (roughly 1 kcal/mol or 1.7 kBT at room temperature). Such results are quite satisfactory given the rather simple network parameterizations and the lack of any reweighting or correction scheme. The only exception is the method that relies on the learned score (inner product, generative), which shows an error of about 3.5 nats (relative error of ∼ 3%); in this example, the score is particularly difficult to learn. On the whole, the agreement with the exact results demonstrates that this method of computing entropy differences is valid in principle. 
+
+B. Classical XY Model in One Dimension 
+
+For a more physically-relevant example, we consider an open “chain” of N interacting spins, i.e. the one-dimensional XY model [45]. This choice is convenient as the canonical partition function is exactly solvable, providing a rigorous metric for method accuracy. Furthermore, system configurations can be obtained without simulations by sampling the von Mises distribu-tion. The base distribution is a series of non-interacting spins distributed uniformly on the unit circle. The system also provides a test bed for model transferability. Concretely, learning the velocity/score fields as finite-range graph neural networks (GNNs), it is possible to apply models trained at one value of N to systems with different sizes. The system is also a simple case of a Riemannian manifold: each spin is a unit vector in 2D, so the phase space domain is the topological space (S1)⊗N , with a distribution function that is invariant under the symmetry group Z 2 × O(2). Technical details of the system and associated models are given in Appendix A 2. A system with N = 10 spins is chosen for model training and the resulting entropy differences are again fairly accurate, with errors of at most 0.3 nats for all flavors of entropy estimation (see Table I). The methods are also show good transferability in predicting both energy and entropy as illustrated in Fig. 1 (left), with no loss of accuracy upon increasing to N = 64. In contrast, the results for smaller systems, especially N = 2, are less impressive. This is likely a boundary effect: we chose not to encode any notion of lattice position in our networks, so the unique nature of the chain ends must be learned independently. The small system of N = 2 is simply two chain ends, so the larger errors are not unexpected in this case. A more expressive model (or one with greater inductive bias) would likely improve these results for small systems. 
+
+C. 13-Particle Lennard-Jones Cluster 
+
+We now turn to a standard test system for generative models of molecular systems: a cluster of 13 Lennard-Jones particles at thermal equilibrium. The system includes a small harmonic restraining potential to keep the cluster intact; in the absence of the Lennard-Jones potential, this results in a collection of independent harmonically restrained particles (with center-of-mass removed). We use the same training data and methods as Klein et al. [17] and learn the velocity field by fine-tuning their model, which is an E(n)-equivariant graph neural network (EGNN, [46]); the model for the score field has the same structure and is initialized with small random weights. For this system, the gains in computational efficiency become especially apparent, as the divergence 
+
+# 1  1  
+
+N
+
+# 1 1    
+
+          
+
+>  
+
+#   1            !   
+
+> "# $% 
+>  ⋅  / γ  ⋅ 
+
+&'  
+
+# 1 − 1 −1 1  1 1 1 
+
+# (   1 1  $'%        
+
+> )* (!
+
+&'   
+
+FIG. 1. Experimental results. Left: Excess energy (blue), negative entropy (teal), and free energy (orange) per spin for the classical XY model with varying N. The models were trained from data with N = 10 (diamonds) and then used to estimate properties for other values (squares). Middle: On-the-fly entropy estimates (smoothed) for the 13-particle Lennard-Jones cluster, showing the convergence of Eq. 9 (teal) and Eq. 13 (violet) to the thermodynamic integration reference value (dashed black) during fine-tuning of a pre-trained model [17]. Right: Estimated configurational entropy for a tangentially active polymer (violet) with varying activity (Péclet number). The dashed black line is the Pe = 0reference obtained by thermodynamic integration with respect to the ideal chain (i.e. without excluded volume). 7calculation is approximately 50 times slower than the inner products. To assess the accuracy of EESI, we conduct a thermody-namic integration to obtain the free energy difference ∆F between the reference and interacting systems. The entropy difference then follows as ∆S = −(∆F − ∆U)/T where ∆U is the change in potential energy between the states and T is the temperature. For a more detailed description of the methods, see Appendix A 3. The results given in Table I again show rather reasonable agreement with errors below 0.5 nats in all cases, again without any reweighting or importance sampling scheme. In the middle panel of Figure 1, we show on-the-fly estimates obtained during model fine-tuning, with accurate values obtained after as few as 500 batch iterations through Eq. 13. The convergence of the estimate from Eq. 10 is slower as the score field is being trained from scratch, although the final results are still rather accurate. These findings suggest that pre-trained transferrable flow models [8, 20] can be easily adapted to provide entropy estimates.  
+
+> D. Tangentially Active Brownian Polymers
+
+The final case we consider is a true nonequilibrium system which does not obey a Boltzmann distribution (or any other known analytical form) and is a well-studied model for active biological macromolecules [47]. The system is a linear polar polymer with N = 20 beads undergoing Brownian dynamics (neglecting hydrodynamics). Bonded and excluded volume interactions are described by conservative forces, while activity is introduced in the form of tangential driving forces. Each bead (except those at the chain ends) is subject to an “active” force of magnitude fa directed along the vector joining its two neighboring beads. The relative strength of the activity is characterized by the Péclet number Pe = fab/kBT where b is the equilibrium bond length and 
+
+kBT is the thermal energy scale. The system is notable for its activity-induced collapse into globule-like states at high Pe. We generate polymer conformations by Brownian dynamics simulations, removing translational degrees of freedom by shift-ing the “tail” bead to the origin. The base distribution is a polymer without any excluded volume interactions or activity, but still incorporating bonded potentials. In addition, we add an angle bending potential to more closely match the chain dimensions of the prior/base and target distributions, which greatly reduces transport cost/distance. Although this prior is more complex than a simple ideal Gaussian or freely-jointed chain, the partition function and configurational entropy are still available analytically and the reduced transport distance allows for faster training and improved accuracy. This choice of prior also allows for an equi-librium (Pe = 0) benchmark via standard thermodynamic integration, which is reported in Table I. The methods are described in detail in Appendix A 4. We again use an EGNN model to parameterize the velocity/score fields and provide additional inductive bias by including the bead position (or index) along the chain as an additional node feature and introducing a Boolean-type flag indicating a covalent bond as an extra edge feature. To reduce training demands, we use the validated initial Pe = 0 models as warm-starts for other values of Pe, ranging from 10 −2 to 10 2.At low Pe, the configurational entropy of the polymer is largely unaffected by the activity, adopting equilibrium-like confor-mations. However, when Pe > 1, large differences emerge, with entropy being strongly reduced. Note that this is not the entropy 
+
+production rate, which has been extensively discussed in the literature, but is instead the entropy difference between the active and passive ensembles, quantifying the thermodynamic restoring force. At this point, the scaling behavior of the configurational entropy change as a function of Pe cannot be clearly identified; we leave this topic to a future investigation. 
+
+# 1  1 1 1  1  1 
+
+#    1 1       
+
+      
+
+> FIG. 2. Entropy estimates obtained for the XY model with varying training data size. The dashed black line is the analytical result while the dotted line is the expected result in the case of memorization. All results are relative to the ideal (uniform) distribution and are expressed in nats.
+
+8 
+
+> E. Learning vs. Memorization
+
+In data-limited regimes, diffusion and flow models are known to “memorize,” i.e. simply reproduce their training data during sampling, rather than generate truly novel samples [27–29]. Since we anticipate operating in such a regime in chemical physics applications, it is worthwhile to comment on this behavior as it pertains to entropy estimation. In particular, we return to the XY model introduced above and retrain our networks under varying sample sizes, with the results shown in Fig 2. If the training data contains M samples, then we expect that a model which has memorized this data yields an entropy estimate of the Boltzmann type, S = −kB ln M, which is plotted alongside the numerical data and the analytical entropy difference. For 
+
+M = 1, the model is clearly memorizing the single sampled state. This memorization quickly fades, so that the “true” entropy is recovered with as few as 100 samples. Of course, the nature of this decay is dependent on the system and the model under consideration, but it is encouraging that a minimally expressive model and a rather limit dataset can still avoid memorization and produce accurate entropy estimates.  
+
+> V. DISCUSSION AND CONCLUSIONS
+
+We have presented a method for estimating entropy differences between physical systems, termed EESI. The method is entirely data-driven and does not rely on any a priori knowledge concerning the form of the distribution function, allowing for the study of nonequilibrium systems, such as active, driven, or flowing molecular ensembles. There are two primary limitations of the EESI method. First, the score field can be rather difficult to learn in practice as its objective has a large variance. Pervious work addressed improved the training signal using target score matching [15, 48], which uses known values of the score at the end points. At equilibrium, the score at the two end states is easily obtained as the gradient of the potential energy, i.e. the forces. However, no such relationship holds out-of-equilibrium for the target distribution as it is not Boltzmann-distributed. It may, however, be possible to improve the score training by careful parameterization of the stochastic interpolant such that the score and velocity are directly related to one another [41]. It may also be possible to use the equivalence of Eqs. 9 and 11 as proposed by Boffi and Vanden-Eijnden [36]. Since ∇ · b tends to have much lower variance than b · s, it can serve as an additional training target for the score. This could be further integrated in an active learning framework, in which the time intervals of greatest uncertainty in b · s are refined by a small number of divergence calculations. Of course, as mentioned above, learning the score is only truly necessary if the flow model is intended to be transferable. A somewhat related challenge is the inability to re-weight generated samples in nonequilibrium conditions. This reweighting (importance sampling) is a key step in obtaining accurate equilibrium ensembles and free energies [5, 15], but again relies on a known form of the probability density, even if un-normalized, as this provides a tractable log-likelihood. Resolving this issue is a formidable challenge and is likely to require system-specific strategies. 
+
+> ACKNOWLEDGMENTS
+
+Financial support for this work was provided by the Tandon School of Engineering at New York University. I am grateful to Professor Mark E. Tuckerman and Dr. Adam Lahouari for helpful discussions and feedback on this manuscript. 
+
+> DATA AVAILABILITY STATEMENT
+
+The data that support the findings of this study will be openly available via the Open Science Framework, reference num-ber "wf54q" at osf.io/wf54q. The PyTorch implementation of EESI is available at github.com/Rauscher-Group/eesi. The codes for the Lennard-Jones and active polymer systems are freely available at github.com/Rauscher-Group/LJClusterTI.jl and github.com/Rauscher-Group/ActivePolyBD.jl, respectively.  
+
+> Appendix A: Systems, Model Architectures, and Training Details 1. Gaussian Mixture Model (GMM)
+
+We first estimate the entropy of a Gaussian mixture in 40-dimensional space. Our implementation is exactly that of Midgley 
+
+et al. [44] and He et al. [15]: 16 components, means ∼ U(−2, 2), std = softplus (−3), random seed 10. The velocity fields are parameterized by a multilayer perceptron (MLP) with 4 hidden layers of width dh = 512 with SiLU activation functions 9[49]. The score field has two hidden layers with dh = 3072; for this system we found that wider (rather than deeper) networks performed best for parameterizing the score. The input features are the d = 40 dimensional position vector concatenated with a learned time embedding of size dh. The time embedding is output from an additional MLP with two hidden layers of size dh and a SiLU activation. The input is a standard positional encoding [50] of the time, t, also of size dh.We train the model using the Adam optimizer [51] with a batch size of 1000 for 100,000 iterations with a learning rate of 10 −4 followed by a fine-tuning of 20,000 iterations with a learning rate of 10 −5. For each batch, fresh samples are drawn from both the base and target distributions. This is in contrast to later experiments which use a static set of target samples.  
+
+> 2. Classical XY Model in One Dimension
+
+The system is a “chain” of N spins placed on a regular one-dimensional lattice [45]. Each spin ˆ si is a 2D unit vector, which may be represented as a point on the unit circle S1. The spins interact with nearest neighbors via the dimensionless potential: 
+
+β H = −J
+
+> N−1
+
+# ∑
+
+> i=1
+
+ˆsi · ˆsi+1 = −J
+
+> N−1
+
+# ∑
+
+> i=1
+
+cos (
+
+θi+1 −
+
+θi) (A1) with 
+
+θi the angle between an arbitrary fixed axis and the ith spin. We use units such that 
+
+β = 1 with coupling parameter J = 2, which plays the role of an inverse effective temperature. The canonical partition function factorizes immediately in terms of the angle differences, 
+
+φi =
+
+θi+1 −
+
+θi, leading to the exact results: 
+
+Z =
+
+> ∫
+> π
+> −
+> π
+
+eJ ∑N−1 
+
+> i=1cos (
+> θi+1−
+> θi)
+
+d
+
+θ N = 2
+
+π
+
+[∫
+
+> π
+> −
+> π
+
+eJ cos  
+
+> φ
+
+d
+
+φ
+
+]N−1
+
+= ( 2
+
+π)N (I0(J)) N−1 = Zid × (I0(J)) N−1 (A2) 
+
+∆U/N = JN
+
+∂ ln (Z/Zid )
+
+∂ J = −J
+
+(
+
+1 − 1
+
+N
+
+) I1(J)
+
+I0(J) (A3) 
+
+∆S/N = ( ∆U − ∆F)/N =
+
+(
+
+1 − 1
+
+N
+
+) [ 
+
+ln I0(J) − J I1(J)
+
+I0(J)
+
+]
+
+(A4) where ∆U = U1 − U0 is the average energy difference between the interacting ( J = 2) system and the non-interacting ( J = 0) system, ∆F = −(1/
+
+β ) ln (Z/Zid ) is the free energy difference of the same, and I 
+
+> ν
+
+(x) is the modified Bessel function of the first kind of order 
+
+ν.Notice that the probability density (i.e. Boltzmann factor) found in square brackets in the third term of Eq. A2 is proportional to the von Mises distribution. Therefore, we generate system configurations by choosing a random orientation for the first spin, θ1 ∼ U(−
+
+π,
+
+π) and then N − 1 samples from the von Mises distribution for angle differences, 
+
+φi ∼ vonMises (J), followed by cumulative summation. The domain of the XY model may be considered as N-fold product space (S1)⊗N which forms a Riemannian manifold, although the metric tensor is unity which simplifies the situation considerably. The stochastic interpolant for such manifolds is written in terms of the exponential and logarithmic maps as described by Wu et al. [18] and further utilized by Hoffmann et al. 
+
+[19], Grenioux et al. [42] for handling periodic particle systems. 
+
+xt = Exp x0
+
+(t Log x0 x1 +
+
+γ(t)z) (A5) where we take 
+
+γ(t) = 0.2√t(1 − t). Including the noise inside the exponential map ensures that the interpolant remains on the manifold at all times, even when perturbed from the geodesic joining x0 and x1. A similar formulation was used implicitly by Máté et al. [13] and Máté et al. [14]. Accordingly, the latent variable z ∼ N (0, Id ) is defined in the tangent space, z ∈ Tx0 M. For the simple geometry here, this tangent space is just (R1)⊗N . 
+
+> a. Equivariant Minibatch Optimal Transport
+
+To improve training and sampling efficiency, we align base/target samples by minimizing transport cost within the symmetry group as described by Klein et al. [17]. The interaction potential, Eq. A1, is invariant under rotations and reflections in two dimensions, i.e. O(2) symmetry. It is not fully permutation invariant owing to the fixed nearest-neighbor interactions and the 10 open chain ends, however it does possess a head-to-tail symmetry, i.e. it is invariant on reversing the order of the summation, a 
+
+Z2 symmetry. With these considerations, it is easy to search the complete symmetry group to find the optimal alignment between any two samples. We apply chain reversal and/or spin reflection to the base sample (leading to four realizations) and then find the optimal rotation that minimizes the transport distance to the target, measured as a Euclidean distance (see below) for each of the realizations, choosing the best configuration among the four. To optimally align samples, we minimize the chordal (or Euclidean) distance between pairs of spins in the base and target samples. Concretely, we define the angle difference as 
+
+ψi =
+
+θ target  
+
+> i
+
+−
+
+θ base  
+
+> i
+
+, then search for a rotation of the base sample spins, 
+
+δ ,that minimizes the following objective: 
+
+C =
+
+> N
+
+# ∑
+
+> i=1
+
+[1 − cos (
+
+ψi −
+
+δ )] (A6) By direct differentiation and some trigonometric identities, it is straightforward to show than the optimal value of 
+
+δ is the circular mean, 
+
+ψ:arg min 
+
+> δ
+
+C =
+
+ψ = atan2 
+
+(
+
+# ∑
+
+> i
+
+sin (
+
+ψi) , ∑
+
+> i
+
+cos (
+
+ψi)
+
+)
+
+(A7) where the second equality may be understood by direct differentiation and the use of trigonometric identities. We intend to train the velocity and score fields at one particular value of N and then apply them to estimate entropies for other systems. Therefore, we do not apply minibatch optimal transport methods as this would alter the joint target/base distribution ν(x0, x1) in a manner that depends on system and batch size, as discussed in the main text.  
+
+> b. 1D Static Graph Neural Network
+
+The velocity and score fields are parameterized by an equivariant graph neural network (EGNN) inspired by that of Satorras 
+
+et al. [46], but simplified and streamlined for the low dimensional system here and taking account of its slightly different symmetries. First, we featurize the interpolant time by a Fourier expansion with logarithmically spaced frequencies in the range 1 ≤
+
+ω ≤ 30 and then pass it through a learned embedding: 
+
+et = ft ([ t ⊕ (cos 
+
+ωkt) ⊕ (sin 
+
+ωkt)]) (A8) with ⊕ indicating concatenation. Each equivariant graph convolution (EGC) layer of the model performs the following sequence of operations: φ li j = wrap 
+
+(
+
+θ lj −
+
+θ li
+
+)
+
+(A9) 
+
+eli j =
+
+[
+
+| j − i|−1, cos (
+
+φ li j ), cos (2
+
+φ li j ), ..., cos (ne
+
+φ li j )
+
+]
+
+(A10) 
+
+θ l+1 
+
+> i
+
+=
+
+θ li + ∑ 
+
+> j∈N(i)
+
+φ li j fe
+
+(
+
+eli j ⊕ et
+
+)
+
+(A11) where wrap (x) = x − (2
+
+π) × ⌊ x/2
+
+π⌋ − 
+
+π and the sum in the angle update runs over the neighbors of each spin, which are taken as those spins separated by at most two lattice spacings. The order of the expansions for et and eli j is taken as eight. The functions ft/e are parameterized by MLPs with SiLU activations. ft has one hidden layer with hidden and output dimen-sion of 32 while fe has three hidden layers with hidden dimension 16 and scalar output. The full EGNN model uses three EGC layers and returns an output for each lattice site as: 
+
+bi(t) = 
+
+θ 3 
+
+> i
+
+−
+
+θ 0 
+
+> i
+
+(A12) Since the features 
+
+φ li j and | j − i|−1 are equivariant under rotation, reflection, and chain reversal, the successive angle updates are also equivariant, as is the vector field output. Note also that the angle updates and resulting velocity are not wrapped into the canonical region since they exist on the tangent space of the manifold, which is RN as mentioned previously. Each EGNN model has a total of 3488 parameters. 11  
+
+> c. Training and Hyperparameters
+
+Samples from the base distribution were drawn on-demand during training iterations. To mimic a data-constrained scenario, the target distribution samples ( N = 10) were limited to a total of 10,000 configurations which were generated prior to the training. The velocity and score models were trained with a batch size of 256 for 20,000 iterations via the Adam optimizer with a learning rate of 10 −4 followed by 5,000 iterations at a rate of 10 −5.To sample from the model, we integrate the ODE 7 using the Heun midpoint method with a discretization of 100 steps. Entropy estimates are computed as the average of 100 × 256 = 25 , 600 samples with 95% confidence intervals determined by bootstrap error analysis.  
+
+> 3. Lennard-Jones Cluster
+
+We consider the alchemical free energy of a small cluster of N = 13 Lennard-Jones particles. The dimensionless system Hamiltonian is written: β H = 12 ∑ 
+
+> 〈i,j〉
+
+[( rm
+
+ri j 
+
+)12 
+
+− 2
+
+( rm
+
+ri j 
+
+)6]
+
++
+
+β H0 (A13) where rm is the minimum energy distance (taken as the unit of length), ri j = |ri − r j| is the distance between particles i and j,β H0 is a reference Hamiltonian, and the sum is taken over all pairs of particles such that i < j. The latter is a simple harmonic restraint that keeps the particles close to the cluster center-of-mass: 
+
+β H0 = 12
+
+> N
+
+# ∑
+
+> i=1
+
+∥∥∥∥∥ri − 1
+
+N
+
+> N
+
+# ∑
+
+> j=1
+
+r j
+
+∥∥∥∥∥
+
+> 2
+
+(A14) We closely follow the work of Klein et al. [17] for model design and training, using the same datasets and checkpoints provided by those authors [52], though sampling only 10 6 configurations rather than the entire ensemble. We implement the same model architecture using the reported weights as a “warm start” for training the velocity network. The score network has the same structure and size but has weights initialized to small random values. The base distribution is a centered Gaussian distribution, which is exactly the Boltzmann density associated with 
+
+β H0, allowing for a direct comparison with thermodynamic integration results (see below). The equivariant optimal transport method of Klein et al. [17] was used with a batch size of 256. Training was carried out using the Adam optimizer with a learning rate of 10 −3 for 10,000 iterations followed by 10,000 iterations at a rate of 10 −4. Model parameter fluctuations were suppressed by an exponential moving average (EMA) scheme, with a damping parameter of 0.999.  
+
+> a. Monte Carlo Simulations and Thermodynamic Integration
+
+To obtain a “ground truth” entropy for comparison, we conduct additional simulations for thermodynamic integration [21]. We use a nonlinear scaling of the Hamiltonian as proposed by Shirts and Pande [53] and Steinbrecher et al. [54] which includes an additional control parameter, 
+
+λ , such that H(
+
+λ = 0) = H0 and H(
+
+λ = 1) = H as given in Eq. A13: 
+
+s(  
+
+> λ)
+> i j
+
+=
+
+α(1 −
+
+λ ) + ( ri j /rm)6 (A15) 
+
+β H 
+
+> λ
+
+=
+
+β H0 +
+
+λ
+
+2 ∑ 
+
+> 〈i,j〉
+
+[(
+
+s( 
+
+> λ)
+> i j
+
+)−2
+
+− 2
+
+(
+
+s( 
+
+> λ)
+> i j
+
+)−1]
+
+(A16) with 
+
+α = 1/4. The free energy then follows as ∆F = ∫ 10 〈
+
+∂λ H 
+
+> λ
+
+〉 
+
+> λ
+
+d
+
+λ , where the angled brackets indicate an ensemble average under the Boltzmann distribution associated with H 
+
+> λ
+
+. We divide the interval 
+
+λ ∈ [0, 1] into 40 evenly-spaced intervals and evaluate the integral numerically via Simpson’s rule. We obtain samples from the various H 
+
+> λ
+
+by Metropolis Monte Carlo. Trial moves were implemented as particle displacements chosen uniformly in [−d, +d ]3 with the range d dynamically adjusted during the first 10 5 cycles of equilibration (one cycle = one attempt per particle) to achieve a target acceptance rate of ∼50%. This was followed by 5 × 10 5 further equilibration cycles and 10 6 production cycles recording values of H 
+
+> λ
+
+and 
+
+∂λ H 
+
+> λ
+
+every 100 cycles. The procedure above was repeated 32 times with different random number generator seeds for each H 
+
+> λ
+
+to reduce statistical uncertainty. 12  
+
+> 4. Tangentially Active Polymer
+
+To apply EESI to a true nonequilibrium (non-Boltzmann) system, we consider a polymer undergoing Brownian dynamics with tangential activity, adopting a simplified version of the model of Bianco et al. [47]. The non-dimensional stochastic equation of motion for the ith particle along the chain is written: 
+
+dri = −∇riU({r}) dt + √2 dW + Pe · ˆsi dt (A17) where U is the conservative potential energy of the system, dW is an increment of the Wiener process, Pe is the Péclet number characterizing the strength of the active force, and ˆ si = ( ri+1 − ri−1) / |ri+1 − ri−1| is the central difference tangent (unit) vector centered on the ith particle. As this tangent vector is not defined for the chain ends, those particles are left passive. The conservative potential is the sum of bonded and excluded volume contributions: 
+
+U = Ub + Unb (A18) 
+
+Ub = k
+
+2
+
+> N−1
+
+# ∑
+
+> i=1
+
+(|ri+1 − ri| − 1)2 (A19) 
+
+Unb = k
+
+2 ∑   
+
+> 〈i,j〉
+> 1
+> |i−j|>1
+
+× (ri j − 1)2 × Θ(1 − ri j ) (A20) where k = 100 and ri j = |ri − r j| is the distance between particles i and j. Within the nonbonded potential, the indicator function ensures that only nonbonded particles are included in the sum over pairs, while the Heaviside function Θ(x) enforces a short-range cutoff at ri j = 1, leading to a purely repulsive (excluded volume) interaction.  
+
+> a. Brownian Dynamics Simulations and Thermodynamic Integration
+
+The equation of motion Eq. A17 is integrated by the Euler-Maruyama method with dt = 0.001. We initialize the polymer chains as self-avoiding walks starting at the origin and simulate for 1 .1 × 10 8 timesteps, discarding the first 10 7 as equilibration time. Ten replicas are run at each value of Pe to reduce statistical uncertainty and ensure uncorrelated samples. For Pe = 0, the polymer is entirely passive and therefore obeys the standard Boltzmann distribution. To estimate the free energy of this system, we again conduct a thermodynamic integration. Since the excluded volume potential is non-singular at the origin, we adopt a direct coupling: 
+
+H 
+
+> λ
+
+= Ub +
+
+λUnb (A21) which allows us to calculate the free energy difference associated with the introduction of excluded volume interactions. Note that the partition function of the “bare” Hamiltonian is available analytically: 
+
+Zb =
+
+> ∫
+
+drN e−Ub =
+
+> ∫
+
+drN exp 
+
+[
+
+− k
+
+2
+
+> N−1
+
+# ∑
+
+> i=1
+
+(|ri+1 − ri| − 1)2
+
+]
+
+= V
+
+{∫
+
+dQ exp 
+
+[
+
+− k
+
+2 (|Q| − 1)2
+
+]} N−1
+
+= V
+
+[
+
+4
+
+π 
+
+> ∫∞
+> 0
+
+Q2e− k 
+
+> 2(Q−1)2
+
+dQ 
+
+]N−1
+
+= V
+
+[
+
+(1 + k)( 1 + erf (√k/2)(k/2
+
+π)3/2 + 2e−k/2
+
+(k/2
+
+π)
+
+]N−1
+
+(A22) where erf (x) is the error function and in the second line we have factorized the Boltzmann weight into independent terms by introducing the connector vectors Q = ri+1 − ri and integrating the chain end position r1 over all space. The modified Hamiltonian is sampled by the same Brownian dynamics simulations described above, logging the values of H 
+
+> λ
+
+and 
+
+∂λ H 
+
+> λ
+
+every 10,000 time steps, with ten independent simulations conducted for each H 
+
+> λ
+
+. ??? TI details!!!  
+
+> b. Base Distribution and Optimal Transport
+
+The equation of motion Eq. A17 is equivariant under all rotations and reflections, but is not symmetric under chain reversal as in the XY model studied earlier. Therefore, to minimize transport distance within the appropriate symmetry group E(3), we first 13 place the “tail” chain end at the origin, apply a point reflection to generate two realizations, apply the Kabsch algorithm to each, and then retain the one with minimal squared Euclidean distance to the target sample. The associated cost matrix is then used to match target and sample configurations within each batch. Although the system defined in Eq. A22 is easily related to the passive system, it leads to much more compact polymers and as a result, large transport distances. To mitigate this, the base distribution is modified to include an angle bending potential so that the polymer dimensions, i.e. end-to-end distance, remain similar in the base and target distributions: 
+
+Uang =
+
+γ
+
+2
+
+> N−1
+
+# ∑
+
+> i=2
+
+(cos 
+
+θi −
+
+κ)2 (A23) where 
+
+θi is the angle between bond vectors ri,i−1 and ri+1,i, with 
+
+κ the cosine of the equilibrium angle and 
+
+γ a spring constant. The partition function may still be obtained analytically for this model, 
+
+Zbase =
+
+> ∫
+
+drN e−Ub−Uang = V
+
+[
+
+4
+
+π 
+
+> ∫∞
+> 0
+
+Q2e− k 
+
+> 2(Q−1)2
+
+dQ 
+
+]N−1 [ 12 
+
+> ∫1
+> −1
+
+e− 
+
+> γ
+> 2(u−
+> κ)2
+
+du 
+
+]N−2
+
+= Zb × Zang (A24) where the second equality is obtained by take Qi as the polar axis for the solid angle integration of Qi along with a change of variables u = cos 
+
+θi, noting that the first bond vector integration is unaffected by the bending potential. Here the angular partition function is: 
+
+Zang =
+
+{ 12
+
+√
+
+π
+
+2
+
+γ
+
+[
+
+erf 
+
+(√ 
+
+γ
+
+2 (
+
+κ + 1)
+
+)
+
+− erf 
+
+(√ 
+
+γ
+
+2 (
+
+κ − 1)
+
+)]} N−2
+
+(A25) Note that since the base distribution is different in the stochastic interpolant vs. the thermodynamic integration, the free energy differences are related by ∆FTI = ∆FSI − ln Zang .We sample from the base distribution by first drawing N − 1 samples from the bond length distribution via rejection sampling with a Gaussian envelop prior centered at the maximum. The cosine of the N − 2 bond angles are then sampled from a truncated Gaussian distribution and the azimuth is taken as uniform over the range [0, 2
+
+π). The first particle is placed at the origin and the chain is built sequentially. The parameters 
+
+κ and 
+
+γ are chosen to simultaneously match the average squared end-to-end distance and the variance of the bond angles observed in the target samples.  
+
+> c. EGNN Node and Edge Features
+
+We again use the EGNN model of [46] to parameterize the velocity and score fields, though we augment it in several ways compared to the Lennard-Jones application above. First, we expand the node features to include a half-period Fourier embedding of both the time and the normalized index of the particle: 
+
+hi = [ t, (cos k
+
+πt), (sin k
+
+πt)] ⊕ [s/N, (cos j
+
+πs/N), (sin j
+
+πs/N)] (A26) where t is the time, s = i − 1 is the (shifted) index/position of the particle along the chain (starting at zero), and the trigonometric terms include harmonics 1 ≤ k ≤ nt and 1 ≤ j ≤ ns, so that hi has dimension dh = 2 + 2nt + 2ns.Second, we introduce a new edge feature to describe bonded interactions. The edge features in the original network are simply the squared distances between particle positions, which are already passed into the message-generating network and are therefore redundant. We replaced these redundant features with a simple flag for each edge, taking a value of 1 if the particles are connected by a bonded potential and zero otherwise, i.e. a Kronecker delta: 
+
+ei j =
+
+δ|i− j|,1 (A27) By encoding this information directly, we ease the demands on the model, which would otherwise have to learn the distinction between bonded and nonbonded particles independently. The network is otherwise identical to that of the LJ system.  
+
+> d. Training and Hyperparameters
+
+The equivariant optimal transport method outlined above was used with a minibatch size of 256. Training was carried out using the Adam optimizer with a learning rate of 1e-3 for 200,000 iterations followed by a series of (100k,25k,25k,25k,25k) iterations at rates of (1e-4,3e-5,1e-5,3e-6,1e-6), respectively. The same exponential moving average (EMA) scheme applied in the case of the LJ system was also utilized here. 14 
+
+5. Computing Infrastructure 
+
+All model training and inference was conducted on a single NVIDIA RTX PRO 2000 Blackwell. Monte Carlo and Brownian dynamics simulations (along with associated thermodynamic integrations) were conducted on an Intel Core Ultra 7 265 processor distributed across 16 cores. 
+
+[1] P. Hoellmer, T. Egg, M. M. Martirossyan, E. Fuemmeler, Z. Shui, A. Gupta, P. Prakash, A. Roitberg, M. Liu, G. Karypis, M. Transtrum, R. G. Hennig, E. B. Tadmor, and S. Martiniani, Open materials generation with stochastic interpolants (2025). [2] C. Zeng, J. Jin, G. Karypis, M. Transtrum, E. B. Tadmor, R. G. Hennig, A. Roitberg, S. Martiniani, and M. Liu, Propmolflow: Property-guided molecule generation with geometry-complete flow matching (2025). [3] C. Zeng, H. W. Sullivan, T. Egg, M. M. Martirossyan, P. Höllmer, J. Jin, R. G. Hennig, A. Roitberg, S. Martiniani, E. B. Tadmor, and M. Liu, Molcrystalflow: Molecular crystal structure prediction via flow matching (2026). [4] M. Kilgour, A. Dong, M. E. Tuckerman, and J. Rogal, A distributional framework for generative modeling of molecular crystals (2026). [5] F. Noé, S. Olsson, J. Köhler, and H. Wu, Boltzmann generators: Sampling equilibrium states of many-body systems with deep learning, Science 365 , 10.1126/science.aaw1147 (2019). [6] A. Morehead and J. Cheng, Geometry-complete diffusion for 3d molecule generation and optimization, Communications Chemistry 7, 150 (2024). [7] M. S. Albergo and E. Vanden-Eijnden, Nets: A non-equilibrium transport sampler (2024). [8] C. B. Tan, M. Hassan, L. Klein, S. Syed, D. Beaini, M. M. Bronstein, A. Tong, and K. Neklyudov, Amortized sampling with transferable normalizing flows (2025). [9] M. Schebek, F. Noé, J. Rogal, M. Schebek, F. Noé, and J. Rogal, Scalable boltzmann generators for equilibrium sampling of large-scale materials, Nature Communications 2026 17:1 17 , 10.1038/s41467-026-73900-9 (2026). [10] A. Havens, B. K. Miller, B. Yan, C. Domingo-Enrich, A. Sriram, B. Wood, D. Levine, B. Hu, B. Amos, B. Karrer, X. Fu, G.-H. Liu, and R. T. Q. Chen, Adjoint sampling: Highly scalable diffusion samplers via adjoint matching (2025). [11] J. F. Gloy and S. Olsson, Hollowflow: Efficient sample likelihood evaluation using hollow message passing (2025). [12] L. Zhao and L. Wang, Bounding free energy difference with flow matching, Chinese Physics Letters 40 ,10.1088/0256-307X/40/12/120201 (2023). [13] B. Máté, F. Fleuret, and T. Bereau, Neural thermodynamic integration: Free energies from energy-based diffusion models, The Journal of Physical Chemistry Letters 15 , 10.1021/acs.jpclett.4c01958 (2024). [14] B. Máté, F. Fleuret, and T. Bereau, Solvation free energies from neural thermodynamic integration, The Journal of Chemical Physics 162 ,10.1063/5.0251736 (2025). [15] J. He, Y. Du, F. Vargas, Y. Wang, C. P. Gomes, J. M. Hernández-Lobato, and E. Vanden-Eijnden, Feat: Free energy estimators with adaptive transport (2025). [16] J. Köhler, L. Klein, and F. Noé, Equivariant flows: Exact likelihood generative learning for symmetric densities (2020). [17] L. Klein, A. Krämer, and F. Noé, Equivariant flow matching (2023). [18] J. Wu, B. Chen, Y. Zhou, Q. Meng, R. Zhu, and Z.-M. Ma, Riemannian neural geodesic interpolant (2025). [19] E. Hoffmann, M. Schebek, L. Klein, F. Noé, and J. Rogal, Boltzmann generators for condensed matter via riemannian flow matching (2026). [20] L. Klein and F. Noé, Transferable boltzmann generators (2024). [21] M. E. Tuckerman, Statistical Mechanics: Theory and Molecular Simulation , 2nd ed. (Oxford University Press, Oxford, 2023). [22] A. Purohit, Free energy calculations in molecular modeling: from classical methods to machine learning, Journal of Molecular Modeling 
+
+32 , 10.1007/s00894-026-06678-8 (2026). [23] M. Sega and M. Salvalaglio, Molecular understanding of free-energy landscapes, Annual Review of Chemical and Biomolecular Engi-neering 17 , 10.1146/annurev-chembioeng-100724-082451 (2026). [24] M. Grmela and H. C. Öttinger, Dynamics and thermodynamics of complex fluids. i. development of a general formalism, Physical Review E 56 , 10.1103/PhysRevE.56.6620 (1997). [25] H. C. Öttinger and M. Grmela, Dynamics and thermodynamics of complex fluids. ii. illustrations of a general formalism, Physical Review E 56 , 10.1103/PhysRevE.56.6633 (1997). [26] H. C. Öttinger, Beyond Equilibrium Thermodynamics (John Wiley & Sons, Inc., Hoboken, New Jersey, 2005). [27] G. Somepalli, V. Singla, M. Goldblum, J. Geiping, and T. Goldstein, Understanding and mitigating copying in diffusion models (2023), arXiv:2305.20086 [cs.LG]. [28] C. Chen, D. Liu, and C. Xu, Towards memorization-free diffusion models (2024), arXiv:2404.00922 [cs.CV]. [29] T. Bonnaire, R. Urfin, G. Biroli, and M. Mézard, Why diffusion models don’t memorize: The role of implicit dynamical regularization in training (2025), arXiv:2505.17638 [cs.LG]. [30] F. Wang and D. P. Landau, Determining the density of states for classical statistical models: A random walk algorithm to produce a flat histogram, Physical Review E 64 , 10.1103/PhysRevE.64.056101 (2001). [31] F. Wang and D. P. Landau, Efficient, multiple-range random walk algorithm to calculate the density of states, Physical Review Letters 86 ,10.1103/PhysRevLett.86.2050 (2001). [32] D. P. Landau, S.-H. Tsai, and M. Exler, A new approach to monte carlo simulations in statistical physics: Wang-landau sampling, American Journal of Physics 72 , 10.1119/1.1707017 (2004). 15 
+
+[33] J. Kim, J. E. Straub, and T. Keyes, Statistical-temperature monte carlo and molecular dynamics algorithms, Physical Review Letters 97 ,10.1103/PhysRevLett.97.050601 (2006). [34] R. Avinery, M. Kornreich, and R. Beck, Universal and accessible entropy estimation using a compression algorithm, Physical Review Letters 123 , 10.1103/PhysRevLett.123.178102 (2019). [35] S. Ro, B. Guo, A. Shih, T. V. Phan, R. H. Austin, D. Levine, P. M. Chaikin, and S. Martiniani, Model-free measurement of local entropy production and extractable work in active matter, Physical Review Letters 129 , 10.1103/PhysRevLett.129.220601 (2022). [36] N. M. Boffi and E. Vanden-Eijnden, Deep learning probability flows and entropy production rates in active matter, Proceedings of the National Academy of Sciences 121 , 10.1073/pnas.2318106121 (2024). [37] G. Papamakarios, E. Nalisnick, D. J. Rezende, S. Mohamed, and B. Lakshminarayanan, Normalizing flows for probabilistic modeling and inference (2019). [38] M. S. Albergo and E. Vanden-Eijnden, Building normalizing flows with stochastic interpolants (2022). [39] Y. Lipman, R. T. Q. Chen, H. Ben-Hamu, M. Nickel, and M. Le, Flow matching for generative modeling (2022). [40] I. Butakov, A. Semenenko, V. Kirova, A. Frolov, and I. Oseledets, Fmmi: Flow matching mutual information estimation (2025). [41] M. S. Albergo, N. M. Boffi, and E. Vanden-Eijnden, Stochastic interpolants: A unifying framework for flows and diffusions (2023). [42] L. Grenioux, L. Galliano, L. Berthier, G. Biroli, and M. Gabrié, Boltzmann generators for amorphous particle systems (2025). [43] E. T. Jaynes, The minimum entropy production principle, Annual Review of Physical Chemistry 31 ,10.1146/annurev.pc.31.100180.003051 (1980). [44] L. I. Midgley, V. Stimper, G. N. C. Simm, B. Schölkopf, and J. M. Hernández-Lobato, Flow annealed importance sampling bootstrap (2022). [45] D. C. Mattis, Theory of Magnetism II: Thermodynamics and Statistical Mechanics (Springer-Verlag, Berlin, 1985). [46] V. G. Satorras, E. Hoogeboom, and M. Welling, E(n) equivariant graph neural networks (2021). [47] V. Bianco, E. Locatelli, and P. Malgaretti, Globulelike conformation and enhanced diffusion of active polymers, Physical Review Letters 
+
+121 , 10.1103/PhysRevLett.121.217802 (2018). [48] V. De Bortoli, M. Hutchinson, P. Wirnsberger, and A. Doucet, Target score matching (2024). [49] S. Elfwing, E. Uchibe, and K. Doya, Sigmoid-weighted linear units for neural network function approximation in reinforcement learning (2017). [50] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin, Attention is all you need (2017). [51] D. P. Kingma and J. Ba, Adam: A method for stochastic optimization (2014). [52] L. Klein, Equivariant flow matching - data and models (2025). [53] M. R. Shirts and V. S. Pande, Solvation free energies of amino acid side chain analogs for common molecular mechanics water models, The Journal of Chemical Physics 122 , 134508 (2005). [54] T. Steinbrecher, D. L. Mobley, and D. A. Case, Nonlinear scaling schemes for lennard-jones interactions in free energy calculations, The Journal of Chemical Physics 127 , 214108 (2007).
