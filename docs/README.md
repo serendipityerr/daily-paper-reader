@@ -6,33 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-23
-- 运行时间：2026-09-23 21:59:03 UTC
+- 最新运行日期：2026-09-24
+- 运行时间：2026-09-24 22:29:35 UTC
 - 运行状态：成功
 - 本次总论文数：3
 - 精读区：2
 - 速读区：1
 
 ### 今日简报（AI）
-2026-09-23日报精选3篇：2篇精读围绕Schrödinger桥做语音增强与量子电路优化，1篇速读补扩散模拟。
-
-最值得看《SE-MSB》用Mamba+Schrödinger桥实现端到端非配对语音增强（9.0），以及《Bridge of Ψ's》把Schrödinger桥用于量子电路优化（8.0）。
-
-普通读者可先读这两篇精读，再用速读《Exact Simulation of Diffusions via Brownian Bridge Range Reconstruction》补充扩散模拟背景。
-- 详情：[/202609/23/README](/202609/23/README)
+1) 2026-09-24日报：3篇入榜、2篇精读，Schrödinger桥与布朗路径成今日
+- 详情：[/202609/24/README](/202609/24/README)
 
 ### 精读区论文标签
-1. [SE-MSB: End-to-End Unpaired Speech Enhancement using Mamba Schrödinger Bridges](/202609/23/2609.26000v1-se-msb-end-to-end-unpaired-speech-enhancement-using-mamba-schrdinger-bridges)  
+1. [The Risk-Sensitive Schrödinger Bridge: Is Not a KL Projection](/202609/24/2609.27250v1-the-risk-sensitive-schrdinger-bridge-is-not-a-kl-projection)  
    标签：评分：9.0/10、query:diff-bridge
-   evidence：扩散薛定谔桥用于非配对语音增强
-2. [Bridge of $Ψ$'s: Quantum Circuit Optimization with Schrödinger Bridges](/202609/23/2609.25947v1-bridge-of-s-quantum-circuit-optimization-with-schrdinger-bridges)  
+   evidence：风险敏感薛定谔桥及其KL投影结构
+2. [Quantum-Enhanced Sampling of Schrödinger Bridges](/202609/24/2609.27103v1-quantum-enhanced-sampling-of-schrdinger-bridges)  
    标签：评分：8.0/10、query:diff-bridge
-   evidence：基于薛定谔桥的生成模型用于电路变换
+   evidence：用量子Gibbs采样器求解动态薛定谔桥
 
 ### 速读区论文标签
-1. [Exact Simulation of Diffusions via Brownian Bridge Range Reconstruction](/202609/23/2609.26739v1-exact-simulation-of-diffusions-via-brownian-bridge-range-reconstruction)  
+1. [Interval-Constrained Brownian Paths: Exact Interpolation and Extrapolation](/202609/24/2609.21943v1-interval-constrained-brownian-paths-exact-interpolation-and-extrapolation)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：通过布朗桥范围重构精确模拟扩散桥
+   evidence：受区间约束的布朗桥及其精确插值密度采样
 
 
 <div class="dpr-home-promo-card">
