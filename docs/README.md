@@ -6,29 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-24
-- 运行时间：2026-09-24 22:29:35 UTC
+- 最新运行日期：2026-09-25
+- 运行时间：2026-09-25 22:07:58 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：2
+- 本次总论文数：1
+- 精读区：0
 - 速读区：1
 
 ### 今日简报（AI）
-1) 2026-09-24日报：3篇入榜、2篇精读，Schrödinger桥与布朗路径成今日
-- 详情：[/202609/24/README](/202609/24/README)
+今日速读 1 篇，聚焦免训练扩散图像变形新方法 AlignMorph（6.0/10）。它通过显式语义传输实现无需微调的图像渐变过渡，适合关注扩散模型编辑与变形效果的读者一读。想上手的话，可对比它与你熟悉的变形工具在语义连贯性上的差异，再判断是否值得跟进。
+- 详情：[/202609/25/README](/202609/25/README)
 
 ### 精读区论文标签
-1. [The Risk-Sensitive Schrödinger Bridge: Is Not a KL Projection](/202609/24/2609.27250v1-the-risk-sensitive-schrdinger-bridge-is-not-a-kl-projection)  
-   标签：评分：9.0/10、query:diff-bridge
-   evidence：风险敏感薛定谔桥及其KL投影结构
-2. [Quantum-Enhanced Sampling of Schrödinger Bridges](/202609/24/2609.27103v1-quantum-enhanced-sampling-of-schrdinger-bridges)  
-   标签：评分：8.0/10、query:diff-bridge
-   evidence：用量子Gibbs采样器求解动态薛定谔桥
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Interval-Constrained Brownian Paths: Exact Interpolation and Extrapolation](/202609/24/2609.21943v1-interval-constrained-brownian-paths-exact-interpolation-and-extrapolation)  
+1. [AlignMorph: Tuning-Free Diffusion Image Morphing via Explicit Semantic Transport](/202609/25/2609.24330v1-alignmorph-tuning-free-diffusion-image-morphing-via-explicit-semantic-transport)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：受区间约束的布朗桥及其精确插值密度采样
+   evidence：用熵最优传输实现两图之间的扩散变形
 
 
 <div class="dpr-home-promo-card">
