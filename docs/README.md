@@ -6,24 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-25
-- 运行时间：2026-09-25 22:07:58 UTC
+- 最新运行日期：2026-09-26
+- 运行时间：2026-09-26 21:45:10 UTC
 - 运行状态：成功
-- 本次总论文数：1
+- 本次总论文数：2
 - 精读区：0
-- 速读区：1
+- 速读区：2
 
 ### 今日简报（AI）
-今日速读 1 篇，聚焦免训练扩散图像变形新方法 AlignMorph（6.0/10）。它通过显式语义传输实现无需微调的图像渐变过渡，适合关注扩散模型编辑与变形效果的读者一读。想上手的话，可对比它与你熟悉的变形工具在语义连贯性上的差异，再判断是否值得跟进。
-- 详情：[/202609/25/README](/202609/25/README)
+2026-09-26 日报：今日无精读，速读两篇 Wasserstein 距离相关论文。最值得看的是黎曼流形上概率分布的生成建模，以及用 Föllmer 漂移研究 1-Wasserstein 距离下的 QSD 收敛。普通读者可先挑与自身方向更近的一篇浏览摘要，再决定是否深读。
+- 详情：[/202609/26/README](/202609/26/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [AlignMorph: Tuning-Free Diffusion Image Morphing via Explicit Semantic Transport](/202609/25/2609.24330v1-alignmorph-tuning-free-diffusion-image-morphing-via-explicit-semantic-transport)  
+1. [When Riemann flows with Wasserstein: Generative Modeling of Probability Distributions on Manifolds](/202609/26/2609.25659v1-when-riemann-flows-with-wasserstein-generative-modeling-of-probability-distributions-on-manifolds)  
    标签：评分：6.0/10、query:diff-bridge
-   evidence：用熵最优传输实现两图之间的扩散变形
+   evidence：最优传输速度与流匹配生成建模
+2. [Quantitative QSD convergence in 1-Wasserstein distance via the Föllmer drift](/202609/26/2609.29042v1-quantitative-qsd-convergence-in-1-wasserstein-distance-via-the-fllmer-drift)  
+   标签：评分：6.0/10、query:diff-bridge
+   evidence：Föllmer过程与路径相对熵、分布约束
 
 
 <div class="dpr-home-promo-card">
