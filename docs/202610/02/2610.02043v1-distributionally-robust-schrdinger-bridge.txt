@@ -1,0 +1,3372 @@
+Title: Distributionally Robust Schrödinger Bridge
+
+URL Source: https://arxiv.org/pdf/2610.02043v1
+
+Published Time: Fri, 02 Oct 2026 02:21:06 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+# DISTRIBUTIONALLY ROBUST SCHRÖDINGER BRIDGE 
+
+Jinhwan Sul Panagiotis Theodoropoulos Vincent Pacelli Jaemoo Choi Evangelos Theodorou 
+
+Department of Aerospace Engineering Georgia Institute of Technology, Atlanta, GA, USA 
+
+> {jsul7,ptheodor3,vpacelli3,jchoi843,evangelos.theodorou}@gatech.edu
+
+## ABSTRACT 
+
+Schrödinger bridge (SB) learns stochastic transport between prescribed initial and target distributions. When the initial distribution shifts at test time, the learned dy-namics can fail to recover the target distribution. We introduce the Distributionally Robust Schrödinger Bridge (DRSB), which learns a single controller that accounts for uncertainty in the initial distribution. The DRSB objective consists of control energy and a KL penalty between the resulting terminal distribution and the target distribution. DRSB seeks a single controller that minimizes the worst-case value of this objective as the initial distribution varies within an ambiguity set around the nominal distribution. We derive an exact variational formulation of this objective and connect its fixed-terminal-cost subproblem to stochastic optimal control and distributionally robust optimization. This formulation motivates an alternating algorithm that updates the adversarial initial distribution, estimates the terminal log-density ratio, and trains the controller. We develop Wasserstein and Sinkhorn variants using stochastic control optimality conditions to approximate the gradients required for adversarial updates. Experiments on two-dimensional transport tasks and image-to-image translation show improved robustness to input perturbations relative to standard SB, with a tradeoff in nominal performance. On Gaussian mixture transport, Sinkhorn DRSB also achieves lower mean sliced Wasserstein distance than fixed-level noise augmentation at both tested unseen noise levels. 
+
+## 1 INTRODUCTION 
+
+Generative modeling is fundamentally a task of learning a transport map from a source distribution to a target distribution. While early approaches, such as GANs (Goodfellow et al., 2014), focused on learning static maps, recent approaches such as diffusion models (Ho et al., 2020; Song et al., 2021) learn dynamic transport maps via stochastic differential equations (SDEs). The Schrödinger Bridge (SB) problem generalizes standard diffusion models and likewise seeks an optimal transport mapping described by an SDE. By definition, SB seeks a stochastic process that connects two arbitrary distributions and minimizes the KL divergence with respect to a reference stochastic process (Schrödinger, 1931; Léonard, 2014). SB has been used in applications such as sampling (Liu et al., 2025), image-to-image translation (Theodoropoulos et al., 2024), and image restoration (Liu et al., 2023). However, the SB dynamics are trained for a prescribed initial distribution. When this distribution shifts at test time, the same dynamics produce a different terminal distribution, violating the original target marginal constraint. This motivates a distributionally robust SB formulation that accounts for uncertainty in the initial distribution. In this paper, we formulate the Distributionally Robust Schrödinger Bridge (DRSB) problem to achieve robust generation under initial distribution shifts. The goal of DRSB is to find a single controller that transports every initial distribution in a prescribed set close to the target distribution. This set, called the ambiguity set, consists of distributions within a prescribed distance of the nominal initial distribution. We connect DRSB to stochastic optimal control through a terminal cost that penalizes mismatch between the induced terminal distribution and the target distribution. This cost takes the form of the log-density ratio between these distributions, which we approximate with a 1arXiv:2610.02043v1 [cs.LG] 1 Oct 2026 neural network to provide a training signal for the controller. Since the induced terminal distribution depends on both the controller and the initial distribution, the terminal cost must be re-estimated as these change. For a fixed terminal cost, the resulting subproblem has the standard distributionally robust optimization (DRO) form (Mohajerin Esfahani & Kuhn, 2018; Gao & Kleywegt, 2023), where the control variable serves as the DRO decision variable. Strong duality results from the DRO literature provide a dual formulation of the inner worst-case maximization over the ambiguity set. We update the adversarial initial distribution using this dual formulation and train the controller via adjoint matching (Domingo-Enrich et al., 2024) to minimize the expected transport cost under the current adversarial distribution. We alternate these updates with re-estimation of the terminal cost, training its network as a binary classifier that distinguishes the resulting terminal samples from target samples. We develop Wasserstein and Sinkhorn variants of DRSB, with adversarial input updates derived from their DRO dual formulations. Using an optimality condition from stochastic optimal control theory (Kappen, 2005), we approximate cost gradients with controller evaluations. The Wasserstein variant iteratively updates adversarial inputs. For the Sinkhorn variant, a first-order approximation of the cost yields a Gaussian sampling rule for each nominal input and a closed-form update of the dual variable. This approximation allows adversarial inputs to be sampled without iterative inner optimization. We evaluate DRSB on 2D Gaussian-to-Gaussian and GMM-to-GMM transport tasks and on image-to-image translation. The results show that DRSB improves robustness to noisy and shifted initial distributions compared with standard SB. On the 2D transport tasks, Sinkhorn DRSB outperforms Wasserstein DRSB under most tested perturbation conditions. The main contributions of this paper are summarized as follows. • We formulate Distributionally Robust Schrödinger Bridge problems to address initial distri-bution shift. • We derive an exact variational formulation of DRSB and connect its fixed-terminal-cost subproblem to SOC and DRO. • We develop block update algorithms for the Wasserstein and Sinkhorn variants using SOC optimality conditions. 
+
+## 2 PRELIMINARIES 
+
+2.1 SCHRÖDINGER BRIDGE UNDER INITIAL DISTRIBUTION UNCERTAINTY 
+
+The standard Schrödinger bridge (SB) problem (Schrödinger, 1931; Léonard, 2014) is 
+
+Problem 2.1 (Schrödinger Bridge) .
+
+min 
+
+> ut
+
+σ2KL (pu,μ ∥pbase ) = min 
+
+> ut
+
+EX∼pu,μ 
+
+Z 10
+
+12 ∥uθt (Xt)∥2dt 
+
+
+
+, (1a) s.t. dX t = uθt (Xt)dt + σdW t, X0 ∼ μ(X0), X1 ∼ ν(X1). (1b) Here, pu,μ denotes the path measure induced by Equation (1b) with the initial law μ, and pbase := 
+
+pu:=0 denotes the base path measure when ut := 0 . The base path measure has the same initial law μ. The equality assumes the conditions for Girsanov’s theorem. Xt ∈ Rd is the d-dimensional state vector at time t. The control uθ : [0 , 1] × Rd → Rd is parameterized by θ. Wt is a standard d-dimensional Brownian motion, and σ is a constant positive diffusion coefficient. pu,μ  
+
+> 0
+
+and pu,μ  
+
+> 1
+
+are the marginal distributions of pu,μ at times t = 0 and t = 1 , respectively. Then, by definition, pu,μ  
+
+> 0
+
+= μ
+
+always holds. The Schrödinger bridge (SB) problem seeks the optimal control by minimizing the KL divergence between pu,μ and pbase while transporting the initial data distribution μ to the target data distribution ν.2(a) Standard SB (b) DRSB (ours) 
+
+Figure 1: Deployment under initial distribution uncertainty. Blue circles denote nominal samples from μ, and purple squares denote shifted test samples from μtest . The desired target ν is unchanged. (a) A standard SB controller matches ν for μ, but this matching need not persist under an initial distribution shift. (b) DRSB trains one controller to reduce the worst-case sum of control energy and terminal mismatch over an ambiguity set of initial distributions. 
+
+Deployment with an unknown initial distribution. Let u⋆ solve Problem 2.1 for the nominal initial distribution μ. For this fixed controller, the Fokker–Planck equation defines the map ΦSB from initial to terminal distributions, 
+
+ΦSB : pu⋆,μ  
+
+> 0
+
+7 → pu⋆,μ  
+
+> 1
+
+, ΦSB (μ) = ν. (2) At deployment, inputs may instead follow an unknown distribution μtest ̸ = μ. Applying the same controller need not preserve terminal matching, i.e. 
+
+ΦSB (μtest )̸ = ν in general . (3) We consider a deployment scenario where the test-time initial law is not known during training and a single learned controller must be used without test-time retraining. Figure 1 illustrates this deployment test setting using point clouds. In Figure 1a, blue circles represent samples from the nominal initial distribution μ, and purple squares represent samples from a perturbed distribution μtest . The same state-dependent dynamics act on both input clouds, but a change in the distribution of starting points can change the terminal cloud. The nominal terminal distribution matches ν, whereas the perturbed terminal distribution may deviate from this unchanged target. We represent uncertainty in the test-time initial distribution by a prescribed set of plausible initial distributions, called an ambiguity set. Figure 1b illustrates the goal of learning one controller for this set. Without a known probability law over deployment shifts, we aim to minimize the worst-case sum of control energy and terminal mismatch over the ambiguity set, using the same learned controller at deployment. 2.2 DISTRIBUTIONALLY ROBUST OPTIMIZATION 
+
+In stochastic optimization, the underlying data distribution is often unknown, and only a few data samples are available. DRO hedges against this uncertainty by optimizing under the worst-case distribution within a prescribed set of distributions called the ambiguity set (Wiesemann et al., 2014). The DRO problem takes the minimax form 
+
+min  
+
+> u∈U
+
+max  
+
+> μ∈Mϵ(ˆ μ)
+
+EX0∼μ[V (u, X 0)] , (4) where the outer minimization selects the decision variable u, and the inner maximization identifies the worst-case distribution μ within the ambiguity set Mϵ(ˆ μ) := {μ : D(μ, ˆμ) ≤ ϵ}, defined as the set of distributions within distance ϵ of the nominal distribution ˆμ under distributional distance D.33 DISTRIBUTIONALLY ROBUST SCHRÖDINGER BRIDGE 
+
+3.1 DISTRIBUTIONAL ROBUSTNESS IN SB AND CONNECTION TO SOC We formulate and solve the Distributionally Robust Schrödinger Bridge (DRSB) problem, which seeks a control that can robustly steer shifted test-time distributions μtest toward the target distribution. All proofs are provided in Appendix A. The DRSB formulation is 
+
+Problem 3.1 (Distributionally Robust Schrödinger Bridge) .
+
+min  
+
+> u
+
+max 
+
+> μ∈Mϵ(ˆ μ)
+
+EX∼pu,μ 
+
+Z 10
+
+12 ∥uθt (Xt)∥2dt 
+
+
+
++ ρKL (pu,μ  
+
+> 1
+
+∥ν), (5a) s.t. dX t = uθt (Xt)dt + σdW t, X0 ∼ μ, (5b) 
+
+Mϵ(ˆ μ) = {μ : D(μ, ˆμ) ≤ ϵ}. (5c) Here, the initial distribution μ is no longer assumed to be known exactly. Instead, the inner maxi-mization in Equation (5a) finds the worst-case initial distribution from the ambiguity set Mϵ(ˆ μ). ˆμ
+
+is the empirical distribution ˆμ = 1
+
+> N
+
+PNi=1 δ ˆXi
+
+> 0
+
+, where δ ˆXi
+
+> 0
+
+is a Dirac delta function at each sample point ˆXi
+
+> 0
+
+. The ambiguity set is centered at ˆμ with radius ϵ under the distributional distance D.DRSB addresses the choice of a single transport controller before the test-time input distribution is known. We consider input perturbations for which the desired target distribution ν remains unchanged. The control-energy term in Equation (5a) retains the transport-cost criterion of SB, while the soft penalty ρ KL( pu,μ  
+
+> 1
+
+∥ν) relaxes the hard terminal constraint pu,μ  
+
+> 1
+
+= ν in Equation (1b). Optimality in Problem 3.1 is defined by minimizing the worst-case sum of control energy and the weighted terminal KL divergence over the ambiguity set. The resulting controller need not preserve the nominal SB transport or be optimal for each initial distribution separately. Nominal performance may therefore be traded for lower worst-case cost. This formulation provides a criterion for selecting one controller when adaptation to each deployment distribution is not possible. 
+
+Remark 3.2. For a nonnegative distance with D(μ, ˆμ) = 0 if and only if μ = ˆ μ, when ϵ = 0 , the ambiguity set reduces to M0(ˆ μ) = {ˆμ}, eliminating the inner maximization. When additionally 
+
+ρ → ∞ , the KL penalty enforces pu,μ  
+
+> 1
+
+= ν and we recover the standard SB in Problem 2.1. To optimize the DRSB objective through stochastic optimal control, we require a terminal cost that represents the mismatch between pu,μ  
+
+> 1
+
+and ν. We introduce a terminal cost neural network 
+
+gϕ : Rd → R parameterized by ϕ that approximates the log-density ratio between pu,μ  
+
+> 1
+
+and ν.
+
+Proposition 3.3 (Terminal cost approximation) . For a fixed admissible pair (u, μ ), suppose pu,μ 
+
+> 1
+
+and ν have positive densities and finite KL divergence. Suppose the function class contains their log-density ratio and a terminal cost function gϕ : Rd → R is an optimal solution of the optimization problem 
+
+gϕ = arg min  
+
+> g
+
+EX1∼pu,μ 
+
+> 1
+
+h
+
+log 
+
+
+
+1 + e−g(X1)i 
+
++ EX1∼ν
+
+h
+
+log 
+
+
+
+1 + eg(X1)i 
+
+. (6) 
+
+Then, gϕ(x) = log 
+
+ pu,μ  
+
+> 1(x)
+> ν(x)
+
+
+
+and 
+
+KL( pu,μ  
+
+> 1
+
+∥ν) = EX1∼pu,μ  
+
+> 1
+
+[gϕ(X1)] − log EX1∼ν [egϕ(X1)]. (7) Proposition (3.3) shows that the KL penalty in Equation (5a) can be expressed in terms of the terminal cost gϕ using Equation (7). The terminal cost is obtained by solving (6). The discriminator gϕ
+
+distinguishes generated samples ( X1 ∼ pu,μ  
+
+> 1
+
+) from target samples ( X1 ∼ ν). As a terminal cost, gϕ
+
+guides the terminal distribution pu,μ  
+
+> 1
+
+toward the target distribution ν through this representation of the KL penalty. 4Theorem 3.4 (Variational formulation of DRSB) . For each admissible pair (u, μ ), apply the varia-tional representation of the terminal KL divergence. Then Problem 3.1 is equivalent to 
+
+min  
+
+> u
+
+max  
+
+> μ∈Mϵ(ˆ μ)
+
+sup 
+
+> g
+
+n
+
+EX0∼μ[V (u, X 0; g)] − ρ log EX1∼ν [eg(X1)]
+
+o
+
+, (8) 
+
+subject to Equations (5b) and (5c) , where 
+
+V (u, x ; g) := EX·| 0∼pu
+
+> ·| 0
+
+Z 10
+
+12 ∥uθt (Xt)∥2dt + ρg (X1) X0 = x
+
+
+
+. (9) 
+
+Here, pu 
+
+> ·| 0
+
+is the controlled path distribution conditioned on the initial state, and the supremum is over measurable g for which the expectations are well defined and 0 < Eν [eg ] < ∞. The optimizing terminal cost depends on (u, μ ) and cannot generally be fixed across the outer optimization. 
+
+For fixed g, the normalization term is constant in (u, μ ), giving the subproblem 
+
+min  
+
+> u
+
+max  
+
+> μ∈Mϵ(ˆ μ)
+
+EX0∼μ[V (u, X 0; g)] , s.t. Equations (5b) and (5c) . (10) We write V (u, x ) = V (u, x ; g) when g is held fixed. From the SOC perspective, V (u, x ; g) in Equation (9) is the cost of a stochastic control problem with terminal cost ρg . For fixed (μ, g ), minimizing it gives a control adapted to that initial distribution and terminal cost (Chen et al., 2021; Liu et al., 2022). A shift in the initial distribution can change the terminal marginal. DRSB instead minimizes the worst-case objective over the ambiguity set, retaining the optimization over g in Equation (8). For fixed g, introducing a Lagrange multiplier λ ≥ 0 gives the dual of Equation (10), with equality when strong duality holds: 
+
+min  
+
+> u
+
+min  
+
+> λ≥0
+
+λϵ + max  
+
+> μ
+
+{EX0∼μ [V (u, X 0)] − λD (μ, ˆμ)} , s.t. (5b) . (11) 3.2 ITERATIVE OPTIMIZATION SCHEME FOR DRSB We use block updates for Equation (8) in the order μ(k) → g(k) → u(k), holding the other two variables fixed at each step. First, with (u(k−1) , g (k−1) ) fixed, the adversarial initial distribution is updated through the DRO dual: 
+
+μ(k), λ (k) ← min  
+
+> λ≥0
+
+λϵ + max 
+
+> μ
+
+EX0∼μ[V (u(k−1) , X 0; g(k−1) )] − λD (μ, ˆμ) . (12) We simulate the dynamics with u(k−1) from μ(k) and denote the resulting terminal marginal by 
+
+p(k)1 = pu(k−1) ,μ (k) 
+
+> 1
+
+. The terminal cost update is 
+
+g(k) = arg min  
+
+> g
+
+EX1∼p(k)1
+
+h
+
+log 
+
+
+
+1 + e−g(X1)i 
+
++ EX1∼ν
+
+h
+
+log 
+
+
+
+1 + eg(X1)i 
+
+. (13) At the population optimum, this loss recovers the same log-density ratio as the KL variational objective. With (μ(k), g (k)) fixed, the control subproblem is 
+
+u(k) ← arg min  
+
+> u
+
+EX0∼μ(k) [V (u, X 0; g(k))] , s.t. (5b ). (14) We use the adjoint matching objective (Domingo-Enrich et al., 2024): 
+
+u(k) = arg min  
+
+> u
+
+EX0∼μ(k) Et∼U [0 ,1] EXt,X 1∼p¯u
+
+> ·| 0
+
+h
+
+∥uθ (t, X t) + ρ∇g(k)(X1)∥2i
+
+, (15) where p¯u 
+
+> ·| 0
+
+is the path measure induced by ¯u = stopgrad (uθ ), conditioned on the initial state. This objective regresses the control toward the negative terminal cost gradient. In practice, each block uses finitely many optimization steps. These updates neither exchange the minimax operators nor establish convergence of the full nested problem. 5The DRSB training procedure is summarized in Algorithm 1. Following the successive ap-proximation method from robust control the-ory (Beard & McLain, 1998), we initialize uθ
+
+with a pretrained standard SB model. Steps 3–5 remain the same across all DRSB variants. Only Step 2, the adversarial initial distribution update, depends on the choice of ambiguity set distance 
+
+D. The cost of Step 2 depends on this choice, while the total training cost also includes simula-tion and network updates. 
+
+Algorithm 1 Distributionally Robust SB 
+
+Require: Drift uθ, terminal cost gϕ, nominal distribution ˆμ, target ν.
+
+Initialize: uθ with a pretrained SB model, gϕ, λ 
+
+> 1:
+
+for k = 1 , 2, . . . , K do  
+
+> 2:
+
+μ(k), λ (k) ← Update via (12)  
+
+> 3:
+
+Simulate (5b) from μ(k), u (k−1)  
+
+> 4:
+
+Update g(k) via (13)  
+
+> 5:
+
+Update u(k) via (15)  
+
+> 6:
+
+end for 
+
+3.3 VARIANTS OF DRSB Different choices of the distributional distance D can lead to different DRSB variants. We consider two variants based on the Wasserstein and Sinkhorn distances. We use a fixed-terminal-cost SOC optimality condition to simplify the adversarial updates. See Appendix B for details. 
+
+DRSB with Wasserstein Distance. The following proposition shows the dual formulation of DRSB with Wasserstein distance. 
+
+Proposition 3.5 (Dual form of Wasserstein DRSB) . The fixed-g subproblem (10) with the Wasserstein-2 ambiguity set MWϵ (ˆ μ) = {μ : W 22 (μ, ˆμ) ≤ ϵ} admits strong duality (Zhang et al., 2025; Gao & Kleywegt, 2023), and the corresponding dual problem (11) specializes to 
+
+min  
+
+> u
+
+min 
+
+> λ≥0
+
+(
+
+λε − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+min 
+
+> X0
+
+n
+
+λ∥X0 − ˆXi
+
+> 0
+
+∥2 − V (u, X 0)
+
+o)
+
+, s.t. (5b). (16) Since the nominal distribution is a discrete empirical distribution, the inner minimization must be solved for every sample. Our implementation represents the adversary by one perturbed sample per nominal sample (Gao & Kleywegt, 2023). Equation (16) is a nested optimization problem over λ and the per-sample initial state X0. In practice, we use the value of λ from the previous iteration when optimizing the worst-case samples, just as we use the controller from the previous iteration in Equation (12). We optimize X0 using gradient descent. For a smooth value function and an optimal controller u∗ of the fixed-g SOC subproblem, the optimality condition is (Kappen, 2005): 
+
+u∗
+
+> 0
+
+(x) = −∇ V (u∗, x ). (17) Replacing −∇ V (u, x ) by u0(x) uses one network evaluation. This is exact at the fixed-g SOC optimum and is a surrogate for a controller after finite optimization. For outer iteration k, hold u(k−1) 
+
+fixed and let j index the inner updates: 
+
+Xi, (j+1) 0 ← Xi, (j)0 − η
+
+h
+
+u(k−1) 0 (Xi, (j)0 ) + 2 λ(j)(Xi, (j)0 − ˆXi
+
+> 0
+
+)
+
+i
+
+, η : step size . (18) The dual update is 
+
+λ(j+1) ← λ(j) − ζ ε − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+∥Xi, (j+1) 0 − ˆXi
+
+> 0
+
+∥2
+
+!
+
+, ζ : step size , (19) which is valid as a dual update only while λ(j+1) ≥ 0.
+
+DRSB with Sinkhorn Distance. The Sinkhorn distance (Cuturi, 2013) between μ and ˆμ is 
+
+Wκ(ˆ μ, μ ) := min 
+
+> γ∈Γ(ˆ μ,μ )
+
+(
+
+E( ˆX0,X 0)∼γ
+
+"
+
+∥ ˆX0 − X0∥2 + κ log dγ ( ˆX0, X 0)
+
+dˆμ( ˆX0)dX 0
+
+!#) 
+
+, (20) where Γ(ˆ μ, μ ) is the set of joint distributions between ˆμ and μ, and κ > 0 is the entropy regularization parameter. 6Proposition 3.6 (Dual form of Sinkhorn DRSB) . The fixed-g subproblem (10) with the Sinkhorn ambiguity set MSϵ (ˆ μ) = {μ : Wκ(ˆ μ, μ ) ≤ ϵ} admits strong duality (Wang et al., 2025), and the corresponding dual problem (11) specializes to 
+
+min  
+
+> u
+
+inf  
+
+> λ> 0
+
+λε + 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+λκ log 
+
+Z
+
+e(V (u,X 0)−λ∥X0− ˆXi
+
+> 0∥2
+
+)/λκ dX 0, s.t. (5b), (21) 
+
+The λ = 0 boundary is interpreted through a limit. For λ > 0 and a finite normalizing integral, the worst-case conditional distribution γ∗(X0| ˆXi
+
+> 0
+
+) is obtained as 
+
+γ∗(X0| ˆXi
+
+> 0
+
+) ∝ e(V (u,X 0)−λ∥X0− ˆXi
+
+> 0∥2
+
+)/λκ . (22) In contrast to the Wasserstein case, the worst-case distribution in Sinkhorn DRSB is supported on all of Rd, even when the nominal distribution ˆμ is discrete. We approximate this distribution by linearizing the fixed-g cost. 
+
+Corollary 3.7 (Gaussian worst-case distribution) . Fix (u, g ) and assume the SOC optimality condition in Equation (17) holds. Suppose ε + κd  
+
+> 2
+
+log( πκ ) > 0. Under the first-order approximation V (X0) ≈
+
+V ( ˆXi
+
+> 0
+
+)+ ∇V ( ˆXi
+
+> 0
+
+)⊤(X0− ˆXi
+
+> 0
+
+), where V (x) = V (u, x ; g), the linearized inner dual in Equation (21) is 
+
+inf  
+
+> λ> 0
+
+λ
+
+
+
+ε + κd 
+
+2 log πκ 
+
+
+
++ 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+"
+
+V ( ˆXi
+
+> 0
+
+) + ∥uθ
+
+> 0
+
+( ˆXi
+
+> 0
+
+)∥2
+
+4λ
+
+#
+
+, (23) 
+
+where the worst-case conditional distribution is 
+
+γ∗(X0| ˆXi
+
+> 0
+
+) = N ˆXi 
+
+> 0
+
+− uθ
+
+> 0
+
+( ˆXi
+
+> 0
+
+)2λ , κ
+
+2 I
+
+!
+
+, (24) 
+
+and the optimal dual variable admits the closed form: 
+
+λ∗ =
+
+vuut
+
+ε + κd 
+
+2 log πκ 
+
+−1 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+"
+
+∥uθ
+
+> 0
+
+( ˆXi
+
+> 0
+
+)∥2
+
+4
+
+#
+
+. (25) Corollary 3.7 gives closed-form sampling for the linearized inner problem. 
+
+## 4 EXPERIMENTS 
+
+4.1 ROBUSTNESS AGAINST NOISY AND SHIFTED DISTRIBUTIONS ON 2D TRANSPORT TASKS 
+
+We demonstrate the robustness of our DRSB algorithm on the 2D Gaussian-to-Gaussian and GMM-to-GMM transport tasks. We use the sliced Wasserstein distance (SWD) between the terminal and target distributions as our metric. We use a standard SB model trained with the Diffusion Schrödinger Bridge Matching (DSBM) algorithm (Shi et al., 2023) as the baseline. We test each trained model against three perturbation types, Gaussian noise (Noisy), directional shift (Shifted), and the DRSB worst-case distribution (Worst), to the initial distribution at test time. 
+
+Table 1: SWD ( ↓) under input perturbations (mean ± std, 10 seeds). Org denotes the original input; the other conditions are defined in the text. 
+
+Gaussian-to-Gaussian GMM-to-GMM 
+
+Input DSBM DRSB DSBM DRSB Org 0.038 ±0.007 0.123 ±0.012 0.902 ±0.242 1.165 ±0.138 
+
+Noisy 0.684 ±0.013 0.638 ±0.016 2.407 ±0.243 2.212 ±0.413 
+
+Shifted 0.666 ±0.011 0.501 ±0.014 5.917 ±0.127 5.840 ±0.095 
+
+Worst 0.951 ±0.013 0.710 ±0.013 1.988 ±0.100 1.478 ±0.100 
+
+The results are summarized in Table 1. On the original distribution, DSBM achieves lower SWD in both tasks. This is because DRSB optimizes for worst-case perfor-mance over the ambiguity set, which allo-cates transport capacity across a wider re-gion of the input space at the cost of nom-inal accuracy. Under all three perturba-tion types, DRSB outperforms DSBM on both Gaussian and GMM tasks. DSBM degrades under perturbations because the learned transport map is fitted to the train-ing distribution, and inputs that deviate from the nominal support produce suboptimal trajectories. The gap between DRSB and DSBM is largest on the worst-case distribution trained on DRSB. 7Table 2: SWD ( ↓), mean ± std over 10 seeds. W-wst and S-wst are the worst-case inputs of DRSB-W and DRSB-S. 
+
+Gaussian-to-Gaussian GMM-to-GMM 
+
+Input DRSB-W DRSB-S DRSB-W DRSB-S Org 0.144 ±0.007 0.123 ±0.012 0.885 ±0.226 1.165 ±0.138 
+
+Noisy 0.678 ±0.013 0.638 ±0.016 2.315 ±0.236 2.212 ±0.413 
+
+Shifted 0.517 ±0.014 0.501 ±0.014 5.967 ±0.153 5.840 ±0.095 
+
+W-wst 0.972 ±0.007 0.881 ±0.018 1.503 ±0.052 1.791 ±0.102 
+
+S-wst 0.812 ±0.012 0.710 ±0.013 1.946 ±0.100 1.478 ±0.100 
+
+Figure 2: GMM adversarial samples from DRSB-S (left) and DRSB-W (right). Black crosses mark nominal centers. 
+
+4.2 COMPARISON BETWEEN WASSERSTEIN AND SINKHORN DRSB We compare the two DRSB variants across perturbation types (Table 2 and Figure 2). DRSB-S achieves lower mean SWD in eight of the ten reported conditions. These results indicate greater robustness of DRSB-S under most of the tested perturbation conditions. Figure 2 shows the computed worst case samples for the GMM task. DRSB-S samples are more dispersed due to the entropy regularization, whereas DRSB-W samples are more concentrated. One possible interpretation is that the broader spread exposes the DRSB-S controller to a wider range of inputs during training, which may help explain its performance under the tested perturbations. 4.3 NOISE AUGMENTATION AND GENERALIZATION TO UNSEEN NOISE LEVELS 
+
+We compare DRSB-S with a noise-augmented DSBM baseline on GMM-to-GMM transport to determine whether DRSB provides benefits beyond noise augmentation. Each augmentation baseline uses Gaussian noise at δtrain = 1 or 2, with the number of perturbed samples equal to 20% of the clean dataset size. This makes the number of training steps involving perturbed samples comparable to that in the additional DRSB stage. We evaluate each model at test-time noise levels δ ∈ { 1, 2, 3, 4}.
+
+Table 3: GMM-to-GMM SWD ( ↓) with noise augmentation (mean ± std, 10 seeds). Test levels δ = 3 , 4 are unseen by both augmentation baselines. DSBM DSBM + Aug DRSB-S 
+
+δ δtrain = 1 δtrain = 2 
+
+Org 0.902 ±0.242 0.850 ±0.178 0.907 ±0.153 1.165 ±0.138 
+
+1.0 1.287 ±0.112 1.042 ±0.246 1.119 ±0.196 1.150 ±0.206 
+
+2.0 1.842 ±0.086 1.881 ±0.145 1.800 ±0.153 1.636 ±0.157 
+
+3.0 2.175 ±0.118 2.298 ±0.146 2.220 ±0.165 1.953 ±0.095 
+
+4.0 2.407 ±0.243 2.425 ±0.129 2.308 ±0.138 2.212 ±0.413 
+
+Table 3 shows that augmentation is effective at the noise level used in training, but its ben-efit does not transfer consistently to unseen levels. Augmentation at δtrain = 1 gives the lowest mean SWD at δ = 1 (1.042), yet per-forms worse than unaugmented DSBM at ev-ery tested δ ≥ 2. Augmentation at δtrain = 2 
+
+improves performance at the matched level and at some other levels, but is worse than DSBM at the unseen level δ = 3 . DRSB-S achieves lower mean SWD than both aug-mentation baselines at every tested δ ≥ 2.DRSB trains against an adaptive adversarial distribution within an ambiguity set, without specifying a test noise level. The results support broader generalization across the tested noise magnitudes than fixed-level augmentation. This robustness comes at the cost of higher Org input SWD (1.165, compared with 0.850 and 0.907 for augmentation). 84.4 IMAGE -TO -I MAGE TRANSLATION UNDER NOISE                                 
+
+> Table 4: FFHQ FID ( ↓) under Gaussian noise δ(mean ±std, 3 seeds).
+> Woman →Man Man →Woman
+> Noise level DSBM DRSB DSBM DRSB Org 25.55 ±0.50 26.52 ±0.50 29.32 ±0.44 29.57 ±0.48
+> δ= 0 .25 26.59 ±0.48 25.82 ±0.49 30.02 ±0.49 29.69 ±0.42
+> δ= 0 .526.15 ±0.49 25.98 ±0.49 30.46 ±0.43 29.70 ±0.51
+> δ= 1 .026.81 ±0.52 25.94 ±0.47 29.63 ±0.50 29.48 ±0.51
+> Figure 3: Woman-to-Man translation. Left to right: perturbed input, DSBM, and DRSB.
+
+We apply DRSB to image-to-image trans-lation on the FFHQ dataset (Karras et al., 2019), which contains images at a res-olution of 1024 ×1024 (CC BY-NC-SA 4.0). Following the experimental set-tings in Theodoropoulos et al. (2024) and Gushchin et al. (2024), we transport im-ages in the 512-dimensional latent space of the ALAE autoencoder (Pidhorskyi et al., 2020). We use FID to evaluate generation quality after decoding the la-tent vector. The results are shown in Ta-ble 4. DRSB outperforms DSBM across all L2-norm noise levels. DSBM achieves a lower FID score than DRSB on nom-inal inputs. Figure 3 shows a quali-tative example. Even when the effect of the added latent-space noise is visu-ally imperceptible in the decoded input image, DSBM generates visible artifacts, whereas DRSB produces a clean transla-tion. 4.5 ADDITIONAL EXPERIMENTAL ANALYSIS 
+
+Computation cost. On a single NVIDIA RTX 4090, the additional DRSB stage takes 404 s on Gaussian transport and 1.4 h on FFHQ, after DSBM pretraining of 754 s and 8.5 h. Total training costs are therefore approximately 1.54 × and 1.16 × DSBM. Network gradient updates dominate runtime, accounting for about 80% on Gaussian transport and over 90% on FFHQ. Worst-case optimization accounts for less than 1.5% in the measured runs. DRSB-W uses up to 90 inner gradient steps, whereas DRSB-S samples a Gaussian adversary using the closed-form dual variable of the linearized problem. Appendix I.1 reports the training configurations and stage-wise costs. 
+
+Empirical convergence. We track the variational objective and update diagnostics over 50 epochs on 2D Gaussian transport with ρ = 10 and ϵ = 12 . The objective stabilizes near 312, with a final value of 311.37. At all reported epochs k ≥ 25 , the normalized ambiguity-constraint residual is below 0.005. The final dual variable is 3.483, close to the value 3.496 predicted by the active-constraint SOC relation. The terminal critic mean and mean squared control magnitude also stabilize, ending at 1.550 and 24.30. A separate 120-iteration run at constant learning rate 10 −7 also settles near 312, supporting stabilization beyond the decaying learning-rate schedule. These observations do not establish stationarity of all three blocks or convergence to a saddle point (Appendix I.2). 
+
+SOC optimality condition. The adversarial updates use the relation ∇X0 V (u, X 0; g) = −u0(X0)
+
+from Equation (17). To assess its accuracy for the trained controller, we compute the cost gradient by discrete adjoint recursion and compare it with −uθ (0 , X 0) on the same Gaussian task. Across the five evaluated epochs, their direction cosines are 0.9996–0.9998 and gradient-to-control magnitude ratios are 0.9310–1.0761. At epoch 50, these values are 0.9998 and 1.0089. Thus, both direction and magnitude approximately satisfy the SOC relation on the evaluated samples, supporting its use in the adversarial update for this experiment. This is an empirical consistency check, not a proof of exact SOC optimality (Appendix I.3). 95 RELATED WORK 
+
+Distributionally Robust Optimization. Beginning with the work of Scarf et al. (1957), early DRO focused on moment-based ambiguity sets (Ghaoui et al., 2003; Delage & Ye, 2010). Because moments have limited expressive power, the DRO literature shifted toward distance-based ambiguity sets. Wasserstein DRO (Mohajerin Esfahani & Kuhn, 2018; Zhao & Guan, 2018; Blanchet & Murthy, 2019; Gao & Kleywegt, 2023; Zhang et al., 2025) has attracted attention because of the geometric interpretation of the Wasserstein distance. KL divergence offers convexity and a tractable inner maximization (Ben-Tal et al., 2013; Hu & Hong, 2013). However, its absolute continuity requirement and abstract interpretation are limitations. Recently, Sinkhorn DRO has been proposed to improve computational tractability while modeling realistic uncertainty (Wang et al., 2025). 
+
+Robust Optimal Transport. The OT literature studies how to reduce the sensitivity of transport maps to outliers. One approach relaxes the marginal constraints in OT (Mukherjee et al., 2021). In particular, unbalanced OT (UOT) formulations are used for this purpose (Balaji et al., 2020; Fatras et al., 2021; Choi et al., 2023). More closely related to our approach, the soft-constrained Schrödinger Bridge (Garg et al., 2024) relaxes terminal boundary constraints to prevent overfitting to noisy training samples. Wang et al. (2024) use a UOT distance within a DRO framework to handle outliers in training data. These methods and DRSB address different forms of robustness. DRSB focuses on distribution shifts at test time. 
+
+## 6 CONCLUSION AND LIMITATIONS 
+
+We formulate and solve the DRSB problem, which aims to transport noisy or shifted input distributions to the target distribution. We focus on the Wasserstein and Sinkhorn variants of DRSB. A globally solved Wasserstein inner problem bounds the fixed-terminal-cost objective, while the linearized Sinkhorn inner problem permits Gaussian sampling. Exploring other distances for DRSB is a direction for future work. Minimax adversarial training can be unstable in high-dimensional settings and requires careful hyperparameter tuning and initialization. The additional experiments quantify noise robustness and training overhead. The convergence diagnostics are empirical and do not establish convergence of the full algorithm. 10 REFERENCES 
+
+Yogesh Balaji, Rama Chellappa, and Soheil Feizi. Robust optimal transport with applications in generative modeling and domain adaptation. Advances in Neural Information Processing Systems ,33:12934–12944, 2020. Randal W Beard and Timothy McLain. Successive Galerkin approximation algorithms for nonlinear optimal and robust control. International Journal of Control , 71(5):717–743, 1998. Richard Bellman. The theory of dynamic programming. Bulletin of the American Mathematical Society , 60(6):503–515, 1954. Aharon Ben-Tal, Dick Den Hertog, Anja De Waegenaere, Bertrand Melenberg, and Gijs Rennen. Robust solutions of optimization problems affected by uncertain probabilities. Management Science , 59(2):341–357, 2013. Jose Blanchet and Karthyek Murthy. Quantifying distributional model risk via optimal transport. 
+
+Mathematics of Operations Research , 44(2):565–600, 2019. Yongxin Chen, Tryphon T Georgiou, and Michele Pavon. Stochastic control liaisons: Richard Sinkhorn meets Gaspard Monge on a Schrödinger bridge. SIAM Review , 63(2):249–313, 2021. Jaemoo Choi, Jaewoong Choi, and Myungjoo Kang. Generative modeling through the semi-dual formulation of unbalanced optimal transport. Advances in Neural Information Processing Systems ,36:42433–42455, 2023. Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. Advances in Neural Information Processing Systems , 26, 2013. Erick Delage and Yinyu Ye. Distributionally robust optimization under moment uncertainty with application to data-driven problems. Operations Research , 58(3):595–612, 2010. Carles Domingo-Enrich, Michal Drozdzal, Brian Karrer, and Ricky TQ Chen. Adjoint matching: Fine-tuning flow and diffusion generative models with memoryless stochastic optimal control. 
+
+arXiv preprint arXiv:2409.08861 , 2024. Kilian Fatras, Thibault Séjourné, Rémi Flamary, and Nicolas Courty. Unbalanced minibatch optimal transport; applications to domain adaptation. In International Conference on Machine Learning ,pp. 3186–3197. PMLR, 2021. Rui Gao and Anton Kleywegt. Distributionally robust stochastic optimization with Wasserstein distance. Mathematics of Operations Research , 48(2):603–655, 2023. Jhanvi Garg, Xianyang Zhang, and Quan Zhou. Soft-constrained Schrödinger bridge: a stochastic control approach. In International Conference on Artificial Intelligence and Statistics , pp. 4429– 4437. PMLR, 2024. Laurent El Ghaoui, Maksim Oks, and Francois Oustry. Worst-case value-at-risk and robust portfolio optimization: A conic programming approach. Operations Research , 51(4):543–556, 2003. Ian J Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. Advances in Neural Information Processing Systems , 27, 2014. Nikita Gushchin, Sergei Kholkin, Evgeny Burnaev, and Alexander Korotin. Light and optimal Schrödinger bridge matching. In Forty-first International Conference on Machine Learning , 2024. Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in Neural Information Processing Systems , 33:6840–6851, 2020. Zhaolin Hu and L Jeff Hong. Kullback-Leibler divergence constrained distributionally robust optimization. Available at Optimization Online , 1(2):9, 2013. Hilbert J Kappen. Path integrals and symmetry breaking for optimal control theory. Journal of Statistical Mechanics: Theory and Experiment , 2005(11):P11011, 2005. 11 Tero Karras, Samuli Laine, and Timo Aila. A style-based generator architecture for generative adversarial networks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 4401–4410, 2019. Christian Léonard. A survey of the Schrödinger problem and some of its connections with optimal transport. Discrete & Continuous Dynamical Systems-A , 34(4):1533–1574, 2014. Guan-Horng Liu, Tianrong Chen, Oswin So, and Evangelos Theodorou. Deep generalized Schrödinger bridge. Advances in Neural Information Processing Systems , 35:9374–9388, 2022. Guan-Horng Liu, Arash Vahdat, De-An Huang, Evangelos A Theodorou, Weili Nie, and Anima Anandkumar. I 2SB: Image-to-Image Schrödinger bridge. In International Conference on Machine Learning , 2023. Guan-Horng Liu, Jaemoo Choi, Yongxin Chen, Benjamin Kurt Miller, and Ricky TQ Chen. Adjoint Schrödinger bridge sampler. arXiv preprint arXiv:2506.22565 , 2025. Peyman Mohajerin Esfahani and Daniel Kuhn. Data-driven distributionally robust optimization using the Wasserstein metric: Performance guarantees and tractable reformulations. Mathematical Programming , 171(1):115–166, 2018. Debarghya Mukherjee, Aritra Guha, Justin M Solomon, Yuekai Sun, and Mikhail Yurochkin. Outlier-robust optimal transport. In International Conference on Machine Learning , pp. 7850–7860. PMLR, 2021. Stanislav Pidhorskyi, Donald A Adjeroh, and Gianfranco Doretto. Adversarial latent autoencoders. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 14104–14113, 2020. Herbert E Scarf, KJ Arrow, and S Karlin. A min-max solution of an inventory problem. Technical report, Rand Corporation Santa Monica, 1957. Erwin Schrödinger. Über die Umkehrung der Naturgesetze . Verlag der Akademie der Wissenschaften in Kommission bei Walter De Gruyter u. Company, 1931. Yuyang Shi, Valentin De Bortoli, Andrew Campbell, and Arnaud Doucet. Diffusion Schrödinger bridge matching. Advances in Neural Information Processing Systems , 36:62183–62223, 2023. Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In 9th International Conference on Learning Representations, ICLR 2021, Virtual Event, Austria, May 3-7, 2021 . OpenReview.net, 2021. Panagiotis Theodoropoulos, Nikolaos Komianos, Vincent Pacelli, Guan-Horng Liu, and Evangelos A Theodorou. Feedback Schrödinger bridge matching. arXiv preprint arXiv:2410.14055 , 2024. Jie Wang, Rui Gao, and Yao Xie. Sinkhorn distributionally robust optimization. Operations Research ,2025. Zifan Wang, Yi Shen, Michael M Zavlanos, and Karl H Johansson. Outlier-robust distributionally robust optimization via unbalanced optimal transport. Advances in Neural Information Processing Systems , 37:52189–52214, 2024. Wolfram Wiesemann, Daniel Kuhn, and Melvyn Sim. Distributionally robust convex optimization. 
+
+Operations Research , 62(6):1358–1376, 2014. Luhao Zhang, Jincheng Yang, and Rui Gao. A short and general duality proof for Wasserstein distributionally robust optimization. Operations Research , 73(4):2146–2155, 2025. Chaoyue Zhao and Yongpei Guan. Data-driven risk-averse stochastic optimization with Wasserstein metric. Operations Research Letters , 46(2):262–267, 2018. 12 A PROOFS OF RESULTS IN SECTION 3
+
+A.1 PROOF OF PROPOSITION 3.3 Fix an admissible pair (u, μ ) and abbreviate pu,μ  
+
+> 1
+
+as pu 
+
+> 1
+
+in this subsection. Assume that pu 
+
+> 1
+
+and ν have positive densities on a common support and finite KL divergence. The function class is unrestricted, and expectations are population expectations. 
+
+Lemma A.1 (Variational form of KL) . Let Φ( g) := Epu 
+
+> 1
+
+[g(X)] − log Eν [eg(X)] be defined over measurable functions g : X → R with Epu 
+
+> 1
+
+[|g|] < ∞ and 0 < Eν [eg ] < ∞. Then, for every such g,
+
+Φ( g) ≤ KL( pu 
+
+> 1
+
+∥ν) (26) 
+
+and equality holds when 
+
+g∗(x) := log 
+
+ pu 
+
+> 1
+
+(x)
+
+ν(x)
+
+
+
+. (27) 
+
+Proof. Introduce a probability measure Qg such that 
+
+dQ g
+
+dν = eg
+
+Eν [eg ] (28) Then g can be written as 
+
+g(X) = log dQ g
+
+dν + log Eν [eg(X)] (29) and Φ( g) becomes 
+
+Φ( g) = 
+
+Z
+
+g(X) dp u 
+
+> 1
+
+(X) − log Eν [eg(X)] (30) 
+
+=
+
+Z 
+
+log dQ g
+
+dν + log Eν [eg(X)]
+
+
+
+dp u 
+
+> 1
+
+(X) − log Eν [eg(X)] (31) 
+
+=
+
+Z
+
+log dQ g
+
+dν dp u 
+
+> 1
+
+(32) 
+
+=
+
+Z 
+
+log dQ g
+
+dp u
+
+> 1
+
++ log dp u
+
+> 1
+
+dν 
+
+
+
+dp u 
+
+> 1
+
+(33) 
+
+= KL( pu 
+
+> 1
+
+∥ν) − KL( pu 
+
+> 1
+
+∥Qg ) ≤ KL( pu 
+
+> 1
+
+∥ν) (34) Setting g∗(X) := log( dp u 
+
+> 1
+
+/dν ) gives log Eν [eg∗
+
+] = log R (dp u 
+
+> 1
+
+/dν ) dν = 0 , hence 
+
+Φ( g∗) = 
+
+Z
+
+log 
+
+ dp u
+
+> 1
+
+dν 
+
+
+
+dp u 
+
+> 1
+
+= KL( pu 
+
+> 1
+
+∥ν). (35) Therefore, the optimal g recovers the log-density ratio log( pu 
+
+> 1
+
+/ν ).
+
+Lemma A.2 (Binary Cross-Entropy Minimizer) . The minimizer of the binary cross-entropy loss 
+
+L(g) = Ex∼pu
+
+> 1
+
+h
+
+log 
+
+
+
+1 + e−g(x)i 
+
++ Ex∼ν
+
+h
+
+log 
+
+
+
+1 + eg(x)i 
+
+(36) 
+
+is g∗(x) = log ( pu 
+
+> 1
+
+(x)/ν (x)) .Proof. For each x, minimize the population-loss integrand over the scalar z = g(x):
+
+ℓx(z) = pu 
+
+> 1
+
+(x) log  1 + e−z  + ν(x) log (1 + ez ) , (37) 
+
+ℓ′
+
+> x
+
+(z) = −pu 
+
+> 1
+
+(x) + ez ν(x)1 + ez , (38) 
+
+ℓ′′ 
+
+> x
+
+(z) = (pu 
+
+> 1
+
+(x) + ν(x)) ez
+
+(1 + ez )2 > 0. (39) 13 Thus the pointwise minimum satisfies eg∗(x)ν(x) = pu 
+
+> 1
+
+(x), giving 
+
+g∗(x) = log pu 
+
+> 1
+
+(x)
+
+ν(x) . (40) Integrating the pointwise inequality proves the result over unrestricted measurable functions. A stationary point in neural-network parameters need not satisfy this pointwise condition. Proposition (3.3) follows from Lemma (A.1) and Lemma (A.2). By Lemma (A.2), the minimizer of the binary cross-entropy loss recovers the log-density ratio g∗(x) = log( pu 
+
+> 1
+
+(x)/ν (x)) . Substituting 
+
+g∗ into the variational form in Lemma (A.1) achieves Φ( g∗) = KL( pu 
+
+> 1
+
+∥ν), which gives Equation (7). A.2 PROOF OF THEOREM 3.4 
+
+Proof. For every admissible pair (u, μ ), Lemma A.1 gives 
+
+KL ( pu,μ  
+
+> 1
+
+∥ν) = sup 
+
+> g
+
+n
+
+Epu,μ  
+
+> 1
+
+[g(X1)] − log Eν [eg(X1)]
+
+o
+
+. (41) Substitution into Equation (5a), followed by conditioning on X0, yields 
+
+min  
+
+> u
+
+max  
+
+> μ∈Mϵ(ˆ μ)
+
+sup 
+
+> g
+
+
+
+Epu,μ 
+
+Z 10
+
+12 ∥uθt (Xt)∥2dt + ρg (X1)
+
+
+
+− ρ log Eν [eg(X1)]
+
+
+
+(42) 
+
+= min  
+
+> u
+
+max  
+
+> μ∈Mϵ(ˆ μ)
+
+sup 
+
+> g
+
+n
+
+EX0∼μ[V (u, X 0; g)] − ρ log Eν [eg(X1)]
+
+o
+
+, (43) which is Equation (8). This substitution is pointwise in (u, μ ) and does not interchange the minimiza-tion over u with an inner maximization. For a fixed pair, the normalized maximizer is 
+
+g∗(x; u, μ ) = log pu,μ  
+
+> 1
+
+(x)
+
+ν(x) , log Eν [eg∗(X1;u,μ )] = 0 . (44) Because this maximizer depends on both u and μ, it cannot be fixed while optimizing them. For a separately fixed g, the logarithmic term is constant with respect to u and μ and may be omitted from their optimization. This gives the fixed-g subproblem in Equation (10), rather than an equivalent formulation with a single fixed g∗ for all pairs. 
+
+## B DETAILS ON THE DERIVATION OF DRSB V ARIANTS 
+
+Throughout this section, g is fixed and V (u, x ) abbreviates V (u, x ; g); in an inner distribution update, 
+
+u is also fixed. The dual identities below concern this fixed-cost subproblem, under the finiteness and regularity assumptions of the cited DRO duality results. B.1 DETAILS ON WASSERSTEIN DRSB We start from the fixed-g Wasserstein DRSB subproblem 
+
+min  
+
+> u
+
+max 
+
+> μ∈Mϵ(ˆ μ)
+
+Epu
+
+Z 10
+
+12 ∥uθt (Xt)∥2dt + ρg (X1)
+
+
+
+(45a) s.t. dX t = uθt (Xt)dt + σdW t, X 0 ∼ μ (45b) 
+
+Mϵ(ˆ μ) = {μ : W 22 (μ, ˆμ) ≤ ϵ} (45c) where the squared Wasserstein-2 distance is defined as 
+
+W 22 (μ, ˆμ) := min 
+
+> γ∈Γ( μ, ˆμ)
+
+Z
+
+∥X0 − ˆX0∥2γ(dX 0, d ˆX0). (46) 14 Consider the inner maximization 
+
+max 
+
+> μ∈Mϵ(ˆ μ)
+
+Epu
+
+Z 10
+
+12 ∥uθt (Xt)∥2dt + ρg (X1)
+
+
+
+(47a) s.t. dX t = uθt (Xt)dt + σdW t, X 0 ∼ μ (47b) 
+
+Mϵ(ˆ μ) = {μ : W 22 (μ, ˆμ) ≤ ϵ} (47c) Define the Lagrangian as 
+
+L(μ, λ ) := EX∼pu
+
+Z 10
+
+12 ∥uθt (Xt)∥2dt + ρg (X1)
+
+
+
+− λ
+
+Z 
+
+∥X0 − ˆX0∥2π(dX 0, d ˆX0) − ε
+
+
+
+(48) Conditioning on X0,
+
+L(μ, λ ) = EX0∼μ [V (u, X 0)] − λ
+
+Z 
+
+∥X0 − ˆX0∥2π(dX 0, d ˆX0) − ε
+
+
+
+(49) where V (u, X 0) := EX·| 0∼pu
+
+> ·| 0
+
+hR 1012 ∥uθt (Xt)∥2dt + ρg (X1) X0
+
+i
+
+is the cost function at t = 0 .Then we have 
+
+L(μ, λ ) = λε +
+
+Z
+
+V (u, X 0)π(X0, ˆX0) dX 0 d ˆX0 − λ
+
+Z
+
+∥X0 − ˆX0∥2π(X0, ˆX0) dX 0 d ˆX0 (50) The dual problem is 
+
+min  
+
+> λ≥0
+
+λε + max  
+
+> μ
+
+E(X0, ˆX0)∼π
+
+h
+
+V (X0) − λ∥X0 − ˆX0∥2i
+
+(51) By the interchangeability principle (Zhang et al., 2025), the dual problem can be written as 
+
+min  
+
+> λ≥0
+
+λε +
+
+Z
+
+max 
+
+> X0
+
+n
+
+V (X0) − λ∥X0 − ˆX0∥2o
+
+ˆμ( ˆX0) d ˆX0 (52) 
+
+= min  
+
+> λ≥0
+
+λε −
+
+Z
+
+min 
+
+> X0
+
+n
+
+λ∥X0 − ˆX0∥2 − V (X0)
+
+o
+
+ˆμ( ˆX0) d ˆX0 (53) For the empirical distribution ˆμ = 1
+
+> N
+
+PNi=1 δ ˆXi
+
+> 0
+
+, the expectation reduces to a finite sum, giving 
+
+min  
+
+> λ≥0
+
+λε − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+min 
+
+> X0
+
+n
+
+λ∥X0 − ˆXi
+
+> 0
+
+∥2 − V (X0)
+
+o
+
+. (54) B.1.1 DERIVATION OF UPDATE RULES (E QUATION (18) AND EQUATION (19)) Equivalently, the samplewise maximization objective is 
+
+max 
+
+> X0
+
+L1(X0) := V (X0) − λ∥X0 − ˆXi
+
+> 0
+
+∥2. (55) Taking the gradient of L1(X0) with respect to X0 gives 
+
+∇xL1(X0) = ∇xV (X0) − 2λ(X0 − ˆXi
+
+> 0
+
+) (56) If u = u∗ solves the SOC problem for this fixed g and its value function is differentiable, Equation (17) gives 
+
+∇xL1(X0) = −u∗
+
+> 0
+
+(X0) − 2λ(X0 − ˆXi
+
+> 0
+
+) (57) Replacing u∗ by the trained drift gives the implemented ascent update. This substitution is approxi-mate unless the fixed-g SOC optimality condition is satisfied: 
+
+X0 ← X0 + η
+
+h
+
+−uθ
+
+> 0
+
+(X0) − 2λ(X0 − ˆXi
+
+> 0
+
+)
+
+i
+
+where η is the gradient ascent step size. Each sample update in Equation (18) requires one evaluation of uθ
+
+> 0
+
+; total overhead also depends on the number of sample and dual updates. 15 Similarly, we can derive the update rule in Equation (19) from the optimality condition for the worst-case optimization. For Equation (55), the first-order optimality condition is 
+
+∇xL1(X(i)∗ 
+
+> 0
+
+) = ∇xV (X(i)∗ 
+
+> 0
+
+) − 2λ(X(i)∗ 
+
+> 0
+
+− ˆXi
+
+> 0
+
+) = 0 (58) Therefore, the worst-case sample satisfies 
+
+∇xV (X(i)∗ 
+
+> 0
+
+) = 2 λ(X(i)∗ 
+
+> 0
+
+− ˆXi
+
+> 0
+
+) (59) Define the objective for the dual variable as 
+
+inf  
+
+> λ≥0
+
+f (λ) := λε − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+h
+
+λ∥X(i)∗ 
+
+> 0
+
+− ˆXi
+
+> 0
+
+∥2 − V (X(i)∗ 
+
+> 0
+
+)
+
+i
+
+(60) By taking the gradient with respect to λ, we have 
+
+df (λ)
+
+dλ = ε + 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+"
+
+∇xV (X(i)∗ 
+
+> 0
+
+) dX (i)∗
+
+> 0
+
+dλ − ∥ X(i)∗ 
+
+> 0
+
+− ˆXi
+
+> 0
+
+∥2
+
+−2λ(X(i)∗ 
+
+> 0
+
+− ˆXi
+
+> 0
+
+) dX (i)∗
+
+> 0
+
+dλ 
+
+#
+
+(61) From Equation (59), we can cancel out the dX (i)∗ 
+
+> 0
+> dλ
+
+terms: 
+
+df (λ)
+
+dλ = ε − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+∥X(i)∗ 
+
+> 0
+
+− ˆXi
+
+> 0
+
+∥2 (62) Consequently, we can perform gradient descent on λ:
+
+λ ← λ − ζ ε − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+∥X(i)∗ 
+
+> 0
+
+− ˆXi
+
+> 0
+
+∥2
+
+!
+
+where ζ is the gradient descent step size. This update is valid only while λ remains nonnegative; otherwise feasibility requires projection onto [0 , ∞).B.2 DETAILS ON SINKHORN DRSB We start from the fixed-g Sinkhorn DRSB subproblem 
+
+min  
+
+> u
+
+max  
+
+> μ∈MSϵ(ˆ μ)
+
+Epu
+
+Z 10
+
+12 ∥uθt (Xt)∥2dt + ρg (X1)
+
+
+
+(63a) subject to dX t = uθt (Xt)dt + σdW t, X0 ∼ μ (63b) 
+
+MSϵ (ˆ μ) = {μ : Wκ(ˆ μ, μ ) ≤ ϵ} (63c) where Wκ(ˆ μ, μ ) is the Sinkhorn distance with entropy regularization parameter κ:
+
+Wκ(ˆ μ, μ ) = min 
+
+> γ∈Γ(ˆ μ,μ )
+
+(
+
+E( ˆX0,X 0)∼γ
+
+"
+
+∥ ˆX0 − X0∥2 + κ log dγ ( ˆX0, X 0)
+
+dˆμ( ˆX0)dX 0
+
+!#) 
+
+. (64) Denote the value of the inner maximization by V.
+
+V := max  
+
+> μ∈MSϵ(ˆ μ)
+
+EX0∼μ [V (X0)] (65) 
+
+= max  
+
+> γ
+
+min  
+
+> λ≥0
+
+λε + E ˆX0∼ˆμEX0∼γ(X0| ˆX0)
+
+"
+
+V (X0) − λ∥ ˆX0 − X0∥2 − λκ log dγ (X0| ˆX0)
+
+dX 0
+
+!# 
+
+(66) 16 Under the assumptions for strong duality in Sinkhorn DRO (Wang et al., 2025), we switch the order: 
+
+V = min  
+
+> λ≥0
+
+λε + E ˆX0∼ˆμ
+
+"
+
+max  
+
+> γ(X0|ˆX0)
+
+EX0∼γ(X0| ˆX0)
+
+"
+
+V (X0) − λ∥ ˆX0 − X0∥2 − λκ log dγ (X0| ˆX0)
+
+dX 0
+
+!# # 
+
+(67) For λ > 0, κ > 0, and a finite normalizing integral, the entropy-regularized inner maximization admits the following closed-form solution. Boundary cases at λ = 0 are understood by limits. The dual form is 
+
+V = inf  
+
+> λ> 0
+
+λε + E ˆX0∼ˆμ
+
+
+
+λκ log 
+
+Z
+
+e(V (X0)−λ∥X0− ˆX0∥2)/λκ dX 0
+
+
+
+(68) and the optimal conditional distribution is 
+
+γ∗(X0| ˆX0) ∝ e(V (X0)−λ∥X0− ˆX0∥2)/λκ (69) B.2.1 SECOND -ORDER APPROXIMATION 
+
+We approximate V (X0) up to second order: 
+
+V (X0) ≈ V ( ˆX0) + ∇V ( ˆX0)⊤δX 0 + 12 δX ⊤ 
+
+> 0
+
+∇xx V ( ˆX0) δX 0 (70) where δX 0 = X0 − ˆX0. Define g := ∇V ( ˆX0) 
+
+> λκ
+
+and A := 2 
+
+> κ
+
+Id − ∇xx V ( ˆX0) 
+
+> λκ
+
+. Here g denotes a local gradient vector; the terminal-cost function remains fixed. For the quadratic approximation and 
+
+A ≻ 0, the corresponding conditional distribution is Gaussian. The equalities below apply to the approximated cost: 
+
+γ∗(X0| ˆX0) ∝ exp 
+
+
+
+g⊤δX 0 − 12 δX ⊤ 
+
+> 0
+
+A δX 0
+
+
+
+(71) 
+
+∝ exp 
+
+
+
+− 12 (δX 0 − A−1g)⊤A(δX 0 − A−1g)
+
+
+
+(72) As a result, 
+
+γ∗(X0| ˆX0) = N ( ˆX0 + A−1g, A −1) (73) with the full expression 
+
+γ∗(X0| ˆX0) = N ˆX0 +
+
+ 2
+
+κ I − ∇xx Vλκ 
+
+−1 ∇Vλκ ,
+
+ 2
+
+κ I − ∇xx Vλκ 
+
+−1!
+
+(74) where V and its derivatives are evaluated at ˆX0.B.2.2 SIMPLIFICATION OF THE DUAL FORM 
+
+Denote I := R e(V (X0)−λ∥X0− ˆX0∥2)/λκ dX 0. For the same quadratic approximation, completing the square in terms of g and A gives the following approximate integral and dual objective: 
+
+I = e V ( ˆX0)
+
+> λκ
+
+Z
+
+exp 
+
+
+
+g⊤δX 0 − 12 δX ⊤ 
+
+> 0
+
+A δX 0
+
+
+
+dX 0 (75) 
+
+= e V ( ˆX0)   
+
+> λκ +12g⊤A−1g
+
+Z
+
+exp 
+
+
+
+− 12 (δX 0 − A−1g)⊤A(δX 0 − A−1g)
+
+
+
+dX 0 (76) Evaluating the Gaussian integral under the condition A ≻ 0 gives 
+
+I = (2 π)d/ 2 det( A−1)1/2 exp V ( ˆX0)
+
+λκ + 12 g⊤A−1g
+
+!
+
+(77) 17 Therefore, 
+
+λκ log I = V ( ˆX0) + λκ 
+
+2 g⊤A−1g + λκ log 
+
+
+
+(2 π)d/ 2 det( A−1)1/2
+
+(78) and the dual objective becomes 
+
+V = inf  
+
+> λ> 0
+
+λ
+
+
+
+ε + κd 
+
+2 log 2 π
+
+
+
++ E ˆX0∼ˆμ
+
+
+
+V ( ˆX0) + λκ 
+
+2 g⊤A−1g + λκ 
+
+2 log det( A−1)
+
+
+
+(79) Solving for λ in this form is complicated due to the dependence of A−1 on λ.B.2.3 FIRST -ORDER APPROXIMATION 
+
+In high-dimensional cases, computing the Hessian ∇xx V ( ˆX0) is expensive. For the linearized cost, the Hessian term is omitted, giving A = 2 
+
+> κ
+
+Id and A−1 = κ 
+
+> 2
+
+Id. The following expressions are exact for this linearized inner problem. The conditional distribution simplifies to 
+
+γ∗(X0| ˆX0) = N
+
+
+
+ˆX0 + 12λ ∇V ( ˆX0) , κ
+
+2 I
+
+
+
+(80) The λ optimization reduces to 
+
+inf  
+
+> λ> 0
+
+λ
+
+
+
+ε + κd 
+
+2 log πκ 
+
+
+
++ E ˆX0∼ˆμ
+
+"
+
+V ( ˆX0) + ∥∇ V ( ˆX0)∥2
+
+4λ
+
+#
+
+(81) For ε + κd  
+
+> 2
+
+log( πκ ) > 0 and Eˆμ[∥∇ V ∥2] > 0, this yields the positive closed-form solution 
+
+λ∗ =
+
+vuut
+
+ε + κd 
+
+2 log πκ 
+
+−1
+
+E ˆX0∼ˆμ
+
+"
+
+∥∇ V ( ˆX0)∥2
+
+4
+
+#
+
+(82) 
+
+## C STOCHASTIC OPTIMAL CONTROL THEORY 
+
+Here we derive Equation (17) using stochastic optimal control theory. We refer the reader to Kappen (2005) for more details. The terminal cost is fixed, and the HJB derivation assumes a sufficiently smooth value function and admissible controls for the verification argument. To apply this section to DRSB, replace the terminal cost g below by ρg . The identity holds for an optimal control and its optimal value, not for an arbitrary intermediate neural drift. Consider the stochastic optimal control (SOC) problem 
+
+min  
+
+> u
+
+E
+
+Z 10
+
+12 ∥ut(Xt)∥2dt + g(X1)
+
+
+
+(83a) subject to dX t = ut(Xt)dt + σdW t (83b) 
+
+X0 ∼ μ, (83c) Define the cost function as 
+
+ct(Xt, u t) := E
+
+Z 1
+
+> t
+
+12 ∥us(Xs)∥2ds + g(X1)
+
+
+
+(84) The value function at time t is the optimal cost from time t to 1.
+
+Vt(x) := min 
+
+> u(s)
+> t≤s≤1
+
+E
+
+Z 1
+
+> t
+
+12 ∥us(Xs)∥2ds + g(X1) Xt = x
+
+
+
+(85) The cost function depends on the control ut, whereas the value function is obtained by minimizing over the control. We split the integral into the intervals from t to t + dt and from t + dt to 1. Substituting t = 1 gives V1(x) = g(x).
+
+Vt(Xt) = min 
+
+> u(s)
+> t≤s≤1
+
+E
+
+"Z t+dt t
+
+12 ∥us(Xs)∥2ds +
+
+Z 1
+
+> t+dt
+
+12 ∥us(Xs)∥2ds + g(X1) Xt
+
+#
+
+(86) 18 Using Bellman’s principle of optimality (Bellman, 1954), we have 
+
+Vt(Xt) = min 
+
+> u(s)
+> t≤s≤1
+
+E
+
+" Z t+dt t
+
+12 ∥us(Xs)∥2ds 
+
++ min 
+
+> u(s)
+> t+dt ≤s≤1
+
+E
+
+Z 1
+
+> t+dt
+
+12 ∥us(Xs)∥2ds + g(X1) Xt+dt 
+
+
+
+Xt
+
+#
+
+(87) 
+
+= min 
+
+> u(s)
+> t≤s≤1
+
+E
+
+"Z t+dt t
+
+12 ∥us(Xs)∥2ds + Vt+dt (Xt+dt ) Xt
+
+#
+
+(88) Applying a Taylor expansion to Vt+dt (Xt+dt ) at (Xt, t ) gives 
+
+E[Vt+dt (Xt+dt )] ≈ E
+
+
+
+Vt(Xt) + ∂V t(Xt)
+
+∂t dt + ( ∇Vt)⊤dX t + 12 (dX t)⊤∇2V (dX t)
+
+
+
+(89) Applying stochastic calculus to Equation (83b) gives 
+
+E[dX t] = ut(Xt)dt (90) 
+
+E[( dX t)( dX t)⊤] = σ2Idt (91) Therefore, 
+
+E[Vt+dt (Xt+dt )] = E
+
+
+
+Vt(Xt) + ∂V t(Xt)
+
+∂t dt + ( ∇Vt)⊤ut(Xt)dt + σ2
+
+2 ∆Vtdt 
+
+
+
+(92) Taking the limit as dt → 0 and substituting Equation (92) into Equation (88) gives 
+
+− ∂V t(Xt)
+
+∂t = min 
+
+> u
+
+ 12 ∥ut(Xt)∥2 + ( ∇Vt)⊤ut(Xt) + σ2
+
+2 ∆Vt
+
+
+
+(93) which is the Hamilton–Jacobi–Bellman (HJB) equation. By differentiating the right-hand side, we obtain the optimal control u∗:
+
+u∗ 
+
+> t
+
+(Xt) = −∇ Vt(Xt) (94) At time t = 0 , we have Equation (17). 
+
+## D SOLVING THE SOC WITH ADJOINT MATCHING 
+
+D.1 ADJOINT MATCHING 
+
+This section summarizes results from the original adjoint matching paper. We refer the reader to Domingo-Enrich et al. (2024), Sections 5.2 and E, for more details. The initial distribution and terminal cost are fixed throughout this section. We assume sufficient differentiability and integrability for pathwise differentiation with additive noise and interchange with expectation. Gradients are column vectors and ∇xu denotes the Jacobian. Adjoint matching solves the optimal control problem 
+
+min 
+
+> uθ
+
+Epu
+
+Z 10
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+)
+
+
+
+(95) s.t. dX ut = uθt (Xut )dt + σtdW t (96) 
+
+X0 ∼ μ (97) Here, we explicitly include the superscript u in the state notation Xu, unlike in previous sections. This notation is useful in the derivation of the adjoint matching objective. 19 D.1.1 DERIVATION OF THE ADJOINT SYSTEM 
+
+We introduce a Lagrange multiplier process a : Ω × [0 , 1] → Rn for the dynamics. The Lagrangian of the optimal control problem is 
+
+L(uθt , a t; Xut , t ) = 
+
+Z 1
+
+> t
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+)
+
+−
+
+Z 1
+
+> t
+
+a⊤
+
+> t
+
+ dX ut − uθt (Xut )dt − σtdW t
+
+ (98) 
+
+=
+
+Z 1
+
+> t
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) −
+
+Z 1
+
+> t
+
+a⊤ 
+
+> t
+
+dX ut
+
++
+
+Z 1
+
+> t
+
+a⊤ 
+
+> t
+
+uθt (Xut )dt +
+
+Z 1
+
+> t
+
+σta⊤ 
+
+> t
+
+dW t (99) Applying integration by parts to the second integral gives 
+
+L(uθt , a t, Xut ) = 
+
+Z 1
+
+> t
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) − a⊤ 
+
+> 1
+
+X1 + a⊤ 
+
+> t
+
+Xt
+
++
+
+Z 1
+
+> t
+
+(Xut )⊤
+
+ da t
+
+dt 
+
+
+
+dt +
+
+Z 1
+
+> t
+
+a⊤ 
+
+> t
+
+uθt (Xut )dt +
+
+Z 1
+
+> t
+
+σta⊤ 
+
+> t
+
+dW t (100) Taking the first variation with respect to the trajectory Xt yields 
+
+δδXut
+
+L = ( ∇xg(Xu 
+
+> 1
+
+) − a1)⊤h1
+
++
+
+Z 1
+
+> t
+
+ da t
+
+dt +  ∇xuθt (Xut )⊤ at + ∇x
+
+ 12 ∥uθt (Xut )∥2
+
+ ⊤
+
+ht dt = 0 , (101) which must hold for all ht. Thus, the coefficients of ht must be zero, and the adjoint system 
+
+
+
+da t
+
+dt = −  ∇xuθt (Xut )⊤ at − ∇ x
+
+  12 ∥uθt (Xut )∥2
+
+a1 = ∇xg(Xu 
+
+> 1
+
+)
+
+(102a) (102b) is derived. Next, we add the dynamics constraint to the cost-to-go function J (u, x t), using the adjoint state as its multiplier. 
+
+J (u, x t) := 
+
+Z 1
+
+> t
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) (103) 
+
+=
+
+Z 1
+
+> t
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) −
+
+Z 1
+
+> t
+
+a⊤
+
+> t
+
+ dX ut − uθt (Xut )dt − σtdW t
+
+ (104) 
+
+=
+
+Z 1
+
+> t
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) − a⊤ 
+
+> 1
+
+Xu 
+
+> 1
+
++ a⊤ 
+
+> t
+
+Xut
+
++
+
+Z 1
+
+> t
+
+(Xut )⊤
+
+ da t
+
+dt 
+
+
+
+dt +
+
+Z 1
+
+> t
+
+a⊤ 
+
+> t
+
+uθt (Xut )dt +
+
+Z 1
+
+> t
+
+σta⊤ 
+
+> t
+
+dW t (105) Taking the gradient with respect to the initial state Xt = xt yields 
+
+∇xt J (u, x t) = 
+
+Z 1
+
+> t
+
+(∇xt Xus )⊤
+
+ da s
+
+ds +  ∇xuθs (Xus )⊤ as + ∇x
+
+ 12 ∥uθs (Xus )∥2
+
+ 
+
+ds 
+
++ ( ∇xt Xu 
+
+> 1
+
+)⊤ (∇xg(Xu 
+
+> 1
+
+) − a1) + at (106) 
+
+= at (by Equation (102) ) . (107) As a result, the solution of the adjoint system in Equation (102) is 
+
+at(Xut , u θ ) = ∇xt
+
+Z 1
+
+> t
+
+12 ∥uθs (Xus )∥2ds + g(Xu 
+
+> 1
+
+)
+
+
+
+(108) 20 D.1.2 DERIVATION OF THE BASIC ADJOINT MATCHING OBJECTIVE 
+
+Now we derive the basic adjoint matching objective 
+
+Lbasic-AM (uθ ; X ¯u) = 12
+
+Z 10
+
+∥uθt (X ¯ut ) + at(X ¯u, ¯u)∥2dt, X ¯u ∼ pu, ¯u = stopgrad (uθ )
+
+(109) The trajectories are generated by the neural network with fixed parameters ( ¯u), detached from gradient computation during simulation. This avoids retaining the full simulation computation graph. It does not remove the costs of trajectory generation and network updates. To derive this objective, we start from the optimal control objective 
+
+L(u) = 
+
+Z 10
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) (110) We follow a similar procedure by adding the dynamics constraint with the adjoint state at(X ¯u, ¯u) as its multiplier. Here, at(X ¯u, ¯u) is independent of θ.
+
+L(u) = 
+
+Z 10
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) −
+
+Z 10
+
+a⊤
+
+> t
+
+ dX ut − uθt (Xut )dt − σtdW t
+
+ (111) 
+
+=
+
+Z 10
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) − a⊤ 
+
+> 1
+
+Xu 
+
+> 1
+
++ a⊤ 
+
+> 0
+
+Xu
+
+> 0
+
++
+
+Z 10
+
+(Xut )⊤
+
+ da t
+
+dt 
+
+
+
+dt +
+
+Z 10
+
+a⊤ 
+
+> t
+
+uθt (Xut )dt +
+
+Z 10
+
+σta⊤ 
+
+> t
+
+dW t (112) Differentiating with respect to the neural network parameter θ gives 
+
+dL(u)
+
+dθ = ddθ 
+
+Z 10
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) − a⊤ 
+
+> 1
+
+Xu 
+
+> 1
+
++ a⊤ 
+
+> 0
+
+Xu
+
+> 0
+
++
+
+Z 10
+
+(Xut )⊤
+
+ da t
+
+dt 
+
+
+
+dt +
+
+Z 10
+
+a⊤ 
+
+> t
+
+uθt (Xut )dt +
+
+Z 10
+
+σta⊤ 
+
+> t
+
+dW t
+
+!
+
+(113) 
+
+= ddθ 
+
+Z 10
+
+12 ∥uθt (Xut )∥2dt + g(Xu 
+
+> 1
+
+) − a⊤ 
+
+> 1
+
+Xu
+
+> 1
+
++
+
+Z 10
+
+(Xut )⊤
+
+ da t
+
+dt 
+
+
+
+dt +
+
+Z 10
+
+a⊤ 
+
+> t
+
+uθt (Xut )dt 
+
+!
+
+(114) Here, X0 is fixed and therefore independent of θ. Differentiating the first term gives 
+
+ddθ 
+
+Z 10
+
+12 ∥uθt (Xut )∥2dt 
+
+
+
+=
+
+Z 10
+
+ ∂u θt
+
+∂θ (X ¯ut ) + ∇xuθt (X ¯ut ) ∂X ut
+
+∂θ 
+
+⊤
+
+uθt (X ¯ut )dt (115) 
+
+=
+
+Z 10
+
+ ∂u θt
+
+∂θ (X ¯ut )
+
+⊤
+
+uθt (X ¯ut ) + 
+
+ ∂X ut
+
+∂θ 
+
+⊤
+
+∇x
+
+ 12 ∥uθt (X ¯ut )∥2
+
+
+
+dt. 
+
+(116) The X1 terms are 
+
+ddθ 
+
+ g(Xu 
+
+> 1
+
+) − a⊤ 
+
+> 1
+
+Xu
+
+> 1
+
+ =
+
+ ∂X u
+
+> 1
+
+∂θ 
+
+⊤  ∇xg(X ¯u 
+
+> 1
+
+) − a1
+
+ = 0 (by Equation (102b) ) . (117) The last two integrals are 
+
+ddθ 
+
+Z 10
+
+(Xut )⊤ da t
+
+dt dt +
+
+Z 10
+
+a⊤ 
+
+> t
+
+uθt (Xut )dt 
+
+
+
+=
+
+Z 10
+
+ ∂u θt
+
+∂θ (X ¯ut )
+
+⊤
+
+atdt +
+
+Z 10
+
+ ∂X ut
+
+∂θ 
+
+⊤  da t
+
+dt +  ∇xuθt (X ¯ut )⊤ at
+
+
+
+dt. (118) 21 Gathering all the terms, we have 
+
+dL(u)
+
+dθ =
+
+Z 10
+
+ ∂u θt
+
+∂θ (X ¯ut )
+
+⊤  uθt (X ¯ut ) + at
+
+ dt 
+
++
+
+Z 10
+
+ ∂X ut
+
+∂θ 
+
+⊤  da t
+
+dt +  ∇xuθt (X ¯ut )⊤ at + ∇x
+
+ 12 ∥uθt (X ¯ut )∥2
+
+ 
+
+dt (119) 
+
+=
+
+Z 10
+
+ ∂u θt
+
+∂θ (X ¯ut )
+
+⊤  uθt (X ¯ut ) + at
+
+ dt (by Equation (102a) ) . (120) Throughout this derivation, the ∂X ut 
+
+> ∂θ
+
+terms account for the dependence of trajectories on θ. These terms cancel by the adjoint equations. The remaining terms are evaluated using trajectories generated by ¯u = stopgrad (u). We can rewrite Equation (120) as 
+
+dL(u)
+
+dθ =
+
+Z 10
+
+∂∂θ 
+
+ 12 ∥uθt (X ¯ut )∥2
+
+
+
++ ∂∂θ 
+
+ a⊤ 
+
+> t
+
+uθt (X ¯ut ) dt (121) 
+
+= ddθ 
+
+Z 10
+
+12 ∥uθt (X ¯ut )∥2 + a⊤ 
+
+> t
+
+uθt (X ¯ut )dt 
+
+
+
+(122) 
+
+= ddθ 
+
+Z 10
+
+12 ∥uθt (X ¯ut )∥2 + a⊤ 
+
+> t
+
+uθt (X ¯ut ) + 12 ∥at∥2dt 
+
+
+
+(∵ at is independent of θ) (123) 
+
+= ddθ 
+
+Z 10
+
+12 ∥uθt (X ¯ut ) + at(X ¯u, ¯u)∥2dt 
+
+
+
+(124) Thus, the basic AM objective in Equation (109) can be used to optimize uθt using gradient descent. D.1.3 CONNECTION TO OPTIMAL CONTROL , THE LEAN ADJOINT STATE , AND THE ADJOINT 
+
+MATCHING OBJECTIVE 
+
+The pathwise adjoint system applies to any sufficiently regular admissible control. We show the consistency of the functional stationarity condition with a verified SOC optimum. During the following variation, trajectories and adjoints are held fixed, and the perturbation is a state-feedback function ht = ht(Xt). The critical-point condition for adjoint matching follows from the first variation of Epu [Lbasic-AM ].
+
+δEpu [Lbasic-AM ]
+
+δu = ddϵ 
+
+
+
+Epu
+
+ 12
+
+Z 10
+
+∥(uθt + ϵh t)( X ¯ut ) + at(X ¯u)∥2dt 
+
+ 
+
+> ϵ=0
+
+(125) 
+
+= Epu
+
+Z 10
+
+h⊤ 
+
+> t
+
+(uθt (X ¯ut ) + at(X ¯u)) dt 
+
+
+
+(126) 
+
+= Epu
+
+Z 10
+
+h⊤ 
+
+> t
+
+(uθt (X ¯ut ) + EX∼pu [at(X ¯u)|X ¯ut ]) dt 
+
+
+
+(127) The last equality follows from the tower property, EX [X] = EY [EX [X|Y ]] . Thus, if u∗ satisfies the following condition, then u∗ is a critical point of the adjoint matching objective. 
+
+u∗ 
+
+> t
+
+(xt) = −EX∗∼pu∗ [at(Xu∗
+
+)|Xu∗ 
+
+> t
+
+= xt] (128) For a verified SOC optimum u∗, the conditional expected cost-to-go equals Vt. Using Equation (108) and interchanging differentiation and expectation gives 
+
+u∗ 
+
+> t
+
+(xt) = −Epu∗
+
+h
+
+at(Xu∗
+
+) | Xu∗ 
+
+> t
+
+= xt
+
+i
+
+(129) 
+
+= −Epu∗
+
+h
+
+∇xt J (u∗, x t) | Xu∗ 
+
+> t
+
+= xt
+
+i
+
+(130) 
+
+= −∇ xt Epu∗
+
+h
+
+J (u∗, x t) | Xu∗ 
+
+> t
+
+= xt
+
+i
+
+(131) 
+
+= −∇ xt Vt(xt). (132) 22 Thus the SOC optimum satisfies the functional stationarity condition. This calculation does not establish global optimality of an arbitrary stationary point in neural-network parameters. We can further simplify the adjoint system to the lean adjoint system . Multiplying Equation (128) by 
+
+(∇xu∗ 
+
+> t
+
+(xt)) ⊤, we have 
+
+(∇xu∗ 
+
+> t
+
+(xt)) ⊤ u∗ 
+
+> t
+
+(xt) = −Epu∗
+
+h
+
+(∇xu∗ 
+
+> t
+
+(xt)) ⊤ at(Xu∗
+
+) | Xu∗ 
+
+> t
+
+= xt
+
+i
+
+(133) 
+
+⇐⇒ Epu∗
+
+
+
+−∇ x
+
+ 12 ∥u∗ 
+
+> t
+
+(xt)∥2
+
+
+
+− (∇xu∗ 
+
+> t
+
+(xt)) ⊤ at(Xu∗
+
+) | Xu∗ 
+
+> t
+
+= xt
+
+
+
+= 0 . (134) The adjoint ODE has zero conditional mean drift at the SOC optimum. This motivates the lean adjoint below; it does not imply that each pathwise adjoint is constant. The functional critical-point result for lean Adjoint Matching is provided by Domingo-Enrich et al. (2024), Proposition 7, under its stated assumptions. 
+
+d˜at
+
+dt = 0 ˜a1 = ∇xg(Xu 
+
+> 1
+
+)
+
+(135a) (135b) where ˜a is called the lean adjoint state . The lean adjoint state is no longer equivalent to the gradient of the cost-to-go function. Since the base SDE has no drift and the state cost is zero, the lean adjoint state is constant in time, with ˜at = ∇xg(Xu 
+
+> 1
+
+). The resulting adjoint matching objective is 
+
+LAM (uθ ; X ¯u) = 12
+
+Z 10
+
+∥uθt (X ¯ut ) + ˜ at(X ¯u)∥2dt = 12
+
+Z 10
+
+∥uθt (X ¯ut ) + ∇xg(X ¯u 
+
+> 1
+
+)∥2dt 
+
+where X ¯u ∼ pu, ¯u = stopgrad (uθ )
+
+(136) Replacing the terminal cost by ρg and taking expectation over trajectories gives Equation (15), up to the constant factor 1/2. The final adjoint matching algorithm is outlined in Algorithm 2. 
+
+Algorithm 2 Adjoint Matching (Domingo-Enrich et al., 2024) 
+
+Require: Parameterized drift uθ, differentiable terminal cost g(x), nominal distribution ˆμ, target distribution ν, replay buffer B, number of epochs E.
+
+Initialize: uθ
+
+1: for epoch in 1, 2, . . . , E do 
+
+2: Sample { ˆXi
+
+> 0
+
+}Mi=1 ∼ ˆμ
+
+3: Sample {ti}Mi=1 ∼ U [0 , 1] .
+
+4: Simulate (5b) to get {( ˜Xi
+
+> 0
+
+, t i, X it , X i
+
+> 1
+
+)}Mi=1 .
+
+5: Update replay buffer B ← B ∪ { (ti, X it , X i
+
+> 1
+
+)}Mi=1 
+
+6: Take gradient steps ∇θ LAM to minimize LAM (θ) = E(t,X t,X 1)∼B 
+
+∥uθ (t, X t) + ∇g(X1)∥2.
+
+7: end for 
+
+23 E FULL DRSB A LGORITHM 
+
+The main DRSB training loop is given in Algorithm 3. Each iteration consists of three steps: worst-case distribution update, terminal cost network update, and control network update. DRSB-W and DRSB-S differ only in the worst-case subroutine. Algorithm 4 details the Wasserstein worst-case optimization, which iteratively updates each sample via gradient ascent (Equation (18)) and adjusts λ
+
+via gradient descent (Equation (19)). Algorithm 5 details the Sinkhorn worst-case optimization, which computes λ∗ in closed form (Equation (25)) and samples from the Gaussian worst-case distribution (Equation (24)). 
+
+Algorithm 3 Distributionally Robust Schrödinger Bridge 
+
+Require: Parameterized drift uθ , parameterized terminal cost gϕ, nominal distribution ˆμ, target distribution ν,replay buffer B, number of epochs E.
+
+Initialize: uθ with a pretrained SB model from ˆμ to ν, gϕ, λ
+
+1: for epoch in 1, 2, . . . , E do 
+
+2: { ˜Xi
+
+> 0
+
+}Mi=1 , λ ← WassersteinWorstCase (uθ , λ ) (Algorithm 4) or 
+
+{ ˜Xi
+
+> 0
+
+}Mi=1 ← SinkhornWorstCase (uθ )
+
+(Algorithm 5) 3: Sample {ti}Mi=1 ∼ U [0 , 1] .4: Simulate (5b) to get {( ˜Xi
+
+> 0
+
+, t i, X it , X i
+
+> 1
+
+)}Mi=1 .5: Update replay buffer B ← B ∪ { (ti, X it , X i
+
+> 1
+
+)}Mi=1 
+
+6: Take gradient steps ∇ϕLD to minimize 
+
+LD (ϕ) = EX1∼B 
+
+h
+
+log(1 + e−gϕ(X1))
+
+i
+
++ EX1∼ν
+
+h
+
+log(1 + egϕ(X1))
+
+i
+
+7: Take gradient steps ∇θ LAM to minimize 
+
+LAM (θ) = E(t,X t,X 1)∼B 
+
+∥uθ (t, X t) + ρ∇gϕ(X1)∥2.8: end for 
+
+Algorithm 4 Wasserstein worst-case optimization 
+
+Require: Minibatch size β, number of λ updates L, worst-case update threshold τ .
+
+Function WassersteinWorstCase (uθ , λ )1: Prepare result set R = {} 
+
+2: for λ update iteration 1, 2, . . . , L do 
+
+3: Sample { ˆXj 
+
+> 0
+
+}βj=1 ∼ ˆμ
+
+4: { ˜Xj 
+
+> 0
+
+}βj=1 ← { ˆXj 
+
+> 0
+
+}βj=1 
+
+5: repeat 
+
+6: {Xj 
+
+> 0
+
+}βj=1 ← { ˜Xj 
+
+> 0
+
+}βj=1 
+
+7: 
+
+n ˜Xj 
+
+> 0
+
+← Xj 
+
+> 0
+
++ η
+
+h
+
+−uθ (0 , X j 
+
+> 0
+
+) − 2λ(Xj 
+
+> 0
+
+− ˆXj 
+
+> 0
+
+)
+
+io βj=1 
+
+8: until 1
+
+> β
+
+Pβj=1 ∥ ˜Xj 
+
+> 0
+
+− Xj 
+
+> 0
+
+∥2 < τ .9: Update λ ← λ − ζ
+
+h
+
+ε − 1
+
+> β
+
+Pβj=1 ∥ ˜Xj 
+
+> 0
+
+− ˆXj 
+
+> 0
+
+∥2
+
+i
+
+10: Save R ← R ∪ { ˜Xj 
+
+> 0
+
+}βj=1 
+
+11: end for Return: R = { ˜Xi
+
+> 0
+
+}Lβ i=1 , λ
+
+Algorithm 5 Sinkhorn worst-case optimization 
+
+Require: Batch size B, number of worst-case samples per clean sample w.
+
+Function SinkhornWorstCase (uθ )1: Sample { ˆXj 
+
+> 0
+
+}Bj=1 ∼ ˆμ
+
+2: Compute λ ←
+
+r ε + κd  
+
+> 2
+
+log πκ −1 1
+
+> B
+
+PBj=1    
+
+> ∥uθ(0 ,ˆXj
+> 0)∥2
+> 4
+
+3: Sample 
+
+
+
+{ ˜Xl
+
+> 0
+
+}wl=1 ∼ N 
+
+
+
+ˆXj 
+
+> 0
+
+− uθ   
+
+> 0( ˆXj
+> 0)2λ
+
+, κ 
+
+> 2
+
+I
+
+ Bj=1 
+
+Return: { ˜Xi
+
+> 0
+
+}wB i=1 
+
+24 F IMPLEMENTATION DETAILS 
+
+All experiments are conducted on a single NVIDIA RTX 4090 GPU. The drift network uθ and the terminal cost network gϕ are both parameterized as multi-layer perceptrons. For the 2D transport tasks (Gaussian and GMM), the baseline SB model is pretrained with the DSBM algorithm (Shi et al., 2023), and the DRSB training is initialized from this pretrained model following the successive approximation scheme in Algorithm 1. For the FFHQ image translation task, the model operates in the 512-dimensional latent space of the ALAE autoencoder (Pidhorskyi et al., 2020). F.1 PRACTICAL TECHNIQUES FOR ADVERSARIAL TRAINING 
+
+The minimax structure of DRSB can make training unstable, particularly in high-dimensional settings. The following techniques stabilize the adversarial optimization. 
+
+Gradual adversarial training. The adversary in DRSB is the worst-case optimization, and its penalty is controlled by the dual variable λ. Gradually decreasing λ from a large initial value increases the adversarial shift slowly. In DRSB-W, this occurs naturally through the λ gradient descent steps (Figure 4a). In DRSB-S, the closed-form λ∗ can produce extreme worst-case shifts from the start. To mitigate this, we linearly increase the ambiguity set radius ε over the first few iterations (Figure 4b).      
+
+> (a) DRSB-W λevolution. (b) DRSB-S εschedule.
+
+Figure 4: Training dynamics. (a) Evolution of λ in DRSB-W. (b) ε-schedule for DRSB-S and corresponding λ evolution. 
+
+Pretraining the terminal cost network gϕ. Consistent with findings in robust control (Beard & McLain, 1998), proper initialization is critical for convergence in adversarial training. We pretrain gϕ
+
+using the pretrained SB drift ¯u by minimizing the joint objective LD (ϕ) + ξLAM (ϕ), where ξ is a weight hyperparameter. Generated samples for LD (ϕ) are obtained from ¯u, and LAM (ϕ) regresses 
+
+ρ∇gϕ(X1) to the negative drift −¯u(t, X t).
+
+Regularization with a pretrained SB model. Worst-case samples can push the controller away from the correct data manifold, leading to semantic degradation. Since the pretrained SB control ¯u
+
+captures the data manifold direction, we regularize uθ to remain close to ¯u via the loss LAM (θ) + 
+
+αE[∥uθ − ¯u∥2], where α is a weight hyperparameter. 25 F.2 SENSITIVITY TO κ IN DRSB-S The entropy regularization parameter κ in the Sinkhorn distance controls the support of the worst-case distribution. As κ → 0, the Sinkhorn distance approaches the Wasserstein distance, and the ambiguity set preserves geometric interpretability. As κ increases, higher-entropy couplings γ are favored, and the worst-case distribution has wider support. Training stability is sensitive to κ. From Equation (24), larger κ produces a more diffuse worst-case distribution. If κ is too large, training becomes unstable due to extreme deviation from the nominal samples. In high-dimensional settings, κ interacts with the dimension d through the optimal dual variable in Equation (25). The term h(κ, ε ) := ε+ κd  
+
+> 2
+
+log( πκ ) must satisfy h(κ, ε ) > 0 for λ∗ to be well-defined. If h(κ, ε ) is too large, λ∗ becomes small and the worst-case distribution deviates excessively from the nominal in Equation (24). Setting κ near 0 or 1/π eliminates the log( πκ ) contribution and reduces the sensitivity to d.Table 5 reports FID scores on the FFHQ Woman →Man task for two values of κ and several values of the ambiguity set radius ε. Both κ = 0 .005 and κ = 0 .32 yield stable training and robustness to input noise. In the FFHQ task with d = 512 , values of κ far from 0 or 1/π (e.g., κ = 0 .25 ) or ε > 30 
+
+cause training to diverge. Table 5: FID ( ↓) sensitivity to κ and ε on FFHQ Woman →Man under noise δ.                                             
+
+> Model Org δ= 0 .25 0.50 1.00
+> DSBM 25.55 ±0.50 26.59 ±0.48 26.15 ±0.49 26.81 ±0.52 DRSB-S κ=0.005, ε=9 26.76 ±0.49 26.28 ±0.44 26.60 ±0.52 27.15 ±0.49 DRSB-S κ=0.005, ε=12 26.36 ±0.48 26.48 ±0.48 26.10 ±0.50 26.66 ±0.52 DRSB-S κ=0.005, ε=15 26.08 ±0.47 26.57 ±0.50 26.35 ±0.53 26.40 ±0.53 DRSB-S κ=0.32, ε=7 26.70 ±0.48 25.93 ±0.48 26.05 ±0.47 26.05 ±0.50 DRSB-S κ=0.32, ε=12 26.52 ±0.50 25.82 ±0.49 25.98 ±0.49 25.94 ±0.47 DRSB-S κ=0.32, ε=15 26.26 ±0.50 25.88 ±0.44 26.51 ±0.52 25.89 ±0.49
+
+26 G ADDITIONAL EXPERIMENTS 
+
+The main text reports selected perturbation conditions in Table 1 and Table 2. This section provides the full results across all noise levels and shift directions. G.1 NOISE ROBUSTNESS 
+
+Table 6 reports SWD under L2-norm noise at eight levels ( δ = 0 .5 to 4.0) for both tasks. DSBM performs best at low noise in the Gaussian task, while DRSB-W and DRSB-S outperform DSBM at higher noise levels. In the GMM task, DRSB-S outperforms both DSBM and DRSB-W at all noise levels except δ = 0 .5.Table 6: SWD ( ↓) on 2D transport tasks under varying L2-norm noise levels δ (mean ± std over 10 seeds). Bold indicates best performance; gray indicates outperforming the baseline DSBM.                                                         
+
+> Model δ=0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+> (a) Gaussian-to-Gaussian
+> DSBM 0.052 ±0.006 0.072 ±0.009 0.128 ±0.012 0.214 ±0.010 0.313 ±0.015 0.431 ±0.012 0.555 ±0.013 0.684 ±0.013 DRSB-W 0.080 ±0.010 0.093 ±0.012 0.138 ±0.013 0.216 ±0.013 0.315 ±0.012 0.425 ±0.013 0.548 ±0.013 0.678 ±0.013 DRSB-S 0.131 ±0.011 0.134 ±0.014 0.165 ±0.015 0.227 ±0.016 0.314 ±0.015 0.414 ±0.015 0.522 ±0.015 0.638 ±0.016
+> (b) GMM-to-GMM
+> DSBM 1.164 ±0.137 1.287 ±0.112 1.597 ±0.077 1.842 ±0.086 2.051 ±0.116 2.175 ±0.118 2.254 ±0.108 2.407 ±0.243 DRSB-W 1.096 ±0.216 1.220 ±0.172 1.547 ±0.114 1.821 ±0.123 1.985 ±0.111 2.139 ±0.128 2.222 ±0.166 2.315 ±0.236 DRSB-S 1.191 ±0.195 1.150 ±0.206 1.293 ±0.145 1.636 ±0.157 1.836 ±0.127 1.953 ±0.095 2.013 ±0.118 2.212 ±0.413
+
+G.2 SHIFT ROBUSTNESS 
+
+Table 7 reports SWD under directional distribution shifts and worst-case inputs. DRSB-S achieves the lowest SWD under most shift directions in both tasks. DRSB-W outperforms DSBM on the original GMM distribution, suggesting that the worst-case update can act as a regularizer on complex manifolds. Table 7: SWD ( ↓) on 2D transport tasks under distribution shifts (mean ± std over 10 seeds). Org: original distribution; Up/Down/Left/Right: directional shift; W-wst: DRSB-W worst case; S-wst: DRSB-S worst case. Bold indicates best performance; gray indicates outperforming the baseline DSBM. 
+
+Model Org Up Down Left Right W-wst S-wst 
+
+(a) Gaussian-to-Gaussian 
+
+DSBM 0.038 ±0.007 0.665 ±0.012 0.673 ±0.020 0.666 ±0.011 0.651 ±0.009 1.081 ±0.021 0.951 ±0.013 DRSB-W 0.144 ±0.007 0.691 ±0.020 0.698 ±0.020 0.517 ±0.014 0.792 ±0.014 0.972 ±0.007 0.812 ±0.012 DRSB-S 0.123 ±0.012 0.647 ±0.018 0.640 ±0.014 0.501 ±0.014 0.769 ±0.016 0.881 ±0.018 0.710 ±0.013 
+
+(b) GMM-to-GMM 
+
+DSBM 0.902 ±0.242 6.167 ±0.233 5.798 ±0.245 5.917 ±0.127 5.917 ±0.132 2.086 ±0.166 1.988 ±0.100 DRSB-W 0.885 ±0.226 5.949 ±0.262 5.865 ±0.282 5.967 ±0.153 5.785 ±0.120 1.503 ±0.052 1.946 ±0.100 DRSB-S 1.165 ±0.138 5.887 ±0.247 5.698 ±0.203 5.840 ±0.095 5.675 ±0.185 1.791 ±0.102 1.478 ±0.100 27 H WORST -C ASE COST ANALYSIS 
+
+H.1 WORST -C ASE COST INTERPRETATION 
+
+Remark H.1 (Fixed-terminal-cost bound) . Fix a controller u and terminal cost g. If ˜μ globally maximizes EX0∼μ[V (u, X 0; g)] over Mϵ(ˆ μ), then 
+
+∀μ ∈ Mϵ(ˆ μ), EX0∼μ[V (u, X 0; g)] ≤ EX0∼˜μ[V (u, X 0; g)] . (137) This is a direct consequence of global inner optimality. It does not require an optimal controller or imply that the ambiguity constraint is active. Approximate adversarial updates need not attain this bound. Since g is fixed, the inequality is not a certificate for the full objective with terminal KL divergence. Applying this bound to a test distribution requires verifying its membership in the ambiguity set. For empirical training and test distributions, the Wasserstein distance is well defined and can be computed from their samples. With the squared Euclidean transport cost, the Wasserstein ambiguity set constrains the average squared displacement from the nominal distribution. H.2 EMPIRICAL COST COMPARISON 
+
+We compare the measured costs of the computed adversarial distribution, four shifted distributions (Up, Down, Left, Right), and the nominal distribution within the Wasserstein ambiguity set. For fixed 
+
+uθ and gϕ, we estimate E[P  
+
+> t12
+
+∥ut∥2∆t + ρg ϕ(X1)] over 1000 uniform time steps. In Figure 5, the computed adversarial distribution has the largest measured cost among these distributions. This finite comparison does not verify global inner optimality or certify the full objective with terminal KL divergence. The control cost in Figure 5 saturates as ρ increases, while the terminal-cost term receives greater weight. 
+
+Figure 5: Cost comparison within the Wasserstein ambiguity set. Left : Evaluated distributions with the ambiguity-set boundary (dashed). Right : Measured cost versus ρ.28 I ADDITIONAL EXPERIMENTAL ANALYSIS 
+
+I.1 MEASURED COMPUTATION COST 
+
+DRSB starts from a pretrained DSBM drift. Table 8 separates the two stages. The DRSB stage costs approximately 0.54 × the Gaussian DSBM time and 0.16 × the FFHQ DSBM time. Including pretraining gives approximately 1.54 × and 1.16 ×, respectively. Gradient updates account for about 80% of Gaussian training time and over 90% on FFHQ, while worst-case optimization accounts for less than 1.5%. DRSB-W uses up to 90 worst-case gradient steps in these runs; DRSB-S uses Gaussian sampling with a closed-form λ update under the linear approximation. FFHQ DRSB draws four Monte Carlo samples per clean sample. These measurements describe the tested workloads and do not establish how runtime scales with dimension. Table 8: Measured training costs. DRSB columns report the additional stage after DSBM pretraining. Trajectory counts follow the reported training configurations.                        
+
+> Gaussian DSBM Gaussian DRSB FFHQ DSBM FFHQ DRSB Iterations 140 50 70 50 Gradient steps (total) 224k 101k 3.36M 320k Trajectories 4,096 1,024 20,480 40,960 Wall-clock time 754 s 404 s 8.5 h 1.4 h Stage time / DSBM time 1×0.54 ×1×0.16 ×
+
+I.2 EMPIRICAL CONVERGENCE 
+
+We examine the 2D Gaussian task with ρ = 10 , ϵ = 12 , and 50 epochs, using a cosine learning-rate schedule from 3 × 10 −7 to 10 −7. In Table 9, Rk = 1 − 1
+
+> N ϵ
+
+P 
+
+> i
+
+∥Xi∗ 
+
+> 0
+
+− ˆXi
+
+> 0
+
+∥2 is the constraint residual, Gk = Epu(k),μ (k)1
+
+[gϕ(X1)] is the mean terminal critic output, and Uk is the mean squared control magnitude on a fixed clean evaluation set. At the reported epochs k ≥ 25 , Rk < 0.005 .The final dual variable is λ50 = 3 .483 , close to the value 3.496 predicted by the active-constraint SOC relation. The terminal critic output and control magnitude change less at later epochs. These summaries measure stabilization, not gradients or stationarity residuals for all three blocks. Table 9: Reported update diagnostics on the 2D Gaussian task.                                                   
+
+> k510 15 20 25 30 35 40 45 50
+> Rk0.260 0.319 0.240 0.111 0.002 0.004 0.002 0.000 0.002 0.001
+> λk6.601 5.696 4.535 3.627 3.427 3.457 3.477 3.488 3.494 3.483
+> Gk0.752 1.232 1.735 2.142 2.068 1.757 1.672 1.631 1.524 1.550
+> Uk22.94 22.92 23.19 23.74 24.10 24.22 24.29 24.36 24.32 24.30
+
+We also evaluate the variational objective 
+
+L(u, μ, g ) = EX0∼μ[V (u, X 0; g)] − ρ log EX1∼ν [eg(X1)], (138) where V (u, x ; g) includes the control effort and terminal cost ρg . The control effort is estimated with a Riemann sum. The sampled values in Table 10 stabilize near 312 after an observed peak of 313.44 at k = 32 . A separate run with constant learning rate 10 −7 for 120 iterations also settles near 312. This provides an additional check beyond the decreasing learning-rate schedule, without proving convergence of the block algorithm. Table 10: Variational objective at the reported epochs.             
+
+> k510 20 30 40 50
+> L270.99 276.16 304.99 311.99 311.44 311.37
+
+29 I.3 EMPIRICAL CHECK OF THE SOC O PTIMALITY CONDITION 
+
+The simplified adversarial update replaces ∇X0 V (u, X 0; g) by −uθ (0 , X 0) using Equation (17). The identity is exact for an optimal controller of the fixed-terminal-cost SOC problem, but finite training need not satisfy it. We assess this approximation on the same 2D Gaussian experiment by computing 
+
+∇X0 V with a discrete adjoint recursion requiring one vector-Jacobian product per time step. The controller and terminal cost are held fixed for this gradient evaluation. Table 11 reports both direction cosines and gradient-to-control magnitude ratios. The cosine tests whether the surrogate points in the cost-gradient direction, while the ratio tests its scale. Across the evaluated epochs, cosines are 0.9996–0.9998 and ratios are 0.9310–1.0761. At epoch 50, the cosine is 0.9998 and the ratio is 1.0089, corresponding to a gradient magnitude approximately 0.9% larger than the control magnitude. These measurements support approximate satisfaction of the SOC relation on the evaluated samples. They do not establish exact SOC optimality or its validity across other tasks and input distributions. Table 11: SOC consistency diagnostics on the 2D Gaussian task.                       
+
+> k10 20 30 40 50
+> cos  ∇X0V, −uθ(0 , X 0)0.9997 0.9996 0.9996 0.9997 0.9998
+> ∥∇ X0V∥/∥uθ(0 , X 0)∥0.9310 1.0761 1.0249 1.0278 1.0089
+
+30

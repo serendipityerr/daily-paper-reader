@@ -1,0 +1,1106 @@
+Title: DOHF: Online Diffusion Fine-tuning with Doob's h-transform Guidance
+
+URL Source: https://arxiv.org/pdf/2609.31882v2
+
+Published Time: Fri, 02 Oct 2026 01:13:00 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# DOHF : Online Diffusion Fine-tuning with Doob’s h-transform Guidance 
+
+Zhengyi Guo Jiayuan Sheng Wenpin Tang David D. Yao 
+
+Abstract 
+
+Reward-based diffusion fine-tuning faces practical challenges when desirable outcomes are rare or conditioning corrections are costly to estimate. In this work, we propose Dif-fusion Online h-guidance Fine-tuning (DOHF) , which turns Doob’s h-transform into a practical online training algorithm. DOHF assigns optimality weights to generated sam-ples, estimates the normalized local correction ∇ log h under the current rollout policy, and distills it directly into the generative model. Theoretically, we characterize the population-optimal DiffusionNFT update as well as the various classfier free guidance methods through a unified h-transform perspective. Methodologically, our framework accommodates black-box and non-differentiable rewards without additional network evaluations. We further show improved alignments under three empirical scenarios. Our work demonstrates how adapt-ing probabilistic conditioning through inexpensive estimation and iterative distillation can improve generative learning across statistical sampling and visual generation. 
+
+# 1 Introduction 
+
+Doob’s h-transform provides a classical probabilistic mechanism for conditioning a Markov pro-cess on a terminal event or reweighting its terminal distribution [14]. Given a terminal weight 
+
+w(X0), the associated function h(xt, t ) = E[w(X0) | Xt = xt] translates terminal information into a local correction of the intermediate dynamics through ∇ log h. This perspective has recently become increasingly relevant to diffusion models. DEFT [7] formulates conditional generation through a generalized h-transform and learns an auxiliary network. Related work studies diffusion guidance under hard constraints [22]. More recently, DOIT [56] uses Doob’s 
+
+h-transform to construct a training-free adaptation procedure. From these viewpoints, a central question is how to efficiently estimate local correction for fine-tuning throughout the generative trajectory. The h-transform gives an explicit answer. For a current rollout policy pold and a general reward weight w, the desired terminal distribution is 
+
+pft (x0) ∝ w(x0)pold (x0),
+
+while its intermediate score differs from that of the current model by exactly ∇xt log h(xt, t ). Existing h-transform approaches use this correction for inference-time guidance [26, 56], typically relative to a fixed reference model. This can become restrictive when the high-reward region is rare under the original proposal: the trajectories used to estimate the correction may provide little information precisely where adaptation is most needed. This motivates an online procedure in which the h-function itself is defined and estimated under the evolving rollout policy, and the resulting local correction is progressively distilled into the generative model. In this work, we propose Diffusion Online h-guidance Fine-tuning (DOHF) . At each iteration, samples from the current rollout policy are assigned an optimality weight w(X0), from which we estimate the corresponding ∇ log h and distill the resulting correction directly into the generative model. This online procedure progressively shifts the rollout distribution toward more informative regions, while our simulation-based estimator remains applicable to black-box and 1arXiv:2609.31882v2 [cs.LG] 1 Oct 2026 non-differentiable rewards. The same formulation naturally accommodates continuous rewards, hard or soft constraints, and relative optimality objectives. We further establish a precise connection to DiffusionNFT [54], showing when its population-optimal velocity coincides with the exact h-transformed update. We evaluate DOHF on rare-mode adaptation, constrained contingency-table generation, and SD3.5-Medium text-to-image fine-tuning. Across these settings, DOHF consistently benefits from jointly adapting the rollout distribution and the h-correction, leading to faster adaptation and strong reward alignment when high-reward regions are poorly represented by the original model. In conclusion, The key of DOHF is not the use of Doob’s h-transform itself, but turning its normalized local correction into an online, self-improving training target: the correction is re-estimated under the evolving rollout policy and distilled into the model that generates the next round of data. 
+
+Our main contributions are: 
+
+• Optimality as an unified framework. We formulate reward-based fine-tuning through a single weight w : X → [0 , 1] interpreted as the probability of an optimality event {O =1}. Exponential tilting, hard constraints w = 1{r ≥ z}, their smooth relaxations, and relative optimality objectives all become instances of one object, and each induces the exact target pft ∝ w p old . In contrast to formulations built on scalar advantages or on a positive/negative split of a rollout group, this retains the full conditioning structure, and in particular accommodates indicator-type hard constraints. 
+
+• Online h-guidance distillation. We turn the terminal weight into a local velocity correction − t 
+
+> 1−t
+
+∇x log h and regress it directly into the generative model, re-estimating h
+
+under the evolving rollout policy at every iteration. Our simulation-based estimator reuses the velocity already computed at the current step, so leads to no additional network evaluations, and w need not be differentiable. Estimating h and improving the rollout distribution are two sides of one update: each iteration re-collects trajectories under the tilted policy, so the correction is estimated where adaptation is most needed. 
+
+• An explicit h yields the guidance strength others must tune. We provide a population-level characterization of DiffusionNFT, showing that its update is an h-attenuated version of the exact h-transform and becomes exact only under the state-dependent choice 
+
+β = 2 h(xt, t, c ). Since DOHF estimates h explicitly, it realizes this state-dependent strength, whereas methods that do not must leave β a constant — which attenuates the update exactly in the low-h regions where high-reward mass is rare. We verify this predic-tion and the framework as a whole on rare-mode adaptation, constrained contingency-table generation, and SD3.5-M text-to-image fine-tuning, where our formulation is additionally compatible with classifier-free guidance, a design not available to forward-matching base-lines. 
+
+Related Work. Existing h-transform methods provide foundations for our work. DEFT [7], hard-constraint guidance [22], and Doob’s Matching [3] learn conditioning corrections, while DOIT [56] estimates them through simulation. SVDD [31], twisted SMC [45], and Feynman-Kac steering [40] offer related inference-time approaches. Tilt Matching [35], Iterative Tilting [34], and Iterative Importance Fine-tuning [6] connects tilted distributions with iterative learning. In parallel, a rapidly growing literature studies reward-based fine-tuning of diffusion models [42, 44]. Policy-based approaches formulate the reverse generation process as a policy and optimize it through RL, including DDPO [2], FlowGRPO [32], DanceGRPO [50], DPOK [17], and MixGRPO [30]. Sampler stochasticity and the resulting training-inference gap are studied in [39]. ReFL [47] and DRaFT [5] directly differentiate reward signals, while DiffusionDPO [43] 2learns from preference pairs. Adjoint Matching [13, 21] and Score as Action [52, 53] cast fine-tuning as stochastic optimal control. Gradient-based construction [55] and flow-map alignment [24, 36] provide alternatives when reward derivatives are available. Regression-based approaches include Advantage Weighted Matching [49] and FlowAWR [18], while online reward-weighted flow matching [16] directly reweights newly generated samples. Reward Score Matching [28], a path-space perspective [48], and reward-based velocity matching [4] clarify the shared structure of these updates. 
+
+# 2 Preliminaries 
+
+Throughout, let c denote an optional conditioning context (e.g. a text prompt, a market co-variate, or c = ∅ if unconditional). We suppress c from the notation below whenever it plays no special role. A pre-trained diffusion/flow model generates 
+
+X0 ∼ pbase (x0 | c).
+
+Moreover, we generate samples online, so we define the policy for rolling out is pold (x0 | c). 
+
+2.1 A Unified Optimality Weight 
+
+We define optimality through a single weight function 
+
+w : X → [0 , 1] , Epold [w(X0)] > 0.
+
+We introduce an optimality variable [29, 54] defining whether the generated X0 is optimal or not: 
+
+O := 1{U ≤w(X0)},
+
+where U ∼ Unif(0 , 1) is an auxiliary uniform random variable independent of X0. Intuitively, 
+
+X0 with higher weight w(X0) is more likely to be optimal. Then P(O = 1 | X0 = x0) = w(x0), and conditioning the base model on {O = 1 } gives the fine-tuned target 
+
+pft (x0 | c) := pold (x0 | O = 1 , c ) = w(x0)
+
+P(O = 1 | c) pold (x0 | c) ∝ w(x0) pold (x0 | c).
+
+Every choice of w ∈ [0 , 1] therefore corresponds to a genuine conditioning event. Note also that 
+
+w and Cw (C > 0) induce the same pft , so any normalization on w has no effect. 
+
+Examples. (i) Exponential tilting [13]: w(x0) = exp   r(x0,c )−rmax (c)
+
+> τ
+
+, temperature τ > 0. (ii) 
+
+Hard threshold [22]: w(x0) = 1{r(x0,c )≥z}, giving pft ∝ pold 1{r≥z}. (iii) Sigmoid relaxation :
+
+w(x0) = σ  r(x0,c )−zβ
+
+, σ(u) = (1 + e−u)−1. Note that it recovers the hard threshold when 
+
+β → 0+. (iv) Loss/statistic-driven weights [26]: w(x0) = ψ(ℓ(x0)) for a nondecreasing ψ, e.g. extreme summary statistics of x0 or loss of data x0 defined by upstream models. 
+
+2.2 The h-Function 
+
+Define h-function as the probability of optimality given tuple ( xt, t, c ) as 
+
+h(xt, t, c ) := P(O = 1 | Xt = xt, c ) = Ew(X0) | Xt = xt, c .
+
+In particular h(x0, 0, c ) = w(x0). By Bayes’ Rule, the fine-tuned marginal at time t is 
+
+pft  
+
+> t
+
+(xt | c) = pold t (xt | O = 1 , c ) = 1
+
+Z(c) pold t (xt | c) h(xt, t, c ), (2.1) where Z(c) does not depend on xt. Hence 
+
+∇xt log pft  
+
+> t
+
+(xt | c) = ∇xt log pold t (xt | c) + ∇xt log h(xt, t, c ), (2.2) so the score correction for fine-tuning is ∇xt log h(xt, t, c ) = ∇xt log Ew(X0) | Xt = xt, c .32.3 Flow Matching 
+
+Consider Gaussian flow matching 
+
+Xt = (1 − t)X0 + tX 1, X1 ∼ N (0 , I ), t ∈ [0 , 1] ,
+
+Let vold (x, t, c ) denote the velocity field corresponding to old policy. For this Gaussian interpolation, the velocity and score are related (see Appendix A for derivation) through 
+
+v(x, t, c ) = − x + t∇x log pt(x | c)1 − t .
+
+By Equation (2.2), the corresponding fine-tuned velocity provides a learning target: 
+
+vft (x, t, c ) = vold (x, t, c ) − t
+
+1 − t ∇x log h(x, t, c ). (2.3) 
+
+# 3 Diffusion Online h-guidance Fine-tuning 
+
+For Flow Matching, the backward process can be reformulated as a SDE [25, 41]: 
+
+dX t =
+
+
+
+(1 + λ2 
+
+> t
+
+)vold (Xt, t, c ) + λ2
+
+> t
+
+1 − t Xt
+
+
+
+dt + λt
+
+r 2t
+
+1 − t dB t, (3.1) where λt is a parameter that we can choose, and when λt = 0 it reverts to the original ODE form. Consider discrete reverse times 0 = t0 < t 1 < · · · < t L = 1, and let ϕold ℓ (xtℓ−1 | xtℓ , c )denote the backward Gaussian transition kernel, with mean μℓ(xtℓ ) and variance σ2 
+
+> ℓ
+
+I.In order to do the regression (2.3), we need ∇x log h(x, t, c ). Fortunately, we could use Monte Carlo Method to estimate it during the online fine-tuning process. 
+
+3.1 Simulation-Based Estimator of ∇x log h(x, t, c ) [56] 
+
+Given Xtℓ = xtℓ , simulate M backward trajectories {x(m) 
+
+> tℓ−1
+
+, . . . , x (m)0 }Mm=1 using ϕold . Define 
+
+Wm := w x(m)0
+
+, Gm := ∇xtℓ log ϕold ℓ
+
+ x(m) 
+
+> tℓ−1
+
+| xtℓ , c  = 1
+
+σ2
+
+> ℓ
+
+∇xtℓ μℓ(xtℓ )⊤ x(m) 
+
+> tℓ−1
+
+− μℓ(xtℓ ).
+
+The plug-in estimator is 
+
+\∇ log hA =
+
+PMm=1 WmGm
+
+  P Mm=1 Wm
+
+ ∨ τℓ
+
+, (3.2) with small truncation level τℓ > 0 for numerical stability. To alleviate the cost by M rollouts of length ℓ, we use one-step-lookahead surrogate ˆx(m)0 = x(m) 
+
+> tℓ−1
+
+− tℓ−1 vold (xtℓ , t ℓ, c ), x(m) 
+
+> tℓ−1
+
+∼ N  μℓ(xtℓ ), σ 2 
+
+> ℓ
+
+I,
+
+in place of x(m)0 , at zero extra NFE (reusing vold (xtℓ , t ℓ, c ) already computed). Moreover, it does not require w to be differentiable, which is more general for various terminal rewards mentioned in Section 2.1. If w is differentiable, we also provide an alternative estimator using finite difference method, which is provided in Appendix B. 4Algorithm A D iffusion Online h-guidance Fine-tuning ( DOHF )
+
+Require: Pretrained vbase , prompt set C, reward model r, schedule {ti}, slow-mix schedule ηk 
+
+> 1:
+
+Initialize model weight vθ ← vbase , and sample-generation policy vϕ ← vθ 
+
+> 2:
+
+for k = 1 , 2, . . . do  
+
+> 3:
+
+for prompt c in mini-batch do  
+
+> 4:
+
+Sample tℓ uniformly; roll out vϕ(·, ·, c ) to obtain xtℓ 
+
+> 5:
+
+Compute \∇ log h(xtℓ , t ℓ, c ) ▷ via 3.2 or B.1  
+
+> 6:
+
+vtarget ← stopgradient 
+
+
+
+vϕ(xtℓ , t ℓ, c ) − tℓ
+
+> 1−tℓ
+
+\∇ log h
+
+ 
+
+> 7:
+
+L ← L + ∥vθ(xtℓ , t ℓ, c ) − vtarget ∥22 
+
+> 8:
+
+end for  
+
+> 9:
+
+Update θ by one step on ∇θL 
+
+> 10:
+
+vϕ ← ηkvϕ + (1 − ηk)vθ ▷ slow-mix sample-generation policy  
+
+> 11:
+
+end for return vθ
+
+Algorithm B Sampling with Classifier-Free Guidance 
+
+Require: Trained vθ, prompt c, guidance scale γ ≥ 0, schedule {ti}Ni=0  
+
+> 1:
+
+x ← z ∼ N (0 , I ) 
+
+> 2:
+
+for i = 0 , 1, . . . , N − 1 do  
+
+> 3:
+
+vcond ← vθ(x, t i, c ), vuncond ← vθ(x, t i, ∅) 
+
+> 4:
+
+v ← vuncond + γ (vcond − vuncond ) 
+
+> 5:
+
+x ← x + v (ti+1 − ti) 
+
+> 6:
+
+end for return x
+
+3.2 Training and Sampling 
+
+We instantiate the training A for Text-to-Image fine-tuning, and for generalized task, prompt could be omitted. In terms of sample rolling-out, we use a slow-mix strategy: starts from on-policy and smooth it with exponential moving average. Note that we index time so that t=1 is pure noise and generation runs from tL = 1 to t0 = 0. For sampling process, especially for Text-to-Image task, we could also implement the similar way used in Classifier-free Guidance [23], as we set some proportion of the prompt to be empty in training process, in order to improve its unconditional generation. For other tasks, just use fine-tuned vθ to sample. For generalization purpose, we provide Algorithm B used in T2I task. 
+
+3.3 Population-Level Relation to DiffusionNFT 
+
+DiffusionNFT [54] is the closest online fine-tuning method to DOHF . Although its positive– negative construction does not explicitly estimate an h-transform, its population optimum ad-mits an exact characterization in terms of the same h-function. Let 
+
+h(xt, t, c ) = Epold [w(X0) | Xt = xt, c ] .
+
+DiffusionNFT parameterizes its positive and negative branches as 
+
+v+ 
+
+> θ
+
+= (1 − β)vold + βv θ, v− 
+
+> θ
+
+= (1 + β)vold − βv θ,
+
+where β > 0 is a fixed guidance coefficient. 
+
+Proposition 3.1. At the population optimum of the double-branch DiffusionNFT objective, the 
+
+5learned velocity satisfies 
+
+v∗ 
+
+> θ
+
+(xt, t, c ) = vold (xt, t, c ) − 2h(xt, t, c )
+
+βt
+
+1 − t ∇xt log h(xt, t, c ).
+
+Consequently, its population optimum coincides with the exact h-transformed velocity 
+
+vft = vold − t
+
+1 − t ∇xt log h
+
+if and only if 
+
+β = 2 h(xt, t, c ).
+
+A complete derivation is provided in Appendix C. This result reveals a key distinction between the two methods. With a fixed β, DiffusionNFT effectively follows the unnormalized direction ∇h = h∇ log h; hence, its update is attenuated in low-h regions where optimal samples are rare. DOHF instead directly estimates the nor-malized correction ∇ log h under the evolving rollout policy and distills it into the model. It therefore realizes the exact h-transformed update without requiring a state-dependent guidance hyperparameter. 
+
+# 4 Experiment 
+
+4.1 Gaussian Mixture 
+
+To isolate the effect of online iteration from confounders, we conduct a controlled study on a 2D synthetic problem. The base distribution is an imbalanced two-mode Gaussian mixture 
+
+pdata (x) = 0 .01 · N  x; μ0, Σ + 0 .99 · N  x; μ1, Σ,
+
+with μ0 = ( −1, −1) ⊤, μ1 = (1 , 1) ⊤, and Σ = 0 .16 I. A rectified-flow velocity network (a small MLP) is first pretrained on samples from pdata .The reward is the soft posterior probability of belonging to the minority mode :
+
+r(x) = P(cluster = 0 | x) = 0.01 · N (x; μ0, Σ) 0.01 · N  x; μ0, Σ + 0 .99 · N  x; μ1, Σ ∈ (0 , 1) .
+
+This turns the alignment task into an extreme mode-seeking problem: the fine-tuned model should transport probability mass from the majority mode μ1 into the minority mode μ0.We compare two reward-tilting strategies, both starting from the same pretrained base: 
+
+• Off-policy h-guidance [22]. A separate value network hϕ(xt, t ) ≈ E[r(X0) | Xt=xt] is regressed on rollouts drawn exclusively from the frozen base, then applied as guidance at inference via ˆ v = vbase − t 
+
+> 1−t
+
+∇ log hϕ.
+
+• DOHF(ours). The same h-transform correction is instead distilled into the velocity network itself via online data collection. Table 1 summarizes the outcome. Off-policy guidance takes 2000 update steps and still lifts the minority-mode fraction to some extent (1 .12% → 14 .88%): most of its training rollouts still land in the majority mode. In contrast, online h-distillation reaches 100% minority-mode concentration after just 200 steps — one order of magnitude fewer updates for a much better outcome: better preserves the target distribution with closer mean ( −0.82 , −0.88) and standard deviation (0 .38 , 0.38). Because each iteration re-collects trajectories under tilted policy, the reward-relevant regions of state space are explored progressively as the model itself improves. For visualization, see Figure 1. 6Figure 1: Visualization of on/off-policy h-transform guidance.                                   
+
+> Method Iterations Minority-mode fraction Mean ±std True data –0.96% (0 .98 ,0.98) ±(0 .44 ,0.44) Base pretrained –1.12% (0 .99 ,0.98) ±(0 .42 ,0.41) Off-policy h-guidance 2000 14.88% (0 .29 ,0.25) ±(0 .73 ,0.71)
+> DOHF(ours) 200 100.00% (−0.82 ,−0.88) ±(0 .38 ,0.38)
+
+Table 1: Fraction of samples falling in the minority cluster after fine-tuning. 
+
+4.2 Contingency Table 
+
+We consider contingency-table generation as an application of endogenous conditional sampling under the framework of [22]. Classical references include [8, 11], with connections to Burnside processes and double cosets discussed in [10, Section 3]. Such tables also arise in financial-network and systemic-risk applications [1, 20]. 
+
+Objective. Let X = ( xij ) ∈ Zm×n 
+
+> +
+
+be contingency table with prescribed row and column sums 
+
+X
+
+> j
+
+xij = ri, X
+
+> i
+
+xij = cj . (4.1) In practice, these marginals may be noisy or partially observed, so we treat them as soft struc-tural targets. Given a pretrained flow model vbase , define 
+
+S2 = X
+
+> i
+
+X
+
+> j
+
+xij − ri
+
+
+
+> 2
+
++ X
+
+> j
+
+X
+
+> i
+
+xij − cj
+
+!2
+
+.
+
+Exact feasibility corresponds to S2 = 0. Since exact matches are extremely rare for large tables, directly using the indicator reward leads to high-variance h-guidance estimates, usually there is no such table in a batch satisfying S2 = 0. We therefore use the smooth reward 
+
+w(x) = exp( −βS2),
+
+where larger β more closely approximates the hard constraint. 
+
+Birthday–deathday contingency table. We evaluate on the classical 12 × 12 birthday– deathday table of 82 descendants of Queen Victoria [12]. The target margins are 
+
+r = (6 , 5, 5, 12 , 12 , 3, 10 , 7, 3, 7, 9, 3) , c = (13 , 4, 7, 10 , 8, 4, 5, 3, 4, 9, 7, 8) ,
+
+with total count 82, the original table is provided as Table 4. We pre-train a flow model that generates nonnegative integer-valued 12 ×12 tables with total count 82; implementation details are given in Appendix D.2. Starting from the same pretrained 7Method Updates Avg. Margin Error ↓ Max Margin Error ↓ W2 vs. DG sampler [9] ↓
+
+Uniform – 0.802 1.975 13.48 Off-policy 800 0.379 1.005 11.00 
+
+DOHF 300 0.210 0.531 9.84 
+
+Table 2: Comparison of margin matching and distributional similarity. The margin errors are standardized by the corresponding generated marginal standard deviations. model, we compare frozen off-policy h-guidance with DOHF using the reward exp( −βS2), where we take β = 0 .02. Among 500,000 uniformly sampled pre-training tables, none exactly satisfies all target mar-gins, illustrating the sparsity of the target event and the necessity of using soft targets. As shown in Table 2, uniform sampling (as how we generate pre-training data) yields an average standardized margin error of 0.802 and a maximum error of 1.975. After only 300 updates, 
+
+DOHF reduces these errors to 0.210 and 0.531, respectively, outperforming the off-policy base-line, which reaches 0.379 and 1.005 after 800 updates. The Diaconis–Gangolli (DG) sampler [9] is a Markov Chain based method, generating ap-proximately uniform contingency tables with fixed margins through repeated local 2 × 2 integer-preserving moves, which requires initial burn-in (in our experiment 200,000 steps are used). Although we are generating tables with perturbed margins, it is still worthwhile to check the difference between generated distributions. It is shown that DOHF also achieves the smallest Wasserstein distance to the DG sampler baseline among the three methods. The advantage comes from adapting the rollout distribution toward the target region, which provides increasingly informative samples for subsequent h-transform updates. For this ex-periment, however, we set vϕ = vbase at each iteration rather than using the EMA update in Algorithm A, since the latter empirically caused collapse to nearly identical tables. This modification preserves rollout diversity while retaining the benefit of online h-distillation. 
+
+4.3 Image Fine-tuning 
+
+Our flow-based Text-to-Image model fine-tuning task is based on SD3.5-Medium [15] at 256 ×
+
+256 resolution. We demonstrate the potential of our method trained with the sum of three reward models: HPSv2.1 [46], PickScore [27] and ClipScore [37]. We will evaluate our method and other baselines on both in-domain and out-of-domain metrics: ImageReward [47], Aesthetic Score [38], GenEval [19] and pair-wise LPIPS 
+
+[51]. Note that we used average pair-wise LPIPS per prompt to measure image diversity. We aim to show that rolling out online is not only more efficient compared to off-policy fashion, but also provide a higher reward, combined with better semantic alignment. For Qualitative comparison, refer to Figure 2. The training and testing prompt set is the ones used in Pick-a-Pic [27]. We finetuned with LoRA( α = 32, r = 32). Each iteration consists of 28 prompts, and generates M = 8 images per prompt via one-step-lookahead surrogate discussed in Section 3.1. For both training and testing roll-outs, 40 time steps are applied. Additional details are provided in Appendix E. As shown in Table 3, our DOHF methodology works very well even without classifier-free-guidance (CFG) [23] using only 2k iterations, surpassing FlowGRPO [32] on most of the metrics using 9k iterations. Moreover, it performs slightly better than DiffusionNFT [54] overall in 2k iterations. To better explain their relationship, detailed discussion are provided in Appendix C. However, our online h-guidance has CFG design which is not available in DiffusionNFT. During training, we set 10% of the prompts to be empty, in order to enforce model to have better unconditional generation, thus vθ(·, ·, c ) − vθ(·, ·, ∅) acts like guidance. During inference, velocity field is vθ(·, ·, c ) + γ vθ(·, ·, c ) − vθ(·, ·, ∅), where γ = 4 is the default guidance scale. 8SD3.5M w/ CFG DOHF w/o CFG DOHF w/ CFG FlowGRPO 
+
+> “Twin obese archbishops in gold space-suits, Vatican launchpad, Hasselblad style.”
+> “Realistic Gothic cathedral in a stormy night.”
+> “A man wearing a shirt that says “dogs”.”
+
+Figure 2: Qualitative comparison across different guidance and fine-tuning methods. The prompts are taken from Pick-a-Pic [27]. It is shown in Table 3 that with guidance, all the quality scores increase to some extent, at little cost of diversity. It is worth noting that GenEval , the out-of-domain rule-based reward measuring how accurately generated images satisfy compositional prompts, increase significantly from 44 .27% to 62 .52%, showing its potential in semantic alignment. 
+
+# 5 Conclusion 
+
+We introduced DOHF , an online diffusion fine-tuning framework based on Doob’s h-transform. Our method turns reward-based adaptation into a local score or velocity correction that can be estimated online and directly distilled into the generative model. This perspective provides a unified treatment of continuous rewards, hard and soft constraints, and relative optimality objectives, while also clarifying the connection to existing methods such as DiffusionNFT. Across rare-mode adaptation, constrained contingency table generation, and text-to-image fine-tuning, DOHF consistently demonstrates the benefit of adapting the rollout distribution to-gether with the model, particularly when reward-relevant regions are difficult to sample via base model. These results suggest that online h-transform fine-tuning offers a promising alternative to both inference-time guidance and trajectory-based reinforcement learning. More broadly, the framework provides a flexible interface between probabilistic conditioning and generative-model optimization, and may be useful for a wide range of problems involving rare events, structured constraints, black-box rewards, and distributional adaptation. 9Model #Iter GenEval PickScore ClipScore HPSv2.1 Aesthetic ImgRwd LPIPS 
+
+SD3.5-M w/o CFG – 4.49% 0.179 0.178 0.150 4.513 -1.809 0.771 SD3.5-M w/ CFG – 41.35% 0.203 0.266 0.248 5.428 0.250 0.674 SD3.5-L w/ CFG – 25.00% 0.193 0.243 0.208 4.919 -0.452 0.733 
+
+DOHF w/o CFG 2k 44.27% 0.216 0.264 0.327 6.327 1.115 0.538 
+
+DOHF w/ CFG 2k 62.52% 0.218 0.277 0.336 6.240 1.329 0.521 Off-policy Guidance 2k 19.52% 0.184 0.201 0.177 4.739 -1.320 0.746 
+
+8k 38.96% 0.197 0.240 0.249 5.422 0.190 0.655 DiffusionNFT 2k 49.39% 0.214 0.261 0.305 6.151 1.118 0.525 FlowGRPO 2k 35.89% 0.205 0.252 0.272 5.924 0.636 0.602 9k 45.66% 0.211 0.259 0.302 6.162 1.020 0.588 Table 3: Evaluation Results under resolution 256 × 256. Bold : best; Underline: second best. 10 References 
+
+[1] S. Albanesi and D. F. Vamossy. Predicting consumer default: A deep learning approach. Working Paper 26165, National Bureau of Economic Research, August 2019. [2] K. Black, M. Janner, Y. Du, I. Kostrikov, and S. Levine. Training diffusion models with reinforcement learning. In International Conference on Learning Representations , 2024. [3] J. Chang, C. Duan, Y. Jiao, Y. Xu, and J. Z. Yang. Inference-time alignment for diffusion models via variationally stable doob’s matching, 2026. [4] J. Choi, W. Guo, Y. Zhu, A. Vahdat, M. Tao, J. Berner, and Y. Chen. Scaling reinforcement learning for diffusion models via velocity matching, 2026. [5] K. Clark, P. Vicol, K. Swersky, and D. J. Fleet. Directly fine-tuning diffusion models on differentiable rewards, 2024. [6] A. Denker, S. Padhy, F. Vargas, and J. Hertrich. Iterative importance fine-tuning of diffusion models, 2026. [7] A. Denker, F. Vargas, S. Padhy, K. Didi, S. Mathis, V. Dutordoir, R. Barbano, E. Mathieu, U. J. Komorowska, and P. Lio. DEFT: Efficient fine-tuning of diffusion models by learn-ing the generalised h-transform. In Advances in Neural Information Processing Systems ,volume 37, 2024. [8] P. Diaconis and B. Efron. Testing for independence in a two-way table: New interpretations of the chi-square statistic. The Annals of Statistics , 13(3):845–874, 1985. [9] P. Diaconis and A. Gangolli. Rectangular arrays with fixed margins. In Discrete Probability and Algorithms , volume 72 of IMA Volumes in Mathematics and Its Applications , pages 15–41. Springer, 1995. [10] P. Diaconis and M. Howes. Random sampling of contingency tables and partitions: Two practical examples of the burnside process. Statistics and Computing , 35(6), Aug. 2025. [11] P. Diaconis and B. Sturmfels. Algebraic algorithms for sampling from conditional distribu-tions. The Annals of Statistics , 26(1):363–397, Feb. 1998. [12] P. Diaconis and B. Sturmfels. Algebraic algorithms for sampling from conditional distribu-tions. The Annals of Statistics , 26(1):363–397, 1998. [13] C. Domingo-Enrich, M. Drozdzal, B. Karrer, and R. T. Q. Chen. Adjoint matching: Fine-tuning flow and diffusion generative models with memoryless stochastic optimal control, 2025. [14] J. L. Doob. Conditional brownian motion and the boundary limits of harmonic functions. 
+
+Bulletin de la Soci´ et´ e Math´ ematique de France , 85:431–458, 1957. [15] P. Esser, S. Kulal, A. Blattmann, R. Entezari, J. M¨ uller, H. Saini, Y. Levi, D. Lorenz, A. Sauer, F. Boesel, D. Podell, T. Dockhorn, Z. English, K. Lacey, A. Goodwin, Y. Marek, and R. Rombach. Scaling rectified flow transformers for high-resolution image synthesis, 2024. [16] J. Fan, S. Shen, C. Cheng, Y. Chen, C. Liang, and G. Liu. Online reward-weighted fine-tuning of flow matching with wasserstein regularization, 2025. 11 [17] Y. Fan, O. Watkins, Y. Du, H. Liu, M. Ryu, C. Boutilier, P. Abbeel, M. Ghavamzadeh, K. Lee, and K. Lee. Dpok: Reinforcement learning for fine-tuning text-to-image diffusion models, 2023. [18] Z. Fu, R. He, W. Shang, X. Ma, L. Wang, C. Liu, and S. Fu. Flowawr: Online adaptive flow reinforcement via advantage-weighted rectification, 2026. [19] D. Ghosh, H. Hajishirzi, and L. Schmidt. Geneval: An object-focused framework for eval-uating text-to-image alignment, 2023. [20] R. Greenwood, S. G. Hanson, A. Shleifer, and J. A. Sørensen. Predictable financial crises. 
+
+The Journal of Finance , 77(2):863–921, 2022. [21] Z. Guo, J. Sheng, D. D. Yao, and W. Tang. Improved techniques for fine-tuning flow models via adjoint matching: a deterministic control pipeline, 2026. [22] Z. Guo, W. Tang, and R. Xu. Conditional diffusion guidance under hard constraint: Astochastic analysis approach. arXiv preprint arXiv:2602.05533 , 2026. [23] J. Ho and T. Salimans. Classifier-free diffusion guidance, 2022. [24] P. Holderrieth, D. Chen, L. Eyring, I. Shah, G. Anantharaman, Y. He, Z. Akata, T. Jaakkola, N. M. Boffi, and M. Simchowitz. Diamond maps: Efficient reward alignment via stochastic flow maps, 2026. [25] C.-W. Huang, J. H. Lim, and A. Courville. A variational perspective on diffusion-based gen-erative models and score matching. In Advances in Neural Information Processing Systems ,volume 34, 2021. [26] H. Kim, T. Lee, H. Kim, and G. D. Veciana. Generating informative samples for risk-averse fine-tuning of downstream tasks. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [27] Y. Kirstain, A. Polyak, U. Singer, S. Matiana, J. Penna, and O. Levy. Pick-a-pic: An open dataset of user preferences for text-to-image generation, 2023. [28] J. Lee, J. Chang, J. Kim, and J. C. Ye. Reward score matching: Unifying reward-based fine-tuning for flow and diffusion models, 2026. [29] S. Levine. Reinforcement learning and control as probabilistic inference: Tutorial and review. arXiv preprint arXiv:1805.00909 , 2018. [30] J. Li, Y. Cui, T. Huang, W. Kong, Y. Cheng, C. Zeng, Y. Ma, C. Fan, M. Yang, Z. Zhong, and L. Bo. Mixgrpo: Unlocking flow-based grpo efficiency with mixed ode-sde, 2026. [31] X. Li, Y. Zhao, C. Wang, G. Scalia, G. Eraslan, S. Nair, T. Biancalani, S. Ji, A. Regev, S. Levine, and M. Uehara. Derivative-free guidance in continuous and discrete diffusion models with soft value-based decoding, 2024. [32] J. Liu, G. Liu, J. Liang, Y. Li, J. Liu, X. Wang, P. Wan, D. Zhang, and W. Ouyang. Flow-grpo: Training flow matching models via online rl, 2025. [33] C. Lu, Y. Zhou, F. Bao, J. Chen, C. Li, and J. Zhu. Dpm-solver++. Machine Intelligence Research , 22(4):730–751, June 2025. [34] J. Pachebat, G. Conforti, A. Durmus, and Y. Janati. Iterative tilting for diffusion fine-tuning, 2025. 12 [35] P. Potaptchik, C.-K. Lee, and M. S. Albergo. Tilt matching for scalable sampling and fine-tuning, 2025. [36] P. Potaptchik, A. Saravanan, A. Mammadov, A. Prat, M. S. Albergo, and Y. W. Teh. Meta flow maps enable scalable reward alignment, 2026. [37] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, G. Krueger, and I. Sutskever. Learning transferable visual models from natural language supervision, 2021. [38] C. Schuhmann, R. Beaumont, R. Vencu, C. Gordon, R. Wightman, M. Cherti, T. Coombes, A. Katta, C. Mullis, M. Wortsman, P. Schramowski, S. Kundurthy, K. Crowson, L. Schmidt, R. Kaczmarczyk, and J. Jitsev. Laion-5b: An open large-scale dataset for training next generation image-text models, 2022. [39] J. Sheng, H. Zhao, H. Chen, D. D. Yao, and W. Tang. Understanding sampler stochasticity in training diffusion models for RLHF. arXiv preprint arXiv:2510.10767 , 2025. [40] R. Singhal, Z. Horvitz, R. Teehan, M. Ren, Z. Yu, K. McKeown, and R. Ranganath. Ageneral framework for inference-time scaling and steering of diffusion models, 2025. [41] W. Tang and H. Zhao. Score-based diffusion models via stochastic differential equations. 
+
+Statistic Surveys , 19:28–64, 2025. [42] M. Uehara, Y. Zhao, T. Biancalani, and S. Levine. Understanding reinforcement learning-based fine-tuning of diffusion models: A tutorial and review. arXiv preprint arXiv:2407.13734 , 2024. [43] B. Wallace, M. Dang, R. Rafailov, L. Zhou, A. Lou, S. Purushwalkam, S. Ermon, C. Xiong, S. Joty, and N. Naik. Diffusion model alignment using direct preference optimization, 2023. [44] G. I. Winata, H. Zhao, A. Das, W. Tang, D. D. Yao, S.-X. Zhang, and S. Sahu. Preference tuning with human feedback on language, speech, and vision tasks: a survey. J. Artificial Intelligence Res. , 82:2595–2661, 2025. [45] L. Wu, B. L. Trippe, C. A. Naesseth, D. M. Blei, and J. P. Cunningham. Practical and asymptotically exact conditional sampling in diffusion models, 2024. [46] X. Wu, Y. Hao, K. Sun, Y. Chen, F. Zhu, R. Zhao, and H. Li. Human preference score v2: A solid benchmark for evaluating human preferences of text-to-image synthesis, 2023. [47] J. Xu, X. Liu, Y. Wu, Y. Tong, Q. Li, M. Ding, J. Tang, and Y. Dong. Imagereward: Learning and evaluating human preferences for text-to-image generation, 2023. [48] Y. Xu, Y. Zhang, S. Luo, L. Wang, and D. He. Designing reinforcement learning for diffusion models: A unified path-space view, 2026. [49] S. Xue, C. Ge, S. Zhang, Y. Li, and Z.-M. Ma. Advantage weighted matching: Aligning rl with pretraining in diffusion models, 2026. [50] Z. Xue, J. Wu, Y. Gao, F. Kong, L. Zhu, M. Chen, Z. Liu, W. Liu, Q. Guo, W. Huang, and P. Luo. Dancegrpo: Unleashing grpo on visual generation. arXiv preprint arXiv:2505.07818 ,2025. [51] R. Zhang, P. Isola, A. A. Efros, E. Shechtman, and O. Wang. The unreasonable effectiveness of deep features as a perceptual metric, 2018. 13 [52] H. Zhao, H. Chen, J. Zhang, D. D. Yao, and W. Tang. Scores as Actions: a framework of fine-tuning diffusion models by continuous-time reinforcement learning. arXiv preprint arXiv:2409.08400 , 2024. [53] H. Zhao, H. Chen, J. Zhang, D. D. Yao, and W. Tang. Scores as Actions: fine tuning diffusion generative models by continuous-time reinforcement learning. In ICML , 2025. [54] K. Zheng, H. Chen, H. Ye, H. Wang, Q. Zhang, K. Jiang, H. Su, S. Ermon, J. Zhu, and M.-Y. Liu. Diffusionnft: Online diffusion reinforcement with forward process. arXiv preprint arXiv:2509.16117 , 2026. [55] W. Zhou, X. Zhu, L. Kong, B. Chen, L. Zhang, Y. Liang, X. Hou, Y. Tian, X. Sun, Y. Wang, L. Li, S. Wu, L. Qu, F. Li, W. Liu, J. McAuley, and T.-S. Chua. On-policy self-distillation in diffusion models, 2026. [56] Q. Zhu, Z. Ye, H. Liu, Z. Wang, and M. Chen. Training-free adaptation of diffusion models via doob’s h-transform, 2026. 14 A Relation between score and velocity 
+
+Consider the rectified-flow interpolation 
+
+Xt = (1 − t)X0 + tϵ, ϵ ∼ N (0 , I ).
+
+The corresponding velocity field is 
+
+v(x, t ) = E[ϵ − X0 | Xt = x] .
+
+Conditioned on X0, we have 
+
+Xt | X0 ∼ N  (1 − t)X0, t 2I ,
+
+and hence 
+
+∇x log pt(x | X0) = − x − (1 − t)X0
+
+t2 = − ϵt .
+
+Using the score marginalization identity, 
+
+∇x log pt(x) = E[∇x log pt(x | X0) | Xt = x] ,
+
+we obtain 
+
+∇x log pt(x) = − 1
+
+t E[ϵ | Xt = x] .
+
+Therefore, 
+
+E[ϵ | Xt = x] = x + (1 − t)E[ϵ − X0 | Xt = x] = x + (1 − t)v(x, t ).
+
+Substituting this into the previous expression gives 
+
+∇x log pt(x) = − x + (1 − t)v(x, t )
+
+t .
+
+Therefore, we have 
+
+v(x, t ) = − x + t∇x log pt(x)1 − t .
+
+# B Alternative Estimator of ∇x log h [26]: 
+
+Approximate h(x, t, c ) ≈ w(ˆ x0(x, t, c )) via the Tweedie point estimate ˆx0(x, t, c ) = x − t v old (x, t, c ),
+
+so that ∇x log h(x, t, c ) ≈ ∂x ˆx0(x, t, c )⊤u, with u := ∇ˆx0 log w(ˆ x0(x, t, c )). Moreover, we should avoid the Jacobian ∂x ˆx0 via a finite-difference step of size ϵ > 0: 
+
+\∇ log hB = 11 − t
+
+
+
+u + t2
+
+ϵ
+
+
+
+∇x log pold t (x + ϵu | c) − ∇ x log pold t (x | c)
+
+
+
+, (B.1) where ∇x log pold t (x | c) = − x+(1 −t)vold (x,t,c ) 
+
+> t
+
+. This method doesn’t require M rollouts in Estima-tor 3.2, only 2 evaluations of vold plus one backward pass through w. However, it requires w to be differentiable. 
+
+# C Relation to Diffusion Negative-aware Fine-Tuning (NFT) 
+
+DiffusionNFT[54] arrives at a guidance mechanism built from the optimality variable r(x0, c ) = 
+
+p(O=1 | x0, c ), which is exactly our weight w(x0). We show that its guidance direction, and both its single-branch and double-branch training objectives, are special cases of the h-transform framework developed above. 15 C.1 Distribution split coefficient α(xt) is equvalent to h(xt, t, c )
+
+DiffusionNFT defines π+(x0 | c) := πold (x0 | O=1 , c ) and π−(x0 | c) := πold (x0 | O=0 , c ). It can be shown that the posterior distribution of old policy can be seperated as 
+
+πold  
+
+> 0|t
+
+(x0 | xt, c ) = α(xt)π+0|t(x0 | xt, c ) + [1 − α(xt)] π−
+
+> 0|t
+
+(x0 | xt, c ),
+
+where 
+
+α(xt) := π+ 
+
+> t
+
+(xt | c)
+
+πold t (xt | c) · Eπold (x0|c)[w(x0)] .
+
+Also, 
+
+vold (xt, t, c ) = α(xt)v+(xt, t, c ) + [1 − α(xt)] v−(xt, t, c ). (C.1) Since π+(x0 | c) = pold (x0 | O=1 , c ) = pft (x0 | c) by definition, we have π+ 
+
+> t
+
+= pft  
+
+> t
+
+, and from equation 2.1, 
+
+pft  
+
+> t
+
+(xt | c)
+
+pold t (xt | c) = h(xt, t, c )
+
+Z(c) .
+
+Since Eπold (x0|c)[w(x0)] = Z(c), substituting gives 
+
+α(xt) = h(xt, t, c )
+
+Z(c) · Z(c) = h(xt, t, c ).
+
+As noted above, π+ 
+
+> t
+
+≡ pft  
+
+> t
+
+as distributions, hence their posteriors over x0 given xt coincide, and since the velocity field is a linear functional of the posterior mean, 
+
+v+(xt, t, c ) = vft (xt, t, c ) = vbase (xt, t, c ) − t
+
+1 − t ∇x log h(xt, t, c ).
+
+C.2 The Guidance Direction ∆ and v− as Anti-Guidance 
+
+According to equation C.1, vold , v +, v − are on the same line. DiffuionNFT defines velocity improvement direction ∆ as: ∆ := α(xt) [ v+ − vold ] = [1 − α(xt)] [ vold − v−].
+
+Using α = h and v+ − vold = vft − vold = − t 
+
+> 1−t
+
+∇x log h,∆ = h ·
+
+
+
+− t
+
+1 − t ∇x log h
+
+
+
+= − t
+
+1 − t h ∇x log h = − t
+
+1 − t ∇xh, 
+
+using h∇ log h = ∇h. That is, ∆ is the (unnormalized) gradient ∇xh, rescaled by − t 
+
+> 1−t
+
+.For v−: by the same construction with w−(x0) := 1 − w(x0), π− = pold (· | O=0 , c ) has 
+
+h−(xt, t, c ) = 1 − h(xt, t, c ), and 
+
+v−(xt, c, t ) = vold (xt, t, c ) − t
+
+1 − t ∇x log  1 − h(xt, t, c ).
+
+Substituting into the first form of ∆, with ∇x log(1 − h) = −∇ xh/ (1 − h), 
+
+−[1 − h]
+
+h
+
+vold − v−i
+
+= −[1 − h] · t
+
+1 − t · ∇xh
+
+1 − h = − t
+
+1 − t ∇xh, 
+
+confirming consistency. Thus v− is precisely the h-transform velocity for the complementary 
+
+event {O = 0 }: it is not an independent construction but an “anti-guidance” field pointing away from the optimal region. 16 C.3 Double-Branch Optimal Velocity 
+
+DiffusionNFT trains vθ (it acts as an anchor for improvement guidance while training, and used for inference after training) via 
+
+L(θ) = Ec,π old (x0|c),t 
+
+h
+
+w(x0) ∥v+ 
+
+> θ
+
+− v∥22 + (1 − w(x0)) ∥v− 
+
+> θ
+
+− v∥22
+
+i
+
+,
+
+where 
+
+v+ 
+
+> θ
+
+:= (1 − β)vold + βv θ, v− 
+
+> θ
+
+:= (1 + β)vold − βv θ. (C.2) The ’good velocity’ is parametrized as a linear combination between anchor vθ and vold , and ’bad velocity’ is pushing vold to the opposite direction from the ’good’ one. By definition pft (x0 | c) = w(x0) 
+
+> Z(c)
+
+pold (x0 | c), i.e. 
+
+w(x0) pold (x0 | c) = Z(c) pft (x0 | c).
+
+Multiplying both sides by the forward transition kernel ϕ(xt | x0), which is shared by pold and 
+
+pft , and applying Bayes’ rule p(x0 | c)ϕ(xt | x0) = pt(xt | c) p0|t(x0 | xt, c ) on each side: 
+
+w(x0) pold t (xt | c) πold  
+
+> 0|t
+
+(x0 | xt, c ) = Z(c) pft  
+
+> t
+
+(xt | c) π+0|t(x0 | xt, c ).
+
+Dividing both sides by pold t (xt | c) and using pft  
+
+> t
+
+(xt | c)
+
+pold t (xt | c) = h(xt, t, c )
+
+Z(c) in Equation 2.1 
+
+w(x0) πold  
+
+> 0|t
+
+(x0 | xt, c ) = Z(c) · h(xt, t, c )
+
+Z(c) · π+0|t(x0 | xt, c ) = h(xt, t, c ) π+0|t(x0 | xt, c ). (C.3) The same argument with w replaced by 1 − w (equivalently h replaced by 1 − h, π+ by π−)gives (1 − w(x0)) πold  
+
+> 0|t
+
+= (1 − h(xt, t, c )) π−
+
+> 0|t
+
+.
+
+Reduction to a weighted regression at fixed xt. In NFT, loss function is defined as 
+
+L(θ, c ) = Eπold (x0,x t|c)[w(x0)∥v+ 
+
+> θ
+
+(xt, t, c ) − v∥22 + (1 − w(x0)) ∥v− 
+
+> θ
+
+(xt, t, c ) − v∥22]Since the joint density πold (x0, x t | c) factorizes as πold t (xt | c) πold  
+
+> 0|t
+
+(x0 | xt, c ), the inner expecta-tion of the positive term at fixed ( xt, t, c ) is 
+
+Z
+
+w(x0) πold  
+
+> 0|t
+
+(x0 | xt, c ) ∥v+ 
+
+> θ
+
+−v∥2 dx 0 = h(xt, t, c )
+
+Z
+
+π+0|t(x0 | xt, c ) ∥v+ 
+
+> θ
+
+−v∥2 dx 0 = h Eπ+0|t
+
+∥v+ 
+
+> θ
+
+−v∥2,
+
+using the identity C.3 and v+ 
+
+> θ
+
+being independent of x0. Since v+ 
+
+> θ
+
+is a constant w.r.t. x0,
+
+Eπ+0|t
+
+∥v+ 
+
+> θ
+
+− v∥2 = v+ 
+
+> θ
+
+− Eπ+0|t
+
+[v] 2 + V ar π+0|t
+
+(v)
+
+| {z } 
+
+> independent of θ
+
+= ∥v+ 
+
+> θ
+
+− v+∥2 + C+,
+
+where Eπ+0|t
+
+[v] = v+(xt, c, t ) by definition of the velocity field. The negative term reduces iden-tically to (1 − h)∥v− 
+
+> θ
+
+− v−∥2 + C−
+
+. Dropping the θ-independent constants, the loss at fixed 
+
+xt, t, c is equivalent to minimizing 
+
+h ∥v+ 
+
+> θ
+
+− v+∥22 + (1 − h) ∥v− 
+
+> θ
+
+− v−∥22.
+
+Let Y := vθ−vold . Let D := v+−vold and D− := v−−vold . Substituting the parameterization, 
+
+v+ 
+
+> θ
+
+− v+ = (1 − β)vold + βv θ − (vold + D) = β(vθ − vold ) − D = β
+
+
+
+Y − Dβ
+
+
+
+,v− 
+
+> θ
+
+− v− = (1 + β)vold − βv θ − (vold + D−) = −β(vθ − vold ) − D− = −β
+
+
+
+Y + D−
+
+> β
+
+
+
+.
+
+Hence ∥v+ 
+
+> θ
+
+− v+∥2 = β2∥Y − D/β ∥2 and ∥v− 
+
+> θ
+
+− v−∥2 = β2∥Y + D−/β ∥2; factoring out β2 > 0(which does not affect the minimizer) gives the weighted least-squares problem 
+
+f (Y ) = h Y − Dβ 
+
+> 22
+
++ (1 − h) Y + D−
+
+> β
+> 22
+
+.
+
+17 Solving for the minimizer. f is a weighted sum of squared distances to two points, D/β 
+
+(weight h) and −D−/β (weight 1 − h); its minimizer is the weighted average 
+
+Y ∗ = h · Dβ + (1 − h) ·
+
+
+
+− D−
+
+β
+
+
+
+= hD − (1 − h)D−
+
+β .
+
+Since vold = h v + + (1 − h) v−, subtracting vold from both sides gives 0 = hD + (1 − h)D−, i.e. 
+
+hD = −(1 − h)D−. Substituting, 
+
+Y ∗ = hD − (1 − h)D−
+
+β = hD + hD β = 2hD β
+
+=⇒ vθ∗ = vold − 2h(xt, t, c )
+
+β · t
+
+1 − t ∇x log h(xt, t, c ).
+
+For fixed scalar β, this is a state-dependent damped version of vft : the guidance strength scales with the local optimality probability h, vanishing where h → 0. Therefore our algorithm is choosing β in the Definition C.2 to be 2 h(xt, t, c ). This is rea-sonable because when you have ( xt, t | c) is more likely to be optimal, that is h(xt, t, c ) > 0.5, we are more confident to push fine-tuned sampling strategy vθ to be farther on the current improvement direction. On the other hand if h(xt, t, c ) < 0.5, we are not willing to trust vθ
+
+that much and keep closer to vold . However, in DiffusionNFT, they don’t estimate h-function explicitly, so choosing β as a function depending on ( xt, t, c ) is not viable. They have to leave β
+
+as a hyper-parameter (in their implementation, β = 1 is default value). Our algorithm provided more flexibility on this aspect. 
+
+C.4 Single-Branch Optimal Velocity 
+
+Training on the positive branch alone, L+(θ) = Ec,t,π old (x0|c)
+
+w ∥v+ 
+
+> θ
+
+− v∥22
+
+, and using w π old  
+
+> 0|t
+
+=
+
+h π +0|t,
+
+L+(θ) = Ec,t,x t
+
+h
+
+h(xt, t, c ) · Ex0∼π+0|t
+
+∥v+ 
+
+> θ
+
+− v∥22
+
+i
+
+.
+
+Pointwise in xt, the L2-minimizer is the conditional mean regardless of the (positive) weight h:
+
+v+∗ 
+
+> θ
+
+= Eπ+0|t
+
+[v] = v+ = vft =⇒ v∗ 
+
+> θ
+
+= vbase + Dβ = vbase − 1
+
+β · t
+
+1 − t ∇x log h, 
+
+which is exact , with no h-dependent damping, for any fixed β.
+
+C.5 Unifying the Three via h
+
+Comparing the two population optima: double-branch: vθ∗ = vbase − 2hβ · t
+
+1 − t ∇ log h, single-branch: vθ∗ = vbase − 1
+
+β · t
+
+1 − t ∇ log h. 
+
+Setting β(xt, t, c ) = 2 h(xt, t, c ) in the double-branch objective exactly cancels the damping factor, giving vθ∗ = vft ; equivalently, this coincides with the single-branch optimum at β = 1. Thus double-branch , β = 2 h ⇐⇒ single-branch , β = 1 ⇐⇒ v∗ 
+
+> θ
+
+= vft = vbase − t
+
+1 − t ∇x log h. 
+
+# D Discussion on Contingency Table 
+
+D.1 Birthday-Deathday Data 
+
+The following Table 4 is taken from the classical contingency-table example of [12]. 18 Birth \ Death Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec Total Jan 1 0 0 0 1 2 0 0 1 0 1 0 6Feb 1 0 0 1 0 0 0 0 0 1 0 2 5Mar 1 0 0 0 2 1 0 0 0 0 0 1 5Apr 3 0 2 0 0 0 1 0 1 3 1 1 12 May 2 1 1 1 1 1 1 1 1 1 1 0 12 Jun 2 0 0 0 1 0 0 0 0 0 0 0 3Jul 2 0 2 1 0 0 0 0 1 1 1 2 10 Aug 0 0 0 3 0 0 1 0 0 1 0 2 7Sep 0 0 0 1 1 0 0 0 0 0 1 0 3Oct 1 1 0 2 0 0 1 0 0 1 1 0 7Nov 0 1 1 1 2 0 0 2 0 1 1 0 9Dec 0 1 1 0 0 0 1 0 0 0 0 0 3Total 13 4 7 10 8 4 5 3 4 9 7 8 82 
+
+Table 4: Birthday and death month of 82 descendants of Queen Victoria. 
+
+D.2 Pretraining the Contingency-Table Flow Model 
+
+To obtain the pretrained generative model used in the contingency-table experiment, we first construct a training distribution over 12 ×12 nonnegative tables with a fixed total count N = 82. For each training sample, we randomly generate an integer table X ∈ Z12 ×12 + satisfying 
+
+X
+
+> i,j
+
+Xij = N. 
+
+We then normalize the table by its total count, 
+
+Pij = Xij 
+
+N , X
+
+> i,j
+
+Pij = 1 ,
+
+so that each table can be viewed as a probability vector on the 144-dimensional simplex. Acontinuous flow model is pretrained on these normalized probability tables. At inference time, the generated probability table bP is converted back to an integer contin-gency table with total count exactly N . We first compute 
+
+Yij = N bPij , eXij = ⌊Yij ⌋.
+
+Since rounding down may leave a residual 
+
+R = N − X
+
+> i,j
+
+eXij ,
+
+we assign one additional count to the R entries having the largest fractional parts 
+
+Yij − ⌊ Yij ⌋.
+
+This largest-remainder rounding procedure guarantees 
+
+X
+
+> i,j
+
+eXij = N
+
+while keeping the resulting integer table as close as possible to the continuous model output under this rounding scheme. If the total number is not hard-constrained to be the total number, we could let 
+
+Yij = N bPij , eXij = round( Yij ).
+
+19 E Additional Details on Text-to-Image Task 
+
+ODE Integration. Roll-out time steps are 40 for both training and inference. Note that we only solve the flow ODE step-by-step till ∇ log h, then use one step estimation no matter using Estimator 3.2 or B.1. However, the solver used in training roll-outs is Euler, and during inference is DPM-Solver++[33], and CFG scale for online h-guidance w/ CFG is 4 by default, for SD3.5-M is 3 .5 by default (both of them are taken due to the relatively best performance among different metrics). 
+
+Online Data Collection. Slow mixed policy is used to generate online samples. Follow the default design used in DiffusionNFT[54], ηk = min(0 .001 ·k, 0.5), which means the data collection starts from on-policy, and gradually converges to 0 .5 · vold + 0 .5 · vθ after 500 iterations. On the other hand, for the off policy guidance baseline, the roll-out policy and regression target are based on the base model vbase .
+
+Other Configurations. In our T2I implementation, 7 Nvidia L40S is used. For each iteration per GPU, 4 prompts are randomly picked, and 12 initial noise is generated for each prompt. We do not use all time steps in training because two denominators in Flow-equivalent SDE 3.1 will approach to zero when t → 1, therefore we set tmin = 0 .05 and tmax = 0 .9. Moreover, stochasticity parameter λt = 1 in SDE 3.1. Learning Rate is 3 e − 5, Gradient Clip is set to be 1.0, and slight LoRA regularization 1 e − 5 is applied. 
+
+# F Additional Qualitative Comparison 
+
+In this section, we will provide more images showing the aesthetic quality and semantic alignment provided by our algorithm. For baselines, SD3.5-Medium, DiffusionNFT, FlowGRPO and off-policy h-guidance are compared in images. For aesthetic quality, refer to Figure 3. For semantic alignment, refer to Figure 4. 20 Prompt 1 Prompt 2 Prompt 3 Prompt 4 SD3.5M (w/o CFG) 
+
+SD3.5M (w/ CFG) 
+
+DiffusionNFT 
+
+FlowGRPO 
+
+Off-policy 
+
+h-guidance 
+
+DOHF (w/o CFG) 
+
+DOHF (w/ CFG) 
+
+Figure 3: Qualitative comparison across different methods and prompts. The prompts are: (Prompt 1) “Pixel art of a space station launching with two suns and a comet, featuring a retro space helmet, minigun, and a bright explosion in a dream-like atmosphere with CGA shading.”; (Prompt 2) “The devil using a heat press.”; (Prompt 3) “Ink drawing of a Shaolin monk in fighting pose.”; (Prompt 4) “A side view of a fox, with a flat design, Artwork of t-shirt graphic.” 21 Prompt 1 Prompt 2 Prompt 3 Prompt 4 SD3.5M (w/o CFG) 
+
+SD3.5M (w/ CFG) 
+
+DiffusionNFT 
+
+FlowGRPO 
+
+Off-policy 
+
+h-guidance 
+
+DOHF (w/o CFG) 
+
+DOHF (w/ CFG) 
+
+Figure 4: Qualitative comparison across different methods and prompts. The prompts are: (Prompt 1, color) “A young woman with red hairs and green eyes”; (Prompt 2, spatial) “A penguin astronaut, in a penguin spacesuit, standing next to the apollo landing”; (Prompt 3, text) “A pikachu holding a sign that says ”I’m cute!” ”; (Prompt 4, text) “Gandalf holding a sign with a text ”you shall not pass” ”. 22
