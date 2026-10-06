@@ -1,0 +1,1533 @@
+Title: Light Entropic Optimal Transport on Riemannian Manifolds
+
+URL Source: https://arxiv.org/pdf/2610.03085v1
+
+Published Time: Mon, 05 Oct 2026 01:15:37 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+Preprint 
+
+# LIGHT ENTROPIC OPTIMAL TRANSPORT ON RIEMANNIAN MANIFOLDS 
+
+Xavier Aramayo-Carrasco 
+
+Applied AI Institute, Moscow, Russia 
+
+Petr Mokrov 
+
+Applied AI Institute, Moscow, Russia 
+
+Alexander Korotin 
+
+Applied AI Institute AXXX, Moscow, Russia 
+
+## ABSTRACT 
+
+Entropic Optimal Transport (EOT) has become a practical framework for learning stochastic couplings between complex distributions, with applications in genera-tive modeling and domain adaptation. However, most EOT solvers are designed for Euclidean spaces, while manifold extensions remain limited and often rely on costly iterative methods, simulated dynamics, or generic neural models that do not fully exploit the underlying geometry. We introduce ManifoldLightOT, a light approach for learning kernel-induced EOT couplings directly on common mani-folds. Using the kernel form of the EOT solution, we construct geometry-specific Gibbs kernels together with compatible potential parameterizations for spheres, tori, SO(3) , and SE(3) . These choices yield closed-form normalization and di-rectly sampleable conditional distributions. Our formulation naturally extends to products of manifolds, making it applicable to more complex geometries. The pa-rameters of the potentials are optimized directly from samples using Monte Carlo estimates of the learning objective. Through synthetic and real-world experiments, we show that ManifoldLightOT often outperforms existing manifold OT methods while retaining direct sampling. 
+
+## 1 INTRODUCTION 
+
+In recent years, developing computationally efficient solvers for Optimal Transport (OT) and En-tropic Optimal Transport (EOT) problems (Cuturi, 2013; Villani, 2008) has attracted considerable interest. OT seeks a coupling between prescribed source and target distributions that minimizes an expected transportation cost, while EOT augments this objective with an entropic regularization term. A well-established class of solvers operates on discrete probability distributions, representing the coupling as a matrix whose dimensions depend on the numbers of source and target samples; see Peyr´ e et al. (2019) for a survey. In this work, we focus on continuous solvers (Gushchin et al., 2023b; Korotin et al., 2021), which learn conditional distributions or transport maps (plans), typi-cally parameterized by neural networks, from samples of the source and target distributions. The EOT formulation is equivalent to the static Schr¨ odinger bridge (SB) problem (Schr¨ odinger, 1931; 1932; L´ eonard, 2013) when the transport cost is induced by the reference measure of the SB. Several neural approaches have been proposed in recent years to solve the EOT or SB problems (Mokrov et al., 2024; Bortoli et al., 2023; Tong et al., 2024; Gushchin et al., 2023a; Korotin et al., 2024; Persiianov et al., 2026). These solvers support out-of-sample estimation, enabling applica-tions such as image generation, image-to-image translation, domain adaptation, and biological tasks including modeling cell dynamics and predicting cellular responses to perturbations. However, these methods are formulated in Euclidean spaces, where source and target samples are elements of RD .However, these methods may not be directly adjusted when data are supported on curved manifolds. Switching on manifold support has proved effective across several generative modeling frameworks, including flow matching (Chen & Lipman, 2024), continuous normalizing flows (Mathieu & Nickel, 2020), and score-based diffusion models (Bortoli et al., 2022). Manifold-aware formulations have also been developed for neural OT and EOT, notably Riemannian Neural OT (RNOT) (Micheli et al., 2026a) and Entropic Riemannian Neural OT (ERNOT) (Micheli et al., 2026b), respectively. In prac-tice, RNOT approximates the c-transform through an additional inner optimization, while ERNOT relies on minibatch or finite-support approximations of the soft c-transform and the induced Gibbs conditionals. These approximations can introduce additional optimization error, sampling bias, and 1arXiv:2610.03085v1 [cs.LG] 2 Oct 2026 Preprint sensitivity to the chosen target support in high-dimensional settings. Motivated by these observa-tions, we propose ManifoldLightOT, an EOT solver with geometry-specific potential parameteriza-tions for several classes of Riemannian manifolds. Following the terminology of LightSB (Korotin et al., 2024), we use the word “light” to denote parameterizations that yield closed-form expressions for the normalizing term and conditional distribution of the EOT coupling. Our main contribution is ManifoldLightOT, a light solver for kernel-induced EOT problems on spheres, tori, SO(3) , and SE(3) . The method combines geometry-specific Gibbs kernels with com-patible potential families, yielding closed-form normalization functions and directly sampleable conditional distributions. We further show that these tractability properties are preserved under Cartesian products, extending the construction to heterogeneous product manifolds. The resulting solver is trained using Monte Carlo estimates of the learning objective from unpaired source and target samples, without additional inner optimization problems. We evaluate ManifoldLightOT on synthetic transport problems across the considered manifolds and on real-world manifold-valued data, comparing its performance with other existing OT methods. 
+
+Notation. Let M denote the underlying manifold, m its Riemannian volume measure, which re-duces to the standard Lebesgue measure when M = Rd, and P(M) the set of probability measures on M. We denote the source and target measures by μ, ν ∈ P (M), assumed to be absolutely con-tinuous with respect to m, and their corresponding points by x, y ∈ M . We use μ(x) and ν(y) to denote their densities with respect to m. For a coupling q ∈ Π( μ, ν ), we denote its density with re-spect to m⊗m by q(x, y ), and its conditional density by q(y|x). Accordingly, q(x, y ) = μ(x)q(y|x),the marginal constraints require R 
+
+> M
+
+q(x, y ) dm (y) = μ(x) and R 
+
+> M
+
+q(x, y ) dm (x) = ν(y).
+
+## 2 BACKGROUND 
+
+In this section, we recall the main concepts underlying our approach. We first review the formula-tion of entropic optimal transport on manifolds and the kernel characterization of its optimal cou-pling. We then recall its connection to the static Schr¨ odinger bridge problem. Finally, we review the LightSB solver (Korotin et al., 2024) as a representative light approach for parameterizing the optimal coupling, while noting that its construction is restricted to Euclidean spaces. 
+
+Entropic Optimal Transport on Riemannian Manifolds. We consider the Entropic Optimal Transport (EOT) problem directly on a Riemannian manifold M. For simplicity, throughout the paper we refer to this manifold formulation simply as EOT. Let μ, ν ∈ P (M) be the source and target probability measures, respectively, and let Π( μ, ν ) denote the set of couplings on M × M 
+
+with marginals μ and ν. Given a transport cost c : M × M → R and a regularization parameter 
+
+ε > 0, the EOT problem (Cuturi, 2013; Genevay, 2019) is defined as 
+
+q∗ ∈ arg min 
+
+> q∈Π( μ,ν )
+
+E(x,y )∼q [c(x, y )] − εH( q) . (1) Here, H( q) denotes the entropy of the coupling density q(x, y ) with respect to the product Rieman-nian volume measure m ⊗ m. We assume the usual well-posedness conditions for continuous EOT, including absolute continuity, finite entropy, and finite expected cost. For SE(3) , we also assume finite translational second moments. While many manifold OT methods use the squared geodesic cost c(x, y ) = 12 d2
+
+> M
+
+(x, y ), our formulation uses geometry-specific kernel-induced costs. 
+
+Kernel characterization of the EOT solution. The solution q∗ of the EOT problem in equa-tion 1 admits a Gibbs kernel representation (Genevay, 2019; Peyr´ e et al., 2019). In particu-lar, for a given cost c and regularization parameter ε, the associated Gibbs kernel is defined as 
+
+Kε(x, y ) = exp ( −c(x, y )/ε ) . With this kernel, the density of the optimal EOT coupling with re-spect to the product Riemannian volume measure m ⊗ m admits the following form 
+
+q∗(x, y ) = u∗(x)Kε(x, y )v∗(y), (2) where u∗ and v∗ are positive scaling functions chosen such that q∗ satisfies the marginal constraints 
+
+μ and ν. Using the source marginal constraint, the optimal coupling in equation 2 can equivalently be expressed through its conditional distribution as 
+
+q∗(y|x) = 1
+
+r∗(x) Kε(x, y )v∗(y), (3) 2Preprint where r∗(x) = R 
+
+> M
+
+Kε(x, y )v∗(y) dm (y) is the corresponding normalization function. The EOT problem in equation 1 is equivalent to the static Schr¨ odinger bridge problem (Schr¨ odinger, 1931; 1932; L´ eonard, 2013) when the transport cost is induced by the reference measure from the SB. 
+
+Light Parameterizations of the EOT Solution. Under the equivalence described above, EOT and static SB share the same optimal coupling q∗. Following Light Schr¨ odinger Bridge (LightSB) (Korotin et al., 2024), a parametric coupling qθ ≈ q∗ is learned by minimizing the Kullback-Leibler (KL) divergence KL( q∗ ∥ qθ ), which is equivalent up to constants to minimizing the surrogate loss 
+
+Ex∼μ[log rθ (x)] − Ey∼ν [log vθ (y)] . Therefore, learning the conditional EOT solution in equation 3 can be approached by choosing a suitable parametric scaling function vθ . In the Euclidean setting, LightSB uses a light parameterization for vθ as a learnable weighted mixture of Gaussian densities, 
+
+vθ (y) = 
+
+> K
+
+X
+
+> k=1
+
+αk N (y|μk, εS k).
+
+Here, the optimizable parameters are θ = {αk, μ k, S k}Kk=1 , where αk > 0 are mixture weights, 
+
+μk ∈ Rd are component means, and Sk ∈ Rd×d are positive-definite covariance parameters. This parameterization leads to closed-form expressions for the normalizing function rθ (x) and the condi-tional coupling qθ (y|x). Together with the surrogate loss above, these closed forms enable training from independent samples of μ and ν, as well as direct sampling from qθ (y|x). However, this con-struction is based on Gaussian distributions and Euclidean identities, so it is not directly applicable to manifold-supported distributions. 2.1 CONTINUOUS EOT L EARNING SETUP 
+
+Although the EOT problem in equation 1 is formulated in terms of the source and target measures 
+
+μ and ν, in practical applications these distributions are typically not available explicitly but only through empirical samples. Below we formalize the continuous EOT setup considered in our work. We assume that the learner is given empirical datasets {x(i)}Ni=1 and {y(j)}Mj=1 , with x(i), y (j) ∈M, consisting of i.i.d. samples from unknown source and target measures μ, ν ∈ P (M), re-spectively. The two datasets are assumed to be independent and unpaired. The task is to use these samples to learn an approximation of the EOT solution q∗ ∈ Π( μ, ν ) in equation 1, and in particular its conditional distribution q∗(y|x).This setup corresponds to continuous EOT learning from empirical samples and should be distin-guished from discrete EOT. Discrete EOT solvers, such as Sinkhorn (Cuturi, 2013) and gradient-based methods (Dvurechensky et al., 2018), treat the samples as empirical measures, bμN =
+
+> 1
+> N
+
+PNi=1 δx(i) and bνM = 1
+
+> M
+
+PMj=1 δy(j) , and return an N × M coupling matrix. Such a solu-tion does not define transport for unseen source points. In contrast, we use the samples as training data to approximate the EOT coupling between measures μ and ν, yielding an out-of-sample model from which ynew can be generated according to an approximation of q∗(y|xnew ) for xnew ∼ μ.Several works extend empirical OT or EOT solutions to unseen samples through map estimation, barycentric projection, or smoothing (H¨ utter & Rigollet, 2021; Pooladian & Niles-Weed, 2021; Deb et al., 2021; Manole et al., 2024; Makkuva et al., 2020). However, they are specialized to quadratic Euclidean costs and rely on structures such as Brenier maps, Euclidean barycenters, or linear smoothers, which do not directly extend to our general kernel-induced costs on manifolds. Al-though SB provides an equivalent formulation of EOT under a suitable reference process (L´ eonard, 2013), but existing continuous SB solvers are typically tied to Euclidean reference processes and kernels (Bortoli et al., 2023; Gushchin et al., 2023a; Tong et al., 2024; Korotin et al., 2024). Adapt-ing them to our geometry-specific Kε would require additional manifold-specific modifications, so we do not include them as direct baselines. We review general-cost continuous EOT solvers in §4. 
+
+## 3 MANIFOLD ENTROPIC OPTIMAL TRANSPORT SOLVER 
+
+The design of ManifoldLightOT is motivated by the observation that tractability (parameterized closed-form solution, direct sampling) in continuous EOT depends on the compatibility between the Gibbs kernel and its associated probability family. In the Euclidean setting, LightSB (Korotin et al., 2024) exploits this compatibility for the quadratic cost through Gaussian kernels and Gaussian 3Preprint mixtures. We adopt this insight as a design criterion for manifold-valued transport. Our method specifies the EOT problem through geometry-aware Gibbs kernels. Each kernel Kε induces the corresponding cost cε(x, y ) = −ε log Kε(x, y ), up to additive constants. The goal is therefore not to approximate squared-geodesic EOT on every manifold, but to construct tractable kernel-induced EOT problems whose associated probability families admit closed-form normalization and conditional sampling. We apply this principle for spheres, tori, SO(3) , SE(3) , and their Cartesian products. We derive the learning objective in §3.1, introduce the manifold-specific constructions in §3.2, and describe training and sampling in §3.3. 3.1 LEARNING OBJECTIVE 
+
+We first describe how the parametric coupling qθ is induced. Given a positive scaling function vθ ,with finite-dimensional parameters θ, we define rθ (x) = R 
+
+> M
+
+Kε(x, y )vθ (y) dm (y) and qθ (y|x) = 
+
+Kε(x, y )vθ (y)/r θ (x). Together with the source marginal, this conditional defines the joint coupling 
+
+qθ (x, y ) = μ(x)qθ (y|x). Thus, qθ is not parameterized as an unrestricted neural coupling; it is determined by the choice of vθ and the fixed Gibbs kernel Kε.Following the same LightSB principle, we learn θ by minimizing the forward KL divergence from the optimal EOT coupling q∗ to the induced coupling qθ :
+
+min  
+
+> θ
+
+KL ( q∗ ∥ qθ ) , (4) where optimal coupling q∗ has form equation 2. Although the optimal coupling q∗ is unknown, the terms in equation 4 that depend on θ can be expressed using only its source and target marginals. In particular, Korotin et al. (2024, Proposition 3.1) show that equation 4 has the same minimizers as 
+
+min  
+
+> θ
+
+L(θ), L(θ) def 
+
+= Ex∼μ [log rθ (x)] − Ey∼ν [log vθ (y)] . (5) Therefore, the objective can be estimated from independent, unpaired samples from μ and ν, without requiring access to or samples from the unknown optimal coupling q∗. Importantly, this objective remains valid on manifolds, since its derivation relies only on the marginal constraints of the optimal coupling and not on the particular geometry of the underlying state space. 3.2 TRACTABLE MANIFOLD -AWARE PARAMETERIZATIONS 
+
+In this subsection, we introduce geometry-specific parameterizations vθ of the optimal scaling func-tion v∗ that yield closed-form expressions for the corresponding normalization function rθ and con-ditional distribution qθ (y|x). We consider spheres ( Sd−1), tori ( Td), the rotation group ( SO(3) ), the special Euclidean group ( SE(3) ), and Cartesian products of these manifolds. We first state a general construction underlying all the proposed parameterizations. 
+
+Proposition 1 (Tractable light parameterizations) . Let Kε be a positive kernel on M × M , and let 
+
+vθ,k : M → R+ be positive potential components such that, for each k, the product Kε(x, y )vθ,k (y)
+
+admits a closed-form normalization rθ,k (x) = R 
+
+> M
+
+Kε(x, y )vθ,k (y) dm (y) and the normalized con-ditional qθ,k (y|x) = Kε(x, y )vθ,k (y)/r θ,k (x) can be sampled directly. For the mixture parameteri-zation vθ (y) = PKk=1 αkvθ,k (y), with αk > 0, it follows that 
+
+rθ (x) = 
+
+> K
+
+X
+
+> k=1
+
+αkrθ,k (x), qθ (y|x) = 
+
+> K
+
+X
+
+> k=1
+
+wθ,k (x)qθ,k (y|x), (6) 
+
+where wθ,k (x) = αkrθ,k (x)/r θ (x). Therefore, the compatibility of Kε and vθ,k yields closed-form normalization and direct conditional sampling for qθ .
+
+It is important to note that the construction in Proposition 1 extends the compatibility princi-ple behind the Gaussian-mixture adjusted-potential parameterization used in LightSB. In the Eu-clidean quadratic-cost setting, this tractable construction can be written using the adjusted inner-product Gibbs kernel with Gaussian-mixture adjusted potentials, i.e., exp( −∥ x − y∥2/(2 ε)) = exp( −∥ x∥2/(2 ε)) exp( ⟨x, y ⟩/ε ) exp( −∥ y∥2/(2 ε)) , so the usual Gaussian Gibbs kernel differs from the inner-product kernel only by separate factors depending on x and y. We next apply this idea to several common non-Euclidean manifolds by constructing compatible choices of Kε, vθ,k , and in-duced costs c(x, y ) for which the normalization and conditional sampling conditions of Proposition 1 are satisfied in closed form. All proofs appear in Appendix A.1. 4Preprint 
+
+Sphere. Let M = Sd−1, with x, y ∈ Sd−1. For g ∈ Rd, define the von Mises-Fisher normalizing function Zd(g) := R 
+
+> Sd−1
+
+exp( g⊤x) dm (x), and let vMF( g) denote the corresponding von Mises-Fisher distribution with natural parameter g.
+
+Kε(x, y ) = exp 
+
+ x⊤yε
+
+
+
+, vθ,k (y) = exp( f ⊤ 
+
+> k
+
+y). (7) 
+
+rθ,k (x) = Zd
+
+
+
+fk + xε
+
+
+
+, qθ,k (·| x) = vMF 
+
+
+
+fk + xε
+
+
+
+. (8) The product Kε(x, y )vθ,k (y) remains in the von Mises-Fisher family, yielding the closed-form nor-malization. The learnable parameters are θ = {αk, f k}Kk=1 , with αk > 0 and fk ∈ Rd. From 
+
+Kε(x, y ) = exp[ −c(x, y )/ε ], this kernel induces the cost c(x, y ) = −x⊤y. Conditional samples are drawn directly from vMF( fk + x/ε ).
+
+Torus. Let M = Td, with x, y ∈ [0 , 2π)d denoting their angular coordinates and xj , y j their j-th coordinates. Define hkj (x) := ( akj +ε−1 cos xj , b kj +ε−1 sin xj )⊤ and ρkj (x) := ∥hkj (x)∥2. Let 
+
+I0 be the modified Bessel function of the first kind and vM( h) the circular von Mises distribution with natural parameter h ∈ R2.
+
+Kε(x, y ) = 
+
+> d
+
+Y
+
+> j=1
+
+exp 
+
+ cos( xj − yj )
+
+ε
+
+
+
+, vθ,k (y) = 
+
+> d
+
+Y
+
+> j=1
+
+exp akj cos yj + bkj sin yj  . (9) 
+
+rθ,k (x) = 
+
+> d
+
+Y
+
+> j=1
+
+2πI 0(ρkj (x)) , qθ,k (·| x) = 
+
+> d
+
+Y
+
+> j=1
+
+vM( hkj (x)) . (10) The learnable parameters are θ = {αk, a k, b k}Kk=1 , with αk > 0 and ak, b k ∈ Rd. The induced cost is c(x, y ) = − Pdj=1 cos( xj − yj ), which is equivalent to c(x, y ) = Pdj=1 [1 − cos( xj − yj )] up to an additive constant. Sampling is done independently for each coordinate from vM( hkj (x)) .
+
+Rotation group. Let M = SO(3) , with x, y represented by unit quaternions in S3, where x and 
+
+−x represent the same rotation. To preserve this antipodal symmetry, we use hyperbolic-cosine kernel and potential components. Let λR > 0 denote a fixed rotational kernel scale, and define 
+
+πk,s (x) := Z4(fk + sλ Rx/ε )/[Z4(fk + λRx/ε ) + Z4(fk − λRx/ε )] for s ∈ {− 1, +1 }.
+
+Kε(x, y ) = cosh 
+
+ λR
+
+ε ⟨x, y ⟩
+
+
+
+, vθ,k (y) = cosh( ⟨fk, y ⟩). (11) 
+
+rθ,k (x) = 12
+
+
+
+Z4
+
+
+
+fk + λR
+
+ε x
+
+
+
++Z4
+
+
+
+fk − λR
+
+ε x
+
+ 
+
+, qθ,k (·| x) = X
+
+> s∈{− 1,+1 }
+
+πk,s (x) vMF 
+
+
+
+fk +s λR
+
+ε x
+
+
+
+.
+
+(12) Using the product identity for two hyperbolic cosines yields the closed-form normalizer above. The learnable parameters are θ = {αk, f k}Kk=1 , with αk > 0 and fk ∈ R4. The kernel induces the cost 
+
+c(x, y ) = −ε log cosh( λR⟨x, y ⟩/ε ). Conditional sampling first draws s according to πk,s (x), then samples from the corresponding von Mises-Fisher distribution and maps the quaternion to SO(3) .
+
+Special Euclidean group. Let M = SE(3) , and write x = ( xt, x R), where xt ∈ R3 is the trans-lational component and xR ∈ S3 is the unit-quaternion representation of the rotational component. We combine an unnormalized Gaussian construction for translations with the SO(3) construction above. Let Ktε(xt, y t) := exp( −∥ xt − yt∥22/(2 σ2 
+
+> ε
+
+)) , and let KRε , rRθ,k , and qRθ,k denote the rotational kernel, normalizer, and conditional from the SO(3) construction. 
+
+Kε(x, y ) = Ktε(xt, y t)KRε (xR, y R),vθ,k (y) = exp 
+
+
+
+− 12 (yt − μk)⊤Σ−1 
+
+> k
+
+(yt − μk)
+
+
+
+cosh( ⟨fk, y R⟩). (13) 
+
+rθ,k (x) = rtθ,k (xt)rRθ,k (xR), qθ,k (y|x) = qtθ,k (yt|xt)qRθ,k (yR|xR). (14) The translational normalizer is rtθ,k (xt) = (2 π)3/2σ3 
+
+> ε
+
+det(Σ k)1/2 det(Σ k +σ2 
+
+> ε
+
+I3)−1/2 exp[ − 12 (xt −
+
+μk)⊤(Σ k +σ2 
+
+> ε
+
+I3)−1(xt −μk)] . The translational conditional is Gaussian, qtθ,k (·| xt) = N (·| ¯μk, A k),5Preprint with Ak = ( σ−2 
+
+> ε
+
+I3 + Σ −1 
+
+> k
+
+)−1 and ¯μk = Ak(σ−2 
+
+> ε
+
+xt + Σ −1 
+
+> k
+
+μk). The learnable parameters are 
+
+θ = {αk, μ k, Σk, f k}Kk=1 , with αk > 0, μk ∈ R3, positive-definite Σk ∈ R3×3, and fk ∈ R4. The product kernel induces the transport cost c(x, y ) = ε∥xt − yt∥22/(2 σ2 
+
+> ε
+
+) − ε log cosh( λR⟨xR, y R⟩/ε ).Sampling draws the translational and rotational components independently from qtθ,k and qRθ,k .
+
+Proposition 2 (Closure under Cartesian products) . Let M = QJj=1 Mj , with product measure m =
+
+NJj=1 mj . Suppose that, for each Mj , the kernel Kε,j and potential component vθ,k,j satisfy the tractability conditions of Proposition 1, with closed-form normalizer rθ,k,j and directly sampleable conditional qθ,k,j . Then, the product parameterization 
+
+Kε(x, y ) = 
+
+> J
+
+Y
+
+> j=1
+
+Kε,j (xj , y j ), vθ,k (y) = 
+
+> J
+
+Y
+
+> j=1
+
+vθ,k,j (yj ) (15) 
+
+also satisfies the conditions of Proposition 1, with 
+
+rθ,k (x) = 
+
+> J
+
+Y
+
+> j=1
+
+rθ,k,j (xj ), qθ,k (y|x) = 
+
+> J
+
+Y
+
+> j=1
+
+qθ,k,j (yj |xj ). (16) 
+
+Therefore, closed-form normalization and direct conditional sampling are preserved. 
+
+Proposition 2 allows the parameterizations introduced above to be combined without additional normalization or sampling procedures. In particular, it directly yields tractable parameterizations on product spaces such as SO(3) J , SE(3) J , and heterogeneous products of the considered manifolds. We summarize the proposed kernels, potential components, closed-form normalizers, conditional distributions, and induced transport costs in Table 1. Table 1: Summary of the proposed manifold-aware parameterizations and induced transport costs. For SO(3) , x, y ∈ S3 denote unit-quaternion representatives, with antipodal points identified.                                                         
+
+> M
+> Kε
+> vθ,k
+> rθ,k
+> qθ,k
+> Induced cost
+> c(x, y )
+> Sd−1exp
+> x⊤yε
+> 
+> exp( f⊤
+> ky)
+> Zd
+> 
+> fk+xε
+> 
+> vMF
+> 
+> fk+xε
+> −x⊤y
+> TddY
+> j=1
+> exp
+> cos( xj−yj)
+> ε
+> 
+> dY
+> j=1
+> exp[ akj cos yj+bkj sin yj]
+> dY
+> j=1
+> 2πI 0(ρkj )
+> dY
+> j=1
+> vM( hkj )
+> −Pdj=1 cos( xj−yj)SO(3) cosh
+> λR
+> ε⟨x, y ⟩
+> 
+> cosh( ⟨fk, y ⟩)
+> Z4
+> 
+> fk+λRεx
+> 
+> +Z4
+> 
+> fk−λRεx
+> 
+> 2
+> X
+> s=±1
+> πk,s (x) vMF
+> 
+> fk+s λR
+> εx
+> −εlog cosh
+> λRε⟨x, y ⟩
+> 
+> SE(3)
+> KtεKRε
+> exp
+> 
+> −12 (yt−μk)⊤Σ−1
+> k(yt−μk)
+> 
+> ×cosh( ⟨fk, y R⟩)
+> rtθ,k (xt)rRθ,k (xR)
+> qtθ,k (yt|xt)qRθ,k (yR|xR)
+> ε
+> 2σ2
+> ε
+> ∥xt−yt∥22
+> −εlog cosh
+> λR
+> ε⟨xR, y R⟩
+> 
+
+3.3 TRAINING AND SAMPLING 
+
+Training. Training the proposed parameterizations requires only optimizing their learnable param-eters θ using the objective in equation 5. Since both vθ (y) and rθ (x) are available in closed form for all the constructions introduced above, the loss can be estimated from independent minibatches 
+
+{x(i)}B0 
+
+> i=1
+
+∼ μ and {y(j)}B1 
+
+> j=1
+
+∼ ν as 
+
+bL(θ) = − 1
+
+B1
+
+> B1
+
+X
+
+> j=1
+
+log vθ
+
+
+
+y(j)
+
++ 1
+
+B0
+
+> B0
+
+X
+
+> i=1
+
+log rθ
+
+
+
+x(i)
+
+. (17) 6Preprint This estimate can be optimized using standard gradient-based methods and requires neither paired samples, intermediate trajectory simulation, nor additional inner optimization problems. 
+
+Sampling. Given a source point x and trained parameters θ, samples from qθ (·| x) are generated using the geometry-specific samplers described in the corresponding constructions of §3.2. Algo-rithm 1 summarizes the general sampling procedure. 
+
+Algorithm 1 Sampling from the learned EOT coupling 
+
+Require: Source point x, trained parameters θ 
+
+> 1:
+
+for k = 1 , . . . , K do  
+
+> 2:
+
+Compute rθ,k (x) 
+
+> 3:
+
+ewk ← αkrθ,k (x) 
+
+> 4:
+
+end for  
+
+> 5:
+
+wk ← ewk/ PKj=1 ewj , for k = 1 , . . . , K  
+
+> 6:
+
+Sample k ∼ Categorical( w1, . . . , w K ) 
+
+> 7:
+
+Sample y ∼ qθ,k (·| x) using the corresponding manifold-specific sampler  
+
+> 8:
+
+return y
+
+## 4 RELATED WORKS 
+
+In this section, we review two categories of continuous optimal transport methods most relevant to our setting. We first discuss general continuous OT and EOT solvers in §4.1, which learn trans-port maps or coupling representations from samples and support out-of-sample inference. We then consider Riemannian-aware OT solvers in §4.2, which explicitly incorporate the geometry of the underlying manifold into the formulation. 4.1 CONTINOUS OT S OLVERS 
+
+Continuous neural OT methods provide a flexible framework for learning transport directly from samples. In Seguy et al. (2018) develop a stochastic optimization approach for large-scale regular-ized OT, while Daniels et al. (2025) use score-based models to sample from regularized transport couplings. Neural Optimal Transport (NeuralOT) (Korotin et al., 2023) introduces a minimax for-mulation for learning transport maps and plans under strong and weak transport costs. This frame-work is further generalized by NeuralOT with General Cost Functionals (Asadulaev et al., 2024), which accommodates a broader class of transport objectives beyond standard pointwise costs. For entropy-regularized OT, Energy-guided Entropic NOT (Mokrov et al., 2024) parameterizes condi-tional transport plans using energy-based models and supports general continuous ground costs. For comparison, we consider NeuralOT as a representative general continuous OT baseline. 4.2 CONTINOUS RIEMMANIAN OT S OLVERS 
+
+Riemannian Neural Optimal Transport (RNOT) (Micheli et al., 2026a) learns continuous optimal transport maps directly on Riemannian manifolds for the squared geodesic cost. It parameterizes a continuous potential whose c-transform enforces c-concavity and constructs the transport map 
+
+T (x), allowing the learned map to transport previously unseen source samples without discretizing the manifold. Entropic Riemannian Neural Optimal Transport (ERNOT) (Micheli et al., 2026b) solves entropically regularized OT on Riemannian manifolds by learning a neural Schr¨ odinger po-tential that defines the transport coupling. For each source point, this coupling gives a conditional distribution over target points. When a single transported point is required, ERNOT summarizes this distribution using manifold-aware constructions, such as its Riemannian barycenter or the mode of a heat-smoothed version of the conditional distribution. 
+
+## 5 EXPERIMENTAL RESULTS 
+
+In this section, we evaluate our method against the manifold-aware solvers introduced in §4. We con-sider synthetic transport problems on Sd−1, Td, SO(3) , and SE(3) , together with real-world appli-cations including continental drift on S2 and crystallographic texture modeling on SO(3) . Across all experiments, performance is measured using manifold-aware metrics comparing transported source samples with samples from the target distribution. Further details on dataset construction and met-ric computation are provided in Appendices A.2 and A.3, respectively. All RNOT and ERNOT 7Preprint experiments use the squared geodesic cost c(x, y ) = dM(x, y )2, whereas NeuralOT uses the corre-sponding manifold-specific induced cost; the full cost expressions are given in Table 1. This protocol tests how each approach performs as a practical continuous transport solver on the same source and target distributions, while making the cost choice of each method explicit. 
+
+Synthetic Experiments. For the synthetic experiments, source and target samples are indepen-dently drawn from known distributions defined directly on each manifold. We first consider high-dimensional spheres and tori. On Sd−1, the source is uniform on the sphere and the target is obtained by mapping Gaussian tangent-space samples around a fixed reference point through the exponen-tial map. On Td, the source is uniform in angular coordinates, while the target is obtained from a Gaussian distribution in angular coordinates with periodic wrapping to [0 , 2π)d. We additionally consider setups on SO(3) and SE(3) . On SO(3) , source and target distributions are generated by mapping Gaussian samples from the Lie algebra through the exponential map, with different cen-ter rotations. On SE(3) , the source combines Haar-uniform rotations with uniformly distributed translations, while the target combines concentrated rotations around a reference orientation with Gaussian translations. We report the squared Maximum Mean Discrepancy (MMD) Table 2. Addi-tional results for high dimensional spheres and tori can be found in Table 4 in Appendix A.5. Table 2: MMD 2 results across different manifolds, reported in units of 10 −2. We report mean ±
+
+standard deviation over five seeds. Lower is better. Method S60 S100 T60 T100 SO(3) SE(3)                                                                         
+
+> ManifoldLightOT (ours) 0.07 ±0.00 0.45 ±0.05 0.08 ±0.00 0.08 ±0.00 0.03 ±0.01 0.18 ±0.01
+> RNOT 0.18 ±0.04 1.47 ±0.21 2.15 ±0.20 23 .15 ±0.57 0.61 ±0.27 0.23 ±0.04
+> ERNOT 0.22 ±0.01 0.32 ±0.09 0.27 ±0.02 0.27 ±0.03 0.47 ±0.09 5.54 ±0.72
+> NeuralOT 0.27 ±0.06 4.38 ±8.24 61 .59 ±0.06 61 .61 ±0.07 1.27 ±2.58 0.27 ±0.05
+
+Continental Drift ( S2). Following the continental-drift benchmark introduced by Cohen et al. (2021) and later considered by RNOT (Micheli et al., 2026a), we construct source and target distri-butions from continental boundaries at 150 million years ago and the present day, respectively, using paleogeographic reconstructions from GPlates (M¨ uller et al., 2018). Points are sampled uniformly with respect to spherical area on S2 and retained when their longitude-latitude coordinates lie within the corresponding continental polygons, yielding empirical unpaired source and target distributions. The plot of predicted points for ManifoldLightOT appears in Figure 1. 
+
+Figure 1: Prediction on continental drift from 150 Ma to the present day for ManifoldLightOT. 
+
+Crystallographic Texture Transfer. Crystallographic texture describes the distribution of crystal orientations within a polycrystalline material and plays an important role in determining its macro-scopic mechanical properties. We consider the Ti-6Al-4V electron backscatter diffraction (EBSD) dataset of (Zeng et al., 2025), which characterizes how crystallographic texture evolves under dif-ferent hot-rolling conditions. Hot rolling deforms a material by passing it through rollers at elevated temperature, and the reduction percentage denotes the decrease in material thickness during this process. Specifically, we formulate an unpaired transport task from the orientations observed in the starting material to those measured after rolling at 825 ◦C with 75% reduction. We consider measurements from both the rolling-direction (RD) and transverse-direction (TD) sections, corre-sponding respectively to sections aligned with and perpendicular to the rolling direction. We con-vert the EBSD orientation measurements to unit quaternions; since each orientation represents a three-dimensional rotation, the resulting distributions are naturally supported on SO(3) . In addi-tion to the MMD metric used in our previous experiments, we evaluate the transported orientations using three crystallography-specific measures. The normalized ODF difference compares the pre-dicted and target orientation distribution functions (ODFs), directly measuring agreement between their crystallographic textures, while the M-index error compares their texture strengths through 8Preprint 
+
+Figure 2: Pole-density plots for the {0001 } orientation family in the EBSD texture-transfer task, shown for the RD and TD conditions. For each orientation quaternion q, we take the fixed direc-tion h = (0 , 0, 1) , rotate it into the sample frame, project the resulting unit vector onto the two-dimensional disk using stereographic projection, and estimate the density of the projected points. Colors indicate orientation concentration in multiples of random distribution (MRD). the symmetry-aware distribution of crystallographic misorientations. All metrics are computed sep-arately for the RD and TD conditions and they are shown in Table 2. We also show the dataset preprocessing and complete metric definitions are provided in Appendix A.2 and A.3, respectively. Table 3: Results on the crystallographic texture transfer task for the rolling-direction (RD) and transverse-direction (TD) conditions. Lower is better for all metrics.                                        
+
+> Method Direction MMD SO(3)
+> Texture Index Error Normalized ODF Difference M-Index Error
+> ManifoldLightOT (ours) RD 0.000592 0.01168 0.00270 0.00425
+> TD 0.000830 0.00112 0.00265 0.00883
+> RNOT RD 0.000635 0.09022 0.01298 0.01304 TD 0.000680 0.00441 0.01936 0.02033 ERNOT RD 0.000901 0.11089 0.12242 0.01650 TD 0.001056 0.13406 0.18600 0.01554 Neural OT RD 0.482989 37.00789 36.40364 0.90857 TD 0.997347 43.39924 45.39681 0.88277
+
+## 6 DISCUSSION 
+
+ManifoldLightOT combines strong empirical performance with a simpler training and sampling procedure than existing manifold-aware EOT solvers. The experiments show that the proposed kernel-induced EOT formulations adapt well across the considered geometries, including spheres, tori, SO(3) , and SE(3) . By using manifold-specific kernel-potential pairs, the method avoids inner optimization procedures and can be trained from Monte Carlo estimates of the learning objective. It is important to note that the proposed pipeline, learning objective, and sampling procedure are not tied to a particular manifold. Extending ManifoldLightOT to a new geometry therefore amounts to deriving an appropriate kernel-potential pair that preserves tractable normalization and direct conditional sampling. This derivation is the main manifold-specific challenge of our formulation and can require additional analytical work. At the same time, the induced costs are not specific to ManifoldLightOT: they define valid geometry-aware EOT objectives and could, in principle, be incorporated into other continuous OT/EOT solvers that support general costs. Thus, the proposed kernels provide both a practical light solver and a set of cost functions for manifold-valued transport. AI USE STATEMENT 
+
+In this work, generative AI tools were used to assist with polishing the writing, debugging code, and formatting tables and mathematical expressions. The mathematical formulation, derivations, methodological contributions, and experimental results are original to the authors. All AI-assisted 9Preprint content was reviewed and verified by the authors, who take responsibility for the final content of the work. ETHICS STATEMENT 
+
+This work focuses on methodological developments for entropic optimal transport on manifolds and does not involve human subjects, personally identifiable information, or sensitive data. The experiments use synthetic benchmarks and publicly available scientific datasets. We are not aware of any specific ethical risks beyond those associated with the general use of machine learning methods, and we have aimed to report the methodology, experimental setup, and results transparently. REPRODUCIBILITY STATEMENT 
+
+To ensure reproducibility, we provide the full implementation of ManifoldLightOT together with the implementations of all baseline methods used in our experiments, as well as the corresponding con-figuration files for every reported setting. The appendix documents the experimental setup, dataset construction and preprocessing, evaluation metrics, and additional implementation details. Together, these materials are intended to enable reproduction of the reported results and comparisons. 
+
+## REFERENCES 
+
+Arip Asadulaev, Alexander Korotin, Vage Egiazarian, Petr Mokrov, and Evgeny Burnaev. Neural optimal transport with general cost functionals, 2024. URL https://arxiv.org/abs/ 2205.15403 .Valentin De Bortoli, Emile Mathieu, Michael Hutchinson, James Thornton, Yee Whye Teh, and Arnaud Doucet. Riemannian score-based generative modelling, 2022. URL https://arxiv. org/abs/2202.02763 .Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet. Diffusion schr¨ odinger bridge with applications to score-based generative modeling, 2023. URL https://arxiv. org/abs/2106.01357 .Ricky T. Q. Chen and Yaron Lipman. Flow matching on general geometries, 2024. URL https: //arxiv.org/abs/2302.03660 .Samuel Cohen, Brandon Amos, and Yaron Lipman. Riemannian convex potential maps, 2021. URL 
+
+https://arxiv.org/abs/2106.10272 .Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. Advances in neural information processing systems , 26, 2013. Mara Daniels, Tyler Maunu, and Paul Hand. Score-based generative neural networks for large-scale optimal transport, 2025. URL https://arxiv.org/abs/2110.03237 .Nabarun Deb, Promit Ghosal, and Bodhisattva Sen. Rates of estimation of optimal transport maps using plug-in estimators via barycentric projections. Advances in Neural Information Processing Systems , 34:29736–29753, 2021. Pavel Dvurechensky, Alexander Gasnikov, and Alexey Kroshnin. Computational optimal transport: Complexity by accelerated gradient descent is better than by Sinkhorn’s algorithm. In Interna-tional conference on machine learning , pp. 1367–1376. PMLR, 2018. Aude Genevay. Entropy-regularized optimal transport for machine learning . PhD thesis, Paris Sciences et Lettres (ComUE), 2019. Nikita Gushchin, Alexander Kolesov, Alexander Korotin, Dmitry P. Vetrov, and Evgeny Burnaev. Entropic neural optimal transport via diffusion processes. In Thirty-seventh Conference on Neural Information Processing Systems , 2023a. URL https://openreview.net/forum?id= fHyLsfMDIs .10 Preprint Nikita Gushchin, Alexander Kolesov, Petr Mokrov, Polina Karpikova, Andrey Spiridonov, Evgeny Burnaev, and Alexander Korotin. Building the bridge of schr¨ odinger: A continuous entropic optimal transport benchmark, 2023b. URL https://arxiv.org/abs/2306.10161 .Jan-Christian H¨ utter and Philippe Rigollet. Minimax estimation of smooth optimal transport maps. 2021. Alexander Korotin, Lingxiao Li, Aude Genevay, Justin Solomon, Alexander Filippov, and Evgeny Burnaev. Do neural optimal transport solvers work? a continuous wasserstein-2 benchmark, 2021. URL https://arxiv.org/abs/2106.01954 .Alexander Korotin, Daniil Selikhanovych, and Evgeny Burnaev. Neural optimal transport. In In-ternational Conference on Learning Representations , 2023. URL https://openreview. net/forum?id=d8CBRlWNkqH .Alexander Korotin, Nikita Gushchin, and Evgeny Burnaev. Light Schr¨ odinger bridge. In The Twelfth International Conference on Learning Representations , 2024. Christian L´ eonard. A survey of the Schr¨ odinger problem and some of its connections with optimal transport. arXiv preprint arXiv:1308.0215 , 2013. Ashok Makkuva, Amirhossein Taghvaei, Sewoong Oh, and Jason Lee. Optimal transport mapping via input convex neural networks. In International Conference on Machine Learning , pp. 6672– 6681. PMLR, 2020. Tudor Manole, Sivaraman Balakrishnan, Jonathan Niles-Weed, and Larry Wasserman. Plugin esti-mation of smooth optimal transport maps, 2024. URL https://arxiv.org/abs/2107. 12364 .Emile Mathieu and Maximilian Nickel. Riemannian continuous normalizing flows, 2020. URL 
+
+https://arxiv.org/abs/2006.10605 .Alessandro Micheli, Yueqi Cao, Anthea Monod, and Samir Bhatt. Riemannian neural optimal trans-port, 2026a. URL https://arxiv.org/abs/2602.03566 .Alessandro Micheli, Silvia Sapora, Anthea Monod, and Samir Bhatt. Entropic riemannian neural optimal transport, 2026b. URL https://arxiv.org/abs/2605.04255 .Petr Mokrov, Alexander Korotin, Alexander Kolesov, Nikita Gushchin, and Evgeny Burnaev. Energy-guided entropic neural optimal transport. In The Twelfth International Conference on Learning Representations , 2024. URL https://openreview.net/forum?id= d6tUsZeVs7 .R. Dietmar M¨ uller, John Cannon, Xiaodong Qin, Robin J. Watson, Michael Gurnis, Simon Williams, Tobias Pfaffelmoser, Maria Seton, Samuel H. J. Russell, and Sabin Zahirovic. Gplates: Building a virtual earth through deep time. Geochemistry, Geophysics, Geosystems , 19(7):2243–2261, 2018. doi: https://doi.org/10.1029/2018GC007584. URL https://agupubs.onlinelibrary. wiley.com/doi/abs/10.1029/2018GC007584 .Jason N. Ott, Cailey B. Condit, Vera Schulte-Pelkum, Rachel Bernard, and Matej Pec. Seismic Anisotropy of Mafic Blueschists: EBSD-Based Constraints From the Exhumed Rock Record. 
+
+Journal of Geophysical Research (Solid Earth) , 129(2):e2023JB027679, February 2024. doi: 10.1029/2023JB027679. Mikhail Persiianov, Jiawei Chen, Petr Mokrov, Alexander Tyurin, Evgeny Burnaev, and Alexander Korotin. Learning of population dynamics: Inverse optimization meets jko scheme, 2026. URL 
+
+https://arxiv.org/abs/2506.01502 .Gabriel Peyr´ e, Marco Cuturi, et al. Computational optimal transport. Foundations and Trends® in Machine Learning , 11(5-6):355–607, 2019. Aram-Alexandre Pooladian and Jonathan Niles-Weed. Entropic estimation of optimal transport maps. arXiv preprint arXiv:2109.12004 , 2021. 11 Preprint Erwin Schr¨ odinger. ¨Uber die Umkehrung der Naturgesetze . Verlag der Akademie der Wis-senschaften in Kommission bei Walter De Gruyter u. Company, 1931. Erwin Schr¨ odinger. Sur la th´ eorie relativiste de l’´ electron et l’interpr´ etation de la m´ ecanique quan-tique. In Annales de l’institut Henri Poincar´ e, volume 2, pp. 269–310, 1932. Vivien Seguy, Bharath Bhushan Damodaran, R´ emi Flamary, Nicolas Courty, Antoine Rolet, and Mathieu Blondel. Large-scale optimal transport and mapping estimation, 2018. URL https: //arxiv.org/abs/1711.02283 .Philip Skemer, Ikuo Katayama, Zhenting Jiang, and Shun ichiro Karato. The misorientation in-dex: Development of a new method for calculating the strength of lattice-preferred orienta-tion. Tectonophysics , 411(1):157–167, 2005. ISSN 0040-1951. doi: https://doi.org/10.1016/ j.tecto.2005.08.023. URL https://www.sciencedirect.com/science/article/ pii/S0040195105004439 .Alexander Tong, Nikolay Malkin, Kilian Fatras, Lazar Atanackovic, Yanlei Zhang, Guillaume Huguet, Guy Wolf, and Yoshua Bengio. Simulation-free schr¨ odinger bridges via score and flow matching, 2024. URL https://arxiv.org/abs/2307.03672 .Paul Van Houtte, Saiyi Li, Marc Seefeldt, and Laurent Delannay. Deformation texture pre-diction: from the taylor model to the advanced lamel model. International Journal of Plasticity , 21(3):589–624, 2005. ISSN 0749-6419. doi: https://doi.org/10.1016/j.ijplas. 2004.04.011. URL https://www.sciencedirect.com/science/article/pii/ S0749641904000610 .C´ edric Villani. Optimal transport: old and new , volume 338. Springer Science & Business Media, 2008. Xiaohan Zeng, Christopher S. Daniel, William Asheshov, Stefan Michalik, Philip Prangnell, and Jo˜ ao Quinta da Fonseca. Effect of temperature, strain and microstructure on texture evolution of ti-6al-4v during hot rolling. Metallurgical and Materials Transactions A , 56(10):4620–4643, 2025. doi: 10.1007/s11661-025-07929-8. 12 Preprint 
+
+## A APPENDIX 
+
+A.1 PROOFS 
+
+Proof of Proposition 1 
+
+Proof. By definition of the mixture potential, 
+
+vθ (y) = 
+
+> K
+
+X
+
+> k=1
+
+αkvθ,k (y).
+
+Therefore, using linearity of integration, its normalization function is 
+
+rθ (x) = 
+
+Z
+
+> M
+
+Kε(x, y )vθ (y) dm (y)=
+
+Z
+
+> M
+
+Kε(x, y )
+
+> K
+
+X
+
+> k=1
+
+αkvθ,k (y) dm (y)=
+
+> K
+
+X
+
+> k=1
+
+αk
+
+Z
+
+> M
+
+Kε(x, y )vθ,k (y) dm (y)=
+
+> K
+
+X
+
+> k=1
+
+αkrθ,k (x).
+
+The corresponding conditional distribution is 
+
+qθ (y|x) = Kε(x, y )vθ (y)
+
+rθ (x)=
+
+> K
+
+X
+
+> k=1
+
+αkrθ,k (x)
+
+rθ (x)
+
+Kε(x, y )vθ,k (y)
+
+rθ,k (x)=
+
+> K
+
+X
+
+> k=1
+
+wθ,k (x) qθ,k (y|x),
+
+where 
+
+wθ,k (x) = αkrθ,k (x)
+
+rθ (x) .
+
+Since all αk and rθ,k (x) are positive, wθ,k (x) > 0, and 
+
+> K
+
+X
+
+> k=1
+
+wθ,k (x) = 1 .
+
+Hence qθ (·| x) is a finite mixture of the component conditionals qθ,k (·| x). Since each component can be sampled directly, one can sample from qθ (·| x) by first drawing k ∼
+
+Categorical( wθ, 1(x), . . . , w θ,K (x)) and then sampling from qθ,k (·| x). Thus, closed-form normal-ization and direct conditional sampling are preserved by the mixture. 
+
+Proof of Proposition 2 
+
+Proof. Using the product structure of both the kernel and potential component, 
+
+Kε(x, y )vθ,k (y) = 
+
+> J
+
+Y
+
+> j=1
+
+Kε,j (xj , y j )vθ,k,j (yj ).
+
+13 Preprint Since the reference measure also factorizes as m = NJj=1 mj , the corresponding normalization function satisfies 
+
+rθ,k (x) = 
+
+Z
+
+> M
+
+Kε(x, y )vθ,k (y) dm (y)=
+
+Z 
+
+> QJj=1 Mj
+> J
+
+Y
+
+> j=1
+
+Kε,j (xj , y j )vθ,k,j (yj )
+
+> J
+
+Y
+
+> j=1
+
+dm j (yj )=
+
+> J
+
+Y
+
+> j=1
+
+Z
+
+> Mj
+
+Kε,j (xj , y j )vθ,k,j (yj ) dm j (yj )=
+
+> J
+
+Y
+
+> j=1
+
+rθ,k,j (xj ).
+
+Therefore, the normalized conditional distribution becomes 
+
+qθ,k (y|x) = Kε(x, y )vθ,k (y)
+
+rθ,k (x)=
+
+> J
+
+Y
+
+> j=1
+
+Kε,j (xj , y j )vθ,k,j (yj )
+
+rθ,k,j (xj )=
+
+> J
+
+Y
+
+> j=1
+
+qθ,k,j (yj |xj ).
+
+Hence the conditional factorizes across the component manifolds. Since each qθ,k,j (·| xj ) can be sampled directly by assumption, a sample from qθ,k (·| x) is obtained by independently sampling 
+
+yj ∼ qθ,k,j (·| xj ) for j = 1 , . . . , J and setting y = ( y1, . . . , y J ). Thus, closed-form normalization and direct conditional sampling are preserved under Cartesian products. 
+
+Proofs of the manifold-specific parameterizations Distributional notation. For g ∈ Rd, we define 
+
+Zd(g) = 
+
+Z
+
+> Sd−1
+
+exp( g⊤y) dm (y),
+
+and denote by vMF( g) the von Mises-Fisher distribution on Sd−1 with density exp( g⊤y)/Z d(g).Since Zd(g) depends only on ∥g∥2, we have Zd(−g) = Zd(g). For the torus construction, 
+
+vM( h), with h ∈ R2, denotes the circular von Mises distribution whose density is proportional to exp( h⊤(cos y, sin y)⊤); its normalizing constant is 2πI 0(∥h∥2), where I0 is the modified Bessel function of the first kind of order zero, defined by 
+
+I0(t) = 12π
+
+Z 2π
+
+> 0
+
+exp( t cos ϕ) dϕ. 
+
+Sphere. Consider one potential component vθ,k . Multiplying it by the kernel in equation 7 gives 
+
+Kε(x, y )vθ,k (y) = exp 
+
+ x⊤yε
+
+
+
+exp( f ⊤ 
+
+> k
+
+y) = exp 
+
+
+
+fk + xε
+
+⊤
+
+y
+
+
+
+.
+
+Thus, the kernel-potential product is itself an unnormalized von Mises-Fisher density with natural parameter fk + x/ε . Integrating over the sphere immediately gives rθ,k (x) = Zd(fk + x/ε ), and dividing by this normalizer gives qθ,k (·| x) = vMF( fk + x/ε ). Hence each component satisfies the assumptions of Proposition 1, which yields closed-form normalization and direct sampling for the complete mixture qθ .14 Preprint 
+
+Torus. For a fixed coordinate j, the addition identity cos( xj − yj ) = cos xj cos yj + sin xj sin yj
+
+gives 
+
+1
+
+ε cos( xj − yj ) + akj cos yj + bkj sin yj
+
+=
+
+
+
+akj + 1
+
+ε cos xj
+
+
+
+cos yj +
+
+
+
+bkj + 1
+
+ε sin xj
+
+
+
+sin yj
+
+= hkj (x)⊤
+
+cos yj
+
+sin yj
+
+
+
+.
+
+Therefore, 
+
+Kε(x, y )vθ,k (y) = 
+
+> d
+
+Y
+
+> j=1
+
+exp 
+
+
+
+hkj (x)⊤
+
+cos yj
+
+sin yj
+
+ 
+
+.
+
+The product factorizes across coordinates. Since the normalizer of each factor is 2πI 0(∥hkj (x)∥2) = 2πI 0(ρkj (x)) , integration gives 
+
+rθ,k (x) = 
+
+> d
+
+Y
+
+> j=1
+
+2πI 0(ρkj (x)) , qθ,k (·| x) = 
+
+> d
+
+Y
+
+> j=1
+
+vM( hkj (x)) .
+
+Thus the coordinates can be sampled independently, and Proposition 1 gives the corresponding mixture construction. 
+
+Rotation Group. Let 
+
+gk,s (x) = fk + s λR
+
+ε x, s ∈ {− 1, +1 }.
+
+Using cosh( a) cosh( b) = 12 [cosh( a + b) + cosh( a − b)] , we obtain 
+
+Kε(x, y )vθ,k (y) = 12
+
+X
+
+> s∈{− 1,+1 }
+
+cosh  gk,s (x)⊤y .
+
+For any g ∈ R4, Z
+
+> S3
+
+cosh( g⊤y) dm (y) = Z4(g) + Z4(−g)2 = Z4(g).
+
+Consequently, 
+
+rθ,k (x) = 12
+
+
+
+Z4
+
+
+
+fk + λR
+
+ε x
+
+
+
++ Z4
+
+
+
+fk − λR
+
+ε x
+
+ 
+
+.
+
+After normalization, the two terms are selected with probabilities 
+
+πk,s (x) = Z4
+
+ fk + s λR 
+
+> ε
+
+x
+
+Z4
+
+ fk + λR 
+
+> ε
+
+x + Z4
+
+ fk − λR 
+
+> ε
+
+x .
+
+Recall that the unit quaternions y and −y represent the same rotation. Accordingly, a density pro-portional to cosh( g⊤y) on SO(3) can be sampled by drawing a quaternion from vMF( g) on S3 and then mapping it to its corresponding rotation. Hence 
+
+qθ,k (·| x) = X
+
+> s∈{− 1,+1 }
+
+πk,s (x) vMF 
+
+
+
+fk + s λR
+
+ε x
+
+
+
+,
+
+where the sampled quaternion is understood to be mapped to SO(3) . Each component is therefore directly sampleable, and Proposition 1 gives the complete mixture. 15 Preprint 
+
+Special Euclidean Group. We use the product representation SE(3) ≃ R3 × SO(3) . The ro-tational factor has already been shown above to satisfy the tractability conditions, so it remains to verify the translational factor. For Ktε and the translational part of vθ,k , define 
+
+Ak =  σ−2 
+
+> ε
+
+I3 + Σ −1
+
+> k
+
+−1 , ¯μk = Ak
+
+ σ−2 
+
+> ε
+
+xt + Σ −1 
+
+> k
+
+μk
+
+ .
+
+Completing the square in yt gives 
+
+∥xt − yt∥22
+
+σ2
+
+> ε
+
++ ( yt − μk)⊤Σ−1 
+
+> k
+
+(yt − μk)= ( yt − ¯μk)⊤A−1 
+
+> k
+
+(yt − ¯μk) + ( xt − μk)⊤(Σ k + σ2 
+
+> ε
+
+I3)−1(xt − μk).
+
+The dependence on yt is therefore Gaussian, so the normalized conditional is qtθ,k (·| xt) =
+
+N (·| ¯μk, A k). Integrating the Gaussian term yields 
+
+rtθ,k (xt) = (2 π)3/2σ3 
+
+> ε
+
+det(Σ k)1/2 det(Σ k + σ2 
+
+> ε
+
+I3)−1/2
+
+× exp 
+
+
+
+− 12 (xt − μk)⊤(Σ k + σ2 
+
+> ε
+
+I3)−1(xt − μk)
+
+
+
+.
+
+Hence both the translational and rotational factors satisfy the assumptions of Proposition 1. Ap-plying Proposition 2 gives rθ,k (x) = rtθ,k (xt)rRθ,k (xR) and qθ,k (y|x) = qtθ,k (yt|xt)qRθ,k (yR|xR).Finally, Proposition 1 gives the full K-component mixture. A.2 DATASETS 
+
+A.2.1 SYNTHETIC DATASETS 
+
+For all synthetic experiments, we independently generate 20000 training samples and 5120 test samples for each of the source and target marginals. Training uses only the unpaired source and target samples, while the held-out test sets are used for evaluation. 
+
+Synthetic Sphere. For the experiments on SD ⊂ RD+1 , the source distribution is uniform on the sphere. A source sample is generated by drawing z ∼ N (0 , I D+1 ) and normalizing it as x =
+
+z/ ∥z∥2. The target is a wrapped normal distribution centered at the fixed point ℓ = ( −1, 0, . . . , 0) ∈
+
+SD . We first draw ξ ∼ N (0 , σ 2ID ) and embed it in RD+1 as eξ = (0 , ξ ). Since ℓ⊤ eξ = 0 , this vector is tangent to the sphere at ℓ, i.e., it points along the local D-dimensional plane orthogonal to ℓ. The sample is then mapped onto the sphere using the spherical exponential map, 
+
+y = cos( ∥eξ∥2)ℓ + sin( ∥eξ∥2)
+
+∥eξ∥2
+
+eξ, 
+
+where y = ℓ when ∥eξ∥2 = 0 . We use σ = 0 .3 for all dimensions. 
+
+Synthetic Torus. A point on TD is represented by D angular coordinates θ = ( θ1, . . . , θ D ), with each θj ∈ [0 , 2π). Source samples are generated independently as θj ∼ Unif[0 , 2π). For the target, we use a wrapped Gaussian centered at (π, . . . , π ). Specifically, we draw z ∼ N (0 , σ 2ID ) and set 
+
+θ = ( π1 + z) mod 2 π, where the modulo operation is applied coordinate-wise and 1 denotes the 
+
+D-dimensional vector of ones. We use σ = 0 .3 in all experiments. When an ambient Euclidean representation is required, each angle is mapped to the corresponding point on the unit circle as 
+
+θj 7 → (cos θj , sin θj ).
+
+Synthetic SO(3) . Rotations are represented by unit quaternions q = ( q0, q 1, q 2, q 3) ∈ S3, with q
+
+and −q representing the same three-dimensional rotation. Both marginals are wrapped normal dis-tributions with different center rotations. The source is centered at the identity rotation, represented by qs = (1 , 0, 0, 0) . The target center is obtained by rotating through an angle ϕ = 2 .5 radians around the axis a = (0 , 0, 1) , giving the unit quaternion qt = (cos( ϕ/ 2) , sin( ϕ/ 2) a).To sample around either center qc, we draw a three-dimensional perturbation v ∼ N (0 , σ 2I3), with 
+
+σ = 0 .8. Writing r = ∥v∥2, this perturbation is converted into the rotation quaternion 
+
+δ(v) = 
+
+
+
+cos r
+
+2 , sin( r/ 2) 
+
+r v
+
+
+
+,
+
+16 Preprint with δ(0) = (1 , 0, 0, 0) . The final sample is q = qc ⊗ δ(v), where ⊗ denotes quaternion multipli-cation. Thus, Gaussian perturbations in three-dimensional rotation-vector coordinates are wrapped around the corresponding center rotation. Source and target train and test samples are generated independently. 
+
+Synthetic SE(3) . A point in SE(3) consists of a three-dimensional rotation and a three-dimensional translation, and is represented in our implementation by a unit quaternion q ∈ S3 together with a translation vector t ∈ R3. For the source distribution, rotations are sampled uniformly over all three-dimensional rotations, i.e., from the Haar-uniform distribution on SO(3) , while translations are sampled uniformly from the cube [−4, 4] 3.For the target rotation, we use a wrapped normal distribution centered at a rotation of 60 ◦ around the z-axis. As in the SO(3) experiment, we draw a rotation vector v ∼ N (0 , 0.32I3), convert it into a rotation quaternion δ(v), and compose it with the target center rotation. The target translations follow a Gaussian distribution with mean μt = (1 , 0.5, −0.5) and isotropic standard deviation 0.5.To keep the translational support identical to that of the source, samples outside [−4, 4] 3 are rejected and resampled. Rotation and translation are sampled independently within each marginal. Each resulting sample is stored as (q0, q 1, q 2, q 3, t 1, t 2, t 3).A.2.2 CONTINENTAL DRIFT 
+
+Continental Drift. We follow the continental-drift benchmark of Cohen et al. (2021) using paleo-geographic reconstructions from GPlates (M¨ uller et al., 2018). The source distribution corresponds to continental regions at 150 million years ago, while the target corresponds to present-day conti-nental regions. The reconstructions are provided as GeoJSON files containing polygonal continental boundaries in geographic coordinates, with each polygon represented by a sequence of longitude-latitude vertices. Thus, the raw data do not consist of points on S2; instead, these polygons define the continental regions from which spherical samples are obtained. Points are sampled uniformly with respect to surface area on S2 and restricted to the corresponding continental regions by rejection sampling. Specifically, we draw a longitude λ ∼ Unif[ −π, π ) and a scalar z ∼ Unif[ −1, 1] . The latitude is then φ = arcsin z, and the corresponding point on the unit sphere is 
+
+x = (cos φ cos λ, cos φ sin λ, sin φ).
+
+This construction is uniform with respect to spherical surface area. The longitude-latitude coordi-nates of each candidate point are tested against the continental polygons for the corresponding time period, and candidates outside all polygons are rejected. Accepted points are represented by their three-dimensional unit vectors x ∈ S2 for training and evaluation. The procedure is applied inde-pendently to the 150 Ma and present-day polygons, yielding unpaired empirical source and target distributions. We sample 50 ,000 training points from each distribution. A.2.3 CRYSTALLOGRAPHIC TEXTURE DATASET 
+
+We use the Ti-6Al-4V electron backscatter diffraction (EBSD) dataset of Zeng et al. (2025), which contains crystallographic orientation maps for the starting material and for samples subjected to dif-ferent hot-rolling conditions. The raw measurements are provided as EBSD maps in the DefDAP format, with each spatial measurement associated with a crystallographic orientation and a phase label. In our experiments, we use the starting material as the source state and the material rolled at 
+
+825 ◦C with a 75% thickness reduction as the target state. We construct two transport tasks corre-sponding to the rolling-direction (RD) and transverse-direction (TD) sections: for each section, the source distribution is formed by the crystallographic orientations measured in the starting material, while the target distribution is formed by the orientations measured after the 825 ◦C, 75% -reduction treatment. These data are naturally unpaired because the source and target orientations are obtained from separate EBSD maps acquired at different material states; consequently, an orientation mea-sured at a given spatial location in the starting material has no one-to-one correspondence with an orientation in the rolled sample. The learning problem is therefore to transport between the two empirical orientation distributions rather than between matched orientation pairs. We preprocess each EBSD map using DefDAP . Given a raw .cpr file, we load the corresponding EBSD map and flatten its orientation and phase arrays so that each measured point is represented independently. Each crystallographic orientation is converted to its quaternion coefficients q =
+
+17 Preprint 
+
+(q0, q 1, q 2, q 3), after which the quaternion is normalized to unit norm. Since q and −q represent the same element of SO(3) , we use a canonical representative by changing the sign whenever q0 < 0,so that all stored quaternions satisfy q0 ≥ 0. The resulting unit quaternions, together with their corresponding phase labels, are saved as PyTorch tensors for subsequent training and evaluation. A.3 METRICS 
+
+Maximum Mean Discrepancy. For all manifold experiments, we compare the transported distri-bution with the target distribution using the squared Maximum Mean Discrepancy (MMD) equipped with a kernel adapted to the corresponding manifold. Let P and Q denote two probability distribu-tions on M, and let k : M × M → R be a positive-definite kernel. The squared MMD is defined as 
+
+MMD 2(P, Q ; k) = Ex,x ′∼P [k(x, x ′)] + Ey,y ′∼Q[k(y, y ′)] − 2Ex∼P,y ∼Q[k(x, y )] , (18) where x, x ′ and y, y ′ are independent samples from their respective distributions. Given target sam-ples {yi}Ni=1 and transported samples {byj }Mj=1 , we use the empirical estimator 
+
+\MMD 2
+
+= 1
+
+N 2
+
+> N
+
+X
+
+> i,i ′=1
+
+k(yi, y i′ ) + 1
+
+M 2
+
+> M
+
+X
+
+> j,j ′=1
+
+k(byj , byj′ ) − 2
+
+N M 
+
+> N
+
+X
+
+> i=1
+> M
+
+X
+
+> j=1
+
+k(yi, byj ). (19) This is the biased empirical estimator, with the diagonal terms included, and corresponds directly to the quantity computed in our implementation. Lower values indicate closer agreement between the transported and target distributions. We use different kernels for each manifold in order to respect its geometry. 
+
+Sphere. For x, y ∈ Sd−1, we use the von Mises-Fisher kernel 
+
+kS(x, y ) = exp κ  x⊤y − 1 , (20) where κ > 0 controls the concentration of the kernel. Since x and y are unit vectors, x⊤y depends only on their relative position on the sphere, and the subtraction of 1 normalizes the kernel such that 
+
+kS(x, x ) = 1 .
+
+Torus. For x, y ∈ Td, represented by angular coordinates x = ( x1, . . . , x d) and y = ( y1, . . . , y d),we use the product von Mises kernel 
+
+kT(x, y ) = exp 
+
+κ
+
+> d
+
+X
+
+> j=1
+
+ cos( xj − yj ) − 1 . (21) Equivalently, this kernel is the product of one-dimensional circular von Mises kernels over the d
+
+coordinates. It is invariant to shifts of any angular coordinate by integer multiples of 2π and therefore respects the periodic structure of Td.
+
+Rotation group. For SO(3) , rotations are represented by unit quaternions q, q ′ ∈ S3, with q and 
+
+−q corresponding to the same rotation. We first compute their rotation angle 
+
+θ(q, q ′) = 2 arccos   q⊤q′  ∈ [0 , π ]. (22) The absolute inner product makes the distance invariant to the quaternion sign ambiguity. We then use a normalized heat kernel on SO(3) ,
+
+kSO(3) (q, q ′) = 
+
+> ∞
+
+X
+
+> ℓ=0
+
+(2 ℓ + 1) e−τ ℓ (ℓ+1) χℓ(θ(q, q ′)) 
+
+> ∞
+
+X
+
+> ℓ=0
+
+(2 ℓ + 1) 2e−τ ℓ (ℓ+1) 
+
+, (23) where τ > 0 is the heat time and 
+
+χℓ(θ) = 1 + 2 
+
+> ℓ
+
+X
+
+> m=1
+
+cos( mθ ) = sin  (ℓ + 12 )θ
+
+sin( θ/ 2) (24) 18 Preprint is the character of the (2 ℓ + 1) -dimensional irreducible representation of SO(3) . The denomi-nator corresponds to the value of the unnormalized kernel at the identity and therefore ensures 
+
+kSO(3) (q, q ) = 1 . In practice, the spectral expansion is truncated once the remaining tail is below a numerical tolerance. 
+
+Special Euclidean group. For x = ( q, t ) and y = ( q′, t ′) in SE(3) , where q, q ′ ∈ SO(3) denote rotations and t, t ′ ∈ R3 translations, we use a product kernel combining the rotational heat kernel above with a Gaussian kernel on the translation component: 
+
+kSE(3) (x, y ) = k τ /α 2
+
+> SO(3)
+
+(q, q ′) exp 
+
+
+
+− ∥t − t′∥22
+
+4τ
+
+
+
+. (25) Here, k τ /α 2 
+
+> SO(3)
+
+denotes the SO(3) heat kernel in equation 23 evaluated with heat time τ /α 2, while 
+
+α > 0 controls the relative scale between rotational and translational differences. This product construction respects the R3 × SO(3) representation used for SE(3) .
+
+Kernel parameters. For the sphere and torus experiments, the kernel concentration is selected separately for each dimension using the scale of the target distribution. Specifically, we com-pute the median positive pairwise manifold distance s among the first 200 target samples and set κ = 1/s 2. For the sphere, the distance used for this bandwidth selection is the spheri-cal angle dS(x, y ) = arccos( x⊤y), while for the torus we use the wrapped distance dT(x, y ) = 
+
+PDj=1 wrap( xj − yj )2
+
+1/2
+
+, where wrap( δ) = atan2(sin δ, cos δ).For D ∈ {2, 10 , 20 , 40 , 60 , 80 , 100 }, the resulting sphere concentrations are κS ∈{4.071 , 0.700 , 0.438 , 0.458 , 0.808 , 2.145 , 10 .157 }, respectively. For the same dimensions, the torus concentrations are κT ∈ { 4.010 , 0.5947 , 0.2873 , 0.1412 , 0.09363 , 0.07003 , 0.05593 }, respectively. For SO(3) , we use the heat kernel with a fixed heat time τ = 0 .5 for all experiments. For SE(3) ,we likewise use τ = 0 .5, with the rotational factor evaluated at heat time τ /α 2 and α = 2 , as in the kernel definition above. 
+
+Crystallographic texture metrics. For the crystallographic texture experiment, let {y(i)}Ni=1 and 
+
+{by(j)}Mj=1 denote the target and transported orientations, respectively. We estimate their orientation distribution functions (ODFs) using the same SO(3) heat kernel introduced above. Specifically, we use the heat-kernel density 
+
+ek τ
+
+> SO(3)
+
+(q, q ′) = 
+
+> ∞
+
+X
+
+> ℓ=0
+
+(2 ℓ + 1) e−τ ℓ (ℓ+1) χℓ(θ(q, q ′)) , (26) which corresponds to the numerator of equation 23. Unlike the MMD kernel, no normalization by its value at the identity is required here. The target and predicted ODFs are estimated as 
+
+ftgt (g) = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ek τtex 
+
+> SO(3)
+
+
+
+g, y (i)
+
+, fpred (g) = 1
+
+M
+
+> M
+
+X
+
+> j=1
+
+ek τtex 
+
+> SO(3)
+
+
+
+g, by(j)
+
+, (27) where g ∈ SO(3) and we set τtex = 0 .01 .The texture index measures the concentration of an ODF and is defined as 
+
+TI( f ) = 
+
+Z
+
+> SO(3)
+
+f (g)2 dg. (28) We report the relative texture-index error 
+
+ETI = |TI( fpred ) − TI( ftgt )|
+
+TI( ftgt ) . (29) In practice, these integrals are evaluated directly from the orientation samples using the heat-kernel identity, resulting in pairwise evaluations of ek 2τtex 
+
+> SO(3)
+
+; diagonal self-pairs are excluded when estimat-ing each texture index. 19 Preprint The normalized ODF difference measures the discrepancy between the complete predicted and target orientation distributions: 
+
+EODF =
+
+R 
+
+> SO(3)
+
+(fpred (g) − ftgt (g)) 2 dg 
+
+R 
+
+> SO(3)
+
+ftgt (g)2 dg . (30) Finally, the M-index characterizes texture through the distribution of crystallographic misorientation angles. We compute HCP symmetry-aware disorientation angles from pairs of orientations and con-struct normalized histograms ptgt and ppred . Given the corresponding histogram prand for uniformly random orientations, the M-index is 
+
+M (p) = 12
+
+> B
+
+X
+
+> b=1
+
+p(b) − p(b)rand , (31) and we report 
+
+EM = |M (ppred ) − M (ptgt )| . (32) We use B = 180 bins, up to 4096 orientation pairs for each distribution, and 100 ,000 random orientation pairs to construct prand . Lower values indicate better agreement with the target for all three metrics. Quantitative comparison of crystallographic textures is commonly based on descriptors of the ori-entation distribution and crystallographic misorientations. The texture index, also known as the J-index, is widely used to quantify the strength or concentration of an orientation distribution, while the M-index was introduced by Skemer et al. (2005) as a complementary measure based on the dis-tribution of crystallographic misorientation angles. Both measures have subsequently been used in EBSD-based texture analysis (Ott et al., 2024). To directly compare two orientation distributions, normalized squared differences between their ODFs have also been used in deformation-texture and crystal-plasticity studies to quantify agreement between predicted and measured textures (Van Houtte et al., 2005). Following these approaches, we use the texture index error, normalized ODF difference, and M-index error to evaluate complementary aspects of the agreement between the transported and target crystallographic textures. A.4 IMPLEMENTATION DETAILS 
+
+For each experiment, all methods use the same training and test distributions and are evaluated on the same test samples. Unless stated otherwise, we use minibatches of size 256 . ManifoldLightOT, ERNOT, and NeuralOT are implemented in PyTorch, while RNOT follows its original JAX/Flax implementation. All experiments are run on a single GPU. The hyperparameters described below are those used for the reported experiments. 
+
+ManifoldLightOT. ManifoldLightOT directly optimizes the parameters of the geometry-specific mixture potentials introduced in §3.2, without using an additional neural network. The mixture components are initialized from randomly selected target training samples, with initially uniform mixture weights, and all parameters are optimized with Adam using β1 = 0 .9, β2 = 0 .999 , and no weight decay. 
+
+Synthetic experiments. For the high-dimensional sphere and torus experiments, we use K = 30 
+
+components in dimension 2 and K = 10 D components for D ∈ { 10 , 20 , 40 , 60 , 80 , 100 }, with batch size 256 . We train for 50000 steps for D ≤ 20 , 100000 steps for D ∈ { 40 , 60 , 80 }, and 200000 
+
+steps for D = 100 . The learning rate is 10 −3 for the low- and medium-dimensional configurations and 10 −2 for the higher-dimensional configurations. We use ε = 0 .1 up to dimension 40 and 
+
+ε = 0 .01 for dimensions 60 –100 , with T2 also using ε = 0 .01 . For the synthetic SO(3) and SE(3) 
+
+experiments, we use K = 100 components, batch size 256 , and train for 50 ,000 steps with learning rate 10 −2, using ε = 0 .05 and 0.2, respectively. The SO(3) rotational kernel scale is λR = 1 , while for SE(3) we use rotational scale 1 and translational scale 0.16 .
+
+Continental Drift. We use K = 1000 components, ε = 0 .1, batch size 64 , and train for 10 6 steps with learning rate 10 −2.
+
+Crystallographic texture. We use K = 1000 components, ε = 0 .01 , rotational kernel scale λR = 2 ,batch size 256 , and train for 200000 steps with learning rate 10 −2.20 Preprint 
+
+RNOT. Our RNOT implementation is based on the official implementation provided by the au-thors ( https://openreview.net/forum?id=ez4oLq7PR3 ). The potential is parameter-ized using the Gromov distance embedding of the input with respect to a set of manifold landmarks, followed by an MLP with two hidden layers of 128 units, SiLU activations, and LayerNorm. The inner optimization required to evaluate the c-transform is performed with Adam using β1 = 0 .9,
+
+β2 = 0 .999 , and tolerance 10 −6.
+
+Synthetic experiments. We use 128 randomly selected landmarks, batch size 256 , learning rate 10 −3,and no learning-rate decay. The inner optimization uses 2500 iterations with learning rate 5 × 10 −2.Most experiments are trained for 1000 outer steps, increased to 1500 for T40 and 2000 for T80 , T100 ,and SE(3) .
+
+Continental Drift. We use 1024 landmarks obtained by farthest-point sampling from 4096 candi-dates, batch size 1024 , and train for 1000 outer steps with learning rate 10 −3 and no learning-rate decay. The inner optimization uses 1000 iterations with learning rate 5 × 10 −2.
+
+Crystallographic texture. We use 128 randomly selected landmarks, batch size 256 , and train for 
+
+10 ,000 outer steps with learning rate 10 −3 and no learning-rate decay. The inner optimization uses 
+
+2500 iterations with learning rate 5 × 10 −2.
+
+ERNOT. We parameterize the ERNOT Schr¨ odinger potential using distances to manifold land-marks, followed by a two-layer MLP with 256 hidden units per layer, SiLU activations, and Layer-Norm on the landmark embedding. The output layer is initialized with standard deviation 0.01 . The regularization parameter ε is estimated separately for each dataset from 256 training samples using the scale factor 0.05 . The potential is optimized with Adam with initial learning rate 10 −3, together with cosine annealing to zero. 
+
+Synthetic experiments. We use 256 landmarks, batch size 256 , and train for 3000 steps with initial learning rate 10 −3.
+
+Continental Drift. We use 256 landmarks, batch size 64 , and train for 3000 steps with initial learning rate 10 −3.
+
+Crystallographic texture. We use 256 landmarks, batch size 256 , and train for 100 ,000 steps with initial learning rate 10 −3. At inference time, we use a target support of 200 samples. 
+
+NeuralOT. Our NeuralOT implementation is based on the official implementation ( https:// github.com/iamalexkorotin/NeuralOptimalTransport ), adapted to the manifold representations and transport costs considered in this work. Both the transport map T and the po-tential f are represented by MLPs with three hidden layers and ReLU activations. The transport network maps between the corresponding manifold coordinate representations and its output is pro-jected back to the manifold, while the potential network outputs a scalar. We use hidden widths of 256 or 512 , depending on the experimental configuration. Training follows the alternating mini-max procedure of NeuralOT: several transport-map updates are performed with the potential frozen, followed by one potential update with the transport map frozen. Both networks are optimized in-dependently with Adam using β1 = 0 .9, β2 = 0 .999 , and no weight decay. NeuralOT uses the manifold-specific costs corresponding to the kernels in Table 1. 
+
+Synthetic experiments. Both networks are optimized with learning rate 10 −4. We use 10 transport-map updates per potential update for all configurations except T2, for which we use 5. The batch size is 256 , except for T40 , where we use 512 . On the sphere, we train for 10 ,000 steps for D ∈ { 2, 10 },
+
+20 ,000 steps for D ∈ { 20 , 40 }, 30 ,000 steps for D ∈ { 60 , 80 }, and 50 ,000 steps for D = 100 . On the torus, we use 10 ,000 steps for D ∈ { 2, 10 , 20 } and 20 ,000 steps for D ∈ { 40 , 60 , 80 , 100 }. The 
+
+SO(3) and SE(3) experiments are trained for 20 ,000 steps. 
+
+Continental Drift. NeuralOT is not included in the Continental Drift experiments. 
+
+Crystallographic texture. We use hidden width 512 , batch size 256 , and 5 transport-map updates per potential update. Both networks are optimized with learning rate 10 −4, and training is performed for 20 ,000 steps. A.5 ADDITIONAL RESULTS 
+
+In this section we present additional results for our synthetic and crystallization experimental setups. 21 Preprint 
+
+Additional High Dimensional Spheres and Tori. In Table 4 we show additional dimensionalities which complements the ones appearing in Table 2. It is important to note that ManifoldLightOT remains showing a strong performance against other methods. Table 4: MMD 2 results on high-dimensional spheres and tori, reported in units of 10 −2. We report mean ± standard deviation over five seeds. Lower is better. 
+
+Sphere 
+
+Method S2 S10 S20 S40 S60 S80 S100 
+
+ManifoldLightOT 0.08 ± 0.01 0.07 ± 0.01 0.08 ± 0.01 0.06 ± 0.00 0.07 ± 0.00 0.13 ± 0.01 0.45 ± 0.05 
+
+RNOT 0.13 ± 0.06 0.10 ± 0.02 0.10 ± 0.01 0.11 ± 0.02 0.18 ± 0.04 0.43 ± 0.09 1.47 ± 0.21 
+
+ERNOT 0.12 ± 0.03 0.15 ± 0.01 0.20 ± 0.03 0.20 ± 0.04 0.22 ± 0.01 0.25 ± 0.02 0.32 ± 0.09 
+
+NeuralOT 0.19 ± 0.07 0.12 ± 0.04 0.17 ± 0.02 0.17 ± 0.02 0.27 ± 0.06 0.29 ± 0.04 4.38 ± 8.24 
+
+Torus 
+
+Method T2 T10 T20 T40 T60 T80 T100 
+
+ManifoldLightOT 0.27 ± 0.06 0.08 ± 0.02 0.08 ± 0.01 0.07 ± 0.00 0.08 ± 0.00 0.08 ± 0.01 0.08 ± 0.00 
+
+RNOT 0.18 ± 0.06 0.20 ± 0.08 0.20 ± 0.02 0.39 ± 0.04 2.15 ± 0.20 7.49 ± 0.38 23 .15 ± 0.57 
+
+ERNOT 0.14 ± 0.02 0.22 ± 0.06 0.27 ± 0.08 0.27 ± 0.04 0.27 ± 0.02 0.26 ± 0.04 0.27 ± 0.03 
+
+NeuralOT 33 .03 ± 29 .80 48 .60 ± 27 .08 61 .31 ± 0.20 61 .53 ± 0.09 61 .59 ± 0.06 61 .63 ± 0.05 61 .61 ± 0.07 
+
+22

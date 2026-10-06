@@ -1,0 +1,2316 @@
+Title: Error-Corrected Inference-Time Scaling for Imperfect Diffusion Models
+
+URL Source: https://arxiv.org/pdf/2610.01933v1
+
+Published Time: Fri, 02 Oct 2026 02:13:09 GMT
+
+Number of Pages: 35
+
+Markdown Content:
+Preprint 
+
+# ERROR -C ORRECTED INFERENCE -T IME SCALING FOR 
+
+# IMPERFECT DIFFUSION MODELS 
+
+Zuokai Wen 1 Louis Grenioux 2 Weinan E 3 Jiequn Han 2∗
+
+> 1
+
+School of Artificial Intelligence, Shanghai Jiao Tong University 
+
+> 2
+
+Center for Computational Mathematics, Flatiron Institute 
+
+> 3
+
+School of Mathematical Sciences, Peking University 
+
+## ABSTRACT 
+
+Inference-time scaling adapts pretrained diffusion models to new sampling tasks without additional training. Existing methods rely primarily on Monte Carlo sam-pling with more particles, yet are premised on the pretrained model being exact. In practice, data and training limitations make the model imperfect, and these meth-ods inherit its error. More particles reduce Monte Carlo error but cannot remove the mismatch between the endpoint and the desired target or the error in tracking the prescribed probability path. We introduce the Energy-based Feynman–Kac Corrector (EBFKC) , a framework for energy-based diffusion models that corrects these errors on the fly given a reference energy. We first derive Feynman–Kac dynamics that track a prescribed path exactly in the continuous-time population limit even when the model is imperfect, and approximate these dynamics using sequential Monte Carlo with variance-controlling guidance. To remove the end-point mismatch, we use the pretrained energy as a surrogate along the diffusion path and progressively incorporate the discrepancy between the learned and target terminal energies. Experiments on Gaussian mixture models, particle systems, alanine dipeptide, and alanine tetrapeptide show that our method closely matches target distributions and molecular free-energy profiles under annealing and reward tilting, whereas standard inference-time scaling baselines retain substantial sam-pling errors. 
+
+## 1 INTRODUCTION 
+
+Diffusion models (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2021) have become a lead-ing paradigm in generative modeling, achieving remarkable performance across high-dimensional applications ranging from visual synthesis (Peebles & Xie, 2023; Rombach et al., 2022; Karras et al., 2022) to scientific discovery (Watson et al., 2023; Duan et al., 2023; Xu et al., 2022). By learning a time-dependent score function, a diffusion model defines a transport from a tractable prior distri-bution to a complex target distribution. However, training such models is expensive, particularly as modern datasets and architectures continue to grow. It is therefore often impractical to train a separate diffusion model for every new target distribution of interest. One natural strategy is to perform additional training after pretraining, commonly referred to as fine-tuning (Domingo-Enrich et al., 2025; Han et al., 2025; Uehara et al., 2024; Liu et al., 2026). However, fine-tuning remains computationally expensive. This limitation has motivated inference-time scaling, which adapts a pretrained diffusion model to a new sampling task by allocating addi-tional computation at inference time. One class of existing approaches consists of guidance-based methods, which modify the reverse dynamics using classifier guidance (Dhariwal & Nichol, 2021), classifier-free guidance (Ho & Salimans, 2021), or many variants (He et al., 2024; Guo et al., 2024; Li et al., 2026a). More recently, probabilistic inference methods have gained attention as a princi-pled approach to inference-time scaling by casting the problem within Bayesian inference and Monte Carlo sampling frameworks (Chung et al., 2022; Bruna & Han, 2024), with particular emphasis on Sequential Monte Carlo (SMC) methods (Wu et al., 2023; Ren et al., 2026b; Wang et al., 2026). In parallel, energy-based diffusion models have been developed (Yu et al., 2026; OuYang et al., 2026; 
+
+> ∗
+
+Correspondence to jhan@flatironinstitute.org 
+
+1arXiv:2610.01933v1 [stat.ML] 1 Oct 2026 Preprint Guth et al., 2026), whose energy representations also support compositional generation and control with Monte Carlo methods (Du et al., 2023; Thornton et al., 2025). Despite their theoretical grounding, these methods commonly assume the pretrained diffusion model is perfect (Ren et al., 2026b; He et al., 2026; Wang et al., 2026). In practice, finite data, limited capac-ity, and imperfect optimization make the learned score only approximate, so the model’s marginals deviate from the true ones. Because existing methods treat these approximate marginals as perfect, they inherit this error: adding particles reduces Monte Carlo error but cannot remove the pretrained model error itself. The error is especially pronounced in out-of-distribution regions, where the learned score is less reliable yet the model is often deployed (Lewis et al., 2025). Tellingly, Soif-fer et al. (2026) show that in this regime it is score estimation error, not the vanilla inference-time approximation error, that dominates. Inference-time reweighting derived under an exact-model as-sumption can therefore leave substantial pretrained model error uncorrected, motivating our goal of correcting this error. In this work, we introduce error-corrected inference-time scaling, realized by the Energy-based Feynman–Kac Corrector (EBFKC) , a framework that corrects pretrained model error on the fly given a reference energy. The reference energy specifies which distribution to sample but not how to explore it: on high-dimensional, multimodal targets, Monte Carlo sampling from the energy alone mixes slowly across modes, whereas a pretrained diffusion model already encodes a learned trans-port that reaches them efficiently. We first derive the full Feynman–Kac reweighting potential for any prescribed measure transport path, without assuming that the underlying score satisfies the base diffusion equation. We approximate the resulting dynamics with SMC and use variance-controlling guidance to mitigate particle-weight degeneracy. Then we construct an energy-aligned path that uses a pretrained energy-based diffusion model as a surrogate along the diffusion path while pro-gressively correcting the discrepancy between the learned and target energies to remove the endpoint mismatch. To our knowledge, EBFKC is the first inference-time scaling method that corrects the path-tracking error of an imperfect pretrained model and, treating the pretrained energy as an ap-proximate surrogate, provably realigns the terminal distribution to the target energy, rather than composing or reweighting several assumed-exact models. 
+
+Our Contributions. Building on this insight, our work makes the following contributions: • Energy-based Feynman–Kac Corrector (EBFKC). We derive the Feynman–Kac–type Fokker– Planck equation for a general prescribed probability path, freeing it from the model’s own marginals, and adapt the Variance-Controlling SMC (Ren et al., 2026b) to track it while controlling particle-weight variance. Unlike the Feynman–Kac Corrector (Skreta et al., 2025), EBFKC tracks the path exactly at the population level even when the pretrained model is imperfect. • Progressive target-energy correction. Instantiating this freedom, we keep the imperfect pre-trained energy as a surrogate proposal while using the reference energy to pin the terminal distribu-tion to the desired energy-aligned target (EAT), removing the endpoint mismatch that increasing the number of particles alone cannot eliminate. We call the resulting method EBFKC on EAT .• Error correction across benchmarks. Across Gaussian mixture models, particle systems, ala-nine dipeptide, and alanine tetrapeptide, we show that a moderately imperfect pretrained model can severely bias existing inference-time scaling methods, and that EBFKC on EAT corrects this bias at inference time, recovering target distributions and molecular free-energy profiles where these baselines fail. 
+
+## 2 BACKGROUND AND PROBLEM FORMULATION 
+
+We review score- and energy-based diffusion models, then formulate inference-time scaling and explain how pretrained model error affects both the terminal target and path tracking. 2Preprint 2.1 SCORE - AND ENERGY -B ASED DIFFUSION MODELS 
+
+Diffusion models (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2021) connect the data distribution p⋆ to a tractable reference ρ through a forward noising diffusion 
+
+dys = us(ys) d s + βs dws, y0 ∼ p⋆, s ∈ [0 , T ]. (1) The coefficients us, β s are chosen so that the process carries y0 ∼ p⋆ to yT ∼ ρ (typically very close to a standard Gaussian); we take the drift linear, us(y) = −Fsy, so the forward transition kernels are Gaussian in closed form. Generation runs a reverse clock t = T − s; let p⋆t denote the law of yT −t, with eut := uT −t and σt := βT −t (so p⋆ 
+
+> 0
+
+= ρ and p⋆T = p⋆). The exact reverse-time drift generating marginals (p⋆t )t∈[0 ,T ] is 
+
+v⋆t (x) = −eut(x) + σ2 
+
+> t
+
+s⋆t (x), s⋆t (x) := ∇x log p⋆t (x). (2) Since p⋆t is unavailable, diffusion models learn a score model sθ (x, t ) ≈ s⋆t (x) from samples of (1) (Ho et al., 2020; Song et al., 2021); we assume such a pretrained model is available. Substituting 
+
+sθ for s⋆t gives the learned drift vθt := −eut + σ2 
+
+> t
+
+sθ and the generative diffusion 
+
+dxt = vθt (xt) d t + σt dwt, x0 ∼ ρ, t ∈ [0 , T ], (3) whose law we denote μt. If sθ = s⋆t for all (x, t ), the generative and exact reverse diffusions share the same drift and initial law ρ, so μt = p⋆t for all t and in particular μT = p⋆. When sθ
+
+approximates s⋆t , μT is only an approximation of p⋆.The score model sθ is often parameterized directly, as in standard score-based models. We instead adopt an energy-based parameterization (Salimans & Ho, 2021): a scalar energy Eθ (x, t ) defines 
+
+pθt (x) = exp( −Eθ (x, t )) /Z θt (with Zθt := R exp( −Eθ (x, t )) d x), and the score follows as sθ =
+
+−∇ xEθ = ∇ log pθt . Unlike a directly parameterized score, which is a general vector field with no potential and hence no associated density, this yields explicit intermediate densities (pθt )t∈[0 ,T ];they need not coincide with the reverse-SDE law μt, since fixing the spatial score does not enforce the correct evolution in time, nor with the truth p⋆t . They further underlie energy-based diffusion’s strength in compositional generation (Du et al., 2023; Thornton et al., 2025), unnormalized density evaluation (Yu et al., 2025; Guth et al., 2026), and downstream reweighting (OuYang et al., 2026). 
+
+Why we start from energy-based diffusion. The same explicit densities pθt , which a bare score cannot provide, are what our method later uses to align the target and to reweight along the prescribed path. 2.2 INFERENCE -T IME SCALING WITH IMPERFECT MODELS 
+
+Inference-time scaling adapts a pretrained diffusion model to a new sampling target without retrain-ing. In full generality, the goal is to sample from 
+
+qref  
+
+> T
+
+(x) ∝  pref (x)γ exp ( r(x)) , pref (x) ∝ exp  −Eref (x) , (4) for an annealing exponent γ > 0, a reward r, and a time-independent reference energy Eref (r = 0 
+
+gives the annealing task, γ = 1 the reward-tilting task). The pretrained model enters because its densities (pθt )t∈[0 ,T ] are expected to be close to the reference, making it a far better starting point than sampling from Eref directly. The canonical choice is pref = p⋆, recovering 
+
+q⋆T (x) ∝ (p⋆(x)) γ exp ( r(x)) . (5) Since each pθt approximates p⋆t , a natural construction interpolates through the model’s own densities (Skreta et al., 2025; Ren et al., 2026b; Wang et al., 2026; He et al., 2026). 
+
+Definition 1 (Model-Induced Target) . The model-induced target (MIT) is 
+
+qMIT  
+
+> T
+
+(x) ∝ (pθT (x)) γ exp( r(x)) ,
+
+which is (4) with Eref = Eθ (·, T ). It is the terminal distribution of the model-induced path 
+
+qMIT  
+
+> t
+
+(x) ∝ (pθt (x)) γ exp( rt(x)) ,
+
+where the intermediate reward rt interpolates between r0 = 0 and rT = r.
+
+This construction, however, is undermined by an imperfect pretrained model in two distinct ways. 3Preprint ρt = 0      
+
+> p?(x) exp( r(x))
+> p?
+> t=T
+> FKC on MIT (Both errors) EBFKC on MIT (Endpoint error) FKC on EAT (Tracking error) EBFKC on EAT (Ours)
+
+Figure 1: SMC trajectory lineages for the four combinations of reweighting scheme (FKC or EBFKC) and prescribed path (MIT or EAT). The target p⋆ is a 64-dimensional mixture of six isotropic Gaussians in two groups (right edge). The figure displays one-dimensional trajectories for four lineages from a population of 2048 particles. The reward r favors the weak mode, with the desired terminal distribution shown in dashed purple. FKC (Skreta et al., 2025) on MIT suffers from both errors and ends in the wrong modes. EBFKC on MIT tracks its path but inherits the endpoint mismatch, while FKC on EAT has the correct endpoint but its path-tracking error makes the weights degenerate, so that only one lineage survives. Only EBFKC on EAT, which removes both errors, reaches the desired target. 
+
+Two failure modes under an imperfect model. Endpoint mismatch: the MIT can differ from the desired qref  
+
+> T
+
+, even if its path is tracked exactly. Path-tracking error: existing reweighting presumes a consistent density pθt that need not even exist, so it fails to track even the model-induced path. 
+
+Endpoint mismatch. Whether this gap matters depends on the reference energy. In data-driven set-tings such as image generation, the goal is to steer the model’s own distribution, so Eref = Eθ (·, T )
+
+and the MIT is exactly the desired target. In most scientific computing tasks, a physical model sup-plies an external E⋆ and the quantities of interest are defined with respect to p⋆ ∝ exp( −E⋆), so the target is Eref = E⋆; here the mismatch must be corrected, yet existing steering methods for pretrained diffusion models are not designed to use a known E⋆ for this purpose. More broadly, the same holds whenever the target is defined with the corresponding reference energy Eref ̸ = Eθ (·, T ),for which the MIT differs from the desired qref  
+
+> T
+
+.
+
+Path-tracking error. Concretely, to obtain efficient reweighting formulas that use only the learned score, most existing methods implicitly assume that such a density pθt exists and satisfies the Fokker– Planck equation associated with (1) (Skreta et al., 2025). This assumption generally fails for a learned, imperfect score, so the resulting reweighting formulas are biased and no longer track qMIT  
+
+> t
+
+,even at the population level. 
+
+## 3 METHOD 
+
+Both issues above point to the same remedy: decouple the sampling path from the model’s own marginals. We therefore track a prescribed path with a general time-dependent potential Φt,
+
+qt(x) = exp ( −Φt(x)) /Z t, t ∈ [0 , T ], (6) requiring only that the path be normalizable, that q0 admit easy sampling, and that Φt and its re-quired derivatives be evaluable; Zt need not be known. The model-induced path is recovered with 
+
+ΦMIT  
+
+> t
+
+(x) = γE θ (x, t ) − rt(x).We then resolve both failure modes with two ingredients, whose effect Fig. 1 illustrates: 
+
+Energy-based Feynman–Kac Corrector (EBFKC) (Sec. 3.1) tracks any prescribed path exactly at the population level, removing the path-tracking error. Energy-aligned target (EAT) (Sec. 3.2) pins the terminal distribution to qref  
+
+> T
+
+for any Eref , removing the endpoint mismatch. Sec. 3.3 further relates our method to annealed SMC and energy-based modeling. 4Preprint 3.1 FOKKER –P LANCK EQUATION FOR A PRESCRIBED PATH 
+
+For the prescribed path in Eq. (6), we derive tracking dynamics directly from its potential Φt, with-out requiring diffusion consistency. The result applies to any sufficiently smooth, strictly positive, normalizable path, including paths to the learned terminal density or to an externally specified target. 
+
+Theorem 2 (Fokker–Planck Equation for a Prescribed Path) . Assume that Φt is C1 in t and 
+
+C2 in x, that Zt < ∞, and that eut is C1 in x. For the prescribed path qt in Eq. (6) , we define the proposal drift vt(x) = −eut(x) − σ2 
+
+> t
+
+∇Φt(x), then qt satisfies the Feynman–Kac-type Fokker–Planck equation 
+
+∂tqt = −∇ · (qtvt) + σ2
+
+> t
+
+2 ∆qt + qtgt, (7) 
+
+where the centered reweighting potential is gt(x) = Gt(x) − Eqt [Gt], and the corresponding uncentered potential is 
+
+Gt(x) = −∂tΦt(x) − ∇ · eut(x) + eut(x)⊤∇Φt(x) − σ2
+
+> t
+
+2 ∆Φ t(x) + σ2
+
+> t
+
+2 ∥∇ Φt(x)∥2 . (8) The derivation is provided in App. B.1. The state-dependent potential Gt corrects the discrepancy between the proposal diffusion and the prescribed evolution of qt, while centering Gt by its expec-tation under qt preserves normalization and eliminates the unknown derivative ∂t log Zt.We simulate Eq. (7) with Sequential Monte Carlo (SMC). Let {(x(i) 
+
+> t
+
+, w (i) 
+
+> t
+
+)}Ni=1 denote a system of normalized weighted particles, initialized independently as x(i)0 ∼ q0 ∝ exp( −Φ0) with w(i)0 =1/N . The particles then evolve according to the continuous-time dynamics 
+
+
+
+dx(i) 
+
+> t
+
+= vt(x(i) 
+
+> t
+
+)d t + σtdw(i) 
+
+> t
+
+, i ∈ [N ],
+
+d log w(i) 
+
+> t
+
+= ˆ gt(x(i) 
+
+> t
+
+)d t, i ∈ [N ],
+
+ˆgt(x(i) 
+
+> t
+
+) := Gt(x(i) 
+
+> t
+
+) − PNj=1 w(j) 
+
+> t
+
+Gt(x(j) 
+
+> t
+
+), i ∈ [N ],
+
+(9) In this way, SMC approximates this normalized Feynman–Kac flow using a weighted particle sys-tem, with optional resampling to control weight degeneracy. Simulating Eq. (9) from t = 0 to t = T
+
+therefore yields a weighted particle approximation of the target distribution qT . To further mitigate particle weight degeneracy during SMC simulation, we also incorporate Variance-Controlling Guid-ance (VCG) (Ren et al., 2026b), which modifies the particle drift in a principled manner; details are in App. B.2. We call this framework the Energy-based Feynman–Kac Corrector (EBFKC) . We remark that FKC (Skreta et al., 2025) follows the same weighted-particle scheme as Eq. (9) using only the learned score, but its reweighting potential is valid only when pθt is consistent with the base diffusion (satisfies its Fokker–Planck equation). Our EBFKC instead evaluates the full potential Gt,which requires the energy Eθ rather than the score alone; in exchange it makes no such assump-tion and tracks the path qt exactly in the continuous-time population limit even when the pretrained model is imperfect. We also extend FKC to general time-dependent rewards in App. B.5. 3.2 FROM MODEL -I NDUCED TO ENERGY -A LIGNED TARGET 
+
+The prescribed-path dynamics provided by EBFKC separate the choice of target from the assump-tion that the model follows an exact diffusion. Applying EBFKC to the model-induced path in Definition 1 gives EBFKC on MIT . We now construct a path ending at a general target qref  
+
+> T
+
+, with the model-induced path recovered with the special choice Eref = Eθ (·, T ).
+
+Energy-Aligned Target. To reach the reference target rather than the model-induced target, we constrain the terminal distribution of the path. 
+
+Definition 3 (Energy-Aligned Target) . The energy-aligned target (EAT) is qEAT  
+
+> T
+
+(x) ∝
+
+exp ( −ΦT (x)) with 
+
+ΦT (x) = γE ref (x) − r(x) + cT ,
+
+where cT is independent of x.
+
+5Preprint Energy-aligned target constrains only the terminal distribution: the intermediate distributions can be constructed flexibly, provided that the resulting path terminates at qref  
+
+> T
+
+. We retain the model-induced path and progressively incorporate the terminal energy correction ∆Eref (x) = Eref (x) − Eθ (x, T ).
+
+For a smooth correction schedule κt with κ0 = 0 and κT = 1 , we instantiate the energy-aligned path through the potential 
+
+ΦEAT  
+
+> t
+
+(x) = Φ MIT  
+
+> t
+
+(x) + γκ t∆Eref (x) = γE θ (x, t ) − rt(x) + γκ t∆Eref (x).
+
+When Eref = Eθ (·, T ), the correction ∆Eref (x) vanishes and EAT reduces to the MIT; and when 
+
+Eref = E⋆, the correction closes the terminal energy mismatch and the path terminates at q⋆T .We also introduce a look-ahead map to stabilize target-energy evaluation, with details in App. B.3. Building on the energy-aligned path, we denote the resulting method EBFKC on EAT and summa-rize it in Alg. 1. 3.3 CONNECTIONS TO ANNEALED SMC AND ENERGY -B ASED MODELING 
+
+Our method can be viewed as annealed SMC along a diffusion-based probability path. Traditional annealed SMC typically uses a geometric tempering path between the initial and target densities. Its intermediate densities can be evaluated up to normalization, but transporting particles between separated modes can remain difficult (M´ at´ e & Fleuret, 2023). We describe the geometric tempering SMC baseline in App. B.6 and compare it with EBFKC on EAT in Lennard-Jones systems (Sec. 4.2). Existing work replaces the tempering path with a diffusion path, whose progressive Gaussian smoothing eases transport between modes, and uses it to build Boltzmann Generators, i.e., sam-plers for p⋆(x) ∝ exp( −E⋆(x)) with E⋆ given (Phillips et al., 2024; Grenioux & Noble, 2026). These methods use a reweighting strategy similar to that in Thm. 2, specialized to Φt = Eθ (·, t ),where the architecture of Eθ enforces Eθ (·, T ) = E⋆ by construction. We generalize this to an arbitrary reference energy, sampling from qref  
+
+> T
+
+rather than from p⋆ alone, and without requiring the terminal constraint to be baked into the architecture. This perspective also motivates our choice of building energy-based rather than score-based diffu-sion models. Reweighting requires evaluating the density along the path, which an energy model provides directly. With only a score, the density must be recovered by integrating the score for every particle at every step, which is costly and adds numerical error (Sj¨ oberg et al., 2026; Lam et al., 2026), making efficient and reliable reweighting impractical. 
+
+## 4 EXPERIMENTS 
+
+We evaluate whether EBFKC on EAT recovers the reference target despite pretrained model error, on annealing and reward-tilting tasks for a high-dimensional Gaussian mixture model, particle systems, alanine dipeptide, and alanine tetrapeptide. We take Eref = E⋆, the scientific setting that motivates our method, for which reference samples are available independently of the pretrained model. We compare against two baselines that each remove only one failure mode: (1) EBFKC on MIT tracks its path correctly but terminates at the MIT, isolating the endpoint mismatch; (2) FKC on EAT runs FKC with the reward redefined as ˆr = r − γ∆Eref , which moves its endpoint to q⋆T (App. B.5), isolating the path-tracking error. Across all systems, only EBFKC on EAT recovers the reference, showing that both failure modes arise in practice and must be addressed. To quantify the computational cost of these accuracy gains, we compare runtimes at the reported sampling budgets. EBFKC on EAT takes approximately 1.1–3.6× the runtime of EBFKC on MIT in these comparisons, owing to additional energy and derivative evaluations (App. D.1–D.5). Unless marked “w/o VCG”, all methods use VCG (Ren et al., 2026b), which we found essential for stable weight dynamics in both FKC and EBFKC. Energy models for particle and molecular systems are trained with Diffusive Classification (OuYang et al., 2026) (App. A). 4.1 GAUSSIAN MIXTURE MODEL 
+
+We use a 30-dimensional Gaussian mixture model (GMM) to isolate the effect of pretrained model error in a fully controlled setting. The marginals p⋆t (x) and their energies E⋆t (x) = − log p⋆t (x)
+
+are available in closed form, which allows us to emulate an imperfect pretrained diffusion model 6Preprint −40 −20 0 20 40 −40 −20 020 40             
+
+> FKC on EAT
+> −40 −20 020 40
+> EBFKC w/o VCG on MIT
+> −40 −20 020 40
+> EBFKC on MIT
+> −40 −20 020 40
+> EBFKC on EAT (Ours)
+> −40 −20 020 40
+> Reference
+
+(a) Annealing ( γ = 2 )0.00 0.25 0.50 0.75 1.00  
+
+> Pretrained-model error level
+> 12510
+> SWD
+> FKC on EAT EBFKC w/o VCG on MIT EBFKC on MIT EBFKC on EAT (Ours)
+
+(c) Annealing SWD sweep 0 20 40 −20 020 40         
+
+> FKC on EAT
+> 020 40
+> EBFKC w/o VCG on MIT
+> 020 40
+> EBFKC on MIT
+> 020 40
+> EBFKC on EAT (Ours)
+> 020 40
+> Reference
+
+(b) Reward tilting ( σ = 100 )0.00 0.25 0.50 0.75 1.00  
+
+> Pretrained-model error level
+> 0.2 0.5 12510
+> SWD
+> FKC on EAT EBFKC w/o VCG on MIT EBFKC on MIT EBFKC on EAT (Ours)
+
+(d) Reward-tilting SWD sweep 
+
+Figure 2: GMM results under controlled pretrained model error. (a–b) Sample distributions and (c–d) SWD under increasing pretrained model error for annealing and reward tilting. Table 1: Quantitative comparison on the 30-dimensional GMM under the controlled-error setting 
+
+σμ = 10 and ρ = 0 .1. Results are mean ± standard deviation over 5 runs. 
+
+Task Method |∆NLL | ↓ MMD ↓ SWD ↓ Mean L2 ↓ Cov F ↓
+
+Annealing FKC on EAT 1.043 ± 0.196 0.076 ± 0.007 4.105 ± 0.375 21 .218 ± 1.462 2437 .100 ± 358 .582 
+
+EBFKC w/o VCG on MIT 59 .355 ± 9.014 0.239 ± 0.035 11 .913 ± 1.374 63 .396 ± 13 .044 6770 .604 ± 1682 .698 
+
+EBFKC on MIT 59 .204 ± 1.041 0.092 ± 0.002 3.359 ± 0.694 9.890 ± 0.385 1879 .349 ± 129 .679 
+
+EBFKC on EAT (Ours) 0.133 ± 0.095 0.022 ± 0.001 1.110 ± 0.331 5.493 ± 0.774 639 .193 ± 27 .982 
+
+Reward tilting FKC on EAT 0.928 ± 0.374 0.061 ± 0.019 1.313 ± 1.191 8.661 ± 7.779 507 .355 ± 680 .777 
+
+EBFKC w/o VCG on MIT 21 .575 ± 10 .209 0.435 ± 0.040 10 .136 ± 6.044 64 .321 ± 29 .173 604 .058 ± 878 .509 
+
+EBFKC on MIT 22 .875 ± 6.175 0.383 ± 0.048 10 .287 ± 5.792 63 .261 ± 25 .670 1027 .872 ± 1435 .608 
+
+EBFKC on EAT (Ours) 0.113 ± 0.016 0.018 ± 0.008 0.194 ± 0.102 1.000 ± 0.684 50 .068 ± 32 .847 
+
+analytically by perturbing the component means and variances. Varying the perturbation magni-tudes allows us to systematically evaluate how sampling quality depends on pretrained model error. Complete definitions are given in App. C.1. Both failure modes caused by the imperfect pretrained model appear in the annealing and reward-tilting tasks (Fig. 2(a,b)). Although the EAT path terminates at the desired target, FKC on EAT remains affected by path-tracking error and fails to sample accurately from that target. EBFKC on MIT corrects path tracking, but its samples still deviate from the reference because of endpoint mismatch, and without VCG it also suffers from severe weight degeneracy. Switching from MIT to EAT further removes the endpoint mismatch, allowing EBFKC on EAT to sample accurately from the desired target. We further evaluate sampling accuracy as the pretrained model error increases. Fig. 2(c,d) reports the sliced-Wasserstein distance (SWD) for annealing and reward tilting, respectively. EBFKC on EAT maintains a low SWD across all error levels in both tasks, whereas EBFKC on MIT and FKC on EAT deviate increasingly from the reference as the model error grows. As shown in App. D.1, FKC w/o VCG on EAT suffers from severe weight degeneracy, indicating the importance of VCG in stabilizing FKC. Table 1 reports the quantitative comparison at a fixed error level, where EBFKC on EAT has the lowest mean error on all five reported metrics for both tasks. 4.2 PARTICLE SYSTEMS 
+
+We next test whether the correction observed with analytically perturbed GMMs extends to energy models trained on finite data. We consider the Double-Well (DW) and Lennard-Jones (LJ) systems, whose time-dependent energies are no longer available in closed form. We train energy-based diffu-sion models with limited training steps to obtain imperfect models and evaluate their inference-time adaptation to annealing and reward tilting. Detailed experimental settings are provided in App. C.2. 
+
+Double-Well system. We first study a 2D 4-particle Double-Well system. Figures 9 and 10 in App. D.2 compare the radial distribution functions (RDFs) and energy distributions for annealing and reward tilting. In both tasks, FKC on EAT and EBFKC on MIT produce visibly shifted RDFs 7Preprint 1 2 3 4 5 6     
+
+> pairwise distance
+> 0.0 0.2 0.4 0.6 0.8
+> RDF
+> Reference EBM reverse diffusion −20 −10 010 20 30
+> energy
+> 0.00 0.02 0.04 0.06 0.08 0.10
+> density
+> Reference EBM reverse diffusion
+
+(a) Pretrained model reverse diffusion results 1 2 3 4 5 6    
+
+> pairwise distance
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> RDF
+> Reference Tempering SMC FKC on EAT EBFKC on MIT EBFKC on EAT (Ours) −20 020 40
+> energy
+> 0.00 0.02 0.04 0.06 0.08 0.10 0.12
+> density
+> Reference Tempering SMC FKC on EAT EBFKC on MIT EBFKC on EAT (Ours)
+
+(b) Reward tilting task results 
+
+Figure 3: LJ results comparing pairwise-distance and energy distributions with the reference. (a) Samples from the pretrained model. (b) Reward-tilting samples from the inference-time methods. -π -π/2 0 π/2 π            
+
+> ϕ
+> -π -π/2 0π/2 π
+> ψ
+> EBFKC w/o VCG on MIT
+> -π -π/2 0π/2 π
+> ϕ
+> EBFKC on MIT
+> -π -π/2 0π/2 π
+> ϕ
+> EBFKC on EAT (Ours)
+> -π -π/2 0π/2 π
+> ϕ
+> Reference
+> 10 −3
+> 10 −2
+> 10 −1
+> 10 0
+
+Figure 4: Ramachandran plots of the backbone dihedral angles (ϕ, ψ ) for annealing ALDP from 
+
+800 K to 300 K . Reference samples at 300 K are compared with samples generated by EBFKC on MIT with/without VCG and EBFKC on EAT using the same pretrained diffusion model at 800 K .and energy distributions, indicating that these methods retain pretrained model error. In contrast, EBFKC on EAT closely matches the reference pairwise-distance and energy distributions under both sampling objectives. 
+
+Lennard-Jones system. We next consider the more challenging 3D 13-particle LJ system, whose potential has a rugged energy landscape and exhibits singular short-range behavior. As shown in Fig. 3(a), the pretrained model visibly deviates from the reference. For reward tilting (Fig. 3(b)), FKC on EAT and EBFKC on MIT inherit this error, whereas EBFKC on EAT closely matches the reference distributions. Geometric tempering SMC (App. B.6), a standard SMC method working without the pretrained model, also fails to sample the target accurately with the same number of particles, illustrating the benefit of the diffusion path (Sec. 3.3). App. D.3 reports the annealing results. Table 7 further confirms that EBFKC on EAT corrects the pretrained model error. 4.3 ALANINE DIPEPTIDE ANNEALING 
+
+We next evaluate our method on alanine dipeptide (ALDP) annealing tasks, a standard benchmark for molecular conformational sampling. Its slow conformational degrees of freedom are character-ized by the backbone dihedral angles ϕ and ψ. We train an energy-based diffusion model at 800 K 
+
+(Fig. 12 in App. D.4) and anneal it to 300 K via inference-time scaling. Fig. 4 compares the Ramachandran plots of the annealed samples. EBFKC on EAT recovers both the conformational basins and their relative populations, whereas EBFKC on MIT, with or without VCG, deviates substantially from the 300 K reference because it anneals toward the MIT rather than the 300 K Boltzmann distribution. The marginal distributions of ϕ and ψ in Fig. 13 support this observation. Table 2 quantifies the comparison: despite the error of the model pretrained at 800 K ,EBFKC on EAT closely matches the reference across all metrics. FKC was numerically unstable on both paths in our ALDP runs, so we omit it. The look-ahead ablation study in App. D.4 shows that removing this map leads to numerical instability, demonstrating its importance in difficult tasks. 8Preprint Table 2: Quantitative ALDP annealing results from 800 K to 300 K ; the first row evaluates the pretrained model at 800 K against the 800 K reference. Results are mean ± std over 5 runs.                                                               
+
+> Methods Temperature (K) (ϕ, ψ )TVD ↓Basin-pop. error ↓Energy TVD ↓Distance TVD ↓
+> Pretrained reverse diffusion 800 0.3005 ±0.0022 0.1699 ±0.0016 0.6730 ±0.0013 0.0253 ±0.0001
+> EBFKC w/o VCG on MIT 300 0.5089 ±0.0163 0.1643 ±0.0037 0.4460 ±0.0130 0.0366 ±0.0008
+> EBFKC on MIT 300 0.5063 ±0.0035 0.1657 ±0.0026 0.4659 ±0.0095 0.0381 ±0.0006
+> EBFKC on EAT (Ours) 300 0.0855 ±0.0031 0.0047 ±0.0041 0.0240 ±0.0028 0.0030 ±0.0002
+
+4.4 FREE -E NERGY ESTIMATION 
+
+Free-energy profiles characterize the relative thermodynamic stability of molecular conformations along selected reaction coordinates. Their accurate estimation remains a rare-event sampling prob-lem because low-probability conformations are infrequently observed even when a pretrained equi-librium sampler can already generate independent configurations. −π −π/2 0 π/2 π
+
+> ϕ
+> 0510 15 20 25
+> Free energy (kJ mol −1 )
+> Umbrella Reference EBFKC on MIT EBFKC on EAT (Ours)
+
+(a) ALDP free-energy profile −π −π/2 0 π/2 π 
+
+> ϕ3
+> 010 20 30 40 50 60 70
+> Free energy (kJ mol −1 )
+> OPES Reference Umbrella sampling EBFKC on MIT EBFKC on EAT (Ours)
+
+(b) Ala-4 free-energy profile 
+
+Figure 5: One-dimensional molecular free-energy profiles at 300 K . (a) ALDP along ϕ. (b) Ala-4 along ϕ3. The references are umbrella sampling for ALDP and OPES for Ala-4. Diffusion-based results show the mean and standard deviation (shaded) over five independent runs. Motivated by this challenge, we follow UmbrellaDiff (Xie et al., 2026) to estimate one-dimensional free-energy profiles at 300 K for ALDP along ϕ and for the 42-atom alanine tetrapeptide (Ala-4) along its third backbone dihedral ϕ3, starting from pretrained diffusion equilibrium samplers (App. D.5). Each umbrella window defines a reward-tilting target with Eref = E⋆, which we sample with EBFKC on EAT or EBFKC on MIT, and the weighted particles from all windows are combined with the weighted multistate Bennett acceptance ratio (MBAR) (Shirts & Chodera, 2008; Xie et al., 2026). 
+
+Alanine dipeptide. As shown in Fig. 5(a), EBFKC on MIT underestimates the principal barriers because its window-wise samples retain pretrained model error. In contrast, EBFKC on EAT closely follows the umbrella sampling reference (Torrie & Valleau, 1977) and reproduces its principal bar-riers and basin structure, indicating that it samples the reward-tilted target in each umbrella window accurately. 
+
+Alanine tetrapeptide. Ala-4 poses a high-barrier sampling problem: its three slow backbone dihe-drals partition the conformational space into eight metastable basins (settings in App. C.4). Fig. 5(b) uses as reference OPES (Invernizzi & Parrinello, 2020), which biases all three slow dihedrals ϕ1,
+
+ϕ2, and ϕ3. Traditional umbrella sampling, which biases only ϕ3, becomes trapped along the hidden slow variables and yields an inaccurate profile. EBFKC on EAT, although it also biases only ϕ3,closely reconstructs the OPES basin-and-barrier structure, whereas EBFKC on MIT retains the pre-trained model error and severely distorts the barrier heights. Without VCG, the profile of EBFKC on MIT is distorted even further (App. D.5). 
+
+## 5 CONCLUSION 
+
+We introduced the Energy-based Feynman–Kac Corrector (EBFKC) , a framework for inference-time scaling with imperfect pretrained energy-based diffusion models given a reference energy. EBFKC derives Feynman–Kac dynamics that track any prescribed path exactly at the population 9Preprint level and simulates them with SMC, using VCG to mitigate weight degeneracy, thereby removing the path-tracking error. The energy-aligned target (EAT) uses the pretrained energy as a surrogate along the path and progressively incorporates the reference energy, removing the endpoint mis-match. Across Gaussian mixture models, particle systems, and molecular systems, both ingredients prove necessary, and EBFKC on EAT recovers the target distributions under annealing and reward tilting and yields accurate molecular free-energy profiles. Future directions include extending the EBFKC framework to discrete diffusion models (Hasan et al., 2026; Ren et al., 2026a), adapting the correction schedules automatically, which we currently design by hand for the high-barrier alanine tetrapeptide system, reducing derivative-evaluation costs, and correcting large pretrained equilib-rium samplers for more reliable inference-time scaling in challenging real-world applications (Lewis et al., 2025). AI USE STATEMENT 
+
+In this work, we have not used generative AI tools for any tasks with required disclosure. We used generative AI tools to polish the writing and to assist with coding. We have reviewed all AI-assisted work: text edits were checked by the authors, and AI-assisted code was reviewed and tested for correctness. We take responsibility for the final content of this work, including text, claims or artifacts produced with the aid of generative AI. REPRODUCIBILITY STATEMENT 
+
+We provide the necessary details to facilitate reproduction of our results. The proposed Energy-based Feynman-Kac Corrector is described in detail in the main text, with complete algorithmic specifications and implementation details provided in the appendix. The assumptions and deriva-tions underlying our theoretical results, together with complete proofs, are also included in the appendix. For all experiments, we report the experimental setups, model architectures, training pro-cedures, sampling configurations, evaluation metrics, and hyperparameters, as well as details of the datasets and target distributions used. The code will be released later. 
+
+## REFERENCES 
+
+Joan Bruna and Jiequn Han. Provable posterior sampling with denoising oracles via tilted transport. 
+
+Advances in Neural Information Processing Systems , 37:82863–82894, 2024. Hyungjin Chung, Jeongsol Kim, Michael Thompson Mccann, Marc Louis Klasky, and Jong Chul Ye. Diffusion posterior sampling for general noisy inverse problems. In The Eleventh Interna-tional Conference on Learning Representations , 2022. Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. Advances in neural information processing systems , 34:8780–8794, 2021. Carles Domingo-Enrich, Michal Drozdzal, Brian Karrer, and Ricky T. Q. Chen. Adjoint matching: Fine-tuning flow and diffusion generative models with memoryless stochastic optimal control. In 
+
+The Thirteenth International Conference on Learning Representations , 2025. URL . Yilun Du, Conor Durkan, Robin Strudel, Joshua B Tenenbaum, Sander Dieleman, Rob Fergus, Jascha Sohl-Dickstein, Arnaud Doucet, and Will Sussman Grathwohl. Reduce, reuse, recycle: Compositional generation with energy-based diffusion models and MCMC. In International con-ference on machine learning , pp. 8489–8510. PMLR, 2023. Chenru Duan, Yuanqi Du, Haojun Jia, and Heather J Kulik. Accurate transition state generation with an object-aware equivariant elementary reaction diffusion model. Nature computational science ,3(12):1045–1055, 2023. Louis Grenioux and Maxence Noble. Diffusion-based annealed boltzmann generators : benefits, pitfalls and hopes. Transactions on Machine Learning Research , 2026. ISSN 2835-8856. URL . Yingqing Guo, Hui Yuan, Yukang Yang, Minshuo Chen, and Mengdi Wang. Gradient guidance for diffusion models: An optimization perspective. Advances in neural information processing systems , 37:90736–90770, 2024. 10 Preprint Florentin Guth, Zahra Kadkhodaie, and Eero Simoncelli. Learning normalized image densities via dual score matching. Advances in Neural Information Processing Systems , 38:89796–89826, 2026. Yinbin Han, Meisam Razaviyayn, and Renyuan Xu. Stochastic control for fine-tuning diffusion models: Optimality, regularity, and convergence. In Forty-second International Conference on Machine Learning , 2025. URL . Mohsin Hasan, Viktor Ohanesian, Artem Gazizov, Yoshua Bengio, Al´ an Aspuru-Guzik, Roberto Bondesan, Marta Skreta, and Kirill Neklyudov. Discrete Feynman-Kac correctors. arXiv preprint arXiv:2601.10403 , 2026. Jiajun He, Jos´ e Miguel Hern´ andez-Lobato, Yuanqi Du, and Francisco Vargas. RNE: plug-and-play diffusion inference-time control and energy-based training. In The Fourteenth International Conference on Learning Representations , 2026. URL . Yutong He, Naoki Murata, Chieh-Hsin Lai, Yuhta Takida, Toshimitsu Uesaka, Dongjun Kim, WeiH-siang Liao, Yuki Mitsufuji, Zico Kolter, Ruslan Salakhutdinov, et al. Manifold preserving guided diffusion. In International Conference on Learning Representations , volume 2024, pp. 44819– 44850, 2024. Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. In NeurIPS 2021 Workshop on Deep Generative Models and Downstream Applications , 2021. URL . Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in neural information processing systems , 33:6840–6851, 2020. Michael F Hutchinson. A stochastic estimator of the trace of the influence matrix for Laplacian smoothing splines. Communications in Statistics-Simulation and Computation , 18(3):1059–1076, 1989. Michele Invernizzi and Michele Parrinello. Rethinking metadynamics: from bias potentials to prob-ability distributions. The journal of physical chemistry letters , 11(7):2731–2736, 2020. Michele Invernizzi, Andreas Kr¨ amer, Cecilia Clementi, and Frank No´ e. Skipping the replica ex-change ladder with normalizing flows. The Journal of Physical Chemistry Letters , 13(50):11643– 11649, 2022. doi: 10.1021/acs.jpclett.2c03327. Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusion-based generative models. Advances in neural information processing systems , 35:26565–26577, 2022. Kevin H Lam, Tyler Farghly, Christopher Williams, Jun Yang, Yee Whye Teh, and Arnaud Doucet. Metropolis-adjusted diffusion models. arXiv preprint arXiv:2605.09654 , 2026. Sarah Lewis, Tim Hempel, Jos´ e Jim´ enez-Luna, Michael Gastegger, Yu Xie, Andrew YK Foong, Victor Garc´ ıa Satorras, Osama Abdin, Bastiaan S Veeling, Iryna Zaporozhets, et al. Scalable emulation of protein equilibrium ensembles with generative deep learning. Science , 389(6761): eadv9817, 2025. Minhuan Li, Jiequn Han, Pilar Cossio, and Luhuan Wu. Robust inference-time steering of protein diffusion models via embedding optimization. arXiv preprint arXiv:2602.05285 , 2026a. URL . Tiancheng Li, Wentao Li, Anyang Peng, Jianming Xue, Linfeng Zhang, Duo Zhang, and Han Wang. Dpa4: Pushing the accuracy-cost frontier of interatomic potentials with emfa so (2) convolution. 
+
+arXiv preprint arXiv:2606.02419 , 2026b. Jie Liu, Gongye Liu, Jiajun Liang, Yangguang Li, Jiaheng Liu, Xintao Wang, Pengfei Wan, Di Zhang, and Wanli Ouyang. Flow-grpo: Training flow matching models via online rl. Ad-vances in neural information processing systems , 38:40783–40818, 2026. B´ alint M´ at´ e and Franc ¸ois Fleuret. Learning interpolations between boltzmann densities. Transac-tions on Machine Learning Research , 2023. ISSN 2835-8856. URL . 11 Preprint Raphael A Meyer, Cameron Musco, Christopher Musco, and David P Woodruff. Hutch++: Optimal stochastic trace estimation. In Symposium on Simplicity in Algorithms (SOSA) , pp. 142–155. SIAM, 2021. RuiKang OuYang, Louis Grenioux, and Jos´ e Miguel Hern´ andez-Lobato. A diffusive classification loss for learning energy-based generative models. In Forty-third International Conference on Machine Learning , 2026. URL . William Peebles and Saining Xie. Scalable diffusion models with transformers. In Proceedings of the IEEE/CVF international conference on computer vision , pp. 4195–4205, 2023. Angus Phillips, Hai-Dang Dau, Michael John Hutchinson, Valentin De Bortoli, George Deligian-nidis, and Arnaud Doucet. Particle denoising diffusion sampler. volume 235 of Proceedings of Machine Learning Research , pp. 40688–40724. PMLR, 21–27 Jul 2024. Yinuo Ren, Haoxuan Chen, Grant M. Rotskoff, Jiequn Han, and Lexing Ying. FluxLite: Inference-time proposal control for discrete diffusion models. arXiv preprint arXiv:2609.35947 , 2026a. URL . Yinuo Ren, Wenhao Gao, Lexing Ying, Grant M. Rotskoff, and Jiequn Han. Driftlite: Lightweight drift control for inference-time scaling of diffusion models. In International Conference on Learn-ing Representations (ICLR) , 2026b. Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨ orn Ommer. High-resolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF confer-ence on computer vision and pattern recognition , pp. 10684–10695, 2022. Amirmojtaba Sabour, Michael S Albergo, Carles Domingo-Enrich, Nicholas M Boffi, Sanja Fidler, Karsten Kreis, and Eric Vanden-Eijnden. Test-time scaling of diffusions with flow maps. arXiv preprint arXiv:2511.22688 , 2025. Tim Salimans and Jonathan Ho. Should EBMs model the energy or the score? In Energy Based Models Workshop-ICLR 2021 , 2021. Michael R Shirts and John D Chodera. Statistically optimal analysis of samples from multiple equilibrium states. The Journal of chemical physics , 129(12), 2008. Anders Sj¨ oberg, Jakob Lindqvist, Magnus ¨ Onnheim, Mats Jirstrand, and Lennart Svensson. Mcmc correction of score-based diffusion models for model composition. Entropy , 28(3), 2026. ISSN 1099-4300. doi: 10.3390/e28030351. URL . Marta Skreta, Tara Akhound-Sadegh, Viktor Ohanesian, Roberto Bondesan, Alan Aspuru-Guzik, Arnaud Doucet, Rob Brekelmans, Alexander Tong, and Kirill Neklyudov. Feynman-kac correc-tors in diffusion: Annealing, guidance, and product of experts. In Forty-second International Conference on Machine Learning , 2025. URL . Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised learning using nonequilibrium thermodynamics. In International conference on machine learn-ing , pp. 2256–2265. pmlr, 2015. Duncan Soiffer, Chandler Squires, Yuan Guan, Jason Hartford, and Pradeep Ravikumar. Catas-trophic compositional generation: Why vanilla diffusion models fail to extrapolate. arXiv preprint arXiv:2606.23920 , 2026. Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In The Ninth International Conference on Learning Representations , 2021. URL . Charlie B. Tan, Joey Bose, Chen Lin, Leon Klein, Michael M. Bronstein, and Alexander Tong. Scal-able equilibrium sampling with sequential Boltzmann generators. In Forty-second International Conference on Machine Learning , 2025. 12 Preprint James Thornton, Louis B´ ethune, Ruixiang ZHANG, Arwen Bradley, Preetum Nakkiran, and Shuangfei Zhai. Composition and control with distilled energy diffusion models and sequential monte carlo. In Yingzhen Li, Stephan Mandt, Shipra Agrawal, and Emtiyaz Khan (eds.), Pro-ceedings of The 28th International Conference on Artificial Intelligence and Statistics , volume 258 of Proceedings of Machine Learning Research , pp. 3259–3267. PMLR, 03–05 May 2025. URL . Glenn M Torrie and John P Valleau. Nonphysical sampling distributions in monte carlo free-energy estimation: Umbrella sampling. Journal of computational physics , 23(2):187–199, 1977. Masatoshi Uehara, Yulai Zhao, Kevin Black, Ehsan Hajiramezanali, Gabriele Scalia, Nathaniel Lee Diamant, Alex M Tseng, Tommaso Biancalani, and Sergey Levine. Fine-tuning of continuous-time diffusion models as entropy-regularized control. arXiv preprint arXiv:2402.15194 , 2024. Chenyang Wang, Weizhong Wang, Yinuo Ren, Jose Blanchet, and Yiping Lu. Simple approximation and derivative free inference-time scaling for diffusion models via sequential Monte Carlo on path measures. In Forty-third International Conference on Machine Learning , 2026. Joseph L Watson, David Juergens, Nathaniel R Bennett, Brian L Trippe, Jason Yim, Helen E Eise-nach, Woody Ahern, Andrew J Borst, Robert J Ragotte, Lukas F Milles, et al. De novo design of protein structure and function with rfdiffusion. Nature , 620(7976):1089–1100, 2023. Li K. Wenliang and Heishiro Kanagawa. Blindness of score-based methods to isolated components and mixing proportions, 2021. Luhuan Wu, Brian Trippe, Christian Naesseth, David Blei, and John P Cunningham. Practical and asymptotically exact conditional sampling in diffusion models. Advances in Neural Information Processing Systems , 36:31372–31403, 2023. Yu Xie, Ludwig Winkler, Lixin Sun, Sarah Lewis, Adam Foster, Jose Jimenez-Luna, Tim Hempel, Michael Gastegger, Yaoyi Chen, Iryna Zaporozhets, Cecilia Clementi, Christopher M. Bishop, and Frank Noe. Enhanced diffusion sampling: Efficient rare event sampling and free energy calculation with diffusion models. In ICML 2026 Workshop on Structured Probabilistic Inference & Generative Modeling , 2026. URL . Minkai Xu, Lantao Yu, Yang Song, Chence Shi, Stefano Ermon, and Jian Tang. Geodiff: A geo-metric diffusion model for molecular conformation generation. In International Conference on Learning Representations , 2022. URL . Hanlin Yu, Arto Klami, Aapo Hyvarinen, Anna Korba, and Omar Chehab. Density ratio estima-tion with conditional probability paths. In Proceedings of the 42nd International Conference on Machine Learning , volume 267, pp. 73146–73174. PMLR, 13–19 Jul 2025. Hanlin Yu, RuiKang OuYang, Partha Kaushik, Arto Klami, Michael U Gutmann, and Omar Chehab. Learning energy-based models from stochastic interpolants using spatiotemporal differences. 
+
+arXiv preprint arXiv:2605.26850 , 2026. Robert W. Zwanzig. High-temperature equation of state by a perturbation method. i. nonpolar gases. 
+
+The Journal of Chemical Physics , 22(8):1420–1426, 08 1954. ISSN 0021-9606. 
+
+## A ENERGY -B ASED DIFFUSION MODEL TRAINING 
+
+Following Diffusive Classification (OuYang et al., 2026), we train the time-dependent energy model 
+
+Eθ in up to two stages: Stage 1 relies on denoising score matching, and an optional Stage 2 further calibrates the model through noise-level classification. The forward SDE (1) admits the closed-form solution 
+
+ys = exp 
+
+
+
+−
+
+Z s
+
+> 0
+
+Fudu
+
+| {z }
+
+> =: S(s)
+
+y0 + exp 
+
+
+
+−
+
+Z s
+
+> 0
+
+Fudu
+
+ sZ s
+
+> 0
+
+β2 
+
+> u
+
+exp 
+
+
+
+2
+
+Z u
+
+> 0
+
+Fr dr
+
+
+
+du
+
+| {z }
+
+> =: ν(s)
+
+z,
+
+13 Preprint where y0 ∼ p⋆ and z ∼ N (0 , Id). We write p⋆t|T (· | xT ) = N  S(T − t)xT , ν (T − t)2Id
+
+ for the resulting law of xt conditioned on xT .Tweedie’s formula then relates the score of the marginal to the score of this conditional, 
+
+∇ log p⋆t (x) = E
+
+h
+
+∇x log p⋆t|T (x | xT ) xt = x
+
+i
+
+, (10) which motivates the Stage 1 denoising score matching objective 
+
+LDSM (θ) = E
+
+
+
+λ(t) −∇ xEθ (xt, t ) − ∇ xt log p⋆t|T (xt | xT ) 2
+
+,
+
+training the model to match the spatial gradient of the energy at each noise level. Tweedie’s for-mula (10) also gives a direct link between the denoiser and the score, 
+
+D⋆t (x) = E[xT | xt = x] = x + ν(T − t)2∇x log p⋆t (x)
+
+S(T − t) ,Dt(x) = x − ν(T − t)2∇xEθ (x, t )
+
+S(T − t) , (11) where Dt is the model denoiser obtained by replacing the true score with −∇ xEθ .Stage 1 alone, however, only matches local properties of the energy landscape: it misses the relative proportions between disjoint regions of the energy (Wenliang & Kanagawa, 2021; OuYang et al., 2026, Appendix C). Stage 2 corrects for this through noise-level classification: we select noise levels t1: K and train the model to identify the level from which a perturbed sample was drawn. The resulting classifier is 
+
+pθ (c = i | x) = exp ( −Eθ (x, t i)) 
+
+PKj=1 exp ( −Eθ (x, t j )) ,
+
+trained with the classification loss 
+
+LDiffCLF (θ) = − 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+Exti ∼pti [log pθ (c = i | xti )] .
+
+The complete Stage 2 training objective is then 
+
+LEBM (θ) = LDSM (θ) + λclf LDiffCLF (θ).
+
+Preconditioned parameterization. We follow the preconditioning scheme of OuYang et al. (2026); Thornton et al. (2025). Let Γ( t) = ν(T − t)/S (T − t) denote the noise-to-signal ratio, and let μdata and σ2data denote the empirical mean and scalar variance of the training data. We define the input scale 
+
+αin (t) = 
+
+q
+
+S(T − t)2σ2data + ν(T − t)2
+
+and input center βin (t) = S(T − t)μdata , and parameterize the energy as 
+
+Eθ (y, t ) = ∥y∥2
+
+2αin (t)2 − σdata 
+
+Γ( t) U θt
+
+ y − βin (t)
+
+αin (t)
+
+
+
+− S(T − t)μ⊤
+
+> data
+
+y
+
+αin (t)2 + 12
+
+S(T − t)2
+
+αin (t)2 ∥μdata ∥2
+
++ d
+
+2 log  2πα in (t)2 .
+
+With this parameterization, the network only needs to learn a non-Gaussian residual in standardized coordinates, while the dominant Gaussian scale and normalization constant are represented analyt-ically. Writing the standardized input as z = ( y − βin (t)) /α in (t), we construct the scalar residual 
+
+U θt from a vector-valued network NN θt via 
+
+U θt (z) = z⊤NN θt (z).
+
+We parameterize NN θt with an E(n)-equivariant graph neural network (EGNN), using sinusoidal time embeddings together with learnable bond- and atom-type embeddings. 14 Preprint 
+
+## B ALGORITHM DETAILS 
+
+B.1 FOKKER –P LANCK EQUATION FOR A PRESCRIBED PATH 
+
+We prove Thm. 2 here. Suppose that qt satisfies the Feynman–Kac-type Fokker–Planck equation 
+
+∂tqt(x) = − ∇ · [qt(x)vt(x)] + σ2
+
+> t
+
+2 ∆qt(x) + qt(x)gt(x). (12) Dividing Equation (12) by qt(x) and using ∇ · (qtvt)/q t = ∇ · vt + v⊤ 
+
+> t
+
+∇ log qt and ∆qt/q t =∆ log qt + ∥∇ log qt∥2 gives the reweighting potential 
+
+gt(x) = ∂t log qt(x) + ∇ · vt(x) + vt(x)⊤∇ log qt(x)
+
+− σ2
+
+> t
+
+2
+
+h
+
+∆ log qt(x) + ∥∇ log qt(x)∥2i
+
+. (13) For the prescribed path qt(x) = Z−1 
+
+> t
+
+exp ( −Φt(x)) , its log-density derivatives satisfy ∂t log qt =
+
+−∂tΦt − ∂t log Zt, ∇ log qt = −∇ Φt, and ∆ log qt = −∆Φ t. Because ∂t log Zt is state indepen-dent, define the uncentered potential as 
+
+Gt = gt + ∂t log Zt.
+
+We then substitute the proposal drift vt = −eut(x) − σ2 
+
+> t
+
+∇Φt(x) into Equation (13). Expanding the divergence and inner-product terms yields 
+
+Gt(x) = − ∂tΦt(x) − ∇ · eut(x) + eut(x)⊤∇Φt(x)
+
+− σ2
+
+> t
+
+2 ∆Φ t(x) + σ2
+
+> t
+
+2 ∥∇ Φt(x)∥2 .
+
+This is the uncentered potential in Equation (8). It remains to determine the state-independent normalization term. Assuming the boundary flux vanishes, integrating Equation (12) over x and using R qt(x) d x = 1 gives Eqt [gt] = 0 . Since 
+
+gt = Gt − ∂t log Zt, the normalization term is ∂t log Zt = Eqt [Gt]. Consequently, the normalized reweighting potential is 
+
+gt(x) = Gt(x) − Eqt [Gt],
+
+which proves Thm. 2. B.2 VARIANCE -C ONTROLLING GUIDANCE 
+
+The Feynman–Kac dynamics in Eq. (7) preserve the prescribed path at the population level, but a finite-particle SMC approximation is prone to weight degeneracy when the reweighting potential has high variance. Variance-Controlling Guidance (VCG) (Ren et al., 2026b) exploits the degree of freedom in the Fokker–Planck equation to actively reduce this variance. Adding a control drift bt
+
+gives an equivalent Fokker–Planck equation: 
+
+∂tqt(x) = − ∇ · [( vt(x) + bt(x)) qt(x)] + σ2
+
+> t
+
+2 ∆qt(x) + qt(x)ϕt(x),
+
+where the residual potential is ϕt(x) = gt(x) + ht(x; bt), and the control potential is ht(x; bt) = 
+
+−∇ Φt(x) · bt(x) + ∇ · bt(x). VCG selects the control drift by directly minimizing the variance of the residual potential: 
+
+min 
+
+> bt
+
+Var x∼qt [ϕt(x)] = Var x∼qt [gt(x) + ht(x; bt)] . (14) To obtain a computationally lightweight control, we restrict the drift to the linear span of n problem-informed basis: bt(x) = Pni=1 λitψi(x, t ). Let hit(x) = ht(x; ψi). Under this linear ansatz, Eq. (14) reduces to the n × n system Atλt = ct, where Aij = Eqt [hithjt ] and ci = −Eqt [gthit].
+
+Solving this system at each time step yields the control drift that minimizes the residual potential variance within the chosen linear span. In practice, At may be ill-conditioned, so we solve the regularized system 
+
+(At + λVCG In)λt = ct. (15) 15 Preprint For the EAT path, we use the following problem-informed basis: 
+
+ψ1 = x, ψ2 = ∇xEθ (x, t ), ψ3 = ∇x[E⋆ (Dt (x)) − Eθ (Dt (x) , T )] , ψ4 = ∇xr (Dt (x)) .
+
+The identity basis ψ1 and learned-energy basis ψ2 are always active. We activate the target-energy correction basis ψ3 when κt̸ = 0 , and use the reward basis ψ4 for reward-tilting tasks. Com-pared with DriftLite (Ren et al., 2026b), we add the target-energy correction basis ψ3, which is significantly important in control drift estimation. At each time, we retain the active basis, evaluate 
+
+hit = ht(·; ψi) on the current weighted particles, form weighted empirical estimates of At and ct,and solve the empirical version of the regularized system in Eq. (15). B.3 LOOK -AHEAD MAP 
+
+The EAT path evaluates the reference and learned terminal energies, while both MIT and EAT paths evaluate the reward, at the current state xt. At high noise levels, these states can lie far from the data manifold, where evaluating E⋆ and its gradient can be numerically unstable. Therefore, in the challenging LJ-13 and molecular sampling tasks we evaluate these quantities at a look-ahead point defined by the map 
+
+Dt (x) = (1 − ωt) x + ωt Dt(x), (16) which interpolates between x and the denoiser prediction Dt(x) of Eq. (11) with strength ωt ∈ [0 , 1] .Flow maps (Sabour et al., 2025) could play the same role, but the denoiser is directly available from the learned energy. Two schedules govern the correction: the look-ahead strength ωt and the correction schedule κt. Since the denoiser is weakly informative early in the reverse process, we activate the correction only later; over its active window ωt decreases from the denoiser toward the identity, and ωT = 0 gives DT (x) = x. Replacing the terminal-time evaluations by their look-ahead counterparts gives the practical potentials 
+
+ΦMIT ,LA  
+
+> t
+
+(x) = γE θ (x, t ) − rt(Dt (x)) ,
+
+ΦEAT ,LA  
+
+> t
+
+(x) = γE θ (x, t ) − rt(Dt (x)) + γκ t ∆Eref (Dt (x)) .
+
+Because ωT = 0 and κT = 1 , the terminal potential is still γE ref (x) − r(x), so the look-ahead map alters only the intermediate marginals, not the endpoint. An imperfect denoiser can still send a few particles to non-physical configurations, so we apply the alive filter (App. B.7) for numerical stability. B.4 DERIVATIVE COMPUTATION AND STOCHASTIC LAPLACIAN ESTIMATION 
+
+Hutchinson trace estimation. We use Hutchinson trace estimator (Hutchinson, 1989) to estimate the Laplacian term. Let Ht(x) = ∇2
+
+> x
+
+Φt(x), and let ϵ ∈ Rd be a random probe satisfying E[ϵϵ ⊤] = 
+
+Id. Since ∆Φ t = tr( Ht), the Hutchinson identity gives 
+
+∆Φ t(x) = Eϵ
+
+ϵ⊤Ht(x)ϵ .
+
+Given R independent probes, we evaluate ℓ(r) 
+
+> t
+
+(x) = ( ϵ(r))⊤Ht(x)ϵ(r) and average them as bLt(x) = 
+
+R−1 PRr=1 ℓ(r) 
+
+> t
+
+(x). Both Rademacher and standard Gaussian probes satisfy the required second-moment condition. For the symmetric Hessian Ht(x), the Gaussian estimator additionally contains the contribution from the Hessian diagonal: 
+
+Var Gauss 
+
+hbLt(x)
+
+i
+
+− Var Rad 
+
+hbLt(x)
+
+i
+
+= 2
+
+R
+
+X
+
+> i
+
+[Ht(x)] 2 
+
+> ii
+
+.
+
+Thus, Rademacher probes have no greater variance than Gaussian probes, and the inequality is strict whenever the Hessian has a nonzero diagonal entry. We therefore use Rademacher probes by default for the stochastic estimation of all Laplacian terms. 
+
+Derivatives and matrix-free Hessian–vector products. We first detail how to compute deriva-tives of functions composed with the look-ahead map in Eq. (16). For any differentiable function 
+
+f : Rd → R, define the look-ahead-composed function 
+
+Ft(x) = f (Dt (x)) .
+
+16 Preprint Let JDt (x) denote the Jacobian of Dt with respect to x. The spatial gradient and time derivative of 
+
+Ft follow from the chain rule: 
+
+∇xFt(x) = JDt (x)⊤∇f (Dt (x)) ,∂tFt(x) = ∇f (Dt (x)) ⊤ ∂tDt(x).
+
+For the look-ahead map in Eq. (16), these two derivatives of the map are 
+
+JDt (x) = (1 − ωt) Id + ωtJDt (x),∂tDt(x) = ˙ ωt (Dt(x) − x) + ωt∂tDt(x).
+
+The Hessian of the composite function contains contributions from both f and the look-ahead map: 
+
+∇2
+
+> x
+
+Ft(x) = JDt (x)⊤∇2f (Dt (x)) JDt (x)+
+
+> d
+
+X
+
+> j=1
+
+[∇f (Dt (x))] j ∇2 
+
+> x
+
+[Dt(x)] j .
+
+We evaluate the required Hessian-vector product (HVP) without explicitly forming the Hessian. For the learned intermediate energy, second-order automatic differentiation directly computes 
+
+∇2
+
+> x
+
+Eθ (x, t )ϵ = ∇x
+
+h
+
+(∇xEθ (x, t )) ⊤ ϵ
+
+i
+
+.
+
+For a look-ahead-composed term Ft, we instead approximate the HVP by applying a centered finite difference to the complete spatial gradient: 
+
+∇2
+
+> x
+
+Ft(x)ϵ ≈ ∇xFt(x + δϵ) − ∇ xFt(x − δϵ)2δ
+
+= 12δ
+
+
+
+JDt (x + δϵ)⊤∇f (Dt(x + δϵ)) 
+
+− JDt (x − δϵ)⊤∇f (Dt(x − δϵ)) 
+
+
+
+, (17) where δ > 0 is the finite-difference step size. By applying the finite difference to the complete composite gradient, this approximation captures the second-order contributions from both f and Dt,without explicitly forming ∇2f or the componentwise Hessians of Dt. In particular, we use this approximation with f = E∗ because OpenMM provides only first-order derivatives of the target energy. In implementation, we evaluate the composite gradient without materializing either JDt or JDt . For an arbitrary evaluation point z, let (xLA  
+
+> t
+
+(z) = Dt(z),
+
+gz = ∇f  xLA  
+
+> t
+
+(z) .
+
+We obtain gz by automatic differentiation for differentiable neural potentials. For f = E∗, we instead obtain this energy gradient from the force returned by OpenMM, with the sign reversed. Us-ing gz as the upstream gradient at the output of Dt, backpropagation computes the vector-Jacobian product 
+
+Gt(z) = JDt (z)⊤gz = ∇zFt(z).
+
+Because Dt is evaluated as part of Dt, backpropagation also applies J⊤ 
+
+> Dt
+
+internally without explicitly constructing either Jacobian. Finally, setting z± = x ± δϵ, we approximate the composite HVP by 
+
+∇2
+
+> x
+
+Ft(x)ϵ ≈ Gt(z+) − Gt(z−)2δ ,
+
+which is Eq. (17). Thus, the desired second-order derivative can be computed by HVP, whereas each composite gradient in its finite-difference approximation is evaluated by a first-order VJP. The same calculation applies to other look-ahead-composed terms for which only first-order derivatives are available. However, the OpenMM finite-difference approximation is time-consuming and cannot be parallelized across particles. Using Machine-learned interatomic potential (MLIP) such as DPA4 (Li et al., 2026b) to evaluate target energy can help with this problem, and we leave this for future work. 17 Preprint 
+
+Variance correction for stochastic log-weights. An unbiased stochastic Laplacian generally does not yield an unbiased incremental importance weight, because SMC exponentiates the estimated log-weight increment. Consider the EDM forward process (Karras et al., 2022) with us = 0 and 
+
+β2 
+
+> s
+
+= 2 s, so that eut = 0 and σ2 
+
+> t
+
+= β2  
+
+> T−t
+
+= 2( T − t); the potential in Eq. (8) then reduces to 
+
+Gt(x) = −∂tΦt(x) − (T − t)∆Φ t(x) + ( T − t) ∥∇ Φt(x)∥2 .
+
+For a fixed particle x at time tk, let hk = tk+1 − tk and define 
+
+Dk = −∂tΦtk (x) + ( T − tk) ∥∇ Φtk (x)∥2 ,Lk = ∆Φ tk (x), ck = hk(T − tk).
+
+Up to a particle-independent centering term, which cancels once the weights are normalized, the corresponding Euler log-weight increment is 
+
+∆ log wk = hkGtk (x) = hkDk − ckLk.
+
+Replacing Lk by its stochastic R-probe estimate bLk = bLtk (x) gives 
+
+\∆ log wk = ∆ log wk + ηk, ηk = −ck(bLk − Lk).
+
+By the Hutchinson identity, Eϵ[ηk | x] = 0 , so the estimated log-weight increment is unbiased conditional on the particle, but the incremental weight itself is not: exponentiating gives 
+
+Eϵ
+
+h
+
+exp 
+
+ \∆ log wk
+
+
+
+| x
+
+i
+
+= exp(∆ log wk)Eϵ[exp( ηk) | x] ≥ exp(∆ log wk),
+
+where the inequality follows from Jensen’s inequality and is strict whenever the trace noise is non-degenerate. Since the trace-estimation variance generally depends on x, this upward bias varies across particles and thereby distorts their normalized relative weights. Under the Gaussian approxi-mation ηk | x ∼ N (0 , v k), the moment-generating function gives 
+
+Eϵ
+
+h
+
+exp 
+
+ \∆ log wk
+
+
+
+| x
+
+i
+
+= exp 
+
+
+
+∆ log wk + vk
+
+2
+
+
+
+.
+
+Subtracting vk/2 from the noisy log-weight increment therefore cancels the multiplicative factor introduced by the additional trace noise, following the classical cumulant-based bias correction of Zwanzig (1954) for exponentiated stochastic quantities. For R ≥ 2, we estimate the conditional variance of the mean trace estimator by 
+
+bσ2 
+
+> L,k
+
+= 1
+
+R(R − 1) 
+
+> R
+
+X
+
+> r=1
+
+
+
+ℓ(r) 
+
+> tk
+
+(x) − bLk
+
+2
+
+.
+
+Since the Laplacian estimate enters the log-weight increment with coefficient −ck, its additional variance at step k is estimated by 
+
+bvk = c2 
+
+> k
+
+bσ2
+
+> L,k
+
+.
+
+At every SMC step, we subtract half of this estimated variance from the noisy log-weight increment: 
+
+\∆ log wcorr  
+
+> k
+
+= hkDk − ck bLk − 12 bvk
+
+= hkDk − ck bLk − 12 c2 
+
+> k
+
+bσ2
+
+> L,k
+
+. (18) In our implementation, we apply the variance correction in Eq. (18) only to the Ala-4 free-energy estimation experiment. In the other experiments, we did not observe a noticeable effect of this correction on sampling performance. 
+
+Hutch++ estimator. We can also estimate ∆Φ t(x) using advanced Hutch++ (Meyer et al., 2021). Its key idea is to separate the Hessian into a data-dependent low-rank component and an orthogonal residual. The trace on the sketched subspace is evaluated directly, while stochastic probes are applied only to the residual. Thus, when the sketch captures the dominant spectral components of the Hes-sian, the randomly estimated residual has lower variance than a Hutchinson estimate applied to the 18 Preprint full Hessian. Concretely, given an m-column Gaussian sketch S ∈ Rd×m, let Q = orth( Ht(x)S)
+
+and PQ = Id − QQ ⊤. We then draw independent residual probes g(1) , . . . , g(R) ∼ N (0 , Id). For each probe, define the single-probe Hutch++ estimate 
+
+ℓ++ ,(r) 
+
+> t
+
+(x) = tr  Q⊤Ht(x)Q +
+
+
+
+g(r)⊤
+
+PQHt(x)PQg(r).
+
+Their average is bL++  
+
+> t
+
+= R−1 PRr=1 ℓ++ ,(r) 
+
+> t
+
+. The same low-rank term appears in every single-probe estimate and therefore cancels when these estimates are centered. For Hutch++, we can also adopt the variance correction method and apply Eq. (18) to reduce the corresponding additional variance. Hutch++ is not used in our implementation and we leave it for future work. B.5 FKC WITH A TIME -DEPENDENT REWARD 
+
+Skreta et al. (2025, Proposition 3.4) considers tilts of the form βtr. We extend it to an arbitrary deterministic, time-dependent reward Rt, which covers both the MIT and EAT paths. 
+
+Time-dependent reward tilting. Let pt > 0 satisfy the base diffusion equation 
+
+∂tpt = −∇ · pt
+
+ −eut + σ2 
+
+> t
+
+∇ log pt
+
+ + σ2
+
+> t
+
+2 ∆pt,
+
+and let Rt be C1 in time and C2 in space, with Zt = R pt(x) eRt(x) dx ∈ (0 , ∞). We claim that, under the usual integrability and vanishing-boundary-flux conditions, the tilted path qt = Z−1 
+
+> t
+
+pt eRt
+
+is represented by the weighted process 
+
+dX t =
+
+
+
+−eut(Xt) + σ2 
+
+> t
+
+∇ log pt(Xt) + σ2
+
+> t
+
+2 ∇Rt(Xt)
+
+
+
+dt + σt dW t, (19) 
+
+dℓ t = GRt (Xt) dt, GRt = ∂tRt +
+
+
+
+∇Rt, σ2
+
+> t
+
+2 ∇ log pt − eut
+
+
+
+, (20) initialized with X0 ∼ q0 and ℓ0 = 0 , with weights proportional to eℓt . The representation is exact in the sense that the normalized weighted marginals equal qt.To verify this claim, define at = −eut + σ2 
+
+> t
+> 2
+
+∇ log pt. Since ∇pt = pt∇ log pt, the diffusion term in the base equation partially cancels the score term in the drift, leaving the continuity equation 
+
+∂tpt = −∇ · (ptat). Differentiating qt = Z−1 
+
+> t
+
+pteRt and using ∂t log Zt = Eqt [GRt ], which follows by integrating over x under the boundary conditions, gives 
+
+∂tqt = −∇ · (qtat) + qt
+
+ GRt − Eqt [GRt ] .
+
+Since ∇qt = qt∇ log qt, the terms −∇ ·  qt σ2 
+
+> t
+
+∇ log qt/2 and σ2 
+
+> t
+
+∆qt/2 cancel. Adding the for-mer to the drift and the latter as a diffusion term therefore leaves the equation unchanged. With 
+
+∇ log qt = ∇ log pt + ∇Rt, the resulting drift is exactly (19), and the reaction term is realized by the weights (20). Taking Rt = βtr recovers Proposition 3.4 of Skreta et al. (2025). 
+
+Instantiation on MIT and EAT. Both paths follow directly from (19)–(20) with a suitable choice of reward. For the MIT path, we simply take Rt = rt. For the EAT path, we take 
+
+Rt(x) = rt(x) − γκ t ∆Eref (x).
+
+Since rT = r and κT = 1 , the terminal reward is RT = r − γ∆Eref , and the endpoint of the tilted path is 
+
+qT (x) ∝  pθT (x)γ exp ( RT (x)) 
+
+∝ exp ( −γE θ (x, T )) exp  r(x) − γE ref (x) + γE θ (x, T )
+
+= exp  −γE ref (x) + r(x)
+
+∝ qref  
+
+> T
+
+(x).
+
+FKC on EAT is therefore FKC on the model-induced construction with the redefined reward ˆr = RT ,under which the MIT coincides with qref  
+
+> T
+
+and the endpoint mismatch vanishes by construction. Any error of FKC on EAT at the population level therefore stems from path tracking. 19 Preprint 
+
+Scope of the extension. These constructions extend FKC to both paths, but they still require pθt
+
+to satisfy the base diffusion equation. For an imperfect model this condition generally fails, so the extended FKC formulas need not track the prescribed path, even at the population level. EBFKC avoids this limitation: it evaluates the full prescribed-path potential of Thm. 2 without imposing diffusion consistency. B.6 TEMPERING MODEL -FREE SMC 
+
+Tempering path. As a model-free baseline, we use traditional SMC along a geometric tempering path with a scheduled reward. Let ρ = N (0 , Σ0) with Σ0 ≻ 0 and ΦG(x) = 12 x⊤Σ−10 x. For a smooth nondecreasing schedule λ(t) satisfying λ(0) = 0 and λ(T ) = 1 , we define the tempering path as 
+
+Φtemp  
+
+> t
+
+(x) = (1 − λ(t))Φ G(x) + λ(t)γE ∗(x) − αtr(x), (21) 
+
+qtemp  
+
+> t
+
+(x) ∝ ρ(x)1−λ(t) p⋆(x)γλ (t) exp  αtr(x).
+
+With α0 = 0 and αT = 1 , the path starts at qtemp 0 = ρ and terminates at the desired target qtemp  
+
+> T
+
+∝
+
+exp( −γE ∗ + r).
+
+Prescribed-path Langevin Feynman–Kac equation. For a prescribed path qt = Z−1 
+
+> t
+
+exp( −Φt),this baseline uses an annealed Langevin proposal. We choose a space-independent diffusivity εt ≥
+
+0, with drift vt = −εt∇Φt and diffusion coefficient σt = √2εt. Assume Φt is C1 in time and C2
+
+in space, 0 < Z t < ∞, differentiation under the integral is valid, and boundary fluxes vanish. Then 
+
+∂tqt = −∇· (qtvt) + εt∆qt + qtgt,Gt(x) = −∂tΦt(x), gt(x) = Gt(x) − Eqt [Gt].
+
+Indeed, ∇qt = −qt∇Φt makes the drift and diffusion terms cancel, while differentiating qt gives 
+
+∂tqt = qtgt. For the tempering path in Eq. (21), the uncentered reweighting potential is Gt(x) = ˙λ(t)[Φ G(x) − γE ∗(x)] + ˙ αtr(x).
+
+Annealed Langevin dynamics with reweighting. With Φt = Φ temp  
+
+> t
+
+, the corresponding weighted particle dynamics between resampling events are 
+
+dx(i) 
+
+> t
+
+= −εt∇Φt(x(i) 
+
+> t
+
+)d t + √2εt dw(i) 
+
+> t
+
+,
+
+d log w(i) 
+
+> t
+
+=
+
+Gt(x(i) 
+
+> t
+
+) −
+
+> N
+
+X
+
+> j=1
+
+w(j) 
+
+> t
+
+Gt(x(j) 
+
+> t
+
+)
+
+ dt. 
+
+Starting from x(i)0iid 
+
+∼ qtemp 0 with w(i)0 = 1 /N , we discretize the particle SDE using Euler–Maruyama and apply left-point Euler updates to the log-weights. We then normalize the weights and resample when the ESS falls below the prescribed threshold, resetting the weights to 1/N .B.7 ALIVE FILTER FOR NUMERICAL STABILITY 
+
+During the look-ahead step of SMC inference, a small number of noisy particles can be mapped to severely non-physical configurations, producing non-finite or extremely large target energies and gradients, which will destroy the following VCG and SMC reweighting. Following the numerical stabilization strategy used in (Tan et al., 2025), we apply an energy-based alive filter to prevent nu-merically unstable, extremely high-energy configurations from propagating through SMC dynamics. Specifically, at time tk, we first use look-ahead map to predict each particle’s terminal position 
+
+xLA ,(i) 
+
+> tk
+
+= Dtk
+
+
+
+x(i)
+
+> tk
+
+
+
+. In molecular experiments, we use the dimensionless reduced potential energy 
+
+u(x) = UOpenMM (x)/(RT target ) at the target temperature Ttarget , where UOpenMM is the molar potential energy and R is the molar gas constant. Given an energy threshold calive (tk), particle i is declared alive if both u
+
+
+
+xLA ,(i)
+
+> tk
+
+
+
+and its gradient are finite, and u
+
+
+
+xLA ,(i)
+
+> tk
+
+
+
+< c alive (tk).20 Preprint 
+
+Algorithm 1: Energy-based Feynman–Kac Corrector on Energy-Aligned Target (EBFKC on EAT) 
+
+Input: Learned energy Eθ , target energy E∗, path schedule (α, κ ); time grid 0 = t0 < · · · < t K = T ;particle count N ; ESS threshold τ . 
+
+> 1
+
+Construct the EAT path qt ∝ exp( −Φt); Initialize x(i)0 ∼ q0 and w(i)0 ← 1/N for i ∈ [N ] 
+
+> 2
+
+for k ← 0 to K − 1 do  
+
+> 3
+
+Select the active EAT basis and solve the weighted VCG system in Eq. (15) for λtk 
+
+> 4
+
+Form the control drift btk = P  
+
+> j∈I (tk)
+
+λjtk ψj and residual potential ϕtk = ˆ gtk + htk (·; btk ) 
+
+> 5
+
+Compute δℓ (i) 
+
+> k
+
+← ∆tk ϕtk (x(i) 
+
+> tk
+
+) at the current particle positions  
+
+> 6
+
+Propagate particles to tk+1 by Euler–Maruyama with drift vtk + btk and diffusion coefficient σtk 
+
+> 7
+
+Reweight w(i) 
+
+> tk+1
+
+∝ w(i) 
+
+> tk
+
+exp( δℓ (i) 
+
+> k
+
+) and normalize  
+
+> 8
+
+if ESS( w(i) 
+
+> tk+1
+
+) < τ then  
+
+> 9
+
+Resample particles using their weights and reset w(i) 
+
+> tk+1
+
+← 1/N 
+
+Output: Weighted particles {(x(i) 
+
+> T
+
+, w (i) 
+
+> T
+
+)}Ni=1 approximating q⋆T ∝ exp( −γE ∗ + r).
+
+Let S be the surviving set, we renormalize the current SMC weights over the surviving particles, 
+
+¯wi = w(i)
+
+> tk
+
+P 
+
+> j∈S
+
+w(j)
+
+> tk
+
+, i ∈ S ,
+
+and use systematic resampling from { ¯wi}i∈S to draw N − |S| parent particles whose copies replace the filtered particles. The post-filter weights are 
+
+
+
+w′(i) 
+
+> tk
+
+= |S| 
+
+N ¯wi, i ∈ S ,w′(j) 
+
+> tk
+
+= 1
+
+N , j / ∈ S .
+
+Thus, the alive filter preserves both the particle count and the total weight since P 
+
+> i
+
+w′(i) 
+
+> tk
+
+= 1 .The replacement particles are sampled from the surviving set in proportion to the renormalized SMC weights { ¯wi}i∈S . The alive filter samples from a truncated distribution by removing the extreme high-energy tail. In practice, this truncation removes only a few particles, and we observe no degradation in algorithm performance. 
+
+## C EXPERIMENTAL DETAILS 
+
+C.1 GMM SETTINGS 
+
+Target distribution. We consider an equally weighted Gaussian mixture model (GMM) with K =40 components in d = 30 dimensions: 
+
+p∗(x) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+N (x; μk, 50 Id) ,
+
+where the component means are sampled independently from Unif([ −40 , 40] d). We apply the vari-ance exploding (VE) forward process, whose samples at noise level s are given by ys = y0 + sϵ for 
+
+s ∈ [0 , T ], with y0 ∼ p⋆ and ϵ ∼ N (0 , Id) independently. The resulting forward marginals are 
+
+r⋆s (y) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+N  y; μk, (50 + s2)Id
+
+ .
+
+Under the generative-time convention t = T − s, these marginals give p⋆t (x) = r⋆T −t(x). Con-sequently, both the intermediate energy E⋆t (x) = − log p⋆t (x) and its score function s∗ 
+
+> t
+
+(x) = 
+
+−∇ xE⋆t (x) are available in closed form. This allows us to emulate pretrained model error through explicit perturbations to the component means and variance, with direct control over the perturbation magnitudes. 21 Preprint 
+
+Controlled pretrained model error. We emulate an imperfect pretrained model by independently perturbing the component means and variance. For each component, we add an independent Gaus-sian perturbation to its mean: 
+
+bμk = μk + ξk,
+
+where ξk ∼ N (0 , σ 2
+
+> μ
+
+Id). We also perturb the reference variance σ2 
+
+> s
+
+= 50 + s2 by rescaling the noise contribution by a factor of 1 + ρ to obtain the perturbed variance 
+
+bσ2 
+
+> s
+
+= 50 + (1 + ρ)s2.
+
+These perturbations define the marginals 
+
+rθs (y) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+N  y; bμk, bσ2 
+
+> s
+
+Id
+
+ ,
+
+with corresponding generative-time marginals pθt (x) = rθT −t(x) and intermediate energy bE(x, t ) = 
+
+− log pθt (x).For the comparisons in Table 1, we set σμ = 10 and ρ = 0 .1. To evaluate robustness across perturbation magnitudes, we sweep each perturbation parameter over five evenly spaced values: 
+
+σμ ∈ { 0, 2.5, 5, 7.5, 10 } and ρ ∈ { 0, 0.025 , 0.05 , 0.075 , 0.1}.
+
+Inference-time targets. Following Eq. (5), both tasks use the unified terminal target 
+
+q⋆T (x) ∝ (p∗(x)) γ exp ( r(x)) .
+
+For annealing, we set r(x) = 0 and γ = 2 to sharpen the reference distribution. For reward tilting, we set γ = 1 and use a quadratic reward centered at μ ∼ N (0, 100 Id), with Σ = σId and σ = 100 :
+
+r(x) = − 12 (x − μ)⊤ Σ−1 (x − μ) .
+
+This reward favors samples near μ, allowing us to test whether inference-time sampling can redirect probability mass toward this region despite pretrained model error. C.2 PARTICLE SYSTEM SETTINGS 
+
+Following the setup of DriftLite (Ren et al., 2026b), we consider two particle systems: Double-Well (DW-4) and Lennard-Jones (LJ-13). For a configuration x = ( r1, . . . , rn) with a system-specific interaction energy H(x), the equilibrium distribution at temperature Tphys is 
+
+p⋆(x) ∝ exp 
+
+(
+
+− 1
+
+Tphys 
+
+"
+
+H(x) + λ
+
+2
+
+> n
+
+X
+
+> i=1
+
+∥ri − r∥2
+
+#) 
+
+, (22) where λ controls harmonic confinement around configuration center r. For both particle systems, we obtain ground truth reference samples from underdamped Langevin dynamics simulations using the BAOAB splitting scheme. For reward tilting, we use the following quadratic reward to favor spatially compact configurations centered at r:
+
+r(x) = − λ′
+
+2
+
+> n
+
+X
+
+> i=1
+
+∥ri − r∥2 . (23) Combining Eqs. (22) and (23) gives 
+
+p⋆(x) exp ( r(x)) ∝ exp 
+
+(
+
+− 1
+
+Tphys 
+
+"
+
+H(x) + λ + Tphys λ′
+
+2
+
+> n
+
+X
+
+> i=1
+
+∥ri − r∥2
+
+#) 
+
+.
+
+Thus, the reward preserves the interaction potential and temperature while increasing the effective confinement strength from λ to λ+Tphys λ′. The default reward strength is λ′ = 0 .5 for both particle systems. 22 Preprint 
+
+Double-Well system. The DW-4 benchmark consists of four particles in two dimensions, so x ∈
+
+R4×2. Let dij = ∥ri − rj ∥ denote the distance between a pair of particles. The interaction energy is 
+
+HDW (x) = X
+
+> i<j
+
+a(dij − d0) + b(dij − d0)2 + c(dij − d0)4 .
+
+We set a = 0 , b = −4, c = 0 .9, and d0 = 4 . The resulting pair potential has two preferred separations, dij = 4 ± 23
+
+√5, which induce the characteristic double-well structure. The harmonic-confinement strength in Eq. (22) is λ = 0 .05 .
+
+Lennard-Jones system. The LJ-13 benchmark contains thirteen particles in three dimensions, with x ∈ R13 ×3. Its interaction energy is 
+
+HLJ (x) = ϵ
+
+2
+
+X
+
+> i<j
+
+" σdij 
+
+12 
+
+− 2
+
+ σdij 
+
+6#
+
+.
+
+The inverse-power terms produce strong short-range repulsion and longer-range attraction, yielding a rugged energy landscape for the thirteen-particle cluster. We use σ = 1 , ϵ = 2 , and harmonic confinement strength λ = 1 .C.3 ALANINE DIPEPTIDE SETTINGS 
+
+Molecular system and reference data. Following the setup of RNE (He et al., 2026), we consider alanine dipeptide (ALDP), a 22-atom molecule represented by x ∈ R22 ×3. Its potential energy is specified by the AMBER ff96 force field with a generalized Born implicit-solvent model. We use the configurations provided by RNE: 210,384 at 300 K and 150,000 at 800 K . The 300 K 
+
+reference ensemble was generated by a 5 μs molecular dynamics simulation using a Langevin middle integrator with a friction coefficient of 1 ps −1 and a time step of 2 fs . We center each configuration before training. 
+
+Free-energy estimation. We estimate the one-dimensional free-energy profile at 300 K along the backbone dihedral angle ϕ. The periodic reaction coordinate is ξALDP (x) = ϕ(x), computed from the atom quadruplet (4 , 6, 8, 14) . To obtain the reference profile, we perform umbrella sampling with 25 windows whose centers are uniformly spaced over the periodic domain: 
+
+ϕi = −π + 2πi 
+
+25 , i = 0 , . . . , 24 .
+
+In each window, we use a Langevin middle integrator with a friction coefficient of 1 ps −1 and a time step of 2 fs . Each trajectory consists of 50 ,000 equilibration steps ( 100 ps ) followed by 1,000 ,000 
+
+production steps ( 2 ns ). We save one configuration every 1,000 production steps ( 2 ps ), yielding 
+
+1,000 configurations per window. C.4 ALANINE TETRAPEPTIDE SETTINGS 
+
+Molecular system and reference data. Following Invernizzi et al. (2022), we consider a 42-atom alanine tetrapeptide (Ala-4) system. The original benchmark constrains covalent bonds involving hydrogen atoms and represents configurations using 98 internal coordinates. We instead impose no bond-length constraints ( constraints=None in OpenMM) and use Cartesian coordinates 
+
+x ∈ R42 ×3, retaining the stretching degrees of freedom of bonds involving hydrogen atoms. The backbone has three pairs of Ramachandran angles, (ϕi, ψ i)3
+
+> i=1
+
+. The three ϕi angles are slow vari-ables, and their sign combinations define eight metastable basins. To generate reference data for the implicit-solvent equilibrium ensemble at 300 K , we run molecular dynamics with on-the-fly probability enhanced sampling (OPES) (Invernizzi & Parrinello, 2020), applying the bias along all three slow dihedrals ϕ1, ϕ2, and ϕ3. We use a friction coefficient of 1 ps −1
+
+and a time step of 1 fs . The simulation consists of 500 ,000 equilibration steps ( 0.5 ns ) without OPES bias, followed by 100 ,000 ,000 production steps ( 100 ns ) with the bias updated every 1,000 steps (1 ps ). The resulting dataset contains 100 ,000 configurations with associated reweighting weights. We use these weights to estimate the equilibrium marginal of ϕ3 and obtain the reference free-energy profile. 23 Preprint 
+
+Free-energy estimation. We estimate the one-dimensional free-energy profile at 300 K along 
+
+ξAla4 (x) = ϕ3(x) ∈ [−π, π ), whose range is covered by overlapping umbrella windows. For the traditional umbrella sampling baseline, we use the ALDP settings in App. C.3, with the bias applied to ϕ3. For umbrella diffusion sampling, we combine the terminal weighted particles from all windows using weighted MBAR, as described in App. C.5. All diffusion-based reward-tilting methods use the same window definitions, per-window sampling budgets, and angular bins. Each resulting free-energy profile is shifted so that its minimum is zero. C.5 MOLECULAR FREE -ENERGY ESTIMATION METHODS 
+
+We estimate the potential of mean force (PMF) along a periodic reaction coordinate ξ(x) ∈ [−π, π ).At temperature Tphys , the target equilibrium distribution is p∗(x) ∝ exp[ −βth U (x)] , where U is the molecular potential energy and βth = 1 /(kBTphys ).
+
+Traditional umbrella sampling. Traditional umbrella sampling covers the reaction-coordinate range with K overlapping biased ensembles. Because a dihedral angle is periodic, we measure displacement from a window center c by dT(ζ, c ) = atan2(sin( ζ − c), cos( ζ − c)) . Window k uses the restraint potential Bk(x) = κumb  
+
+> k
+
+dT(ξ(x), c k)2/2 and its dimensionless counterpart bk(x) = 
+
+βth Bk(x). The desired biased ensemble in each window is therefore 
+
+q∗
+
+> k
+
+(x) = 1
+
+Zk
+
+p∗(x) exp [ −bk(x)] . (24) Here, Zk is the normalization constant of window k. In traditional umbrella sampling, molecular dynamics under U + Bk generates samples for each window. MBAR then combines the gener-ally correlated samples across windows to account for the bias potentials and estimate equilibrium statistics under p∗.
+
+Umbrella diffusion sampling. Following UmbrellaDiff (Xie et al., 2026), we formulate sampling within each umbrella window as a reward-tilting task with γ = 1 and rk(x) = −bk(x), so that the desired terminal distribution is q∗ 
+
+> k
+
+in Eq. (24). For each window, we initialize particles indepen-dently from the Gaussian prior and run the SMC sampler based on the pretrained diffusion models, obtaining terminal weighted particles {(xk,i , w k,i )}Nk 
+
+> i=1
+
+.
+
+Weighted MBAR. We combine weighted particles across umbrella windows using the weighted multistate Bennett acceptance ratio (weighted MBAR) estimator of Xie et al. (2026). For window k,we compute the effective sample size as ESS k = ( P 
+
+> i
+
+wk,i )2/ P 
+
+> i
+
+w2
+
+> k,i
+
+. We normalize the relative weights within each window as ewk,i = wk,i / PNk 
+
+> j=1
+
+wk,j and assign each sample the effective mass 
+
+αk,i = ESS k ewk,i . The total effective mass of window k is then Mk = P 
+
+> i
+
+αk,i = ESS k. This construction preserves the relative particle weights within each window and sets its total effective mass to ESS k.Pooling all windows gives {(xn, α n)}Nn=1 , where N = PKk=1 Nk. We estimate the reduced free en-ergies { bfk}Kk=1 of the biased ensembles by solving the weighted MBAR self-consistency equations, for k = 1 , . . . , K :
+
+exp( − bfk) = 
+
+> N
+
+X
+
+> n=1
+
+αn exp [ −bk(xn)] 
+
+PKℓ=1 Mℓ exp 
+
+h bfℓ − bℓ(xn)
+
+i . (25) These equations determine the free energies up to a common additive constant, which does not affect normalized observables. Given these reduced free energies, we reweight the pooled particles to estimate observables in a target state a ∈ { 0, 1, . . . , K }. The unnormalized weight of sample xn in this state is 
+
+W (a) 
+
+> n
+
+= αn exp [ −ba(xn)] 
+
+PKℓ=1 Mℓ exp 
+
+h bfℓ − bℓ(xn)
+
+i .
+
+Here, a = 1 , . . . , K index the sampled biased states, whereas a = 0 denotes the unbiased equilib-rium state, for which b0 ≡ 0. Because no samples are drawn directly from the unbiased state, it does 24 Preprint Table 3: EGNN architectures and EBM training details.                   
+
+> System Layers Hidden dim. EBM training epochs DW-4 432 Stage 1: 125 epochs LJ-13 432 Stage 1: 300 epochs ALDP ( 800 K )432 Stage 1: 200 epochs; Stage 2: 200 epochs ALDP ( 300 K )432 Stage 1: 200 epochs; Stage 2: 200 epochs Ala-4 6128 Stage 1: 500 epochs
+
+not appear in the denominator of Eq. (25). We denote its unnormalized weights by Wn ≡ W (0) 
+
+> n
+
+and normalize them as W n = Wn/ P 
+
+> m
+
+Wm. When the window particles consistently approximate 
+
+q∗
+
+> k
+
+, the expectation of an observable o(x) under the unbiased ensemble p∗ is estimated using these normalized equilibrium weights: 
+
+Ep∗ [o(x)] ≈
+
+> N
+
+X
+
+> n=1
+
+W no(xn).
+
+Free-energy profile estimation. We use the normalized equilibrium weights W n to estimate the marginal density along ξ and construct the PMF for ALDP and Ala-4. The equilibrium marginal density is pξ (ζ) = R p∗(x)δ(ξ(x) − ζ) d x. For a partition {Ij } of [−π, π ), we estimate the proba-bility mass in bin j using the weighted samples: 
+
+bmj = X
+
+> n
+
+W n1{ξ(xn) ∈ Ij } .
+
+The corresponding density estimate is bpj = bmj /|Ij |, which gives the discrete PMF 
+
+bFj = −kBTphys log bpj + C, 
+
+where C is an arbitrary additive constant. We choose C so that min j bFj = 0 and plot each estimate at the corresponding bin center. C.6 TRAINING AND INFERENCE DETAILS 
+
+Training configuration. We train the energy-based diffusion models using the Adam optimizer with a learning rate of 5 × 10 −4. The batch size is 1024 for Stage 1 and 512 for Stage 2 by default. The loss weighting function is 
+
+λ(σ) = σ2 + σ2data 
+
+σ2σ2data 
+
+,
+
+where σ is the noise level and σ2data is the empirical scalar variance of the training data. Table 3 lists the architecture and number of training epochs for each system. 
+
+Diffusion schedule. During inference, we use the following EDM-style noise schedule: 
+
+σi =
+
+
+
+σ1/7max + iK
+
+
+
+σ1/7min − σ1/7max 
+
+7
+
+, i = 0 , . . . , K, 
+
+where K denotes the number of inference steps and σi is the noise level at step i. For numerical stability, we truncate integration at tK = T − σmin , corresponding to a small positive terminal noise level σmin . For molecular systems, we use (K, σ min , σ max ) = (1000 , 0.002 , 80) . The corresponding settings are (1000 , 0.005 , 50) for particle systems and (500 , 0.005 , 50) for GMM, with T = σmax 
+
+throughout. For the pretrained reverse-diffusion evaluations, we use the second-order Heun sam-pler with 512 steps. For annealing experiments, we initialize particles from the annealed Gaussian prior q0(x) ∝ ρ(x)γ . For ρ = N (0 , σ 2max I), this corresponds to sampling from N (0 , σ2max  
+
+> γ
+
+I) with uniform initial weights. 25 Preprint 
+
+Reward and correction schedules. We instantiate the intermediate reward as rt(x) = αtr(x).The reward schedule αt and correction schedule κt satisfy 
+
+α0 = κ0 = 0 , αT = κT = 1 .
+
+We define the linear normalized progress as 
+
+p(t) = clip 
+
+ tT − σmin 
+
+, 0, 1
+
+
+
+∈ [0 , 1] .
+
+At the inference grid points ti = T − σi, this equals (σmax − σi)/(σmax − σmin ). To control when each schedule activates and how it increases, we construct the delayed-power smootherstep non-linear progress based on the quintic polynomial S(u) = 6 u5 − 15 u4 + 10 u3:
+
+A(p; s, q ) = S
+
+ 
+
+clip 
+
+ p − s
+
+1 − s , 0, 1
+
+ q 
+
+, s ∈ [0 , 1) , q > 0.
+
+Then the reward and correction schedules can be configured independently as 
+
+αt = A(p(t); sα, q α) , κt = A(p(t); sκ, q κ) .
+
+Here, s sets the activation point, while q controls the growth shape. Separate parameter pairs specify the reward and correction schedules. Table 4 lists the settings for each experiment. For Ala-4 umbrella diffusion sampling, a single pair of schedules does not serve all windows well, so we choose the activation order per window; since both orders share the same terminal values 
+
+αT = κT = 1 , this does not change the window target. For windows centered at ϕ3 < 0, where the pretrained model already provides adequate particle support, we use a reward-first path with 
+
+sα < s κ, so that the reward is activated before the target correction. For windows centered at 
+
+ϕ3 > 0, a low-probability region that the pretrained model covers poorly, we use a target-first path with sα > s κ, which first corrects the pretrained model error to improve particle coverage and then concentrates the corrected particles within the window. Table 4: Reward and target-correction schedule parameters.                        
+
+> Experiment (sκ, q κ)(sα, q α)
+> DW-4 (0 .999 ,3) (0.999,3) LJ-13 (0 .999 ,4) (0 .999 ,2)
+> ALDP annealing (0 .999 ,3) -ALDP umbrella diffusion sampling (0 .999 ,3) (0 .9988 ,1)
+> Ala-4 umbrella diffusion sampling (0 .999 ,3) Reward-first: (0 .9988 ,1)
+> Target-first: (0 .9994 ,1)
+
+Look-ahead schedule. We parameterize the look-ahead strength by the noise level so that the look-ahead map transitions from the denoiser prediction to the identity as sampling approaches the endpoint. We define 
+
+ωσ = S
+
+
+
+clip 
+
+ σ − σmin 
+
+σLA − σmin 
+
+, 0, 1
+
+ 
+
+,
+
+For σLA > σ min , the schedule equals one for σ ≥ σLA and decreases to zero at σmin . We set 
+
+σLA = 4 σmin by default. 
+
+Inference configuration. We use N = 8192 particles for GMM, DW-4, and LJ-13, and N = 1000 
+
+particles per batch for ALDP annealing. For free-energy estimation, we use N = 200 particles per window for ALDP and N = 12 for Ala-4. For the Ramachandran plots, we pool terminal particles from 250 batches of 1,000 particles each, yielding 250 ,000 samples. Across all SMC experiments, we use systematic resampling with an ESS threshold of 0.9N . For methods using VCG, the regularization parameter is λVCG = 10 −6. Unless otherwise stated, exper-iments use five random seeds. For Hutchinson trace estimation, we use R = 2 probes for DW-4, R = 4 for LJ-13 and ALDP, and 
+
+R = 8 for Ala-4. When finite differences are required, we use a default step size of δ = 10 −4.26 Preprint For the alive filter, we set the energy cutoff at time tk to calive (tk) = 10 
+
+> κtk
+
+for ALDP and calive (tk) = 
+
+> 10 20
+> κtk
+
+for Ala-4. For ALDP, the terminal cutoff of 10 exceeds the maximum reduced potential energy of −8.35 observed among 125,000 reference configurations at 300 K . Thus, none of these reference configurations exceeds the energy cutoff. The alive filter is used to exclude numerically problematic configurations encountered during SMC inference. 
+
+MALA rejuvenation. To improve particle mixing in molecular experiments, we apply Metropolis-adjusted Langevin algorithm (MALA) rejuvenation during SMC inference. For ALDP annealing, we enable MALA rejuvenation when κt > 10 −4 and perform 2 MALA steps every 25 SMC steps. ALDP umbrella diffusion sampling uses the same rule, with 5 additional MALA steps at the endpoint. For Ala-4 umbrella diffusion sampling, we instead enable MALA from the 500th SMC step and perform 2 MALA steps every 10 SMC steps, followed by 5 final MALA steps. In all molecular experiments, we additionally perform four MALA steps immediately after each resam-pling event. 
+
+Tempering SMC configuration. For the tempering SMC baseline, we use N = 8192 for LJ-13 and a uniform time grid with 1000 steps, 
+
+tk = k
+
+1000 , k = 0 , . . . , 1000 , ∆t = 0 .001 .
+
+We use the DABG (Grenioux & Noble, 2026) exponential tempering schedule 
+
+λ(t) = δ 1−t 
+
+> temp
+
+− δtemp 
+
+1 − δtemp 
+
+, δtemp = 10 −5,
+
+and choose the diffusivity schedule 
+
+ε(t) = εfinal +  εinitial − εfinal 
+
+(1 − t)2, t ∈ [0 , 1] ,
+
+where εinitial = 1500 and εfinal = 1 .C.7 EVALUATION METRICS 
+
+We describe the metrics and evaluation protocols used in our experiments. Throughout this section, 
+
+P and Q denote the generated and reference empirical distributions with normalized sample weights. 
+
+E(x) = −γ log p⋆(x) − r(x) denotes the target energy for the inference-time scaling task. 
+
+GMM evaluation. Following DriftLite (Ren et al., 2026b), we evaluate GMM results using the following metrics. Let the generated samples be weighted samples {(wi, xi)}Ni=1 and the reference samples be uniform-weight samples {(1 /M, yj )}Mj=1 .• Negative log-likelihood (NLL) difference: |∆NLL | = |EP [E] − EQ[E]| measures the log-likelihood difference between the generated and reference distributions. • Maximum mean discrepancy (MMD): MMD = ∥EP [k(x, ·)] − EQ[k(x, ·)] ∥H measures the gap between kernel mean embeddings. We use the RBF kernel k(x, y) = exp( −∥ x − y∥2/(2 σ2
+
+> k
+
+)) 
+
+with bandwidth σk = 20 for GMM and σk = 5 for the particle systems. In all experiments, we approximate the kernel using 2048 random Fourier features. • Sliced-Wasserstein distance (SWD): We report the computationally efficient sliced-Wasserstein distance SWD 22(P, Q ) ≈ L−1 PLℓ=1 W 22 (πθℓ P, π θℓ Q), where πθ projects configurations onto direction θ. In all experiments, we use L = 10 projection directions sampled uniformly from the unit sphere. • Mean L2: Mean L2 = ∥ ˆμx − ˆμy ∥2 measures the Euclidean distance between the global sample means, where ˆμx = PNi=1 wixi and ˆμy = M −1 PMj=1 yj .• Cov F : Cov F = ∥ ˆΣx − ˆΣy ∥F measures the Frobenius distance between the global sample covariance matrices. Here, ˆΣx is the weighted sample covariance with degrees-of-freedom cor-rection 1 − PNi=1 w2 
+
+> i
+
+, and ˆΣy is the reference sample covariance with denominator M − 1.27 Preprint 
+
+Particle system evaluation. Following DriftLite (Ren et al., 2026b), we evaluate particle systems using the NLL difference, MMD and SWD defined above, together with two additional metrics for interparticle structure and the target-energy distribution. • Radial Distribution Function Wasserstein-1 Distance: W RDF 1 = W1(gP , g Q) compares pooled pairwise-distance distributions. Here, the ensemble-averaged interatomic distance distribution g
+
+describes the distribution of interparticle distances and characterizes the spatial arrangement of particles. • Energy Wasserstein-1 distance: W E 
+
+> 1
+
+= W1(E#P, E #Q) compares the full target-energy distri-butions, where E#P denotes the distribution of E(x) for x ∼ P .
+
+ALDP annealing evaluation. We evaluate ALDP annealing using four metrics. For each run reported in Table 2, we compare 25,000 generated samples with all RNE reference configurations at the corresponding temperature. Before evaluation, we center each conformation by subtracting its mean atomic position and apply chirality folding to match the reference enantiomer. To assess pretrained model error at 800 K , we evaluate reverse-diffusion samples generated using the second-order Heun sampler with 512 steps, as described in App. C.6. • Ramachandran TVD: We compare the joint distributions of the backbone dihedral angles (ϕ, ψ )
+
+using normalized 64 × 64 histograms over [−π, π )2. The angles ϕ and ψ are computed from the atom quadruplets (4 , 6, 8, 14) and (6 , 8, 14 , 16) , respectively. Let Pij and Qij denote the generated and reference probabilities in bin (i, j ), respectively. The Ramachandran total variation distance (TVD) is 
+
+DRam = 12
+
+> 64
+
+X
+
+> i=1 64
+
+X
+
+> j=1
+
+|Pij − Qij | .
+
+• Basin-population error: We compare the relative populations of four regions in the Ramachandran plane, defined by the signs of ϕ and ψ: αR for ϕ < 0, ψ < 0; extended/ β for ϕ < 0, ψ ≥ 0; C7 ax 
+
+for ϕ ≥ 0, ψ < 0; and αL for ϕ ≥ 0, ψ ≥ 0. Let pb and qb denote the generated and reference probabilities in basin b, respectively. The basin-population error is 
+
+Ebasin = 12
+
+> 4
+
+X
+
+> b=1
+
+|pb − qb| .
+
+• Energy TVD: We compare the reduced-energy distributions using 100 equal-width bins spanning the MD reference energy range. We evaluate the potential energy U (x) of each conformation using the unconstrained OpenMM ALDP system and convert it to the reduced energy u(x) = βU (x),where β = 1 /(kBT ). Following the evaluation convention of FKC (Skreta et al., 2025) and RNE (He et al., 2026), we exclude samples outside the reference energy range before normalizing the histograms. Let P (E) 
+
+> i
+
+and Q(E) 
+
+> i
+
+denote the normalized generated and reference bin probabili-ties, respectively. The energy TVD is 
+
+Denergy = 12
+
+> 100
+
+X
+
+> i=1
+
+P (E) 
+
+> i
+
+− Q(E) 
+
+> i
+
+.
+
+• Distance TVD: We compare pooled distributions of all  22 2
+
+ = 231 pairwise atomic distances using 200 equal-width bins spanning the MD reference distance range. We compute these distances for each conformation and pool them across conformations. Let P (d) 
+
+> i
+
+and Q(d) 
+
+> i
+
+denote the normalized generated and reference bin probabilities, respectively. The distance TVD is 
+
+Ddistance = 12
+
+> 200
+
+X
+
+> i=1
+
+P (d) 
+
+> i
+
+− Q(d) 
+
+> i
+
+.
+
+## D ADDITIONAL EXPERIMENTAL RESULTS 
+
+D.1 GMM RESULTS 
+
+Without VCG, FKC on EAT concentrates samples in a limited subset of the target modes under both annealing and reward tilting, leaving other modes poorly represented (Fig. 6). 28 Preprint The SWD sweep in Fig. 7 further shows substantial sampling error even at zero pretrained-model error, with no monotonic dependence on the perturbation level in either task. Together with the FKC on EAT results using VCG in Fig. 2, these observations support the essential role of VCG in stablizing Feynman-Kac dynamics. Table 5 reports the runtime of each method. FKC on EAT and EBFKC on EAT take longer than either MIT variant. Both EAT methods require additional evaluations for the target-energy correction, which add to the sampling cost. −40 −20 0 20 40 −40 −20 020 40 
+
+FKC w/o VCG on EAT 
+
+(a) Annealing 0 20 40 −30 −20 −10 010 20 30 40 50 FKC w/o VCG on EAT (b) Reward tilting 
+
+Figure 6: Sample distribution of FKC w/o VCG on EAT in the GMM task under (a) annealing and (b) reward tilting. 0.00 0.25 0.50 0.75 1.00 
+
+> Pretrained-model error level
+> 0510 15 20
+> SWD
+> FKC w/o VCG on EAT
+
+(a) Annealing 0.00 0.25 0.50 0.75 1.00  
+
+> Pretrained-model error level
+> 0.0 2.5 5.0 7.5 10.0 12.5 15.0
+> SWD
+> FKC w/o VCG on EAT
+
+(b) Reward tilting 
+
+Figure 7: SWD of FKC w/o VCG on EAT across pretrained-model error levels on the GMM under (a) annealing and (b) reward tilting. Table 5: Runtime comparison on the 30-dimensional GMM under σμ = 10 and ρ = 0 .1. Results are mean ± std over 5 runs. 
+
+Method Annealing ( γ = 2 .0) Reward tilting ( σ = 100 )FKC on EAT 5.357 ± 0.406 (s) 5.996 ± 0.736 (s) EBFKC w/o VCG on MIT 3.098 ± 0.537 (s) 3.283 ± 0.445 (s) EBFKC on MIT 3.626 ± 0.376 (s) 4.061 ± 0.963 (s) EBFKC on EAT (Ours) 5.267 ± 0.082 (s) 5.503 ± 0.149 (s) 
+
+29 Preprint D.2 DOUBLE -WELL RESULTS 
+
+Fig. 8 demonstrates that the pretrained energy-based diffusion model is imperfect: its reverse dif-fusion samples fail to reproduce the reference RDF peaks and exhibit an energy distribution shifted toward higher energies. Fig. 9 and Fig. 10 show the results of annealing and reward tilting, re-spectively. In both tasks, EBFKC on EAT closely matches the target RDF and energy distribution, whereas FKC on EAT and EBFKC on MIT retain substantial deviations from the reference. Table 6 reports the runtime of each method on the DW-4 tasks. For DW-4, we evaluate the required second-order derivatives of the target energy directly, without finite differences, so EBFKC on EAT takes reasonable 11% longer than EBFKC on MIT in both tasks. Table 6: Runtime comparison on the DW-4 tasks. Results are mean ± std over 5 runs. 
+
+Method Annealing ( γ = 2 .0) Reward tilting ( λ′ = 0 .5)FKC on EAT 412 .594 ± 16 .254 (s) 416 .153 ± 17 .053 (s) EBFKC w/o VCG on MIT 342 .789 ± 16 .330 (s) 339 .989 ± 13 .836 (s) EBFKC on MIT 367 .378 ± 14 .568 (s) 365 .100 ± 18 .214 (s) EBFKC on EAT (Ours) 406 .058 ± 16 .066 (s) 403 .458 ± 14 .271 (s) 2 3 4 5 6   
+
+> pairwise distance
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6
+> RDF
+> reference generated −15 −10 −5 0
+> energy
+> 0.00 0.05 0.10 0.15 0.20 0.25
+> density
+> reference generated
+
+Figure 8: Comparison of the reference distribution and reverse diffusion samples from the pre-trained energy-based diffusion model on the double-well system. 2 3 4 5 6  
+
+> pairwise distance
+> 01234
+> RDF
+> reference FKC on EAT EBFKC on MIT EBFKC on EAT (Ours) −30 −25 −20
+> energy
+> 0.0 0.2 0.4 0.6 0.8
+> density
+> reference FKC on EAT EBFKC on MIT EBFKC on EAT (Ours)
+
+(a) Radial Distribution Function (b) Energy Distribution 
+
+Figure 9: Comparison of the reference distribution, FKC on EAT, EBFKC on MIT, and EBFKC on EAT for the double-well system under annealing. D.3 LENNARD –J ONES RESULTS 
+
+Annealing results. Fig. 11 compares the radial distribution functions and energy distributions of tempering SMC, FKC on EAT, EBFKC on MIT and EBFKC on EAT with the reference under 30 Preprint 2 3 4 5 6
+
+pairwise distance 
+
+0.0 0.5 1.0 1.5 2.0 
+
+> RDF
+
+Reference FKC on EAT EBFKC on MIT EBFKC on EAT (Ours) −10 −5 0
+
+energy 
+
+0.0 0.1 0.2 0.3 0.4 0.5 
+
+> density
+
+Reference FKC on EAT EBFKC on MIT EBFKC on EAT (Ours) 
+
+(a) Radial Distribution Function (b) Energy Distribution 
+
+Figure 10: Comparison of the reference distribution, FKC on EAT, EBFKC on MIT, and EBFKC on EAT for the double-well system under reward tilting. LJ-13 annealing. EBFKC on EAT closely reproduces the reference RDF peaks and energy distribu-tion, whereas EBFKC on MIT deviates from the reference RDF and shifts the energy distribution severely. Tempering SMC shifts the energy distribution toward higher energies, which demonstrates tempering SMC alone is insufficient to accurately sample from the Lennard–Jones system. Table 7 summarizes their performance across five metrics on DW-4 and LJ-13 under annealing and reward tilting. 1 2 3 4 5
+
+pairwise distance 
+
+0.0 0.5 1.0 1.5 
+
+> RDF
+
+Reference Tempering SMC FKC on EAT EBFKC on MIT EBFKC on EAT (Ours) −60 −40 −20 0 20 
+
+energy 
+
+0.00 0.02 0.04 0.06 0.08 0.10 0.12 
+
+> density
+
+Reference Tempering SMC FKC on EAT EBFKC on MIT EBFKC on EAT (Ours) 
+
+(a) Radial Distribution Function (b) Energy Distribution 
+
+Figure 11: Comparison of the reference distribution, Tempering SMC, FKC on EAT, EBFKC on MIT and EBFKC on EAT for the Lennard-Jones system under annealing. Table 7: Performance comparison on particle systems (DW-4 and LJ-13). Results are reported as mean ± std over 5 runs. 
+
+System Task Method |∆NLL | MMD SWD W RDF 1 W E
+
+> 1
+
+DW Annealing FKC on EAT 23 .9565 ± 0.9045 0.2659 ± 0.0059 0.6263 ± 0.0511 1.6010 ± 0.0090 23 .9565 ± 0.9045 
+
+EBFKC w/o VCG on MIT 18 .1923 ± 1.0910 0.4315 ± 0.0645 0.9894 ± 0.1340 0.7005 ± 0.0307 18 .1923 ± 1.0910 
+
+EBFKC on MIT 19 .7381 ± 0.2039 0.0996 ± 0.0029 0.2341 ± 0.0217 0.7582 ± 0.0069 19 .7381 ± 0.2039 
+
+EBFKC on EAT (Ours) 0.3389 ± 0.2107 0.0816 ± 0.0193 0.2032 ± 0.0441 0.3943 ± 0.1437 0.3754 ± 0.1556 
+
+Reward tilting FKC on EAT 7.2620 ± 0.3554 0.1506 ± 0.0037 0.3644 ± 0.0313 0.9265 ± 0.0152 7.2620 ± 0.3554 
+
+EBFKC w/o VCG on MIT 8.1395 ± 1.0000 0.5666 ± 0.2091 1.1923 ± 0.4556 0.7240 ± 0.1778 8.1395 ± 1.0000 
+
+EBFKC on MIT 9.3752 ± 0.0563 0.1500 ± 0.0029 0.3403 ± 0.0113 1.0112 ± 0.0023 9.3752 ± 0.0563 
+
+EBFKC on EAT (Ours) 0.3769 ± 0.0568 0.0178 ± 0.0028 0.0461 ± 0.0052 0.0690 ± 0.0065 0.3769 ± 0.0568 
+
+LJ Annealing Tempering SMC 22 .1007 ± 3.3704 0.3914 ± 0.1333 0.4064 ± 0.1320 0.2928 ± 0.0501 22 .1007 ± 3.3704 
+
+FKC on EAT 30 .7764 ± 3.4780 0.3153 ± 0.1421 0.3384 ± 0.1562 0.2553 ± 0.0397 30 .7764 ± 3.4780 
+
+EBFKC w/o VCG on MIT 3.9507 ± 1.1581 0.2068 ± 0.0420 0.2222 ± 0.0311 0.0467 ± 0.0099 4.0748 ± 1.0444 
+
+EBFKC on MIT 3.4750 ± 0.8181 0.1891 ± 0.0747 0.2176 ± 0.0831 0.0411 ± 0.0108 3.5841 ± 0.7376 
+
+EBFKC on EAT (Ours) 0.9211 ± 0.3994 0.0600 ± 0.0059 0.0647 ± 0.0098 0.0121 ± 0.0075 0.9411 ± 0.3991 
+
+Reward tilting Tempering SMC 14 .4944 ± 3.6800 0.3141 ± 0.1519 0.3439 ± 0.1917 0.4414 ± 0.2101 14 .4944 ± 3.6800 
+
+FKC on EAT 17 .5700 ± 0.4250 0.1246 ± 0.0159 0.1536 ± 0.0328 0.3275 ± 0.0051 17 .5700 ± 0.4250 
+
+EBFKC w/o VCG on MIT 7.3426 ± 1.3823 0.2026 ± 0.0798 0.2316 ± 0.0901 0.1528 ± 0.0262 7.3493 ± 1.3764 
+
+EBFKC on MIT 6.4575 ± 0.5650 0.1441 ± 0.0356 0.1658 ± 0.0526 0.1358 ± 0.0137 6.4618 ± 0.5605 
+
+EBFKC on EAT (Ours) 0.1366 ± 0.0832 0.0345 ± 0.0041 0.0425 ± 0.0023 0.0140 ± 0.0024 0.2454 ± 0.0837 
+
+31 Preprint 
+
+Runtime. Table 8 reports the runtime of each method on the Lennard–Jones benchmark. We use the look-ahead map on LJ-13 and compute the required second-order derivatives using finite differences, whose evaluations can be parallelized across particles. These additional evaluations make the relative runtime of EBFKC on EAT longer than EBFKC on MIT with/without VCG. Table 8: Runtime comparison on the LJ-13 tasks. Results are mean ± std over 5 runs.                                     
+
+> Method Annealing ( γ= 2 .0)Reward tilting ( λ′= 0 .5)FKC on EAT 1484 .691 ±1.749 (s) 2074 .467 ±2.337 (s) EBFKC w/o VCG on MIT 670 .970 ±0.693 (s) 1199 .705 ±1.273 (s) EBFKC on MIT 671 .882 ±0.804 (s) 1201 .382 ±1.070 (s) EBFKC on EAT (Ours) 1339 .710 ±0.454 (s) 1820 .829 ±1.568 (s)
+
+D.4 ALDP ANNEALING RESULTS 
+
+At 800 K , the pretrained model captures the broad shapes of the dihedral marginals but retains vis-ible discrepancies from the reference (Fig. 12). After annealing to 300 K , EBFKC on EAT closely reproduces the reference marginals of both backbone dihedrals (Fig. 13). Both MIT variants under-represent the leftmost major peak in ϕ and overconcentrate probability near the dominant positive-ψ
+
+peak. −π −π/2 0 π/2 π      
+
+> ϕ(rad)
+> 0.0 0.1 0.2 0.3 0.4 0.5
+> density
+> Reference Reverse diffusion −π−π/2 0π/2 π
+> ψ(rad)
+> 0.0 0.1 0.2 0.3 0.4
+> density
+> Reference Reverse diffusion
+
+Figure 12: ALDP backbone dihedral marginals at 800 K from the reference distribution and pre-trained reverse diffusion: ϕ (left) and ψ (right). The reverse diffusion marginals are estimated from 100,000 generated samples. Table 9 reports the runtime of each method for ALDP annealing using 1000 particles. Unlike the particle system experiments, OpenMM provides only first-order derivatives of the target energy, so the second-order derivatives required by EBFKC on EAT are computed using finite-difference ap-proximation. Because these additional OpenMM evaluations cannot be parallelized across particles, EBFKC on EAT has a longer runtime than EBFKC on MIT with/without VCG. Table 9: Runtime comparison for ALDP annealing from 800 K to 300 K . Results are reported as mean ± std over 5 runs.           
+
+> Method Sampling time (s) EBFKC w/o VCG on MIT 142 .202 ±0.636
+> EBFKC on MIT 142 .932 ±0.119
+> EBFKC on EAT (Ours) 508 .433 ±1.109
+
+Look-ahead map ablation study. We ablate the denoised look-ahead map in the ALDP annealing experiment to demonstrate its necessity in high-dimensional real-world applications. The ablation reveals two concrete failure modes. First, with alive filtering enabled, the sampler completes all 1,000 scheduled annealing transitions but is terminated by the endpoint alive check because none 32 Preprint −π −π/2 0 π/2 π      
+
+> ϕ(rad)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> density
+> Reference EBFKC w/o VCG on MIT EBFKC on MIT EBFKC on EAT (Ours) −π−π/2 0π/2 π
+> ψ(rad)
+> 0.00 0.25 0.50 0.75 1.00 1.25 1.50
+> density
+> Reference EBFKC w/o VCG on MIT EBFKC on MIT EBFKC on EAT (Ours)
+
+Figure 13: ALDP annealing marginals comparison for ϕ (left) and ψ (right). EBFKC on EAT closely matches the 300 K reference, whereas both MIT variants deviate substantially. The marginals are estimated from all 250,000 samples generated by each method and all reference sam-ples at 300 K .of the 1,000 terminal particles satisfies the joint validity criterion: energy below the cutoff and finite OpenMM energy and force. Second, without alive filtering, the 1,000-particle run becomes numerically unstable at the 816th transition when the target-energy correction activates, and all 1,000 particle-wise VCG potentials become non-finite because the target energy is evaluated directly at noisy particle states. Together, these failures show that the look-ahead map is necessary for producing physically meaningful terminal-space predictions before the target energy and its gradient are evaluated by OpenMM. Alive filtering can shield the VCG calculation from occasional invalid particles, but it cannot compensate for the systematic failure caused by removing the look-ahead map. D.5 MOLECULAR FREE -ENERGY ESTIMATION RESULTS 
+
+Figures 14 and 15 compare the dihedral marginals obtained by pretrained reverse diffusion with the reference distributions at 300 K for ALDP and Ala-4, respectively. The pretrained ALDP model captures the broad shapes of the reference marginal distributions but fails to reproduce some details, while the pretrained Ala-4 model closely reproduces the marginal distributions with some remaining discrepancies. These results indicate that both pretrained models capture the main features of the reference distributions but remain imperfect. −π −π/2 0 π/2 π      
+
+> ϕ(rad)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> density
+> Reference Reverse diffusion −π−π/2 0π/2 π
+> ψ(rad)
+> 0.0 0.2 0.4 0.6 0.8
+> density
+> Reference Reverse diffusion
+
+Figure 14: ALDP backbone dihedral marginals at 300 K from the reference distribution and pre-trained reverse diffusion: ϕ (left) and ψ (right). The reverse diffusion marginals are estimated from 100,000 generated samples. Fig. 16 presents the free-energy profiles estimated by EBFKC w/o VCG on MIT for ALDP and Ala-4. For ALDP, the method exhibits large estimation errors and substantial variability across runs, 33 Preprint −π −π/2 0 π/2 π
+
+ϕ1 (rad)     
+
+> 0.0 0.5 1.0 1.5
+> density
+> Reference Reverse diffusion −π−π/2 0π/2 π
+
+ψ1 (rad)     
+
+> 0.00 0.25 0.50 0.75 1.00 1.25
+> density
+> Reference Reverse diffusion −π−π/2 0π/2 π
+
+ϕ2 (rad)     
+
+> 0.00 0.25 0.50 0.75 1.00 1.25
+> density
+> Reference Reverse diffusion −π−π/2 0π/2 π
+
+ψ2 (rad)     
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> density
+> Reference Reverse diffusion −π−π/2 0π/2 π
+
+ϕ3 (rad)     
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> density
+> Reference Reverse diffusion −π−π/2 0π/2 π
+
+ψ3 (rad) 
+
+> 0.0 0.2 0.4 0.6
+> density
+> Reference Reverse diffusion
+
+Figure 15: Ala-4 backbone dihedral marginals at 300 K from the reference distribution and pre-trained reverse diffusion. The reverse diffusion marginals are estimated from 100,000 generated samples. overestimating the free energy in the positive-ϕ region and failing to recover the reference basin there. Comparison with EBFKC on MIT in Fig. 5(a) highlights the benefit of VCG for ALDP free-energy estimation. For Ala-4, the method substantially underestimates the high free-energy barrier in the positive-ϕ3 region. Table 10 reports the runtime of each method for ALDP free-energy estimation in window 13 with 200 particles. As in the ALDP annealing experiment, the finite-difference evaluation of the second-order target-energy derivatives introduces additional OpenMM evaluations which cannot be paral-lelized across particles, so EBFKC on EAT has a longer runtime than EBFKC on MIT with/without VCG. Also we note that the runtime of EBFKC on MIT is slightly shorter than EBFKC w/o VCG on MIT, which is reasonable because the VCG method can reduce the variance of particle weights and thus reduce the number of resampling steps, which can save some MALA runtime. Table 11 reports the corresponding runtime for Ala-4 free-energy estimation in window 13 with 12 particles. Because the larger pretrained model makes each baseline sampling step more expensive, target-energy correction contributes a smaller relative runtime overhead in Ala-4 than in ALDP. 34 Preprint −π −π/2 0 π/2 π
+
+> ϕ
+> 020 40 60
+> Free energy (kJ mol −1 )
+> Umbrella Reference EBFKC w/o VCG on MIT
+
+(a) ALDP: compared with umbrella reference −π −π/2 0 π/2 π 
+
+> ϕ3
+> 010 20 30 40 50 60 70
+> Free energy (kJ mol −1 )
+> OPES Reference Umbrella sampling EBFKC w/o VCG on MIT
+
+(b) Ala-4: compared with OPES reference 
+
+Figure 16: EBFKC w/o VCG on MIT free-energy estimates for the molecular systems. (a) ALDP along ϕ, compared with traditional umbrella sampling reference. (b) Ala-4 along ϕ3, compared with the OPES reference and umbrella sampling results. Results are based on 5 independent runs. Table 10: Runtime comparison for ALDP free-energy estimation in window 13 with 200 particles. Results are reported as mean ± std over 5 runs. 
+
+Method Sampling time (s) EBFKC w/o VCG on MIT 119 .30 ± 10 .43 
+
+EBFKC on MIT 106 .17 ± 3.24 
+
+EBFKC on EAT (Ours) 269 .19 ± 9.11 
+
+Table 11: Runtime comparison for Ala-4 free-energy estimation in window 13 with 12 particles. Results are reported as mean ± std over 5 runs. 
+
+Method Sampling time (s) EBFKC w/o VCG on MIT 389 .05 ± 14 .20 
+
+EBFKC on MIT 376 .89 ± 17 .25 
+
+EBFKC on EAT (Ours) 504 .87 ± 12 .79 
+
+35
