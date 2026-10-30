@@ -1,0 +1,1981 @@
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR
+PEPTIDE GENERATION
+ABDALLAH BENABDALLAH AND MOHSEN DLALA
+Abstract. The optimal control of a discrete Schr¨odinger bridge is a discrete gra-
+dient, a difference of vertex potentials, but recent models such as MadSBM instead
+learn a free control on the edges by cross-entropy. We prove that this leaves the ac-
+tion uncontrolled: cross-entropy identifies the control only up to a state-dependent
+shift (a gauge), and the action is KL(r∥p) plus a gauge term the loss never constrains.
+We propose GDSBM, which writes the control as a difference of vertex potentials
+and adds the action to the loss; pinning the gauge costs no expressiveness and makes
+the action a property of the model, so the penalty acts on the model and not on
+the gauge. On peptide generation our MadSBM reimplementation has a free-gauge
+action of order 108 for a gauge-fixed value of 6.5, against 1.5 for GDSBM, with no
+quality loss that three seeds can detect. The gradient form also fits guidance, which
+becomes the addition of a potential: guided toward a net charge of +3 at pH 7,
+GDSBM is closer than MadSBM, over three seeds, to its exact tempered target in
+total variation at every guidance strength (at β = 1, 81% of samples in the target
+window against 74%, for a target of 97%); we claim no statistical significance.
+1. Introduction
+Peptides occupy the therapeutic space between small molecules and antibodies: spe-
+cific enough to hit flat protein surfaces, small enough to manufacture chemically [53].
+Their discovery still relies on screening large libraries and keeping the rare hits, whereas
+generative models promise to invert the pipeline and sample candidates conditioned on
+the desired function [2, 81, 73]. The promise is already concrete for proteins—structure
+prediction [37, 1], language models [60, 46, 52, 31], structure- and sequence-level de-
+sign [22, 35]—and for antimicrobial peptides, where generative models have produced
+laboratory-tested candidates [21, 72] and biologically informed generators are emerg-
+ing [68]. Making it quantitative requires two things current discrete generators do not
+simultaneously offer: a principled training objective, and conditioning that is exact
+rather than heuristic.
+Continuous-state models dominate protein structure generation [32, 69, 48, 3, 83, 45,
+12, 81]; on sequences the generators of choice are discrete diffusions and flows [6, 34,
+14, 50, 61, 65, 15, 71], now at language-model scale [55] and instantiated for proteins
+[2, 79, 47]. Closest to this work is Schr¨odinger-bridge matching, first continuous [23,
+Date: October 23, 2026.
+MSC2020: Primary 60J28, 49Q22; Secondary 68T07, 92D20.
+1
+arXiv:2610.31361v1  [math.OC]  22 Oct 2026
+
+
+2
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+Figure 1. Two changes turn MadSBM into a bridge.
+Both
+models transport a fully masked x0 to a peptide x1; bar lengths are
+illustrative (measured values in Section 7). Left, MadSBM: u is a free
+field on the edges, trained by cross-entropy, which fixes it only up to
+a state-dependent shift and leaves the action free.
+Right, GDSBM:
+(i) u = ¯∇v, the form of the Doob optimum, which has zero circulation
+along cycles; (ii) CE →CE + λA, which lowers the gauge-fixed action
+(6.35 against 1.51 at N = 32).
+64, 75] and now discrete [38]—but validated only on image tokens and graphs [38, 40],
+with closed-form benchmarks only now appearing [5].
+MadSBM [29] is, to our knowledge, the first discrete bridge model brought to the
+scale of biological sequences: a controlled jump process on the amino-acid edit graph,
+anchored to a frozen protein language model [46], with the forward–backward iterations
+[74] that are hard to scale to |V|L states replaced by a token-wise cross-entropy. This
+is a genuine advance and our starting point. Its price, however, is structural, and it is
+precisely what makes a bridge a bridge. The control is not an h-transform of the ESM-2
+reference: it is a free field uθ(x, y, t) on the edges which, by MadSBM’s own consistency
+theorem, cross-entropy recovers only up to an additive c(x, t), whereas the optimum is
+a difference of vertex values, u∗(x, y, t) = log h(y, t) −log h(x, t). The loss is not the
+action: cross-entropy is minimized by every representative of the class u + c, whose
+actions differ without bound (Section 4), so the reported action is a statement about
+the representative the optimizer happens to produce rather than about the model.
+Conditioning, finally, is a logit tilt known to be biased for tempered targets [42, 78], a
+bias usually asserted and left unmeasured. MadSBM keeps the construction and the
+name of the Schr¨odinger bridge but, relative to the ESM-2 reference, neither its control
+class nor its objective. Figure 1 contrasts the three objects.
+Observation, and a gauge. Doob’s h-transform states that the optimal bridge control
+is a difference of vertex functions [28, 43].
+We take this seriously three times: for
+parameterization (learn a vertex potential, not an edge field), for conditioning (design
+objectives are vertex functions, and composing h-transforms adds potentials), and for
+inference-time correction (the twisting functions of sequential Monte Carlo are vertex
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+3
+functions). A fourth observation concerns not what the control should be but what
+training identifies. At each state the conditional law of the next token is a softmax
+of reference logits plus control, and a softmax is invariant to adding a function of
+the current state; a control learned by cross-entropy is therefore identified only up to
+this gauge, whereas the action is not invariant to it. It splits exactly into KL(r∥pθ), a
+function of the learned conditional alone, and an unbounded gauge excess (Theorem 1).
+The vertex form of the optimum is the natural gauge fixing: it pins the term the softmax
+cannot see, so that an action penalty acts on the conditional and not on the gauge.
+This changes how the action of a bridge model must be reported, and what it means
+to regularize it.
+Contributions. Three main results, one per section, with all proofs in the appendix.
+• The action of a free control measures its gauge (C1, Theorem 1). The
+per-state action splits exactly into KL(r∥pθ), a function of the learned conditional
+alone, and a gauge excess that cross-entropy never constrains and that is unbounded
+along the orbit of a model; at the forward Girsanov kernel the gauge-fixed value is
+instead bounded and invertible in KL(pθ∥r). Measured, a trained free field reports
+108 for a gauge-fixed 6.5.
+• Vertex-potential control and the exact effect of the penalty (C2, Theo-
+rem 2). We parameterize uθ(x, y, t) = vθ(y, t) −vθ(x, t), the form of the optimum,
+from a zero-initialized energy head. This pins the gauge without restricting the rep-
+resentable conditionals, so at λ = 0 the model is functionally identical to MadSBM
+[29]; the gauge term becomes an anchor on the current token; and the penalty has
+an exact effect, a convex shrinkage of the data posterior towards the reference with
+weight λνV /(1 + λνV ).
+• Conditioning is algebra on potentials, and its bias is measurable (C3,
+Theorem 3). A tilt is an h-transform whose potential adds to the trained one, so
+a multi-objective sweep needs no retraining; for any scalar statistic the tempered
+target’s marginal is closed-form, with no product structure assumed; and a particle
+system with telescoping weights reaches it. On peptides the net charge is exactly
+computable, turning the bias of the myopic guided sampler into a measurement
+against an explicit sampling floor.
+What we do not claim. No wet-lab validation and no state-of-the-art claim: we compare
+to our own MadSBM reimplementation at matched compute and seeds, reporting effect
+sizes and sign consistency, not significance.
+We do not claim that vθ is a globally
+consistent potential (consistency across states is learned, not enforced), that the vertex
+form helps by itself (at λ = 0 the two models coincide) or beyond the penalty (the
+2 × 2 ablation has one seed, 300 steps), or that we minimize the Schr¨odinger action.
+Multi-objective guidance and the particle system are stated, not evaluated.
+Outline. Section 2 situates related work; Section 3 recalls bridges on graphs; Sections 4–
+6 state the three results; Section 7 reports the action audit, the form/penalty abla-
+tion, unconditional generation and exactly-conditioned peptide generation. Deferred
+remarks are collected in Appendix A.
+
+
+4
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+2. Related Work
+Our question is narrow: for sequence generation on a discrete state space, should
+the control of a Schr¨odinger bridge be a free field on the edges of the sequence graph,
+or an exact discrete gradient of a vertex potential?
+Bridges, and potentials versus fields. The Schr¨odinger problem [63, 43] is the en-
+tropic regularisation of dynamical optimal transport [9, 16, 20]; continuous-state neu-
+ral solvers differ in which fixed-point iteration they discretise [23, 64, 75, 49].
+In
+Rd the optimal control is a gradient, u∗= ∇log h, and methods that exploit this—
+scalar-potential transport [54], adjoint and stochastic-optimal-control matching [25,
+26], energy-based parametrisations [7]—gain by removing a rotational component that
+carries no transport. On graphs the geometry of entropy-driven dynamics is well un-
+derstood [51, 27, 17] and is only now becoming a learning algorithm [58], but on a
+simplex with (|V| + 1)L vertices neither the metric nor the free energy is computable,
+so we work with the control of a jump process and the discrete gradient v(y) −v(x)
+along an edge.
+Discrete generation and discrete bridges. Discrete diffusion [6, 14], score-entropy mod-
+els [50], masked diffusion [61, 65] and discrete flow matching [15] learn the reversal of
+a reference jump process; discrete bridge formulations [38, 40, 5, 74] place a control on
+its rates. MadSBM [29] does so for masked sequences with an ESM-2 reference [46],
+trained by cross-entropy; it is our direct baseline. All learn general rate structures,
+whereas we impose uθ(x, y, t) = vθ(y, t) −vθ(x, t), which removes cycle inconsistencies
+by construction, and we make the associated action explicit and use it to audit the
+learned bridge.
+Guidance, reward optimisation, and the test domain. Function-conditioned design has
+been attacked as model-based optimisation and reinforcement learning [13, 4, 70, 66,
+39, 10, 36, 57], as inference-time guidance [24, 33, 18, 30, 56, 62, 59, 44, 82, 76, 67],
+and as reward fine-tuning [11, 77, 25, 80], all presuming the generator is a well-defined
+object whose conditional laws can be tilted; whether the control of a bridge is such an
+object is our question. The exact twist, h(x, t) = E[eφ(XT ) | Xt = x], is intractable here
+and practical surrogates are biased [42]; we apply the same h-transform viewpoint to
+a control that is already a vertex potential, so the twist adds a second potential to the
+first. We evaluate on peptides, as MadSBM does, for their natural reference process
+and exactly computable objectives; our comparison is to MadSBM alone, at matched
+corpus, compute and seeds.
+3. Background: Bridges on the Sequence Graph
+This section fixes the objects used throughout and recalls two classical facts: the
+Girsanov formula for jump processes (Fact 1) and the Gibbs–Doob variational principle,
+which makes optimal controls gradients (Fact 2). Neither is a contribution; both are
+proved in Appendices B and C because the paper reads them closely.
+Sequences as a jump process. Let V be the set of 20 amino acids, m /∈V a mask token,
+and X = (V ∪{m})L. The edit graph E ⊂X × X contains the pairs (x, y) such that y
+is obtained from x by replacing one masked position i by one amino acid a; we write
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+5
+y = xi←a. The reference process is the continuous-time Markov chain on X with rates
+(1)
+R0
+t (x, y) = λt rt(a | x, i) 1{xi=m},
+y = xi←a,
+and R0
+t (x, y) = 0 off E, where λt ≥0 is the masking intensity and rt(· | x, i) a probability
+vector on V (built from the protein language model in Section 5). We fix a horizon T
+on which the rates are bounded, and write P0 for the law on D([0, T], X) of the chain
+started from the Dirac mass at mL. Since X is finite and the rates are bounded, all
+objects below are well defined.
+Controls and action. A control is a bounded measurable u : [0, T] × E →R; the
+controlled chain has rates Ru
+t (x, y) = R0
+t (x, y)eut(x,y) and the same initial law, with
+path law Pu. The cost of a control is the relative entropy of its path law.
+Fact 1 (Girsanov for jump processes). Let (tk, Xtk)k≤n be the jump times and states
+of a path. Then Pu ≪P0 with
+log dPu
+dP0 =
+n
+X
+k=1
+utk(Xtk−, Xtk)
+−
+Z T
+0
+X
+y
+R0
+t (Xt, y)
+ eut(Xt,y) −1
+
+dt,
+(2)
+and, with a(z) = zez −ez + 1 and Ψ(z) = ez −z −1,
+KL(Pu ∥P0) = EPu
+Z T
+0
+X
+y
+R0
+t (Xt, y) a
+ ut(Xt, y)
+
+dt,
+(3)
+KL(P0 ∥Pu) = EP0
+Z T
+0
+X
+y
+R0
+t (Xt, y) Ψ
+ ut(Xt, y)
+
+dt.
+(4)
+Both identities are elementary once the path likelihood of a finite-state jump process
+is written down: (2) is a ratio of two such likelihoods, and (3)–(4) follow by taking
+expectations and compensating the jump term, once under Pu and once under P0. It is
+this change of compensating measure, and nothing else, that produces the two kernels.
+Remark 1 (Two kernels). The kernels are related by Ψ(z) = eza(−z). Both are non-
+negative and vanish only at z = 0, but they are not interchangeable: Ψ is strictly
+convex, while a′′(z) = (z+1)ez is negative for z < −1, so a is not convex. Equation (3),
+with a, is the path-space action KL(Pu∥P0) that defines the Schr¨odinger bridge; (4),
+with Ψ, is its reverse counterpart.1 Section 5 states which kernel the training penalty
+uses and in which expectation; we do not identify a per-state penalty with a path-space
+entropy.
+1The published version of MadSBM writes zez −ez −1 (Corollary 4.2); the identity of their Theo-
+rem 4.1 gives +1, which is required for the kernel to vanish at z = 0. We use +1.
+
+
+6
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+Doob’s transform. Let φ : X →R be a terminal reward and set h(x, t) = EP0[eφ(XT ) |
+Xt = x], vt(x) = log h(x, t). Let Ph be the chain with rates R0
+t (x, y)h(y, t)/h(x, t), i.e.
+the controlled chain with
+(5)
+u∗
+t (x, y) = vt(y) −vt(x),
+(x, y) ∈E.
+Fact 2 (Gibbs–Doob variational principle). dPh
+dP0 = eφ(XT )
+h(x0, 0), and for every path law
+P ≪P0 with the same initial state x0,
+(6)
+KL(P ∥Ph) = KL(P ∥P0) −EP φ(XT ) + log h(x0, 0) ≥0.
+Hence minP{KL(P∥P0) −EPφ(XT )} = −log h(x0, 0), attained uniquely at Ph.
+The proof is a single cancellation: writing (2) for u∗, the jump term telescopes
+against the increments of log h(Xt, t), and the backward equation for h makes what
+remains exactly the compensator with the opposite sign (Appendix C). For a prescribed
+terminal law µ1 ≪P0
+T and a Dirac source the Schr¨odinger system reduces to a single
+potential, P∗= dµ1
+dP0
+T (XT ) P0 [19, 43]. What matters here is the structure of (5): the
+optimal control is the discrete gradient of a scalar function on the vertices, not an
+arbitrary function on the O(L|V | |V |L) edges. It is intractable to compute, since h
+requires an expectation over |V |L continuations; GDSBM learns v instead.
+Learning the rates: MadSBM and the token kernel. MadSBM [29] instantiates R0 with
+ESM-2 [46] as reference token distribution r and learns an edge-wise control uθ(x, y, t),
+trained by cross-entropy on the clean token under the model posterior
+(7)
+pθ(y | x, t) = R0
+t (x, y)euθ(x,y,t)
+Zθ(x, t)
+,
+Zθ(x, t) =
+X
+y′
+R0
+t (x, y′)euθ(x,y′,t).
+Since (7) is invariant under uθ 7→uθ + c(x, t) for any c independent of y, cross-entropy
+determines u only modulo such a gauge; their consistency theorem states exactly this,
+uθ∗= u∗+ c(x, t) almost everywhere on ρ∗
+t , under an expressivity assumption. The
+action (4), however, is not gauge-invariant.
+Per-state notation. Fix a state x and a time t and set ν = P
+y R0
+t (x, y), r(y) =
+R0
+t (x, y)/ν, Z = P
+y R0
+t (x, y)eut(x,y), p(y) = R0
+t (x, y)eut(x,y)/Z and ζ = Z/ν = P
+y r(y)eut(x,y).
+Thus ν is the total reference rate out of x and r the reference law of the destination;
+ζ is the factor by which the control inflates the total rate, and p is the law of the
+destination of the next jump out of x under the controlled chain, i.e. the token kernel
+the sampler draws from. Finally h(ζ) = ζ −1 −log ζ for ζ > 0 is non-negative and
+vanishes only at ζ = 1.
+4. The Action of a Cross-Entropy-Trained Control
+The action (4) is a sum over states of a per-state functional. The following result
+computes it in closed form and separates the part the model determines from the part
+it does not.
+Theorem 1 (Gauge decomposition of the action). With the notation above:
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+7
+(a) (splitting)
+(8)
+X
+y
+R0(x, y) Ψ
+ u(y)
+
+= ν KL(r ∥p) + ν h(ζ),
+both terms being non-negative; the first depends on u only through p, the second
+only through ζ.
+(b) (non-identifiability) u 7→u + c1 leaves p (hence the cross-entropy) unchanged and
+sends ζ 7→ζec. Along this orbit the action equals ν KL(r∥p) + ν h(ζec): it takes
+every value in [ν KL(r∥p), ∞), its minimum being attained at c∗= −log ζ.
+(c) (forward kernel) for u = log(p/r) + c1,
+X
+y
+R0(x, y) a
+ u(y)
+
+= ν
+h
+1 + ec KL(p∥r) + c −1
+i
+,
+minimised at c∗= −KL(p∥r) with value ν
+ 1 −e−KL(p∥r)
+∈[0, ν); the map
+KL(p∥r) 7→this value is a bijection from [0, ∞) onto [0, ν).
+The proof is in Appendix D. Writing u = log(p/R0) + log Z splits Ψ(u) = eu −u −1
+into a relative entropy, blind to a constant shift of u, and a term h(ζ) that sees nothing
+else: the separation is the softmax invariance of p, read on the action. The number a
+model reports as its action is therefore a genuine property, ν KL(r∥p), plus a term that
+by (b) can be made arbitrarily large without altering the token kernel at any state, so
+any comparison of raw actions is void, including one in our own favour (Remark 3).
+5. GDSBM: Vertex-Potential Control with Action Regularization
+Theorem 1 says that the action of a free control is not a model quantity. This section
+fixes that by reading the control as a difference of a vertex potential, the form of the
+Doob optimum (5).
+The trained object. Let T be the token vocabulary of the protein language model
+(the 20 amino acids V , the mask m and the special tokens) and fϕ the logits of the
+frozen model [46]. Fix a state x, a masked position i, and write s = xi = m for the
+current token. With the inverse temperature βt of the reference (βt = 1 −t in our
+implementations of both arms, where t is the masking level and t = 1 the fully masked
+sequence),
+(9)
+r(y) = softmaxy
+ βtfϕ(x)i
+
+,
+pθ(y) = softmaxy
+ βtfϕ(x)i + uθ(x, y, t)
+
+,
+y ∈T ,
+where uθ(x, ·, t) ∈RT is the control at the edges leaving x at position i. Both are
+probability vectors, so the token kernel is the rate (1) at unit intensity; λt enters only
+through the sampler. Let q(a) = P(Xi
+1 = a | Xt = x) be the posterior of the clean
+token, supported on V . Training minimises the cross-entropy
+(10)
+CE(u) = −
+X
+y∈T
+q(y) log pθ(y)
+(as in MadSBM, the loss is also evaluated at unmasked positions, where it is a copy
+task; the analysis concerns masked positions, the only ones where the sampler uses the
+
+
+8
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+kernel). Its gradient in the logits is pθ(y) −q(y), which sums to zero: the gradient has
+no component along 1, so nothing in the cross-entropy ever selects the gauge.
+Definition 1 (Vertex-potential control). For a potential V : X →R the discrete
+gradient is the edge function ( ¯∇V )(x, y) = V (y) −V (x), i.e. the difference of the
+potential between the two ends of an edge. Since V cannot be evaluated on all of X,
+we read it locally: at a state x, a time t and a masked position i, an energy head
+outputs ˜vθ(x, t) ∈RT whose coordinate a is the potential of the neighbour xi←a. As
+xi←xi = x, the coordinate xi is the potential of the current state itself, so
+(11)
+uθ
+ x, xi←a, t
+
+= ˜vθ(x, t)a −˜vθ(x, t)xi.
+The head is initialised at zero, so uθ ≡0 and pθ = r at initialisation: the untrained
+model is the tempered protein language model.
+By construction uθ(x, s, t) = 0: the current token carries zero control. We call this
+the vertex gauge. The implemented action penalty is the per-state sum
+(12)
+AΨ(u; x) =
+X
+y∈T
+r(y)Ψ
+ u(y)
+
+,
+Ψ(z) = ez −z −1,
+which matches the kernel of MadSBM’s action metric at unit intensity ν = 1. MadSBM
+trains with the cross-entropy alone; GDSBM adds the action to the loss and minimises
+(13)
+L(θ) = E
+
+CE
+
++ λ E
+
+AΨ
+
+,
+with AΨ evaluated on the vertex-gauge control (11) and λ ≥0 (λ = 0.1 for the GDSBM
+arm in all experiments).
+Notation. Two control classes act on the logits at a masked position with current token
+s: the free class Ufree = RT (MadSBM) and the vertex class Uvtx = {u ∈RT : us =
+0}. A control u induces pθ[u](a) = r(a)eua/Zu with Zu = P
+b r(b)eub. Let q be the
+clean-token posterior, supported on V , and set νV = P
+a∈V r(a), ˜r = r|V /νV and
+J(p) = CE(p) + λAΨ, with AΨ read through (b) below as a function of p. The result
+states three facts: the vertex class loses no conditional (a); in that class the action
+is a function of the conditional alone (b); and the penalty has an exact effect on the
+minimiser (c).
+Theorem 2 (Vertex gauge: expressiveness, anchor, shrinkage). (a) (pinning the gauge
+costs nothing) pθ[u] = pθ[w] if and only if u −w ∈R1. Hence every orbit meets
+Uvtx exactly once, at u −us1. Moreover u ∈Uvtx if and only if ua = va −vs for
+some v ∈RT , and a conditional p is recovered by ua = log
+
+(pa/r(a))/(ps/r(s))
+
+.
+Consequently the two classes realise the same conditionals and the same infimum
+of (10), so GDSBM at λ = 0 is functionally identical to MadSBM. What the con-
+ditionals do not fix is the rate level: R0eu and R0eu−us1 differ by the factor e−us
+isolated in Theorem 1;
+(b) (the action becomes a model quantity) for u ∈Uvtx with p = pθ[u],
+(14)
+AΨ(u; x) = KL(r ∥p) + h
+r(s)
+p(s)
+
+,
+a function of p alone, whose second term vanishes if and only if p(s) = r(s);
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+9
+Table 1. Form × penalty, seed 42, 300 steps, common random num-
+bers. val CE is the cross-entropy on the validation split; action is the
+training-convention action (raw gauge, averaged over tokens) of the con-
+trol as parameterised.
+Class
+λ
+val CE
+action
+free (MadSBM)
+0
+1.36985924
+15.73
+vertex (ours)
+0
+1.36985921
+42.91
+free (MadSBM)
+0.1
+1.4510
+0.413
+vertex (ours)
+0.1
+1.4473
+0.584
+(c) (exact effect of the penalty) assume r(y) > 0 for all y and let the class be expressive,
+i.e. any interior p is attainable (by (a) this holds in either class). Then J has an
+interior minimiser, and every minimiser satisfies, on the amino acids,
+(15)
+p(· | V ) = (1 −w) q + w ˜r,
+w =
+λνV
+1 + λνV
+.
+In particular ∥p(· | V ) −q∥TV = w ∥˜r −q∥TV.
+The proof is in Appendix E. Part (b) is Theorem 1(a) at ν = 1 with ζ eliminated
+through p(s) = r(s)/ζ; part (c) is a stationarity computation on the open simplex, in
+which the penalty turns the loss into a cross-entropy with weights q + λr. State by
+state, the penalised minimiser is thus a convex shrinkage of the data posterior towards
+the amino-acid reference, with weight w ≃8.5% at λ = 0.1 and νV ≃0.93: an explicit,
+measurable regulariser towards the ESM-2 prior, and nothing more (Remarks 5–6).
+Training. At each step a masking level t is drawn on a uniform grid and each residue is
+masked independently with probability t; the frozen language model gives fϕ(xt), the
+head gives ˜vθ, and the loss (13) is computed with AΨ on uθ = ¯∇˜vθ. Only the head
+is trained (hyperparameters in Appendix G). In Algorithm 1, P is the set of residue
+positions of the batch: the loss denoises at masked positions and copies at unmasked
+ones. The two arms differ only at line 3, where the head output is read as a vertex
+potential (GDSBM) or as the control itself (MadSBM, with λ = 0).
+Sampling. We use MadSBM’s sampler unchanged, with the same engineering constants,
+for both models: only the control field differs, so the comparison bears on a single
+object, the control class and the penalty. Algorithm 2 starts from the fully masked
+sequence and, at each of N steps, uses the control to decide which masked positions
+jump and which amino acid they receive. Two features bear on what the audit of
+Section 7.1 measures. The jump probability uses the control damped by a rate scale
+κ = 0.01, whereas the token kernel uses it undamped, so the two uses of uθ are not
+on the same scale; in particular the jump schedule, unlike the token kernel, is not
+gauge-invariant. And the candidate set is restricted to the 20 amino acids after the
+nucleus filter, so the tokens carrying the mass 1−νV of Theorem 2(c) are never emitted.
+Parameters κ, η, τ, πtop are in Appendix G. Guidance (Section 6) adds β∆Φ to u before
+lines 4 and 5, and nowhere else.
+
+
+10
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+Algorithm 1 GDSBM training step (MadSBM: free reading, λ = 0)
+Require: corpus D, frozen logits fϕ, head θ, penalty weight λ, grid G
+1: draw x1 ∼D, t ∼Unif(G); mask each residue with probability t to get xt
+2: ri ←softmax
+ βtfϕ(xt)i
+
+,
+βt = 1 −t
+3: ˜v ←headθ(xt, t);
+ui(a) ←˜vi(a) −˜vi
+ (xt)i
+
+(GDSBM),
+ui(a) ←˜vi(a)
+(MadSBM)
+4: pi ←softmax
+ βtfϕ(xt)i + ui
+
+5: θ ←AdamW
+ θ, ∇θ[CE(p, x1) + λ AΨ(u; r)]
+
+Algorithm 2 in Appendix G records the sampler.
+Scope. The word bridge is used in the sense of the Background: a jump process on
+the sequence graph, anchored at a fully masked source, with a reference given by the
+tempered protein language model and a control of the form (5). GDSBM is a parametric
+approximation of this object, with locally read potentials (Remark 6), trained by a
+regularised per-state objective. We claim exactly Theorems 1–3, and do not claim that
+the trained model minimises the path-space entropy of the Schr¨odinger problem.
+6. Conditioning: Algebra on Potentials
+Design asks for sequences with prescribed properties. The vertex form is the level
+at which conditioning composes, and on peptides it is also the level at which the bias
+of practical guidance becomes measurable rather than asserted.
+Three objects. Let P∗be the bridge of Section 3, with terminal law µ1, and let Φ :
+X →R be a bounded design objective. The tempered target at inverse temperature
+β ≥0 is
+(16)
+µβ
+1(x) = µ1(x) eβΦ(x)
+Zβ
+,
+Zβ =
+X
+x
+µ1(x)eβΦ(x).
+Computing the tilt potential vβΦ
+t
+(x) = log EP∗[eβΦ(XT ) | Xt = x] requires an expec-
+tation over continuations, intractable on X; the standard surrogate replaces it by the
+reward βΦ itself.
+We evaluate Φ on partially masked sequences by letting masked
+positions contribute nothing and write, for a state x, a position i and a token a ∈V ,
+∆Φ(x, i, a) = Φ(xi←a) −Φ(x). The myopic guided control is uβ
+θ = ¯∇(vθ + βΦ), that is
+uθ plus β∆Φ on every edge, and the token kernel (9) becomes
+(17)
+pβ
+θ (a) ∝pθ(a) eβ∆Φ(x,i,a),
+a ∈V.
+The same increment enters the jump intensity and the token logits, so the guided sam-
+pler is one modification of the control rather than two; this is the discrete counterpart
+of classifier guidance [24, 33, 56, 62, 59]. Finally, let x(0) →· · · →x(N) be the sampler’s
+states, x(0) the fully masked source and x(N) the fully decoded sequence, and run K
+particles with the unguided kernel as proposal and incremental weights
+(18)
+Gk
+ x(k−1), x(k)
+= exp
+
+β
+
+Φ(x(k)) −Φ(x(k−1))
+
+,
+k = 1, . . . , N,
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+11
+with self-normalised weights W j ∝QN
+k=1 G j
+k. For a statistic c : X →R with finitely
+many values and ψ : R →R, write Φ = ψ ◦c. The result states three facts: (a) a tilt is
+an h-transform whose potential adds to the trained one, with an explicit gap when two
+tilts are composed; (b) the tempered target has a closed-form marginal for any scalar
+statistic; (c) the myopic sampler is biased, while the weighted particle system recovers
+the target.
+Theorem 3 (Conditioning). (a) (algebra on potentials) The path law Pβ with rates
+R∗
+t (x, y) evβΦ
+t
+(y)−vβΦ
+t
+(x) has terminal law µβ
+1, and its control relative to the reference
+is the vertex potential
+uβ
+t (x, y) =
+ v∗
+t (y) −v∗
+t (x)
+
++
+ vβΦ
+t
+(y) −vβΦ
+t
+(x)
+
+.
+(19)
+For bounded Φ1, Φ2, tilting by Φ1 then Φ2 gives PΦ1+Φ2, but the potentials add only
+up to a gap, vΦ1+Φ2 = vΦ1 + vΦ2 + G, with G(·, T) = 0 and
+G(x, t) = log EPΦ1
+
+eΦ2(XT ) | Xt = x
+
+−log EP∗
+eΦ2(XT ) | Xt = x
+
+.
+(20)
+(b) (closed-form target) For every value v of c, with no product structure on µ1, no
+fixed length and no additivity of c assumed,
+(21)
+µβ
+1(c = v) = µ1(c = v) eβψ(v)/Zβ,
+Zβ = P
+v′ µ1(c = v′) eβψ(v′).
+(c) (bias and its removal) The myopic kernel (17) is exact for the one-step tilt and
+biased for the terminal tilt (16); the weights telescope, Q
+k Gk = eβ[Φ(x(N))−Φ(x(0))]
+with Φ(x(0)) constant, so W j ∝eβΦ(x(N),j) and P
+j W jδx(N),j is a consistent esti-
+mator of µβ
+1 as K →∞, with or without intermediate resampling.
+The proof is in Appendix F: (a) is Fact 2 with P∗in place of P0, plus a change
+of measure for the gap; (b) groups (16) by the level sets of c; (c) is a telescoping
+product. Since a sum of vertex potentials is one, the conditioned model stays in the
+class of Definition 1, whereas on a free edge field the tilt inherits an unidentified shift.
+The gap vanishes only at t = T, so the additive rule used in practice is the myopic
+approximation, not an identity; what (a) does give at every β is that the target of a
+multi-objective sweep is a single tilted law, so a sweep needs no retraining (Remark 7
+delimits what we measure).
+The bias becomes a measurement. Peptide design conditions are scalar statistics of the
+sequence: the net charge at pH 7,
+(22)
+c(x) =
+L
+X
+i=1
+φ(xi),
+φ(K) = φ(R) = +1,
+φ(D) = φ(E) = −1,
+φ(H) = +0.1,
+and φ = 0 otherwise, or the mean hydropathy over decoded residues [41], which is not
+additive in the positions. A target is a function of such a statistic, Φ = ψ ◦c; we use
+
+
+12
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+ψ(v) = −(v −c⋆)2. Part (b) then gives the one-dimensional marginal of the tempered
+law in closed form, so the bias of the myopic sampler documented in [42, 78] can be
+compared to its target rather than asserted.
+Remark 2 (The measurement protocol). Throughout, µ1 is the terminal law of the
+sampler actually run at β = 0, with its temperature and nucleus truncation, not an
+idealised bridge and not the data. We estimate its marginal p(v) = µ1(c = v) from n0
+unguided samples, ˆp, and form qβ(v) ∝ˆp(v) eβψ(v) on the support of ˆp. For n guided
+samples with empirical charge histogram ˆµβ we report TV(ˆµβ, qβ) = 1
+2
+P
+v |ˆµβ(v) −
+qβ(v)|, the sum running over the union of the supports, together with the fraction of
+samples in a window [c⋆−1, c⋆+ 1] against its value under qβ. A value of TV is read
+against a sampling floor: its law under the null in which the sampler draws exactly
+from the true tempered marginal, obtained by a parametric bootstrap from ˆp that
+redraws both ˆp (n0 samples) and the guided sample (n samples). Two limits apply:
+matching the marginal of c is necessary for ˆµβ to approximate µβ
+1 but not sufficient,
+since the statistic sees one coordinate of the sequence only; and ˆp is itself an estimate,
+whose error the floor accounts for.
+7. Experiments
+The experiments answer three questions, in order. Is the action of a cross-entropy-
+trained control a statement about transport, or about the gauge (Section 7.1)? Does
+the vertex form change the model when the penalty is off, and what does the penalty
+do when the form is free (Section 7.2)? And does the regularised model pay for it
+in sequence quality (Section 7.3)? Section 7.4 reports the conditioning measurement.
+Deviations and threats to validity are listed in Appendix G, and full tables in Appen-
+dix H.
+Setup. MadSBM (reimpl.) is the free edge field trained by cross-entropy alone (λ = 0);
+GDSBM (ours) is the vertex-potential control of Definition 1 trained with (13) at
+λ = 0.1. They share the frozen ESM-2 650M backbone [46], the AdaLN head (≈45M
+trainable parameters), corpus, optimiser, schedule (127 000 steps) and sampler, so they
+differ in exactly two places: the control class and the penalty. The dataset of [29] is
+not public, so we rebuild a corpus from UniProt (reviewed, 5 ≤L ≤50, strict 20-
+letter alphabet) split 90/5/5 at seed 42: all comparisons are internal to our two arms.
+We train three seeds per arm (42, 43, 44) and sample at N ∈{32, 64, 128}, generating
+20 sequences at each length L ∈{5, . . . , 50} per (arm, seed, N), i.e. 920 sequences
+and 16 560 in all; pairs are always at equal seed and N. We report pseudo-perplexity
+under ESM-2, mean pLDDT from ESMFold rescaled to [0, 100], the fraction of unique
+sequences (Appendix G), and the action in three conventions—raw, vertex gauge, and
+gauge-fixed, the minimum over the gauge class, equal to KL(r∥p) by Theorem 1—plus
+its forward-kernel counterpart.
+7.1. The raw action of a free control measures its gauge. Figure 2 evaluates the
+instantaneous action along the sampling trajectories; numerical values are in Table 3.
+Three readings, in increasing order of what they license.
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+13
+Figure 2. The raw action of a free control measures its gauge.
+Seed-averaged action along sampling trajectories (33 tokens, three
+seeds, 46 sequences per arm, seed and N).
+(a) Three conventions
+at N ∈{32, 64, 128} (log scale): the raw and vertex-gauge actions of
+MadSBM are of order 108, those of GDSBM stay near 1.8.
+(b) Af-
+ter gauge fixing, Agf = KL(r∥p) is a property of the conditional alone:
+GDSBM is lower by a factor 4.2–4.4 (error bars: inter-seed s.d.). Source:
+Table 3.
+(i) The raw action of the free control is not a transport quantity. For MadSBM it is
+of order 108, with a seed-to-seed standard deviation larger than its mean and a spread
+of a factor 3.6 · 103 across the three seeds (from the logs), while the corresponding
+gauge-fixed value is 6.35–6.72 across the three budgets, with a seed-to-seed standard
+deviation of 14–20% of its mean. Theorem 1 identifies the discrepancy: the raw action
+is KL(r∥p) + h(ζ) and the cross-entropy never constrains ζ, so the second term is free
+to be large. This is a statement about the quantity, not about the model: two controls
+differing by a gauge induce the same token kernel at every state. We therefore regard
+any comparison of raw actions between a free field and a pinned one as void, including
+the comparison in our own favour.
+(ii) After gauge fixing, the comparison is well posed and GDSBM has the lower
+action. The gauge-fixed action is a function of the learned conditional alone. GDSBM
+is below MadSBM by a factor 4.2, 4.3 and 4.4 at N = 32, 64, 128 on the full vocabulary,
+and 3.8, 3.9 and 4.0 on the amino acids, with the ordering holding for all nine (seed,
+N) pairs. As a numerical check, the gauge-fixed column of Table 3 reproduces the
+independently computed KL(r∥p) to the printed precision, as Theorem 1(a) requires.
+(iii) At the forward kernel, the gap narrows sharply. Figure 2 uses the reverse kernel
+Ψ, which is what the penalty applies. Auditing the same checkpoints at the Girsanov
+kernel a, with the closed-form gauge minimisation of Theorem 1(c), the raw forward
+action of MadSBM lies between 7 · 109 and 2.4 · 1010, but the gauge-fixed forward
+action of the two arms differs by a factor of only 1.07–1.09, with the sign holding for
+all nine (seed, N) pairs. This is not saturation: both values are around 0.51–0.56,
+well below the bound 1 of Theorem 1(c) at unit intensity. Inverting its closed form,
+
+
+14
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+KL(p∥r) = −log(1 −Aa
+gf), on the seed means gives a ratio of 1.11–1.13 between the
+arms, against 4.2–4.4 for KL(r∥p). The reduction is thus concentrated in the reverse
+direction, the one the penalty acts on. We report both (Table 4) and make no claim
+that it transfers quantitatively to the path-space action.
+7.2. Form and penalty, separated. Table 1 switches the two changes independently,
+at seed 42 for 300 steps with identical data order and noise draws.
+At λ = 0 the
+two forms are the same model, to eight digits: the validation cross-entropies agree to
+3.6 · 10−8, i.e. to float32 non-determinism, which is Theorem 2(a) measured. Yet the
+raw actions of that same model differ by a factor 2.7, purely because the two param-
+eterisations pick different representatives of the gauge class; a quantity that moves by
+2.7 while the model is unchanged to eight digits cannot be evidence of minimal-action
+transport. At λ = 0.1 the penalty is partly absorbed by the gauge of a free field: the free
+field reaches a lower raw action (0.413 against 0.584) at a worse cross-entropy (1.4510
+against 1.4473). By Theorem 1(b) it can drive h(ζ) to zero at no cost in cross-entropy,
+so part of the penalty’s gradient is spent on the gauge, whereas the vertex form must
+pay the anchor h(r(s)/p(s)) of Theorem 2(b), reducible only by moving p. The penalty
+therefore does not mean the same thing in the two classes, which is why we treat the
+form and the penalty as a single design choice. These runs are 300 steps at one seed:
+a mechanism check, not a performance comparison.
+7.3. Unconditional generation at matched compute. Across nine paired tests
+(three metrics, three budgets, three seeds, 2 degrees of freedom each; Table 5), no
+difference survives a Bonferroni threshold of 0.05/9 = 0.0056. The smallest p-value
+is pLDDT at N = 64, ∆= −0.24 with p = 0.014 uncorrected and a constant sign
+across the three seeds; perplexity changes sign with the budget (+0.25, −0.04, +0.04);
+uniqueness favours GDSBM with a constant sign at N = 32 and 64 (+0.008, p = 0.073;
++0.010, p = 0.118) and not at N = 128. With three seeds a p-value above 0.05 is not
+evidence of equivalence, and the sign pattern is the informative part. The conclusion
+we draw is the negative one we need: the four-fold reduction of the gauge-fixed action of
+Section 7.1 is not bought at a detectable cost in sequence quality, with a possible small
+pLDDT penalty of about 0.1–0.5 points that these three seeds can neither establish
+nor exclude. Checkpoint cross-entropies, re-evaluated with common random numbers,
+are in Table 6 and show a paired difference of alternating sign.
+7.4. Conditioning against a closed-form target. We guide each sampler with the
+myopic twist of (17), using the reward Φ = −(c −c∗)2 of (22) on the net charge c, at
+tempering β ∈{0.5, 1, 2, 4} with c∗= 3. By Theorem 3 the tempered target law of c
+is available in closed form, qβ(v) ∝ˆp(v) e−β(v−c∗)2, where ˆp is the unguided law of c
+estimated from n0 = 300 unconditional samples. We report TV(ˆµβ, qβ) between the
+empirical law of c under guidance (n = 256 samples) and qβ, and the empirical mass of
+the window c ∈[2, 4] against the mass qβ assigns to it; each arm is compared with its
+own target, since ˆp differs between arms. Even a perfect sampler has TV > 0 because
+ˆp and ˆµβ are finite-sample estimates; we quantify this sampling floor by a parametric
+bootstrap (5000 replicates, same n0 and n): draw ˆp(r) ∼Mult(n0, ˆp)/n0, form its tilt,
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+15
+Table 2. Conditioning on net charge, three seeds (42, 43, 44; one check-
+point per seed and arm). Entries are mean±inter-seed s.d., followed
+after the slash by the sampling floor (TV) or the target mass qβ([2, 4])
+(window). Window rates in %. Bold marks the better arm at each β;
+no significance is claimed (see text).
+TV to qβ / floor ↓
+window rate / target (%) ↑
+β
+MadSBM
+GDSBM
+MadSBM
+GDSBM
+0.5
+0.549±0.098 / 0.081
+0.473±0.023 / 0.087
+56.0 / 88.5
+68.6 / 86.8
+1
+0.470±0.064 / 0.075
+0.380±0.057 / 0.080
+73.7 / 96.9
+81.0 / 96.7
+2
+0.350±0.052 / 0.061
+0.253±0.058 / 0.066
+88.4 / 99.4
+93.0 / 99.5
+4
+0.281±0.054 / 0.027
+0.178±0.077 / 0.044
+97.0 / 99.9
+99.5 / 99.9
+and compare with an independent Mult(n, qβ)/n draw. The floor is the mean of the
+resulting TV, averaged over seeds; mass of ˆp outside its support is ignored, so it is
+slightly underestimated.
+(i) Both samplers move toward the target, neither reaches it.
+The observed TV
+exceeds the 95% quantile of its own sampling floor in all 24 (arm, β, seed) cases, one
+marginally (GDSBM, seed 43, β = 4: 0.100 against 0.099), and the mean TV exceeds
+the mean floor by a factor of at least 3.8 (smallest: 0.253/0.066, GDSBM at β = 2).
+(ii) The window rate is below its target in all 24 cases, the expected gap of a twist that
+sees only one-step reward increments, not a property of either model. (iii) Ordering.
+GDSBM has the lower TV in 11 of the 12 paired (seed, β) comparisons and the higher
+window rate in 11 of 12 (exceptions: seed 43 at β = 0.5, seed 44 at β = 2), with
+mean TV gaps 0.076, 0.090, 0.097, 0.103, the first within MadSBM’s inter-seed spread
+(0.098). With three seeds we report direction, not significance, and do not attribute
+the ordering to the vertex form rather than the penalty, the 2 × 2 ablation not having
+been run under guidance. One checkpoint per seed and arm, evaluated on CPU; the
+particle system of Theorem 3(c) is implemented but not evaluated here.
+8. Conclusion
+A discrete bridge trained by cross-entropy leaves one degree of freedom per state
+unconstrained, and the action it reports lives almost entirely there. Theorem 1 makes
+this exact and gives the comparable, gauge-fixed quantity; Theorem 2 pins the gauge
+by the form of the Doob optimum, at no cost in representable conditionals, and turns
+an action penalty into a convex shrinkage towards the reference; Theorem 3 makes
+conditioning addition of potentials and replaces an asserted bias by a measured one.
+Two questions remain open (Appendix I): a per-state regulariser is not yet a path-
+space action, and a locally read potential is not yet a global one. We plan to study the
+geometry of the control potential through the Onsager-type and entropy-dissipation
+structure of finite-state Schr¨odinger bridges [8].
+
+
+16
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+Figure
+3. Conditioning on net charge,
+three seeds (42, 43, 44).
+(a) TV(ˆµβ, qβ) versus β: large markers are seed means, small mark-
+ers individual seeds; the band is the 5–95% range of the sampling floor,
+the dotted line its mean. (b) Empirical mass of the window c ∈[2, 4]
+(solid) against the target qβ([2, 4]) (dashed). (c,d) Law of c at β = 1,
+averaged over seeds (bars), against the unguided ˆp (grey) and the closed-
+form target qβ (circles), for MadSBM (c) and GDSBM (d); the strip is
+the window.
+Appendix A. Deferred remarks
+This appendix collects the remarks referenced from the main text.
+Remark 3 (The reported action is not a property of the model). Cross-entropy identifies
+a control only up to the gauge, because the softmax cannot see it, yet the action is
+not gauge-invariant. The number a model reports as its action is therefore the sum
+of a genuine property of the model, the divergence ν KL(r∥p), and a term that by
+Theorem 1(b) can be made arbitrarily large without altering the token kernel at any
+state. Any comparison of raw actions is thus void, including one in our own favour: two
+parameterisations that agree as models to eight digits report raw actions differing by
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+17
+a factor of 2.7, and a trained free field reports 108 for a gauge-fixed value of 6.35–6.72
+(Section 7.1). The two directions are moreover not symmetric: h(s) ∼s for large s and
+h(s) ∼log(1/s) for small s, so inflating the action is exponentially cheap in the shift
+while deflating it is only logarithmic. The vertex form of Section 5 does not remove
+the second term; it pins it, by imposing u(xi) = 0 at the current token. That term
+becomes the anchor h(r(xi)/p(xi)), a function of the learned conditional alone, so the
+action is again a property of the model and a penalty acts on the conditional rather
+than on the gauge.
+Remark 4 (Two kernels, two scales). Theorem 1(c) is the same computation at the
+forward kernel a of Fact 1. The gauge-fixed forward action is bounded by the total
+reference rate whatever the divergence, whereas the gauge-fixed reverse action KL(r∥p)
+is unbounded; the two kernels measure two directions of divergence, not two scales of
+the same one. We use the closed form of (c) to audit the same trained models at the
+forward kernel (Section 7.1); the training penalty uses Ψ.
+Remark 5 (What the penalty is). Theorem 2(c) says that, state by state, the penalised
+minimiser is a convex shrinkage of the data posterior towards the amino-acid refer-
+ence of the language model, with weight w; the restriction to V is what the sampler
+uses (non-amino-acid tokens are excluded). For λ = 0.1 and νV ≃0.93, w ≃8.5%.
+The penalty therefore acts as an explicit, measurable regulariser towards the protein-
+language-model prior ESM-2, of the form of a mixture (q + λr)/(1 + λνV ); this is the
+sense in which it lowers the action, and we do not interpret it further as a path-space
+optimality statement. It is a population statement for an expressive class: a finite
+network does not attain (15). We make no claim that (13) is a path-space entropy:
+AΨ is a per-state functional, evaluated along noised data states.
+Remark 6 (Geometry, and what is not claimed). The state space X = (V ∪{m})L
+with the edit edges is the Cartesian product of L stars K1,|V | centred at the mask; it
+has |X| = (|V | + 1)L vertices and |E| = L|V |(|V | + 1)L−1 edges. A global potential
+v : X →R yields an edge field v(y) −v(x) with zero circulation on every closed walk.
+Since each star is a tree, the cycle space of the product is generated by the squares,
+so zero circulation reduces to a commutation condition: filling position i with a then
+position j with b must accumulate the same control as the reverse order. A free edge
+field has |E| −|X| + 1 additional rotational degrees of freedom.
+The energy head,
+however, reads the potentials of the neighbours from the current state: consistency
+across states is learned, not enforced, and we do not claim that vθ is a global potential.
+What Theorem 2(a) gives is the gauge pinning at each state, not the curl-free condition.
+Remark 7 (Scope of the conditioning claims). Theorem 3 is a statement about the
+structure of the conditioned model: a tilt is an h-transform, it stays in the vertex class,
+rewards compose, the target of a statistic is closed-form, and a particle system reaches
+it. What we measure in Section 7.4 is the single-objective myopic sampler against
+the closed-form marginal of part (b); the particle system is stated but not evaluated
+here, and neither is multi-objective guidance or the hydropathy statistic, for which a
+reliable estimate of ˆp would require far more than n0 = 300 unguided samples. In the
+
+
+18
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+particle system we would resample systematically when the effective sample size falls
+below K/4 and report weighted estimators without a final resampling step; we do not
+use the guided kernel (17) as proposal together with the weights (18), since the twist
+would then be applied twice, once in the proposal and once in the weight. A guided
+proposal q requires the incremental weight to carry the ratio of the base kernel to q;
+we leave this residual twist to future work and use the free-proposal version, whose
+target is exactly (16) by Theorem 3(c). Finally, the algebra applies to both arms; the
+ordering observed in Section 7.4 is reported as measured and is not attributed to the
+vertex form rather than to the penalty.
+Appendix B. Girsanov’s formula for jump processes
+We prove Fact 1 in full. Throughout, X is finite, the rates R0
+t (x, y) are bounded
+measurable in t and vanish off E, and u is bounded, so Ru = R0eu is bounded and
+both P0 and Pu are laws of non-explosive Markov chains on D([0, T], X), the space of
+c`adl`ag trajectories from [0, T] into X.
+Path likelihood. Condition on n jumps at times t1 < · · · < tn in [0, T] with states
+x0 →x1 →· · · →xn. Writing Λt(x) = P
+y∈X Rt(x, y) for the total rate, the likelihood
+of this path under rates R with respect to the measure P
+n≥0 dt1 · · · dtn δ-counting on
+states is
+(23)
+LR =
+
+n
+Y
+k=1
+Rtk(xk−1, xk)
+
+exp
+
+−
+Z T
+0
+Λt(Xt) dt
+
+,
+the product of the jump intensities at the jump times and of the survival factors on
+the inter-jump intervals. The dominating measure does not depend on R, so the ratio
+of (23) for Ru and R0 is well defined, and since Ru and R0 have the same support,
+Pu ≪P0 with
+log dPu
+dP0 =
+n
+X
+k=1
+utk(Xtk−, Xtk)
+−
+Z T
+0
+X
+y
+R0
+t (Xt, y)
+ eut(Xt,y) −1
+
+dt,
+(24)
+which is (2).
+Compensation formula. Let N(dt, dy) be the jump measure of the chain, N([0, t] ×
+{y}) = #{k : tk ≤t, Xtk = y}. Under a law with rates R, the compensator of N is
+Rt(Xt, y) dt, i.e. for every bounded predictable f,
+(25)
+E
+X
+k
+f(tk, Xtk−, Xtk) = E
+Z T
+0
+X
+y
+Rt(Xt, y) ft(Xt, y) dt.
+This is the definition of the intensity of a finite-state jump process and holds by Fubini
+on (23).
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+19
+The two kernels. Take EPu of (24). The second term is already a time integral; for the
+first, apply (25) under Ru = R0eu with f = u:
+KL(Pu∥P0) = EPu
+Z T
+0
+X
+y
+R0
+u eu −eu + 1
+
+dt = EPu
+Z T
+0
+X
+y
+R0 a(u) dt,
+with a(z) = zez −ez + 1. Take instead EP0 of −log dPu
+dP0 and apply (25) under R0 with
+f = u:
+KL(P0∥Pu) = EP0
+Z T
+0
+X
+y
+R0
+−u + eu −1
+
+dt = EP0
+Z T
+0
+X
+y
+R0 Ψ(u) dt,
+with Ψ(z) = ez −z −1. Both kernels are non-negative with a unique zero at z = 0, and
+Ψ(z) = eza(−z). Finally Ψ′′(z) = ez > 0, so Ψ is strictly convex, while a′′(z) = (z+1)ez
+changes sign at z = −1, so a is not convex.
+□
+Appendix C. The Gibbs–Doob Variational Principle
+This appendix proves Fact 2.
+The result is classical; we give it in full because
+the form of the optimal control, a difference of vertex values, is the starting point
+of the whole paper, and because the cancellation that produces it is what makes the
+h-transform a change of rates rather than a reweighting of paths.
+Setting. Keep the assumptions of Appendix B: X finite, R0 bounded on [0, T], and now
+φ : X →R an arbitrary function, necessarily bounded. Define
+h(x, t) = EP0
+
+eφ(XT )  Xt = x
+
+,
+vt(x) = log h(x, t),
+and let Ph be the law of the chain started at x0 with rates R0
+t (x, y)h(y, t)/h(x, t), i.e.
+the controlled chain with u∗
+t (x, y) = vt(y) −vt(x).
+Step 0: h is bounded away from zero. Since X is finite, m = minx φ(x) and M =
+maxx φ(x) are finite, and h(x, t) ∈[em, eM] for every (x, t) as an average of values in
+that range. Hence v = log h is well defined and bounded, u∗is bounded, and Ph is the
+law of a non-explosive chain to which Appendix B applies.
+Step 1: the backward equation.
+Lemma 1. h is differentiable in t and satisfies
+(26)
+∂th(x, t) = −
+X
+y∈X
+R0
+t (x, y)
+ h(y, t) −h(x, t)
+
+,
+h(·, T) = eφ.
+Proof.
+Condition on the behaviour of the chain on [t, t + δ]. With probability 1 −
+Λt(x)δ+o(δ) there is no jump, and with probability Rt(x, y)δ+o(δ) there is exactly one
+jump, to y; two or more jumps have probability o(δ) because the rates are bounded.
+The Markov property then gives
+h(x, t) =
+ 1 −Λt(x)δ
+
+h(x, t + δ) + δ
+X
+y
+Rt(x, y)h(y, t + δ) + o(δ).
+Subtracting h(x, t+δ), dividing by δ and letting δ ↓0 yields (26); the terminal condition
+is the definition of h at t = T.
+□
+
+
+20
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+Dividing (26) by h(x, t) > 0 and using u∗
+t (x, y) = log h(y,t)
+h(x,t),
+(27)
+∂tvt(x) = −
+X
+y
+R0
+t (x, y)
+h(y, t)
+h(x, t) −1
+
+= −
+X
+y
+R0
+t (x, y)
+ eu∗
+t (x,y) −1
+
+.
+Step 2: telescoping along the path. Fix a path with jumps at t1 < · · · < tn.
+The function t 7→vt(Xt) is piecewise C1: between two jumps the state is constant
+and only t varies, and at each jump time it has a jump of size vtk(Xtk) −vtk(Xtk−) =
+u∗
+tk(Xtk−, Xtk). Summing its increments over [0, T],
+vT (XT ) −v0(x0) =
+n
+X
+k=1
+u∗
+tk
+ Xtk−, Xtk
+
++
+Z T
+0
+∂tvt(Xt) dt,
+that is,
+(28)
+n
+X
+k=1
+u∗
+tk
+ Xtk−, Xtk
+
+= log h(XT , T) −log h(x0, 0) −
+Z T
+0
+∂tvt(Xt) dt.
+Step 3: the cancellation. Write the Girsanov density (2) for u∗:
+log dPh
+dP0 =
+X
+k
+u∗
+tk
+| {z }
+Step 2
+−
+Z T
+0
+X
+y
+R0
+t (Xt, y)
+ eu∗
+t (Xt,y) −1
+
+dt.
+Substituting (28) for the jump term and (27) for ∂tvt(Xt),
+−
+Z T
+0
+∂tvt(Xt) dt = +
+Z T
+0
+X
+y
+R0
+t (Xt, y)
+ eu∗
+t (Xt,y) −1
+
+dt,
+which is exactly the compensator with the opposite sign. The two integrals cancel and
+(29)
+log dPh
+dP0 = log h(XT , T) −log h(x0, 0) = φ(XT ) −log h(x0, 0),
+using the terminal condition h(·, T) = eφ. This is the first claim of Fact 2: the h-
+transform reweights a path by its terminal reward alone, and the constant h(x0, 0) is
+the normalisation.
+Step 4: the variational identity. Let P ≪P0 be any path law started at x0. On
+the event where the densities are defined,
+log dP
+dPh = log dP
+dP0 −log dPh
+dP0 = log dP
+dP0 −φ(XT ) + log h(x0, 0),
+by (29). Taking EP, and noting that log h(x0, 0) is a constant,
+(30)
+KL
+ P ∥Ph
+= KL
+ P ∥P0
+−EP φ(XT ) + log h(x0, 0) ≥0,
+which is (6). Rearranging,
+KL
+ P∥P0
+−EPφ(XT ) = −log h(x0, 0) + KL
+ P∥Ph
+,
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+21
+so the left-hand side is bounded below by −log h(x0, 0), with equality if and only if
+KL(P∥Ph) = 0, i.e. P = Ph. The minimiser is therefore unique and is the h-transform.
+□
+Remark: why the optimal control is a gradient. Nothing in Steps 1 to 4 used
+the structure of X beyond finiteness. What the computation shows is that the optimal
+control is u∗
+t (x, y) = vt(y)−vt(x) with v a function of the vertex alone, and that this is
+forced: it is the only form for which the telescoping of Step 2 can cancel the compensator
+of Step 3. An edge field that is not a difference of vertex values leaves a residue in
+(29), and the resulting law is not an h-transform of P0. This is the observation that
+Section 5 turns into a parameterisation.
+Appendix D. Proof of Theorem 1
+Everything in this appendix is one identity read three times. The per-state action
+splits into a divergence that the conditional determines and a term that only the gauge
+sees; proving this once gives, in turn, the value of the gauge that minimises the action
+and the corresponding closed form for the forward Girsanov kernel.
+Notation. Fix (x, t) and write ν = P
+y R0(x, y), r = R0(x, ·)/ν, Z = P
+y R0eu, ζ =
+Z/ν = P
+y r(y)eu(y), p = R0eu/Z = reu/ζ, and h(ζ) = ζ −1 −log ζ for ζ > 0. Recall
+Ψ(z) = ez −z −1 and a(z) = zez −ez + 1.
+Part (a): the splitting. Proof.
+Everything follows from writing the control in terms
+of the conditional it produces. From p = R0eu/Z we get
+u = log p
+R0 + log Z,
+and the three sums that make up Ψ(u) = eu −u −1 can then be computed one by one.
+The exponential sum is the normalisation itself, P
+y R0eu = Z = νζ. The constant
+sum is P
+y R0 = ν. For the linear sum, substitute the expression for u and factor out
+ν:
+X
+y
+R0 u =
+X
+y
+R0 log p
+R0 +ν log Z = ν
+X
+y
+r log p
+νr+ν log Z = −ν KL(r∥p)−ν log ν+ν log Z,
+where the middle equality uses R0 = νr and the last one separates the constant log ν
+from the divergence. Assembling the three pieces,
+X
+y
+R0 Ψ(u) = νζ −ν + ν KL(r∥p) + ν log ν −ν log Z = ν
+h
+KL(r∥p) + ζ −1 −log ζ
+i
+,
+since log Z −log ν = log ζ. This is (8). Non-negativity of the first term is that of a
+relative entropy. For the second, the inequality log ζ ≤ζ −1 gives h ≥0 on (0, ∞),
+with equality only at ζ = 1; moreover h(ζ) →∞both as ζ ↓0 and as ζ →∞. The
+first term is a function of p alone and the second of ζ alone.
+□
+
+
+22
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+Part (b): the orbit. Proof.
+The cross-entropy (10) depends on u only through p.
+Adding a constant c to u multiplies both R0eu and Z by ec, so p is unchanged while ζ
+becomes ζec; as c runs over R, ζec runs over (0, ∞) and h(ζec) over [0, ∞). By part (a)
+the action along the orbit is ν KL(r∥p) + νh(ζec), whose minimum over the gauge is
+therefore reached exactly when ζec = 1, that is at c∗= −log ζ, with value ν KL(r∥p),
+and whose excess over that minimum is νh(ζec), unbounded in c.
+□
+Part (c): the forward kernel. Proof.
+It suffices to treat ν = 1 and multiply by
+ν at the end, since R0 = νr. From eu = ecp/r we get P
+y r eu = ec and P
+y r u eu =
+ec P
+y p
+ log(p/r) + c
+
+= ec KL(p∥r) + c
+
+, so P
+y r a(u) = ec KL(p∥r) + cec −ec + 1. Its
+derivative in c is ec KL(p∥r)+c
+
+, which vanishes and changes sign at c∗= −KL(p∥r);
+substituting gives 1 −e−KL(p∥r). The map d 7→1 −e−d is strictly increasing from
+[0, ∞) onto [0, 1), hence a bijection, so a measured gauge-fixed forward action recovers
+KL(p∥r) = −log(1 −·).
+□
+Appendix E. Proof of Theorem 2
+Part (a): pinning the gauge costs nothing. Proof.
+By definition log
+ pθ[u](a)/r(a)
+
+=
+ua −log Zu for every a. If u −w = c1, then Zu = ecZw and the two conditionals co-
+incide. Conversely, if pθ[u] = pθ[w], then ua −wa = log Zu −log Zw for every a, a
+constant independent of a, so u −w ∈R1. For c = −us this gives u −us1 ∈Uvtx and
+pθ[u −us1](a) =
+r(a) eua−us
+P
+b r(b) eub−us = e−us r(a) eua
+e−us Zu
+= pθ[u](a),
+so pθ is the same. Uniqueness holds because two elements of Uvtx that differ by c1 have
+s-components 0 and 0 + c, hence c = 0. If ua = va −vs, then us = 0; conversely, if
+us = 0, take v = u. Here v is a potential on the star of neighbours of the current state,
+not a global potential on X (Remark 6). Finally, inverting pθ[u](a) = r(a)eua/Zu in the
+vertex gauge, where us = 0 gives Zu = r(s)/ps, yields ua = log
+
+(pa/r(a))/(ps/r(s))
+
+.
+The map u 7→pθ[u] is therefore constant on each orbit u + R1, and every orbit
+meets Uvtx exactly once, so the two classes produce the same set of conditionals. Since
+CE depends on u only through pθ[u], its infimum is the same over both classes, and
+GDSBM at λ = 0 is functionally identical to MadSBM. What the conditionals do not
+fix is the rate level: R0eu and R0eu−us1 differ by the factor e−us, which is the part of
+the action that Theorem 1 isolates.
+□
+Part (b): the anchor. Proof.
+Theorem 1(a) with ν = P
+y r(y) = 1 gives AΨ(u; x) =
+KL(r∥p) + h(ζ) with ζ = P
+y r(y)eu(y) and p = reu/ζ. In the vertex gauge u(s) = 0,
+so p(s) = r(s)eu(s)/ζ = r(s)/ζ, i.e. ζ = r(s)/p(s), which is (14). Since h vanishes only
+at 1, the second term vanishes if and only if p(s) = r(s).
+□
+Part (c): the penalised per-state minimiser. Fix a masked position with current
+token s = m, let r > 0 on T , let q be the clean-token posterior, supported on V so that
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+23
+q(s) = 0, and let ν = 1 (unit intensity). Minimise over the open simplex
+J(p) = −
+X
+y
+q(y) log p(y) + λ
+h
+KL(r∥p) + h
+ r(s)/p(s)
+i
+.
+Step 1: an explicit form. Using KL(r∥p) = P
+y r log r −P
+y r log p and h(r(s)/p(s)) =
+r(s)/p(s) −1 −log r(s) + log p(s),
+(31) J(p) = −
+X
+y̸=s
+ q(y) + λr(y)
+
+log p(y) + λ
+ 1 −r(s)
+
+log p(s) + λ r(s)
+p(s) + const,
+where the constant collects P
+y r log r, −1 and −log r(s), and we used q(s) = 0.
+Step 2: existence of an interior minimiser. J is smooth on the open simplex. If p(y) →0
+for some y̸ = s, then −log p(y) →+∞with coefficient q(y) + λr(y) ≥λr(y) > 0, so
+J →+∞. If p(s) →0, then λr(s)/p(s) →+∞like 1/p(s) while λ(1 −r(s)) log p(s) →
+−∞only like log p(s), so again J →+∞. Hence the sublevel sets are compact in the
+open simplex and a minimiser exists in the interior.
+Step 3: stationarity. At an interior minimiser there is κ > 0 with ∂J/∂p(y) = −κ for
+all y. For y̸ = s this reads −
+ q(y) + λr(y)
+
+/p(y) = −κ, i.e.
+(32)
+p(y) = q(y) + λr(y)
+κ
+,
+y̸ = s,
+while for y = s it gives the quadratic κ p(s)2 + λ
+ 1 −r(s)
+
+p(s) −λr(s) = 0, which has
+a unique positive root; κ is then fixed by P
+y p(y) = 1.
+Step 4: restriction to the amino acids. The sampler emits only a ∈V , and V ⊂
+T \ {s}, so (32) applies to all of V . Summing over V and using P
+a∈V q(a) = 1 gives
+P
+a∈V p(a) = (1 + λνV )/κ with νV = P
+a∈V r(a). Dividing, κ cancels:
+(33) p(a | V ) = q(a) + λνV ˜r(a)
+1 + λνV
+= (1−w) q(a)+w ˜r(a),
+w =
+λνV
+1 + λνV
+,
+˜r = r|V
+νV
+.
+The total-variation statement follows from p(· | V ) −q = w(˜r −q).
+□
+Numerical value. The audit of Section 7.1 measures νV ∈[0.933, 0.936] along the sam-
+pling trajectories, so at λ = 0.1 the shrinkage weight is w = 0.085. Equation (33) is
+a statement about the population minimiser over an expressive class; a finite network
+does not attain it, and we do not use it as a prediction of the trained conditional.
+Appendix F. Proof of Theorem 3
+Part (a): the tilt is an h-transform, and composition. Proof.
+Apply Fact 2
+with P∗in place of P0 and φ = βΦ: dPβ/dP∗= eβΦ(XT )/hβΦ(x0, 0), so the terminal
+marginal of Pβ is µ1eβΦ/Zβ = µβ
+1 (and hβΦ(x0, 0) = Zβ for a Dirac source). The rates
+of Pβ relative to P0 are R0eu∗evβΦ(y)−vβΦ(x), which is (19); a sum of vertex potentials
+is a vertex potential.
+For the composition, the densities multiply: eΦ2 dPΦ1 ∝eΦ1+Φ2 dP∗, so tilting by
+Φ1 then by Φ2 gives PΦ1+Φ2. Conditionally on Xt = x, dPΦ1/dP∗= eΦ1(XT )/EP∗[eΦ1 |
+
+
+24
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+Xt = x], hence EP∗[eΦ1+Φ2 | x] = EP∗[eΦ1 | x] · EPΦ1[eΦ2 | x]; taking logarithms
+gives (20). At t = T both conditional expectations equal eΦ2(x), so G(·, T) = 0.
+□
+Part (b): the closed-form marginal. Proof.
+µβ
+1(c = v) = Z−1
+β
+P
+x: c(x)=v µ1(x) eβψ(c(x)) =
+Z−1
+β eβψ(v) µ1(c = v), and Zβ = P
+v′ eβψ(v′)µ1(c = v′) by the same grouping. Only the
+fact that Φ is constant on the level sets of c is used.
+□
+Part (c): bias and telescoping weights. Proof.
+The kernel (17) reweights the
+one-step conditional by eβ∆Φ, which is the exact tilt of that conditional and not of
+the terminal law, since the exact terminal tilt would require vβΦ and not βΦ; the
+discrepancy is the gap of part (a) at t < T and is the bias documented in [42, 78].
+For the particle system, the product (18) telescopes to eβ[Φ(x(N))−Φ(x(0))], and the
+constant e−βΦ(x(0)) cancels under self-normalisation; this uses that x(N) is the fully
+decoded sequence, so that Φ(x(N)) is the reward of the returned sample. The weighted
+sample is then self-normalised importance sampling from the proposal µ1 with weight
+eβΦ, whose normalised target is (16); consistency is the standard law of large numbers
+for self-normalised estimators (Φ is bounded), and resampling according to the current
+weights leaves the Feynman–Kac flow invariant [82, 67].
+□
+Appendix G. Experimental details, deviations and threats to validity
+Architecture. Frozen ESM-2 650M [46] provides logits fϕ(xt) and last-layer hidden
+states. The trainable head is two AdaLN transformer blocks (hidden 1280, 16 heads,
+MLP ratio 4, ≈45M parameters) conditioned on a Gaussian Fourier time embedding
+(64 dimensions, scale 30) followed by a SiLU MLP, then a final norm and a vocabulary
+projection whose weight and bias are initialised to zero. At initialisation the control
+vanishes and the model is exactly the tempered reference. The MadSBM arm reads
+the projection as a free field uθ(x, ·, t); the GDSBM arm reads it as a vertex potential
+vθ(x, ·, t) and forms uθ = ¯∇vθ as in Definition 1.
+Optimisation. AdamW, (β1, β2) = (0.9, 0.999), weight decay 0.01, learning rate 10−4
+with cosine decay to 10−5, warmup over 4% of steps, gradient clipping at 10, batch
+size 64, 127 000 steps, 500 discrete masking levels with t uniform and clamped to
+[10−6, 1 −10−6], validation every 500 steps with checkpoint selection on the logged
+objective. λ = 0.1 for GDSBM and λ = 0 for MadSBM.
+Sampling. MadSBM’s sampler, unchanged for both arms: rate scale κ = 0.01, jump
+scale η = 0.05, temperature τ = 0.5, top-p πtop = 0.9, rate clamp −40, N steps from
+tmax = 1 −10−6 down to 10−6, with positions still masked at the end resolved by
+the final argmax. Non-amino-acid tokens are excluded from the candidate set; a row
+emptied by top-p filtering is recomputed without the filter, which occurred for about
+one position in the whole campaign.
+Metrics. Pseudo-perplexity under ESM-2 650M in fp32 by sequential single-position
+masking. pLDDT from EsmForProteinFolding in fp32, one sequence at a time, av-
+eraged per sequence and rescaled to [0, 100].
+Uniqueness is the fraction of distinct
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+25
+Algorithm 2 Sampling (identical for both arms)
+Require: trained head θ, length L, budget N; t decreases from tmax to ϵ, dt = 1/N
+1: x ←mL
+2: for k = 1, . . . , N do
+3:
+read ui from the head as in line 3 of Algorithm 1; ℓi ←βtfϕ(x)i + ui
+4:
+πi ←1 −exp
+ −min{η P
+y eκui(y) dt, 40}
+
+5:
+ai ∼softmax
+ top-pπtop(ℓi/τ)
+
+V
+
+6:
+xi ←ai for each masked i that jumps, with probability πi
+7: end for
+8: fill the positions still masked by arg maxy∈V ℓi(y); return x
+sequences in a generation set. Action curves are computed along the sampling trajec-
+tories with the closed forms of Appendix D, averaged over internal positions, on 46
+sequences per (arm, seed, N).
+Declared deviations from [29]. (i) Corpus rebuilt from UniProt (reviewed, 5 ≤L ≤50,
+strict 20-letter alphabet), their dataset not being public; comparisons are internal to
+our two arms. (ii) Standard padding with batch 64 instead of dynamic batching at
+batch 1 with accumulation 16. (iii) Our own training loop. (iv) Conditional guidance
+removed from the sampler for the unconditional comparison.
+(v) pLDDT through
+transformers rather than OpenFold, same model and precision. (vi) Two sampler
+safeguards are ours and are disclosed: non-amino-acid tokens are excluded from the
+candidate set, and a row emptied by top-p filtering is recomputed without the filter.
+(vii) The conditioning runs of Section 7.4 were executed on CPU. Their engineering
+constants were otherwise kept unchanged for comparability.
+Checkpoint selection and excluded run. The madsbm run at seed 44 was resumed twice
+and its best-step tracker was reset, so the retained checkpoint is at step 124 000 rather
+than at the best step 76 000; this is the one selection asymmetry in the campaign. A
+300-step diagnostic run (madsbm at seed 97) is present in our logs and is excluded from
+every table, as a run of a different length from every reported configuration.
+Statistical scope. Three training seeds, hence two degrees of freedom in every paired
+test. We report constancy of sign, uncorrected p-values and the Bonferroni threshold,
+and we do not claim significance for any single metric of Section 7.3. The claims we do
+make are the identity of Theorem 2(a) verified to float precision, the gauge decompo-
+sition of Theorem 1(a) verified numerically through the agreement of the gauge-fixed
+action with KL(r∥p), and the ordering of the gauge-fixed actions, which holds in all
+nine (seed, N) pairs at both kernels. The conditioning measurement is on three seeds,
+one checkpoint per seed and arm, executed on CPU.
+What the action reduction is not. The penalty uses the reverse kernel and is evaluated
+per state along noised data; Theorem 2(c) shows that it acts as a shrinkage towards
+the reference with weight w ≃8.5% at λ = 0.1. A lower gauge-fixed action therefore
+means a conditional closer to the tempered language model in the reverse-KL sense,
+not that the trained path measure minimises the path-space entropy of the Schr¨odinger
+problem.
+
+
+26
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+Appendix H. Numerical tables
+This appendix gives the numerical values behind Figure 2 and behind Section 7.3;
+the conditioning values are in Table 2 of the main text.
+Table 3. Action audit along sampling trajectories, mean ± s.d.
+over three seeds. Araw is the action of the control as parameterised;
+Avtx is the same control put in the vertex gauge u(xi) = 0; Agf is the
+minimum over the gauge class, which equals KL(r∥p) by Theorem 1.
+Left block: full 33-token vocabulary.
+Right block: restricted to the
+20 amino acids, the only tokens the sampler can emit. For GDSBM,
+Araw = Avtx by construction. The raw columns are seed means; their
+inter-seed dispersion is reported in the text.
+33 tokens
+20 amino acids
+Model
+N
+Araw
+Avtx
+Agf
+Araw
+Avtx
+Agf
+MadSBM
+32
+2.9·108
+5.7·108
+6.35 ± 0.92
+2.9·108
+5.7·108
+5.25 ± 0.83
+MadSBM
+64
+3.5·108
+6.1·108
+6.51 ± 1.15
+3.5·108
+6.1·108
+5.38 ± 1.08
+MadSBM
+128
+8.9·108
+9.1·108
+6.72 ± 1.31
+8.9·108
+9.1·108
+5.58 ± 1.23
+GDSBM
+32
+1.808 ± 0.039
+1.808 ± 0.039
+1.512 ± 0.040
+1.655 ± 0.034
+1.655 ± 0.034
+1.369 ± 0.034
+GDSBM
+64
+1.826 ± 0.117
+1.826 ± 0.117
+1.514 ± 0.096
+1.670 ± 0.117
+1.670 ± 0.117
+1.370 ± 0.097
+GDSBM
+128
+1.852 ± 0.117
+1.852 ± 0.117
+1.542 ± 0.097
+1.696 ± 0.114
+1.696 ± 0.114
+1.399 ± 0.095
+Table 4. Forward-kernel audit, gauge-fixed, mean ± s.d. over three
+seeds, 20 amino acids. Aa
+gf = 1 −e−KL(p∥r) by Theorem 1(c) at unit
+intensity; the last column inverts it on the seed means. The ordering
+holds in all nine (seed, N) pairs.
+N
+MadSBM Aa
+gf
+GDSBM Aa
+gf
+ratio
+ratio of KL(p∥r)
+32
+0.5494 ± 0.0091
+0.5094 ± 0.0072
+1.08
+1.12
+64
+0.5503 ± 0.0164
+0.5125 ± 0.0207
+1.07
+1.11
+128
+0.5613 ± 0.0217
+0.5170 ± 0.0183
+1.09
+1.13
+Appendix I. Deferred theory
+Three questions are left open; we state them here because they bound the present
+contribution rather than extend it.
+From a per-state regulariser to a path-space action. Our penalty is the reverse Girsanov
+kernel evaluated state by state along noised data, not KL(P0∥Pu) along the controlled
+process. Two routes could close the gap: evaluate the kernel along sampled trajectories,
+at the cost of differentiating through the sampler; or penalise the forward kernel a with
+the gauge fixed in closed form (Theorem 1(c)), which is the correct path-space integrand
+but whose kernel is not convex, so the optimisation needs study.
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+27
+Table 5. Unconditional generation, 920 sequences per (arm, seed,
+N); mean over seeds of the per-seed means ± inter-seed s.d.
+N
+Model
+seeds
+PPL ↓
+pLDDT ↑
+unique ↑
+32
+MadSBM (reimpl.)
+3
+9.550 ± 0.256
+73.44 ± 0.69
+0.919 ± 0.016
+32
+GDSBM (ours)
+3
+9.796 ± 0.025
+72.95 ± 0.17
+0.928 ± 0.021
+64
+MadSBM (reimpl.)
+3
+9.520 ± 0.091
+73.37 ± 0.58
+0.909 ± 0.029
+64
+GDSBM (ours)
+3
+9.475 ± 0.226
+73.13 ± 0.60
+0.919 ± 0.027
+128
+MadSBM (reimpl.)
+3
+9.488 ± 0.274
+73.64 ± 0.40
+0.914 ± 0.032
+128
+GDSBM (ours)
+3
+9.529 ± 0.035
+73.52 ± 0.20
+0.912 ± 0.027
+Table 6. Re-evaluated cross-entropy, common random numbers,
+three seeds. Paired at equal seed, the difference GDSBM −MadSBM
+on the test split is +0.040, −0.125 and −0.053 for seeds 42, 43, 44: the
+sign is not constant, so the penalty neither costs nor buys cross-entropy
+systematically at λ = 0.1.
+Split
+Model
+seeds
+CE
+CV(CE)
+val
+MadSBM (reimpl.)
+3
+1.1825 ± 0.0910
+0.077
+val
+GDSBM (ours)
+3
+1.1367 ± 0.0449
+0.039
+test
+MadSBM (reimpl.)
+3
+1.1915 ± 0.0741
+0.062
+test
+GDSBM (ours)
+3
+1.1454 ± 0.0308
+0.027
+From a locally read potential to a global one. The energy head reads the potentials of
+the neighbours from the current state, so nothing forces the learned field to be curl-
+free on the squares of the edit graph (Remark 6). A penalty on the circulation around
+squares is computable in closed form on a minibatch and would make the control an
+exact discrete gradient; whether this changes the generated distribution is an empirical
+question we have not settled. Related to it, a bridge whose reference is the trained
+conditional rather than the frozen language model would make the whole construction
+self-consistent, at the cost of an outer iteration.
+Geometry of the control potential. We read the potential locally, as a vector on the
+neighbours of the current state, and make no use of the geometry of the sequence graph.
+A natural next step is to equip the edit graph with the Onsager-type structure that
+governs entropy dissipation for finite-state Schr¨odinger bridges [8], and to ask whether
+a potential read in that geometry, rather than by a state-wise head, yields a control
+that is globally consistent and whose action carries a dissipation interpretation. This
+would address the two questions above at once.
+References
+[1] J. Abramson et al., Accurate structure prediction of biomolecular interactions with AlphaFold 3,
+Nature 630 (2024), 493–500.
+
+
+28
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+[2] S. Alamdari, N. Thakkar, R. van den Berg, L. Tenori, et al., Protein generation with evolutionary
+diffusion: sequence is all you need, Advances in Neural Information Processing Systems 36 (2023).
+[3] M. S. Albergo and E. Vanden-Eijnden, Building normalizing flows with stochastic interpolants,
+arXiv:2209.15571, 2022.
+[4] C. Angermueller, D. Dohan, D. Belanger, R. Deshpande, K. Murphy, and L. Colwell, Model-
+based reinforcement learning for biological sequence design, International Conference on Learning
+Representations, 2020.
+[5] X. Aramayo Carrasco, G. Ksenofontov, A. Leonov, I. Koshelev, and A. Korotin, Entering the era
+of discrete diffusion models: a benchmark for Schr¨odinger bridges and entropic optimal transport,
+International Conference on Learning Representations, 2026.
+[6] J. Austin, D. D. Johnson, J. Ho, D. Tarlow, and R. van den Berg, Structured denoising diffusion
+models in discrete state-spaces, Advances in Neural Information Processing Systems 34 (2021),
+17981–17993.
+[7] M. Balcerak, T. Amiranashvili, A. Terpin, S. Shit, L. Bogensperger, S. Kaltenbach, P. Koumout-
+sakos, and B. Menze, Energy matching: unifying flow matching and energy-based models for
+generative modeling, Advances in Neural Information Processing Systems 38 (2026), 8583–8609.
+[8] A. BenAbdallah and M. Dlala, Nonlocal Onsager operators and entropy dissipation for finite-state
+Schr¨odinger bridges, arXiv:2606.11513, 2026.
+[9] J.-D. Benamou and Y. Brenier, A computational fluid mechanics solution to the Monge–
+Kantorovich mass transfer problem, Numer. Math. 84 (2000), 375–393.
+[10] E. Bengio, M. Jain, M. Korablyov, D. Precup, and Y. Bengio, Flow network based generative
+models for non-iterative diverse candidate generation, Advances in Neural Information Processing
+Systems 34 (2021), 27381–27394.
+[11] K. Black, M. Janner, Y. Du, I. Kostrikov, and S. Levine, Training diffusion models with reinforce-
+ment learning, International Conference on Learning Representations, 2024.
+[12] J. Bose, T. Akhound-Sadegh, G. Huguet, K. Fatras, J. Rector-Brooks, C. Liu, A. Nica, M. Ko-
+rablyov, M. Bronstein, and A. Tong, SE(3)-stochastic flow matching for protein backbone gener-
+ation, International Conference on Learning Representations, 2024.
+[13] D. H. Brookes, H. Park, and J. Listgarten, Conditioning by adaptive sampling for robust design,
+International Conference on Machine Learning, 2019.
+[14] A. Campbell, J. Benton, V. De Bortoli, T. Rainforth, G. Deligiannidis, and A. Doucet, A contin-
+uous time framework for discrete denoising models, Advances in Neural Information Processing
+Systems 35 (2022), 28266–28279.
+[15] A. Campbell, J. Yim, R. Barzilay, T. Rainforth, and T. Jaakkola, Generative flows on discrete
+state-spaces: enabling multimodal flows with applications to protein co-design, International Con-
+ference on Machine Learning, 2024.
+[16] Y. Chen, T. T. Georgiou, and M. Pavon, Stochastic control liaisons: Richard Sinkhorn meets
+Gaspard Monge on a Schr¨odinger bridge, SIAM Rev. 63 (2021), 249–313.
+[17] S.-N. Chow, W. Huang, Y. Li, and H. Zhou, Fokker–Planck equations for a free energy functional
+or Markov process on a graph, Arch. Ration. Mech. Anal. 203 (2012), 969–1008.
+[18] H. Chung, J. Kim, M. T. McCann, M. L. Klasky, and J. C. Ye, Diffusion posterior sampling for
+general noisy inverse problems, arXiv:2209.14687, 2022.
+[19] I. Csisz´ar, I-divergence geometry of probability distributions and minimization problems, Ann.
+Probab. (1975), 146–158.
+[20] M. Cuturi, Sinkhorn distances: lightspeed computation of optimal transport, Advances in Neural
+Information Processing Systems 26 (2013).
+[21] P. Das et al., Accelerating antimicrobial discovery with controllable deep generative models and
+molecular dynamics, arXiv:2005.11248, 2020.
+[22] J. Dauparas et al., Robust deep learning–based protein sequence design using ProteinMPNN,
+Science 378 (2022), 49–56.
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+29
+[23] V. De Bortoli, J. Thornton, J. Heng, and A. Doucet, Diffusion Schr¨odinger bridge with applica-
+tions to score-based generative modeling, Advances in Neural Information Processing Systems 34
+(2021), 17695–17709.
+[24] P. Dhariwal and A. Nichol, Diffusion models beat GANs on image synthesis, Advances in Neural
+Information Processing Systems 34 (2021), 8780–8794.
+[25] C. Domingo-Enrich, M. Drozdzal, B. Karrer, and R. T. Q. Chen, Adjoint matching: fine-tuning
+flow and diffusion generative models with memoryless stochastic optimal control, International
+Conference on Learning Representations, 2025.
+[26] C. Domingo-Enrich and J. Han, Adjoint matching through the lens of the stochastic maximum
+principle in optimal control, arXiv:2604.08580, 2026.
+[27] M. Erbar and J. Maas, Ricci curvature of finite Markov chains via convexity of the entropy, Arch.
+Ration. Mech. Anal. 206 (2012), 997–1038.
+[28] H. F¨ollmer, Random fields and diffusion processes, in ´Ecole d’´Et´e de Probabilit´es de Saint-Flour
+XV–XVII, 1985–87, Springer, 2006, 101–203.
+[29] S. Goel and P. Chatterjee, Minimal-action discrete Schr¨odinger bridge matching for peptide se-
+quence design, ICLR 2026 DeLTa Workshop, 2026; arXiv:2601.22408.
+[30] N. Gruver, S. Stanton, N. Frey, T. G. J. Rudner, I. Hotzel, J. Lafrance-Vanasse, A. Rajpal, K. Cho,
+and A. G. Wilson, Protein design with guided discrete diffusion, Advances in Neural Information
+Processing Systems 36 (2023), 12489–12517.
+[31] T. Hayes et al., Simulating 500 million years of evolution with a language model, Science 387
+(2025), 850–858.
+[32] J. Ho, A. Jain, and P. Abbeel, Denoising diffusion probabilistic models, Advances in Neural
+Information Processing Systems 33 (2020), 6840–6851.
+[33] J. Ho and T. Salimans, Classifier-free diffusion guidance, arXiv:2207.12598, 2022.
+[34] E. Hoogeboom, D. Nielsen, P. Jaini, P. Forr´e, and M. Welling, Argmax flows and multinomial
+diffusion: learning categorical distributions, Advances in Neural Information Processing Systems
+34 (2021), 12454–12465.
+[35] J. B. Ingraham et al., Illuminating protein space with a programmable generative model, Nature
+623 (2023), 1070–1078.
+[36] M. Jain et al., Biological sequence design with GFlowNets, International Conference on Machine
+Learning, 2022, 9786–9801.
+[37] J. Jumper et al., Highly accurate protein structure prediction with AlphaFold, Nature 596 (2021),
+583–589.
+[38] J. H. Kim, S. Kim, S. Moon, H. Kim, J. Woo, and W. Y. Kim, Discrete diffusion Schr¨odinger
+bridge matching for graph transformation, International Conference on Learning Representations,
+2025.
+[39] A. Kirjner, J. Yim, R. Samusevich, S. Bracha, T. Jaakkola, R. Barzilay, and I. Fiete, Improving
+protein optimization with smoothed fitness landscapes, International Conference on Learning
+Representations, 2024.
+[40] G. Ksenofontov and A. Korotin, Categorical Schr¨odinger bridge matching, arXiv:2502.01416, 2025.
+[41] J. Kyte and R. F. Doolittle, A simple method for displaying the hydropathic character of a protein,
+J. Mol. Biol. 157 (1982), 105–132.
+[42] C. K. Lee, P. Jeha, J. Frellsen, P. Lio, M. S. Albergo, and F. Vargas, Debiasing guidance for
+discrete diffusion with sequential Monte Carlo, arXiv:2502.06079, 2025.
+[43] C. L´eonard, A survey of the Schr¨odinger problem and some of its connections with optimal trans-
+port, Discrete Contin. Dyn. Syst. 34 (2014), 1533–1574.
+[44] X. Li et al., Derivative-free guidance in continuous and discrete diffusion models with soft value-
+based decoding, arXiv:2408.08252, 2024.
+[45] Y. Lin and M. AlQuraishi, Generating novel, designable, and diverse protein structures by equiv-
+ariantly diffusing oriented residue clouds, arXiv:2301.12485, 2023.
+
+
+30
+A. BENABDALLAH, M. DLALA AND MOHSEN DLALA
+[46] Z. Lin et al., Evolutionary-scale prediction of atomic-level protein structure with a language model,
+Science 379 (2023), 1123–1130.
+[47] S. L. Lisanza et al., Multistate and functional protein design using RoseTTAFold sequence space
+diffusion, Nat. Biotechnol. 43 (2025), 1288–1298.
+[48] X. Liu, C. Gong, and Q. Liu, Flow straight and fast: learning to generate and transfer data with
+rectified flow, arXiv:2209.03003, 2022.
+[49] G.-H. Liu, Y. Lipman, M. Nickel, B. Karrer, E. Theodorou, and R. T. Q. Chen, Generalized
+Schr¨odinger bridge matching, International Conference on Learning Representations, 2024.
+[50] A. Lou, C. Meng, and S. Ermon, Discrete diffusion modeling by estimating the ratios of the data
+distribution, International Conference on Machine Learning, 2024.
+[51] J. Maas, Gradient flows of the entropy for finite Markov chains, J. Funct. Anal. 261 (2011),
+2250–2292.
+[52] A. Madani et al., Large language models generate functional protein sequences across diverse
+families, Nat. Biotechnol. 41 (2023), 1099–1106.
+[53] M. Muttenthaler, G. F. King, D. J. Adams, and P. F. Alewood, Trends in peptide drug discovery,
+Nat. Rev. Drug Discov. 20 (2021), 309–325.
+[54] K. Neklyudov, R. Brekelmans, D. Severo, and A. Makhzani, Action matching: learning stochastic
+dynamics from samples, International Conference on Machine Learning, 2023.
+[55] S. Nie et al., Large language diffusion models, Advances in Neural Information Processing Systems
+38 (2026), 50608–50646.
+[56] H. Nisonoff, J. Xiong, S. Allenspach, and J. Listgarten, Unlocking guidance for discrete state-space
+diffusion and flow models, International Conference on Learning Representations, 2025.
+[57] P. Notin et al., ProteinGym: large-scale benchmarks for protein fitness prediction and design,
+Advances in Neural Information Processing Systems 36 (2023), 64331–64379.
+[58] D. Rancati, J. Maas, and F. Locatello, Learning discrete diffusion of graphs via free-energy gradient
+flows, arXiv:2604.11311, 2026.
+[59] J. Rector-Brooks et al., Steering masked discrete diffusion models via discrete denoising posterior
+prediction, International Conference on Learning Representations, 2025.
+[60] A. Rives et al., Biological structure and function emerge from scaling unsupervised learning to
+250 million protein sequences, Proc. Natl. Acad. Sci. USA 118 (2021), e2016239118.
+[61] S. S. Sahoo et al., Simple and effective masked diffusion language models, arXiv:2406.07524, 2024.
+[62] Y. Schiff et al., Simple guidance mechanisms for discrete diffusion models, International Confer-
+ence on Learning Representations, 2025.
+[63] E. Schr¨odinger, Sur la th´eorie relativiste de l’´electron et l’interpr´etation de la m´ecanique quantique,
+Ann. Inst. H. Poincar´e 2 (1932), 269–310.
+[64] Y. Shi, V. De Bortoli, A. Campbell, and A. Doucet, Diffusion Schr¨odinger bridge matching,
+Advances in Neural Information Processing Systems 36 (2023), 62183–62223.
+[65] J. Shi, K. Han, Z. Wang, A. Doucet, and M. Titsias, Simplified and generalized masked diffusion
+for discrete data, Advances in Neural Information Processing Systems 37 (2024), 103131–103167.
+[66] S. Sinai, R. Wang, A. Whatley, S. Slocum, E. Locane, and E. D. Kelsic, AdaLead: a simple and
+robust adaptive greedy search algorithm for sequence design, arXiv:2010.02141, 2020.
+[67] M. Skreta et al., Feynman–Kac correctors in diffusion: annealing, guidance, and product of ex-
+perts, arXiv:2503.02819, 2025.
+[68] D. Soares et al., OmegAMP: targeted AMP discovery through biologically informed generation,
+arXiv:2504.17247, 2025.
+[69] Y. Song, J. Sohl-Dickstein, D. P. Kingma, A. Kumar, S. Ermon, and B. Poole, Score-based
+generative modeling through stochastic differential equations, arXiv:2011.13456, 2020.
+[70] S. Stanton et al., Accelerating Bayesian optimization for biological sequence design with denoising
+autoencoders, International Conference on Machine Learning, 2022, 20459–20478.
+[71] H.
+Stark
+et
+al.,
+Dirichlet
+flow
+matching
+with
+applications
+to
+DNA
+sequence
+design,
+arXiv:2402.05841, 2024.
+
+
+GRADIENT DISCRETE SCHR¨ODINGER BRIDGE MATCHING FOR PEPTIDE GENERATION
+31
+[72] P. Szymczak et al., Discovering highly potent antimicrobial peptides with deep generative model
+HydrAMP, Nat. Commun. 14 (2023), 1453.
+[73] S. Tang, Y. Zhang, and P. Chatterjee, PepTune: de novo generation of therapeutic peptides with
+multi-objective-guided discrete diffusion, International Conference on Machine Learning, 2025;
+arXiv:2412.17780.
+[74] P. Theodoropoulos, J. Nam, E. Theodorou, and J. Choi, Generalized Schr¨odinger bridge on graphs,
+arXiv:2602.04675, 2026.
+[75] A. Y. Tong et al., Simulation-free Schr¨odinger bridges via score and flow matching, International
+Conference on Artificial Intelligence and Statistics, 2024, 1279–1287.
+[76] B. L. Trippe et al., Diffusion probabilistic modeling of protein backbones in 3D for the motif-
+scaffolding problem, International Conference on Learning Representations, 2023.
+[77] M. Uehara, Y. Zhao, T. Biancalani, and S. Levine, Understanding reinforcement learning-based
+fine-tuning of diffusion models: a tutorial and review, arXiv:2407.13734, 2024.
+[78] Z. Wan, Y. Ouyang, L. Xie, F. Fang, H. Zha, and G. Cheng, Discrete guidance matching: exact
+guidance for discrete flow matching, International Conference on Learning Representations, 2026;
+arXiv:2509.21912.
+[79] X. Wang, Z. Zheng, F. Ye, D. Xue, S. Huang, and Q. Gu, Diffusion language models are versatile
+protein learners, arXiv:2402.18567, 2024.
+[80] C. Wang et al., Fine-tuning discrete diffusion models via reward optimization with applications
+to DNA and protein design, International Conference on Learning Representations, 2025.
+[81] J. L. Watson et al., De novo design of protein structure and function with RFdiffusion, Nature
+620 (2023), 1089–1100.
+[82] L. Wu, B. L. Trippe, C. A. Naesseth, D. M. Blei, and J. P. Cunningham, Practical and asymp-
+totically exact conditional sampling in diffusion models, International Conference on Machine
+Learning, 2023.
+[83] J. Yim et al.,
+SE(3) diffusion model with application to protein backbone generation,
+arXiv:2302.02277, 2023.
+Department of Mathematics, Higher Institute of Computer Science and Multimedia
+of Sfax, University of Sfax, Tunisia
+Email address: abdellah.benabdallah@isims.usf.tn
+Department of Mathematics, Qassim University, Buraydah, Saudi Arabia
+Email address: 3862@qu.edu.sa

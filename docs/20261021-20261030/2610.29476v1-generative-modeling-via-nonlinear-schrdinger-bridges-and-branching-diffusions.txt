@@ -1,0 +1,2732 @@
+GENERATIVE MODELING VIA
+NONLINEAR SCHRÖDINGER BRIDGES AND BRANCHING DIFFUSIONS
+MATHIAS GRAU AND PIERRE HENRY-LABORDÈRE†
+Abstract. We propose a new generative modeling framework grounded in forward-backward
+partial differential equations (PDEs).
+These equations arise naturally in mean-field game
+(MFG) theory, and are closely related to nonlinear Schrödinger systems. Our main contribution
+is to reinterpret this connection within the setting of generative modeling and to develop
+an efficient numerical methodology for its practical implementation. Specifically, we derive
+and characterize a nonlinear extension of the classical Schrödinger bridge problem through
+a coupled system of PDEs, yielding a model we call SBNL (Schrödinger Bridge NonLinear).
+To compute its solution, we design a simulation algorithm based on branching diffusions and
+the probabilistic representation of semilinear PDEs. The resulting method is embarrassingly
+parallel, scalable to high dimensions, and applicable to a broad class of nonlinear interaction
+functionals. We validate the approach through numerical experiments, including recovery of
+the classical Schrödinger bridge, nonlinear extensions with convex penalties (Gross-Pitaevskii)
+as well as potential interaction terms, and high-dimensional generative tasks such as image
+synthesis on the MNIST and FFHQ human face dataset. Furthermore, the same framework
+embeds score-based generative modeling, diffusion models, and tractable gaussian Schrödinger
+bridges.
+1. Introduction
+The Schrödinger bridge (SB) problem [1–3] has recently attracted significant attention in
+generative modeling due to its ability to learn an optimally controlled stochastic dynamics that
+transports between two arbitrary endpoint distributions. By minimizing relative entropy with
+respect to a reference diffusion (typically Brownian motion), the SB framework reveals deep
+connections between optimal transport, stochastic control, and score-based generative modeling
+[4–7].
+When both terminal costs and the evolving marginal law are controlled, the problem extends
+beyond classical (linear) Schrödinger bridges to mean-field control and mean-field games (MFG)
+[8–11].
+In this regime, interactions through the marginal distribution induce a semilinear
+forward–backward structure.
+Existing iterative schemes for SB, such as iterative proportional fitting (IPF) / iterative
+Markovian fitting (IMF) and related diffusion-based approaches [6, 7, 12], are primarily designed
+for linear entropic transport.
+These methods rely on alternating optimization procedures,
+which can be computationally expensive and may suffer from error accumulation. More recent
+approaches based on Gaussian mixture energy models [13, 14] improve scalability in some
+settings but remain limited in expressivity in high dimensions. Even recent extensions based on
+controlled stochastic dynamics [15] are not well suited to law-dependent running costs, which
+induce intrinsically coupled semilinear dynamics.
+Although recent works in MFG and generalized Schrödinger bridge formulations clarify the
+structure of the coupling in terms of forward–backward potentials [16, 17], they often do not yield
+objectives that are both theoretically grounded and directly amenable to unbiased stochastic
+optimization in high dimensions.
+Our contributions are as follows:
+(1) We introduce a variational objective for semilinear mean-field Schrödinger bridges with
+law-dependent running and terminal costs, and characterize optimality through coupled
+†Qube
+Research
+&
+Technologies,
+Paris,
+France.
+mathias.grau@qube-rt.com,
+pierre.henrylabordere@qube-rt.com
+1
+arXiv:2610.29476v1  [cs.LG]  21 Oct 2026
+
+
+2
+(φ, ¯φ) PDEs (equivalently, a Lasry - Lions (m, v) system). We refer to the resulting
+model as SBNL (Schrödinger Bridge NonLinear).
+(2) We develop a marked-branching stochastic algorithm for the two-type (φ, ¯φ) coupling,
+prove unbiasedness and L2-integrability of the estimator under explicit conditions, and
+train the potentials jointly (rather than via alternating refitting), with branching used
+both during training and sampling.
+(3) We report experiments ranging from bridge recovery and soft terminal penalties to
+Gross-Pitaevskii-type couplings and high-dimensional latent image transport.
+1.1. Related work.
+Linear Schrödinger bridges. The Schrödinger bridge problem is classically linked to entropic
+optimal transport [3, 4, 18], with efficient Sinkhorn-type and iterative fitting procedures in
+the linear setting. These methods scale well when dynamics are fixed between prescribed
+marginals. Recent neural approaches approximate bridges through forward-backward SDEs [6]
+or diffusion-style training [7, 12]; they mainly target linear bridges and often rely on expensive al-
+ternating refits (IPF/IMF). A complementary, simulation-free line parameterizes the Schrödinger
+potentials with Gaussian mixture forms, yielding lightweight solvers [13, 14] at the cost of limited
+expressivity. Even recent drift-and-volatility extensions (Schrödinger-Bass bridges) [15] still
+assume (approximately) linear entropic transport and are not tailored to running costs that
+depend on the evolving marginal law.
+Control formulations and mean-field games (MFG).. Once running or terminal terms depend on
+the marginal law, the problem leaves the linear SB regime and sits in mean-field control / MFG
+[8, 9], with forward-backward PDE couplings studied in [4, 10, 19, 20]. Extending Sinkhorn-
+type or alternating schemes to such coupled HJB-Fokker-Planck systems is challenging in high
+dimension. Recent interaction/unbalanced frameworks [17, 21, 22] encode growth, interaction,
+or state costs through composite weighted losses and staged training. Trajectory-level optimal-
+control views, e.g. adjoint matching [23], couple learning to long-horizon simulation and can be
+costly. We retain entropic regularization while centering law-dependent running costs, starting
+from the non linear Sinkhorn system with jointly learned coupled Schrödinger potentials, using
+branching Monte Carlo.
+Branching representations for semilinear PDEs. Branching diffusion methods provide probabilistic
+representations of semilinear PDEs via weighted particle systems [24–26]. We extend these ideas
+to the coupled forward-backward system arising in mean-field Schrödinger bridges, where the
+interaction between the two potentials introduces a time-reflected dependency. This enables a
+scalable estimator for both the potentials and their gradients, which we integrate into a neural
+generative framework.
+2. Semilinear Schrödinger bridges
+We denote by µ0 and µT laws on Rd. Let (Xt)t∈[0,T] be controlled by a drift α· under P, with
+X0 ∼µ0 and dXt = αt dt + dWt.
+2.1. Formulation. As a generalization of the classical Schrödinger bridge formulation, we
+consider the following variational problem:
+(1)
+P := inf
+α· EX0∼µ0
+"Z T
+0
+ 1
+2c|αt|2 + f(m(t, ·))
+
+dt + g(m(T, ·))
+#
+,
+where c > 0, m(t) denotes the law of Xt, and f and g are functionals. The infimum is taken
+over the control α, where m is constrained to satisfy the Fokker-Planck PDE.
+The three terms appearing in P play different roles:
+• The quadratic control cost 1
+2c|αt|2 penalizes deviations of the dynamics from the reference
+Brownian motion. By Girsanov’s theorem, for feedback controls its expectation equals
+1
+cH(P | P0), the relative entropy between the controlled law P of the diffusion and the
+law P0 of the Brownian motion started from µ0 [2]. This quadratic structure is also
+crucial analytically: it is the only choice of control penalty for which the associated
+
+
+3
+Hamilton-Jacobi-Bellman (HJB) equation admits a tractable solution through a Cole-
+Hopf transformation. For this reason, essentially all generative modeling frameworks
+based on stochastic control can be viewed as particular cases of the Schrödinger bridge.
+• The functional f(m(t, ·)) introduces a running cost depending directly on the marginal
+law of the process at each time t. Such terms allow for mean-field type interactions,
+density regularization, or penalization of undesirable behaviors (e.g. concentration, mass
+spread) during the evolution. Classical examples include (see the review [9]):
+– Quadratic interaction: f(m) = κ
+2
+R
+Rd m(x)2 dx, which penalizes high concentrations
+and favors dispersion.
+– Entropy-type term: f(m) =
+R
+Rd m(x) log m(x) dx, encouraging spreading of the
+distribution.
+– Potential interaction: f(m) =
+R
+Rd V (x) m(x) dx, where V is an external field acting
+on the density (as in [21]).
+– Pairwise interaction kernel: f(m) = 1
+2
+RR
+Rd×Rd K(x −y) m(x) m(y) dxdy, modeling
+attractive or repulsive mean-field effects.
+• The terminal cost g(m(T, ·)) enforces constraints or preferences on the final law. In
+the hard-constraint setting of the classical Schrödinger bridge, g is chosen so that
+m(T, ·) = µT , i.e. the terminal distribution matches the prescribed target. In the relaxed
+setting, g can encode convex penalties measuring the discrepancy between the final
+distribution and the target. For use below, we denote by g∗the Legendre transform
+(convex conjugate) of g:
+g∗(v(T, ·)) := sup
+m(T,·)
+n
+EX∼m(T,·)[v(T, X)] −g(m(T, ·))
+o
+.
+Note that in practice it does not make sense to perfectly calibrate to the empirical
+measure, which is only a finite sample approximation of the true law. Instead, one seeks
+both proximity to the empirical distribution and sufficient regularity of the solution,
+precisely what the soft constraint achieves.
+Remark 2.1 (State dependence and MFG link). Running and terminal costs that depend explicitly
+on the state x can be rewritten in the law-only form (1) by integrating against m; the resulting
+forward-backward MFG optimality system and its relation to Theorem 2.1 are recorded in
+Appendix E.
+2.2. Main result.
+Theorem 2.1 (Semilinear Schrödinger bridge). We assume (A1)-(A4) from Appendix D. The
+optimal controlled process of (1) is given under a measure P by
+(2)
+dXt = ∇log φ(t, Xt) dt + dWt,
+with Law(Xt) = φ(t, ·) ¯φ(T −t, ·) and F :=
+δf
+δm(t,x) where the pair (φ, ¯φ) satisfies the PDE system
+∂tφt + 1
+2∆φt = c φt F(t, x, φt ¯φT−t),
+(3)
+∂t ¯φt + 1
+2∆¯φt = c ¯φt F(T −t, x, ¯φtφT−t),
+(4)
+The terminal conditions (φ(T, ·), ¯φ(T, ·)) are characterized by the coupled nonlinear Sinkhorn
+system
+(5)
+(φ(0, x) ¯φ(T, x) = µ0(x),
+¯φ(0, x) φ(T, x) = G−1  −1
+c log φ(T, ·), x
+,
+where G :=
+δg
+δm(T,x), G−1(w, ·) is the density m solving G(·, m) = w, and φ(0, ·), ¯φ(0, ·) are
+obtained by propagating the terminal potentials backward through (3)-(4).
+Appendix A proves Theorem 2.1 by a verification argument; see [8] for the well-posedness of the
+forward-backward system.
+
+
+4
+Remark 2.2 (Nonlinear Sinkhorn interpretation). When f ≡0 with a hard terminal constraint,
+(5) reduces to the usual Sinkhorn system, with (φ, ¯φ) propagated by linear heat kernels and
+matched to µ0, µT . Our formulation adds two nonlinear ingredients: the semilinear propagation
+(3)-(4) through the running cost F, and the terminal coupling φ(T, ·) 7→G−1(−1
+c log φ(T, ·), ·)
+induced by g. The values φ(0, x), ¯φ(0, x) are obtained from the PDE system via the branching
+representation of Section 3.
+Remark 2.3 (Forward-backward system). Although Theorem 2.1 is stated in terms of the system
+(3)-(4) with terminal conditions, it can equivalently be expressed in the usual forward-backward
+form familiar from mean field games. Indeed, defining the density m(t, x) := φ(t, x) ¯φ(T −t, x),
+one checks that m satisfies the forward Fokker-Planck equation (see proof for details)
+∂tm + ∇·
+ m ∇log φ
+ −1
+2∆m = 0,
+while v := −1
+c log φ satisfies the backward Hamilton-Jacobi equation
+∂tv + 1
+2∆v −c
+2 |∇v|2 + F(t, x, m) = 0
+Thus the pair (m, v) solves the standard forward-backward MFG system of Lasry - Lions type.
+Our formulation in terms of (φ, ¯φ) is algebraically equivalent but particularly well-suited for the
+branching Monte-Carlo representation introduced below.
+Remark 2.4 (Soft constraint and matching marginal µT ). Consider the terminal cost
+g(m(T, ·)) = λ Df(µT , m(T, ·)),
+λ > 0,
+with f(u) := −log u −1, i.e. Df(µT , m) =
+R m log m
+µT −
+R m, which is KL(m(T, ·) ∥µT ) −1 on
+probability measures. Over nonnegative measures, the convex conjugate g∗is
+(6)
+g∗(v(T, ·)) = λ EXT ∼µT
+h
+e v(T,XT )/λi
+,
+so that the terminal coupling in the nonlinear Sinkhorn system (5) becomes explicit:
+(7)
+G−1
+−1
+c log φ(T, ·), x
+
+= µT (x) φ(T, x)−a,
+a := 1
+λc.
+The system (5) then reads
+(8)
+(φ(0, x) ¯φ(T, x) = µ0(x),
+¯φ(0, x) φ(T, x) = µT (x) φ(T, x)−a.
+In our numerical experiments, we consider this formulation for various values of λ. In the limit
+λ →∞(i.e. a →0), the terminal penalty enforces the hard constraint m(T, ·) = µT , and the
+terminal coupling in (8) reduces to the standard marginal constraint
+(9)
+¯φ(0, x) φ(T, x) = µT (x),
+so that the nonlinear Sinkhorn system recovers the classical Schrödinger bridge.
+Appendix F records an analogous soft terminal condition based on a p-Wasserstein discrepancy.
+Remark 2.5 (Special cases of semilinear Schrödinger bridges). Appendix H records several
+tractable specializations: linear bridges with confining potentials and explicit heat kernels on
+Coxeter chambers (including Dyson and type-C limits), the Gaussian semilinear bridge for
+log-linear F [27] and a relative-entropy terminal cost (Proposition H.1), lifted bridges with
+Gyöngy’s Markov projection (Proposition H.2), and score-based / DDPM models as the exact
+F ≡0 solution with ¯φ ≡1 and noised-data prior (Appendix H.2), with proofs in Appendices I
+and J.
+3. Branching diffusions
+The semilinear PDE system (3)-(4) is generally analytically intractable, and thus requires numeri-
+cal approximation. A deterministic Sinkhorn-type iterative method based on PDE techniques was
+introduced by Guéant [11]; however, this approach suffers from the curse of dimensionality and is
+therefore
+not
+suitable
+in
+the
+context
+of
+generative
+modeling.
+
+
+5
+Figure 1. Branching paths on an 8-Gaussian
+terminal potential, illustrating Gross-Pitaevskii-
+type branching (Appendix M).
+An alternative and more powerful approach is pro-
+vided by marked branching diffusion representa-
+tions, originating in McKean’s probabilistic solu-
+tion of the KPP equation [24] and subsequently
+extended to broad classes of semilinear and non-
+linear PDEs [25, 26, 28]. These representations
+have been successfully applied to parabolic, ellip-
+tic, and even hyperbolic PDEs, including, notably,
+the complex Gross-Pitaevskii equation developed
+in Appendix G.
+The key idea is to encode the nonlinear terms of
+the PDE into a branching mechanism: particles
+follow Brownian dynamics until a random exponen-
+tial branching time, at which point they reproduce
+according to rules determined by the nonlinearity
+F. The resulting branching trees provide unbiased
+MC estimators of the PDE solution. This stochas-
+tic representation is embarrassingly parallelizable,
+which makes it particularly effective for large-scale
+simulations and high-dimensional problems.
+More generally, when F is local and analytic in
+m(t, x), we truncate its power series at order K, yielding a polynomial nonlinearity amenable to
+branching. Without loss of generality, we write it in the canonical form
+(10)
+F(t, x, m) = 1 −
+K
+X
+k=0
+ak(t, x) mk := 1 −Fp(t, x, m),
+where the coefficients (ak)k=0,··· ,K are functions of t and x ∈Rd. Thus the system (3)-(4)
+becomes
+(11)
+
+
+
+
+
+∂tφt + 1
+2∆φt = c φt
+
+1 −Fp
+ t, x, φt ¯φT−t
+
+,
+∂t ¯φt + 1
+2∆¯φt = c ¯φt
+
+1 −Fp
+ T −t, x, ¯φtφT−t
+
+.
+3.1. Branching representation. We use a marked branching Brownian motion with two types
+of particles: white vertex ◦represents φ, black vertex • represents ¯φ. The branching rate is fixed
+to be β = c, and we choose arbitrarily probabilities pk > 0 for k = 0, 1, . . . , K with PK
+k=0 pk = 1.
+Each particle moves as a Brownian motion and lives an exponential time τ ∼Exp(c). At a
+branching/death time s, draw K⋆with probability pK⋆and apply
+(White parent (◦) :
+◦s −→(k+1) ◦s + k •T−s,
+k = 0, 1, . . . , K,
+Black parent (•) :
+•s −→k ◦T−s + (k+1) •s,
+k = 0, 1, . . . , K.
+Here, the subscript denotes the (re-)starting time of each particle: offspring with the same
+type as the parent start at time s, and offspring with the opposite type start at time T −s.
+Each simulation carries a multiplicative weight W, initialized to 1 at the root (t, x). At every
+branching event occurring at time s with outcome K⋆, it is updated as
+(12)
+W −→W × aK⋆(s◦, Xs)
+pK⋆
+,
+s◦:= s (white parent),
+s◦:= T −s (black parent),
+where Xs is the position of the particle at time s. Thus the global weight of a branching tree is
+the product of the factors associated with all branchings. At time T, each surviving white (resp.
+black) particle at position Xi
+T (resp. ¯Xj
+T ) contributes the factor φ(T, Xi
+T ) (resp. ¯φ(T, ¯Xj
+T )). We
+
+
+6
+denote by
+
+
+
+
+
+Nwhite
+T
+the number of white particles at time T, with positions X1
+T , . . . , X
+Nwhite
+T
+T
+,
+¯Nblack
+T
+the number of black particles at time T, with positions ¯X1
+T , . . . , ¯X
+¯
+Nblack
+T
+T
+.
+Proposition 3.1 (Unbiased stochastic representation for φ). Let A := ∥φ(T, ·)∥∞, B :=
+∥¯φ(T, ·)∥∞and bk := ∥ak∥L∞([0,T]×Rd) be finite, and assume (i) cT P
+k k pk < 1 and (ii)
+A2B2 exp
+ cT(P
+k b2
+krk/pk −1)
+ ≤r for some r > 0. Set
+Φ := W
+Nwhite
+TY
+i=1
+φ(T, Xi
+T )
+¯
+Nblack
+TY
+j=1
+¯φ(T, ¯Xj
+T ).
+Then the tree is a.s. finite, Φ ∈L2, and φ(t, x) = Et,x[Φ] (and its black-rooted analogue ¯φ) is the
+mild solution of (3)-(4) dominated by (38).
+The proof is deferred to Appendix L; illustrative Feynman-Galton-Watson diagrams in Ap-
+pendix M, and a numerical sanity check of the time-reflected coupling u(t, ·)u(T −t, ·) in
+Appendix K.
+4. Stochastic-optimization form of the nonlinear Sinkhorn system
+To enforce the two nonlinear Sinkhorn conditions (5), we match the associated measures using
+the Maximum Mean Discrepancy (MMD) [29], which we now recall.
+Definition 4.1 (Maximum Mean Discrepancy). Let k be a positive definite kernel. For two
+probability laws P, Q on Rd, the MMD admits the closed form
+MMD2
+k(P, Q) = EX,X′∼P [k(X, X′)] + EY,Y ′∼Q[k(Y, Y ′)] −2 EX∼P;Y ∼Q[k(X, Y )],
+where X, X′ (resp. Y, Y ′) are independent copies from P (resp. Q).
+Remark 4.1 (Characteristic kernel). If k is characteristic, then MMDk(P, Q) = 0 ⇐⇒P = Q.
+Background on MMD and RKHS, and the proof of Proposition 4.1, are given in Appendix C.
+Proposition 4.1 (MMD objective). Let k be as in Lemma C.1 (e.g. Gaussian), assume the
+four densities below are integrable, and define
+(13)
+LMMD := MMD2
+k
+
+φ(0, ·) ¯φ(T, ·), µ0
+
++ MMD2
+k
+
+¯φ(0, ·) φ(T, ·), G−1  −1
+c log φ(T, ·), ·
+
+.
+Then LMMD ≥0, and LMMD = 0 ⇐⇒(φ(T, ·), ¯φ(T, ·)) satisfy (5) a.e.
+4.1. Meta-algorithm for training semilinear Schrödinger bridges.
+We parametrize the terminal potentials by neu-
+ral networks φθ(x) := φθ(T, x) and ¯φη(x) :=
+¯φη(T, x). Let µ∗be a reference density that is
+easy to sample and evaluate.
+For Z ∼µ∗, we define bAθ,η(Z, ◦(resp. •)) us-
+ing a white (resp. black) rooted branching tree
+starting from (0, Z) :
+bAθ,η(Z, ◦) := W
+Nwhite
+TY
+i=1
+φθ(Zi
+T )
+¯
+Nblack
+TY
+j=1
+¯φη( ¯Zj
+T ),
+with analogous definition for a black-rooted tree.
+Algorithm 1: Training semilinear
+SB
+Input: Laws µ0, µT , µ∗, rate c, rule F,
+penalty λ > 0, kernel k, step γ,
+batch size B.
+Output: Trained potentials (φθ, ¯φη).
+1 Initialize θ, η;
+2 while not converged do
+3
+Draw {X(b)
+0 }B
+b=1 ∼µ0, {X(b)
+T }B
+b=1 ∼µT ,
+and {Z(b)}B
+b=1 ∼µ∗;
+4
+Simulate white and black trees from
+each Z(b) and form b
+Aθ,η(Z(b), ◦) and
+b
+Aθ,η(Z(b), •);
+5
+b
+LMMD ←
+1
+B(B−1)
+P
+b̸=b′J(b, b′);
+// U-statistic
+6
+(θ, η) ←(θ, η) −γ∇(θ,η) b
+LMMD;
+
+
+7
+In the KL terminal case of Remark 2.4, using the reweighted kernel ˜k(x, y) := µ∗(x) k(x, y) µ∗(y),
+which remains characteristic provided µ∗> 0 almost everywhere, the MMD objective computed
+with ˜k reads
+(14)
+min
+θ,η LMMD(θ, η) := min
+θ,η E[J].
+where
+(15)
+J = bAθ,η(Z, ◦) ¯φη(Z) bAθ,η(Z′, ◦) ¯φη(Z′)k(Z, Z′) −2 bAθ,η(Z, ◦) ¯φη(Z)k(Z, X′
+0)µ∗(X′
+0)
++ µ∗(X0)k(X0, X′
+0)µ∗(X′
+0) + bAθ,η(Z, •)φθ(Z) bAθ,η(Z′, •)φθ(Z′)k(Z, Z′)
+−2 bAθ,η(Z, •)φθ(Z)φθ(X′
+T )
+−1
+λc k(Z, X′
+T )µ∗(X′
+T ) +
+ φθ(XT )φθ(X′
+T )
+ −1
+λc µ∗(XT )k(XT , X′
+T )µ∗(X′
+T ).
+Here, (Z, Z′) ∼µ∗⊗µ∗, (X0, X′
+0) ∼µ0 ⊗µ0, and (XT , X′
+T ) ∼µT ⊗µT are drawn independently.
+As the trees attached to Z and Z′ are independent, E[J] = LMMD (with kernel ˜k); Algorithm 1
+averages J(b, b′), i.e. J at the b-th and b′-th samples, over b̸ = b′, which keeps the estimate
+unbiased. Each term is estimated on mini-batches and minimized by stochastic gradient descent,
+with a Gaussian kernel and a suitable µ∗as stable defaults (Appendix B).
+4.2. Meta-algorithm for sampling with semilinear Schrödinger bridges.
+Once the potentials (φθ, ¯φη) have been
+learned, we can generate new samples
+by simulating the optimal controlled pro-
+cess (Algorithm 2):
+under P, dXt
+=
+∇log φθ(t, Xt) dt + dWt. The branching
+representation of Proposition 3.1 gives un-
+biased Monte-Carlo estimates bφ of φθ(t, x)
+around x = Xt, differentiated in x with
+autograd; the ratio ∇bφ/ bφ is a consistent
+(M →∞) estimator of the score field.
+We then discretize the dynamics by Euler-
+Maruyama (or a higher-order scheme).
+Algorithm 2: Sampling from semilinear
+SB
+Input: Trained (φθ, ¯φη), rate c, rule F, Euler steps
+N, horizon T, samples M.
+Output: Approximate bridge path (Xtk)N
+k=0.
+1 Initial X0 ∼µ0, ∆t ←T/N;
+2 for k = 0 to N −1 do
+3
+Simulate M white-rooted trees from (tk, Xtk);
+4
+Form bφk(x) of φ(tk, x):
+bφk(x)←1
+M
+M
+X
+m=1
+Wm
+Nm,w
+TY
+i=1
+φθ(Xm,i
+T,x)
+¯
+Nm,b
+TY
+j=1
+¯φη( ¯
+Xm,j
+T,x )
+vk ←∇x log bφk(x)|x=Xtk ;
+// autograd
+5
+Draw ξk ∼N(0, Id);
+6
+Xtk+1 ←Xtk + ∆t vk +
+√
+∆t ξk;
+5. Numerical experiments
+5.1. Implementation details. Each of φθ, ¯φη : Rd →(0, ∞) is a positive-scalar feedforward
+network. Unless stated otherwise, all use 3 to 8 fully connected layers with nonlinear activations.
+Widths are 16 for d = 2, 32 for d = 50, and 64 for d = 512 for latent FFHQ experiments.
+Potentials are trained jointly by stochastic gradient descent on the MMD objective 14 (Adam,
+γ = 10−4, B = 64). We use automatic differentiation of log φθ for sampling (Section 4.2); see
+Appendix N. We train on 104 samples in 2D and 105 samples in 50D, for 300 epochs in both
+cases. Sampling uses between N = 50 and N = 200 Euler steps and M ∈{103, 104} branching
+trees per score evaluation (higher M in higher dimension). All runs use NVIDIA Tesla T4 GPUs;
+bridge training takes ∼30 s for 300 epochs on 104 points in 2D, and generation ∼3 s for 50 steps.
+5.2. Results.
+Classical Schrödinger bridges (F = 0, λ = ∞, d = 2). We begin with controlled experiments
+in low dimensions to validate that our algorithm recovers the classical Schrödinger bridge.
+Specifically, we set F ≡0 and enforce a hard terminal constraint (see Remark 2.4 with λ = ∞),
+so that the problem reduces to entropic optimal transport.
+
+
+8
+Figure 2. Temporal evolution of Law(Xt) from Moons →Swiss (source µ0 on the left, target
+µT on the right).
+We compare SBNL against DeepGSB [16], LightSB [13], LightSBB-M [15], DSBM [12], and
+BranchSBM [17] on a Gaussian →mixture of 8 Gaussians benchmark, selecting methods that
+are closest to our setting in terms of modeling assumptions and problem formulation. Figure 3a
+displays terminal samples, while Table 3b reports quantitative distances to µT . SBNL captures
+all modes and achieves the best mixture W2, whereas BranchSBM attains the lowest empirical
+W2. Overall, SBNL remains competitive across evaluation metrics. Additional per-mode coverage
+results and full comparisons are provided in Appendix O.2.
+(3a) Terminal samples on the 8-Gaussians benchmark.
+Method
+MW2
+W emp
+2
+E
+∥∆¯x∥
+∥∆Σ∥F
+SBNL
+1.52±0.07 1.14±0.23 0.023±0.012 0.29±0.04
+2.97±0.22
+BranchSBM
+1.57±0.14 1.05±0.12 0.018±0.009 0.08±0.05 1.74±0.19
+LightSBB-M 1.55±0.27 1.26±0.15 0.018±0.009 0.16±0.07
+1.79±0.39
+LightSB
+1.54±0.24 1.22±0.12 0.024±0.009 0.11±0.06
+4.69±0.49
+DSBM
+2.54±0.15 1.61±0.12 0.044±0.017 0.23±0.09 12.05±0.84
+DeepGSB
+2.48±0.19 2.02±0.11 0.199±0.020 0.24±0.08 25.93±0.24
+(3b) Comparison (MW2 : closed-form Wasserstein, W emp
+2
+:
+empirical W2 on 104 samples, E : energy distance, and ∥∆¯x∥
+(resp. ∥∆Σ∥F ) : Euclidean (resp. Frobenius) error on the sample
+mean (resp. covariance)).
+(3c) Visual comparison across all metrics, each
+column-wise max-normalized to 1 (lower is bet-
+ter).
+High-dimensional mixtures (F(m) = 0, λ = ∞, d = 50). We use the same d=50 Gaussian-mixture
+benchmark as in [12] (Figures 21-22). The empirical mean, standard deviation, and skewness of
+Law(XT ) converge to those of µT within 50 training epochs (Figure 23). We observe no variance
+collapse, attributable to the consistent branching estimator of ∇log φθ avoiding the bias that
+score-matching pipelines accumulate at high d [7].
+Soft terminal conditions (F = 0, λ < ∞, d = 2). We next relax the hard constraint by
+introducing a finite penalty parameter λ. Figure 4a shows Law(Xt) for decreasing values of
+λ, and Figure 4b reports the induced Kullback-Leibler divergence at the terminal time. As
+expected, DKL(µT , Law(XT )) decreases monotonically with λ, confirming that stronger penalties
+enforce closer alignment with the target law.
+(4a) Generation for λ ∈{105, 104, 5×103, 103, 102}.
+(4b) Terminal DKL(µT , Law(XT )) versus λ.
+(4c) Evolution of the convex penalty during generation
+for c ∈{0.01, 0.1, 0.3} and κ ∈{1, 10, 100}.
+
+
+9
+Gross-Pitaevskii penalty (F(m) = κm, λ = ∞, d = 2). We also investigate the convex penalty
+functional f(m(t, ·)) := κ
+2
+R
+Rd m(t, x)2 dx, so that F(m) = κm. Larger κ and c increase branching,
+making the dynamics more sensitive to the nonlinearity (Figure 4c).
+Potential running cost (F(t, x, m) = V (x), λ = ∞, d = 2). We finally illustrate a state-dependent
+running cost of potential type, f(m(t, ·)) :=
+R
+Rd V (x) m(t, x) dx, so that F(t, x, m) = V (x). This
+lets the environment shape the transport path: the optimal bridge routes mass around the
+obstacle while still matching both marginals. Figure 5a (resp. Figure 5b) shows the evolving
+samples (resp. density estimation) of Law(Xt) deflecting around the high-potential region, and
+Figure 5c display a 3D evolution. Further potential landscapes are reported in Appendix O.3.
+(5a) Samples Law(Xt) deflecting around high-V .
+(5b) Estimated density m(t, ·) snapshots, t∈[0, T].
+(5c) 3D evolution.
+MNIST in latent space (F(m) = 0, λ = ∞, d = 32). On MNIST we run the bridge in the
+d=32 latent space of a pretrained VAE on (1, 24, 24) grayscale images, with µ0, µT the codes of
+digits 1 and 3 and 6×103 samples per class for training. Figure 6 shows Law(Xt) and decoded
+trajectories; intermediate reconstructions stay visually smooth and digit-like.
+Figure 6. Temporal evolution of the latent variables and their corresponding decoded repre-
+sentations.
+FFHQ young-to-old (F(m) = 0, λ = ∞, d = 512). We evaluate FFHQ young-to-old transfer
+in the d=512 ALAE latent space [30, 31], using 3×104 samples per age group. Figure 7 shows
+decoded trajectories and, for each baseline, the source child and its decoded terminal sample.
+SBNL preserves identity and attributes, while several baselines collapse to a near-canonical face;
+the extended panel is in Appendix O.7.
+
+
+10
+(7a) Comparison of source (left) and terminal samples.
+(7b) Decoded trajectories during sampling.
+FID of the different methods
+SBNL
+LightSB
+LightSBB-M
+DSBM
+DeepGSB
+BranchSBM-F
+BranchSBM-M
+36.03
+59.90
+40.76
+38.92
+66.39
+61.96
+39.54
+Figure 7. FFHQ young-to-old in ALAE latent space. Lower FID is better.
+6. Discussion
+We formulate semilinear mean-field Schrödinger bridges with law-dependent f(m(t, ·)), g(m(T, ·))
+and characterize optimality through coupled (φ, ¯φ) PDEs, equivalently a Lasry - Lions (m, v)
+system – beyond the linear entropic setting of Sinkhorn and iterative Markovian fitting. We
+recast the terminal conditions as a nonlinear Sinkhorn system, which we solve by Maximum
+Mean Discrepancy, using branching diffusions to obtain unbiased stochastic representations of φ.
+Our experiments cover bridge recovery, Gross-Pitaevskii-type couplings, potential interactions,
+and latent transport.
+The numerics are encouraging, but we do not claim systematic superiority over mature
+diffusion Schrödinger-bridge pipelines in the linear setting. Training in the nonlinear regime still
+requires careful tuning of the hyperparameters (branching rate c, kernel bandwidths, penalty λ)
+to remain stable, and both the parallelization of the branching simulation and the variance of
+the underlying Monte Carlo estimators leave room for improvement. We see this work as a new
+variational and optimality system whose first mesh-free realization invites variance reduction
+and hybridization with standard training pipelines.
+References
+[1] Erwin Schrödinger. Über die umkehrung der naturgesetze. Sitzungsberichte der Preussischen
+Akademie der Wissenschaften. Physikalisch-mathematische Klasse, pages 144–153, 1931.
+[2] Hans Föllmer. Random fields and diffusion processes. In P.-L. Hennequin, editor, École
+d’Été de Probabilités de Saint-Flour XV–XVII, 1985–87, volume 1362 of Lecture Notes in
+Mathematics, pages 101–203. Springer, 1988. doi: 10.1007/BFb0086180.
+[3] Christian Léonard. A survey of the schrödinger problem and some of its connections with
+optimal transport. Discrete & Continuous Dynamical Systems - A, 34(4):1533–1574, 2014.
+[4] Jean-David Benamou, Guillaume Carlier, Simone Di Marino, and Luca Nenna. An entropy
+minimization approach to second-order variational mean-field games. Mathematical Models
+and Methods in Applied Sciences, 29(8):1553–1583, 2019. doi: 10.1142/S0218202519500283.
+[5] Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon,
+and Ben Poole. Score-based generative modeling through stochastic differential equations.
+In International Conference on Learning Representations (ICLR), 2021.
+URL https:
+//openreview.net/forum?id=PxTIG12RRHS.
+[6] Tianrong Chen, Guan-Horng Liu, and Evangelos A. Theodorou. Likelihood training of
+schrödinger bridge using forward-backward sdes theory, 2023. URL https://arxiv.org/
+abs/2110.11291.
+[7] Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet.
+Diffusion
+schrödinger bridge with applications to score-based generative modeling. In Advances in
+Neural Information Processing Systems (NeurIPS), volume 34, pages 17695–17709, 2021.
+[8] Jean-Michel Lasry and Pierre-Louis Lions. Mean field games. Japanese Journal of Mathe-
+matics, 2(1):229–260, 2007.
+
+
+11
+[9] Pierre Cardaliaguet. Notes on mean field games (from p.-l. lions’ lectures at collège de france),
+2013. URL https://www.ceremade.dauphine.fr/~cardaliaguet/MFG20130420.pdf.
+[10] Olivier Guéant, Jean-Michel Lasry, and Pierre-Louis Lions. Mean field games and applica-
+tions. In Paris-Princeton Lectures on Mathematical Finance 2010, volume 2003 of Lecture
+Notes in Mathematics, pages 205–266. Springer, 2011. doi: 10.1007/978-3-642-14660-2_3.
+[11] Olivier Guéant.
+Mean field games equations with quadratic hamiltonian: A specific
+approach. Mathematical Models and Methods in Applied Sciences, 22(9):1250022, 2012. doi:
+10.1142/S0218202512500222.
+[12] Yuyang Shi, Valentin De Bortoli, Andrew Campbell, and Arnaud Doucet.
+Diffusion
+Schrödinger bridge matching. In Advances in Neural Information Processing Systems,
+volume 36, pages 77995–78009, 2023.
+[13] Alexander Korotin, Nikita Gushchin, and Evgeny Burnaev. Light schrödinger bridge, 2023.
+URL https://arxiv.org/abs/2310.01174.
+[14] Nikita Gushchin, Sergei Kholkin, Evgeny Burnaev, and Alexander Korotin. Light and
+optimal schrödinger bridge matching, 2024. URL https://arxiv.org/abs/2402.03207.
+[15] Alexandre Alouadi, Pierre Henry-Labordère, Grégoire Loeper, Othmane Mazhar, Huyên
+Pham, and Nizar Touzi. Lightsbb-m: Bridging schrödinger and bass for generative diffusion
+modeling, 2026. URL https://arxiv.org/abs/2601.19312.
+[16] Guan-Horng Liu, Tianrong Chen, Oswin So, and Evangelos A. Theodorou. Deep generalized
+schrödinger bridge, 2022. URL https://arxiv.org/abs/2209.09893.
+[17] Sophia Tang, Yinuo Zhang, Alexander Tong, and Pranam Chatterjee. Branched schrödinger
+bridge matching, 2026. URL https://arxiv.org/abs/2506.09007.
+[18] Cédric Villani. Topics in optimal transportation, volume 58 of Graduate Studies in Mathe-
+matics. American Mathematical Society, 2003.
+[19] Igor Swiecicki, Thierry Gobron, and Denis Ullmo. Schrödinger approach to mean field games.
+Physical Review Letters, 116(12):128701, 2016. doi: 10.1103/PhysRevLett.116.128701.
+[20] Thomas Bonnemain, Thierry Gobron, and Denis Ullmo. Schrödinger approach to mean
+field games with negative coordination. SciPost Physics, 9(4):059, 2020. doi: 10.21468/
+SciPostPhys.9.4.059.
+[21] Guan-Horng Liu, Yaron Lipman, Maximilian Nickel, Brian Karrer, Evangelos A. Theodorou,
+and Ricky T. Q. Chen. Generalized schrödinger bridge matching, 2024. URL https:
+//arxiv.org/abs/2310.02233.
+[22] Zhenyi Zhang, Zihan Wang, Yuhao Sun, Tiejun Li, and Peijie Zhou. Modeling cell dynamics
+and interactions with unbalanced mean field schrödinger bridge, 2025. URL https://arxiv.
+org/abs/2505.11197.
+[23] Carles Domingo-Enrich, Michal Drozdzal, Brian Karrer, and Ricky T. Q. Chen. Adjoint
+matching: Fine-tuning flow and diffusion generative models with memoryless stochastic
+optimal control, 2025. URL https://arxiv.org/abs/2409.08861.
+[24] Henry P. McKean. Application of brownian motion to the equation of kpp. Communications
+on Pure and Applied Mathematics, 28(3):323–331, 1975.
+[25] Pierre Henry-Labordère, Nadia Oudjane, Xiaolu Tan, Nizar Touzi, and Xavier Warin.
+Branching diffusion representation of semilinear pdes and monte carlo approximation.
+Annales de l’Institut Henri Poincaré, Probabilités et Statistiques, 55(1):184–210, 2019. doi:
+10.1214/17-AIHP880.
+[26] Pierre Henry-Labordère and Nizar Touzi. Branching diffusion representation for nonlinear
+cauchy problems and monte carlo approximation. The Annals of Applied Probability, 31(5):
+2350–2375, October 2021. doi: 10.1214/20-AAP1649.
+[27] Charlotte Bunne, Ya-Ping Hsieh, Marco Cuturi, and Andreas Krause. The schrödinger
+bridge between gaussian measures has a closed form. In Proceedings of the 26th Interna-
+tional Conference on Artificial Intelligence and Statistics, volume 206 of Proceedings of
+Machine Learning Research, pages 5802–5833. PMLR, 2023. URL https://proceedings.
+mlr.press/v206/bunne23a.html.
+[28] Pierre Henry-Labordère.
+Cutting cva’s complexity, 2012.
+URL https://ssrn.com/
+abstract=1995502. Risk magazine.
+
+
+12
+[29] Arthur Gretton, Karsten M. Borgwardt, Malte J. Rasch, Bernhard Schölkopf, and Alexander
+Smola. A kernel two-sample test. Journal of Machine Learning Research, 13(25):723–773,
+2012. URL http://jmlr.org/papers/v13/gretton12a.html.
+[30] Stanislav Pidhorskyi, Donald Adjeroh, and Gianfranco Doretto. Adversarial latent autoen-
+coders, 2020. URL https://arxiv.org/abs/2004.04467.
+[31] A. Alouadi, P. Henry-Labordère, G. Loeper, H. Pham, and N. Touzi. Bridging Schrödinger
+and Bass for generative modelling. Preprint, 2025.
+[32] Claude Cohen-Tannoudji, Bernard Diu, and Franck Laloë. Mécanique quantique, Tome 3.
+CNRS Editions, Paris, 2017. ISBN 9782705652404.
+[33] Thierry Cazenave. Semilinear Schrödinger equations, volume 10 of Courant Lecture Notes
+in Mathematics. American Mathematical Society, 2003.
+[34] Catherine Sulem and Pierre-Louis Sulem. The nonlinear Schrödinger equation: self-focusing
+and wave collapse, volume 139 of Applied Mathematical Sciences. Springer, 1999.
+[35] David J. Grabiner. Brownian motion in a weyl chamber, non-colliding particles, and random
+matrices. Annales de l’Institut Henri Poincaré, Probabilités et Statistiques, 35(2):177–204,
+1999. doi: 10.1016/S0246-0203(99)80003-0.
+[36] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In
+Advances in Neural Information Processing Systems, pages 6840–6851, 2020.
+[37] István Gyöngy. Mimicking the one-dimensional marginal distributions of processes having
+an itô differential. Probability Theory and Related Fields, 71(4):501–516, 1986.
+[38] Bruno Dupire. Pricing with a smile. Risk, 7(1):18–20, 1994.
+[39] Julien Guyon and Pierre Henry-Labordère.
+Nonlinear Option Pricing.
+Chapman &
+Hall/CRC, 2011.
+[40] Gerard Brunick and Steven Shreve. Mimicking an itô process by a solution of a stochastic
+differential equation.
+The Annals of Applied Probability, 23(4):1584–1628, 2013.
+doi:
+10.1214/12-AAP881.
+[41] Julie Delon and Agnès Desolneux. A wasserstein-type distance in the space of gaussian
+mixture models. SIAM Journal on Imaging Sciences, 13(2):936–970, 2020.
+[42] Gábor J. Székely and Maria L. Rizzo. Testing for equal distributions in high dimension.
+InterStat, 5(16.10):1249–1272, 2004.
+
+
+13
+Appendix A. Proof of Theorem 2.1
+Setting. Let A be the set of progressively measurable processes α with E
+R T
+0 |αt|2 dt < ∞. For
+α ∈A, let Xα
+t := X0 +
+R t
+0 αs ds + Wt, where X0 ∼µ0 is independent of W, let mα
+t := Law(Xα
+t )
+(it has a density, since the relative entropy of Law(Xα) with respect to the law of X0 + W is at
+most 1
+2E
+R T
+0 |αt|2 dt), and
+J(α) := E
+h Z T
+0
+1
+2c|αt|2 dt
+i
++
+Z T
+0
+f(mα
+t ) dt + g(mα
+T ),
+P = inf
+α∈A J(α).
+The functionals f, g may take the value +∞(e.g. f(m) = κ
+2
+R m2 when m has no density in L2);
+f may also depend on t, in which case F(t, ·, m) is the derivative of f(t, ·). Throughout, (v∗, m∗)
+denotes the solution of the forward-backward system given by (A4),
+∂tv∗+ 1
+2∆v∗−c
+2|∇xv∗|2 + F
+ t, x, m∗
+t
+ = 0,
+v∗(T, x) = G
+ x, m∗
+T
+,
+(16)
+∂tm∗= c ∇x·
+ m∗∇xv∗ + 1
+2∆m∗,
+m∗
+0 = µ0,
+(17)
+where m∗
+t := m∗(t, ·), F(t, x, m∗
+t ) depends on the whole density m∗
+t , and (17) is the Fokker-Planck
+equation of the feedback drift −c∇xv∗.
+Step 1: convexity.
+Lemma A.1. Assume (A2). Let m, m′ be probability densities with f(m′) < ∞and F(t, ·, m′) ∈
+L1(m) ∩L1(m′). Then
+f(m) ≥f(m′) +
+Z
+Rd F(t, x, m′)
+ m(x) −m′(x)
+ dx,
+and the same inequality holds for g and G.
+Proof. If f(m) = +∞there is nothing to prove. Otherwise set mε := m′ + ε(m −m′), ε ∈[0, 1].
+By definition of the linear functional derivative, f(m)−f(m′) =
+R 1
+0
+R F(t, x, mε)(m−m′)(x) dx dε,
+hence
+f(m) −f(m′) −
+Z
+F(t, x, m′)(m −m′) dx
+=
+Z 1
+0
+Z  F(t, x, mε) −F(t, x, m′)
+(m −m′)(x) dx dε
+=
+Z 1
+0
+1
+ε
+Z  F(t, x, mε) −F(t, x, m′)
+ mε −m′(x) dx dε ≥0,
+because mε −m′ = ε(m −m′) and each inner integral is nonnegative by (A2). The proof for g is
+identical.
+□
+Step 2: verification. Let X∗be the solution of dX∗
+t = −c∇xv∗(t, X∗
+t ) dt + dWt, X∗
+0 = X0, which
+exists and is pathwise unique because ∇xv∗is Lipschitz, and set α∗
+t := −c∇xv∗(t, X∗
+t ). By
+(A3)-(A4), α∗∈A and mα∗
+t
+= m∗
+t .
+Fix α ∈A with J(α) < ∞. Itô’s formula applied to v∗(t, Xα
+t ), combined with (16), gives
+v∗(T, Xα
+T ) = v∗(0, X0) +
+Z T
+0
+h
+c
+2|∇xv∗|2 + αt · ∇xv∗−F(t, ·, m∗
+t )
+i
+(t, Xα
+t ) dt
++
+Z T
+0
+∇xv∗(t, Xα
+t ) · dWt.
+Since E supt≤T |Xα
+t |2 < ∞(by (A3) and α ∈A), the growth conditions of (A4) make every term
+integrable and the stochastic integral a martingale, so that
+E
+v∗(T, Xα
+T )
+ = E
+v∗(0, X0)
+ + E
+Z T
+0
+h
+c
+2|∇xv∗|2 + αt · ∇xv∗i
+(t, Xα
+t ) dt
+−E
+Z T
+0
+F(t, Xα
+t , m∗
+t ) dt.
+(18)
+
+
+14
+Lemma A.1 with m = mα
+t , m′ = m∗
+t (for f) and m = mα
+T , m′ = m∗
+T (for g), together with the
+terminal condition G(·, m∗
+T ) = v∗(T, ·), yields
+Z T
+0
+f(mα
+t ) dt + g(mα
+T ) ≥
+Z T
+0
+f(m∗
+t ) dt + g(m∗
+T ) + E
+Z T
+0
+h
+F(t, Xα
+t , m∗
+t ) −F(t, X∗
+t , m∗
+t )
+i
+dt
++ E
+v∗(T, Xα
+T ) −v∗(T, X∗
+T )
+.
+We insert (18) for α and for α∗(both processes start from X0): the terms in F cancel, and we
+obtain
+J(α) −J(α∗) ≥E
+Z T
+0
+h
+1
+2c|αt|2 + αt · ∇xv∗+ c
+2|∇xv∗|2i
+(t, Xα
+t ) dt
+−E
+Z T
+0
+h
+1
+2c|α∗
+t |2 + α∗
+t · ∇xv∗+ c
+2|∇xv∗|2i
+(t, X∗
+t ) dt
+= 1
+2c E
+Z T
+0
+αt + c∇xv∗(t, Xα
+t )
+2 dt ≥0,
+(19)
+where we used 1
+2c|a|2 +a·p+ c
+2|p|2 = 1
+2c|a+cp|2 and α∗
+t +c∇xv∗(t, X∗
+t ) = 0. Hence J(α∗) ≤J(α)
+for every α ∈A: the control α∗is optimal and P = J(α∗).
+Step 3: uniqueness of the optimal control. If J(α) = J(α∗), then (19) forces αt = −c∇xv∗(t, Xα
+t ),
+dt ⊗dP-a.e. Thus Xα solves the equation of X∗with the same initial condition and the same
+Brownian motion, and pathwise uniqueness gives Xα = X∗, hence α = α∗.
+Step 4: Cole-Hopf transform. Set φ := e−cv∗> 0. Then ∂tv∗= −∂tφ
+cφ , ∇xv∗= −∇xφ
+cφ
+and
+∆v∗= −∆φ
+cφ + |∇xφ|2
+cφ2 , so that the terms in |∇xφ|2 cancel:
+∂tv∗+ 1
+2∆v∗−c
+2|∇xv∗|2 = −1
+cφ
+
+∂tφ + 1
+2∆φ
+
+.
+Hence (16) is equivalent to ∂tφ + 1
+2∆φ = c φ F(t, x, m∗
+t ), and the optimal feedback is −c∇xv∗=
+∇x log φ, which is (2).
+Step 5: factorization of the optimal law. Set ψ := m∗/φ. Expanding m∗= φψ and using the
+equation of Step 4,
+∂tm∗+ ∇x·
+ m∗∇x log φ
+ −1
+2∆m∗= ψ
+
+∂tφ + 1
+2∆φ
+
++ φ
+
+∂tψ −1
+2∆ψ
+
+= φ
+
+∂tψ −1
+2∆ψ + c ψ F(t, x, m∗
+t )
+
+,
+where the cross terms ±∇xφ · ∇xψ cancel. As c∇x· (m∗∇xv∗) = −∇x· (m∗∇x log φ) and φ > 0,
+(17) is equivalent to
+∂tψ −1
+2∆ψ = −c ψ F(t, x, m∗
+t ),
+m∗
+t = φ(t, ·) ψ(t, ·).
+The time reversal ¯φ(t, x) := ψ(T −t, x) turns this forward equation into the backward equation
+∂t ¯φ + 1
+2∆¯φ = c ¯φ F(T −t, x, m∗
+T−t). Since m∗
+t = φ(t, ·) ¯φ(T −t, ·) and m∗
+T−t = ¯φ(t, ·)φ(T −t, ·),
+the pair (φ, ¯φ) solves (3)-(4), and Law(X∗
+t ) = m∗
+t = φ(t, ·) ¯φ(T −t, ·).
+Step 6: boundary conditions. The initial condition m∗
+0 = µ0 reads φ(0, ·) ¯φ(T, ·) = µ0. The
+terminal condition v∗(T, ·) = G(·, m∗
+T ), with v∗(T, ·) = −1
+c log φ(T, ·) and m∗
+T = ¯φ(0, ·)φ(T, ·),
+reads G
+ ·, ¯φ(0, ·)φ(T, ·)
+ = −1
+c log φ(T, ·), i.e.
+¯φ(0, x) φ(T, x) = G−1  −1
+c log φ(T, ·), x
+,
+where G−1(w, ·) is the density m such that G(·, m) = w. It is unique when the second inequality of
+(A2) is strict for m1̸ = m2: G(·, m1) = G(·, m2) forces
+R (G(x, m1)−G(x, m2))(m1−m2)(x) dx = 0.
+This is the nonlinear Sinkhorn system (5), which completes the proof.
+□
+Hard terminal constraint. For the classical constraint mT = µT (g = 0 at µT and +∞elsewhere),
+A is restricted to the controls with mα
+T = µT , and the terminal condition of (16) is replaced by
+m∗
+T = µT , v∗(T, ·) becoming an unknown. The proof is unchanged, except that in Step 2 the
+terminal terms vanish: g(mα
+T ) = g(m∗
+T ) = 0 and E[v∗(T, Xα
+T )] = E[v∗(T, X∗
+T )] because Xα
+T and
+X∗
+T both have law µT . Step 6 then gives ¯φ(0, ·)φ(T, ·) = µT , i.e. (9).
+
+
+15
+Origin of the system: Lagrangian duality. The system (16)-(17) is the optimality system of the
+following dual problem. For v ∈C1,2 with the growth of (A4), let
+Lv := ∂tv −c
+2|∇xv|2 + 1
+2∆v,
+f∗(ψ) := inf
+m
+n
+f(m) +
+Z
+ψ m
+o
+,
+g∗(ϕ) := sup
+m
+n Z
+ϕ m −g(m)
+o
+.
+For α ∈A, Itô’s formula gives E[v(T, Xα
+T )] −E[v(0, X0)] = E
+R T
+0 (∂tv + αt · ∇xv + 1
+2∆v)(t, Xα
+t ) dt.
+Adding this zero quantity to J(α) and minimizing pointwise in αt, which gives αt = −c∇xv and
+infa{ 1
+2c|a|2 + a · ∇xv} = −c
+2|∇xv|2, we get the weak duality
+(20)
+P ≥
+Z T
+0
+f∗ Lv(t, ·)
+ dt −g∗ v(T, ·)
+ + EX0∼µ0
+v(0, X0)
+.
+The first-order conditions of the infimum defining f∗(Lv) and of the supremum defining g∗(v(T, ·))
+are F(t, ·, mt) = −Lv, which is the HJB equation (16), and v(T, ·) = G(·, mT ), which is its
+terminal condition.
+Conversely, for v = v∗, Lemma A.1 shows that the infimum and the
+supremum are attained at m∗
+t and m∗
+T , and Itô’s formula for α∗shows that the right-hand side
+of (20) equals J(α∗) = P: there is no duality gap.
+Appendix B. Stochastic-optimization forms of the nonlinear Sinkhorn system
+Using the branching representation of Proposition 3.1, the nonlinear Sinkhorn conditions read
+(21)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Ex,white
+
+W
+Nwhite
+TY
+i=1
+φ(T, Xi
+T )
+¯
+Nblack
+TY
+j=1
+¯φ(T, ¯Xj
+T )
+
+¯φ(T, x) = µ0(x),
+Ex,black
+
+W
+Nwhite
+TY
+i=1
+φ(T, Xi
+T )
+¯
+Nblack
+TY
+j=1
+¯φ(T, ¯Xj
+T )
+
+φ(T, x) = G−1(−1
+c log φ(T, ·), x).
+We now recast the two nonlinear Sinkhorn conditions in sample-based forms that can be used
+to train neural terminal potentials. We parametrize the terminal potentials φ(T, ·), ¯φ(T, ·) by
+neural networks and, with a slight abuse of notation, write
+φθ(x) := φ(T, x),
+¯φη(x) := ¯φ(T, x),
+and let µ∗be a reference probability density on Rd that is easy to sample and evaluate.
+Following the notation of Section 4.1, for Z ∼µ∗a white- (resp. black-) rooted branching tree
+started at (0, Z) yields the unbiased one-tree estimators bAθ,η(Z, ◦) (resp. bAθ,η(Z, •)), with
+(22)
+
+
+
+E
+ bAθ,η(Z, ◦)
+ = Aθ,η(Z, ◦) ≈φ(0, Z),
+E
+ bAθ,η(Z, •)
+ = Aθ,η(Z, •) ≈¯φ(0, Z),
+where the approximation replaces the true terminal potentials by their neural-network parametriza-
+tion (φθ, ¯φη). The two boundary equations (5) thus read
+(23)
+(Aθ,η(x, ◦) ¯φη(x) = µ0(x),
+Aθ,η(x, •) φθ(x) = G−1  −1
+c log φθ, x
+.
+In the KL terminal case of (6), the second condition becomes Aθ,η(x, •) φθ(x) = µT (x) φθ(x)−a
+with a := 1/(λc).
+Possibility 1: RKHS/MMD matching. Each boundary equation matches a (reweighted) measure
+to a marginal, so we enforce them by minimizing the MMD between the two sides. Using a
+characteristic kernel k with RKHS H (Appendix C), we set
+LMMD(θ, η) := MMD2
+k
+ Aθ,η(·, ◦) ¯φη, µ0
+ + MMD2
+k
+ Aθ,η(·, •) φθ, φ−a
+θ µT
+.
+Estimating Aθ,η(·, ◦), Aθ,η(·, •) by the branching trees and importance-sampling against µ∗, the
+closed form of Definition 4.1 gives the sample-based objective (14)-(15), minimized directly by
+stochastic gradient descent (Algorithm 1); a mixture of Gaussian kernels is a stable default.
+
+
+16
+Appendix C. RKHS and MMD
+For completeness, we recall the definitions and elementary properties of reproducing kernel
+Hilbert spaces (RKHS) and the maximum mean discrepancy (MMD) used in Section 4.1 and in
+the proof of Theorem 2.1. We refer to [29] for a detailed treatment.
+Reproducing kernel Hilbert space. Let k : Rd × Rd →R be a symmetric positive definite kernel,
+i.e. for any n ∈N, points x1, . . . , xn ∈Rd and scalars c1, . . . , cn ∈R,
+n
+X
+i,j=1
+cicj k(xi, xj) ≥0.
+By the Moore-Aronszajn theorem, there exists a unique Hilbert space Hk of functions f : Rd →R,
+called the reproducing kernel Hilbert space of k, such that:
+• for every x ∈Rd, the function k(x, ·) ∈Hk;
+• (reproducing property) for every f ∈Hk and every x ∈Rd,
+f(x) = ⟨f, k(x, ·)⟩Hk.
+In particular, taking f = k(y, ·) gives ⟨k(x, ·), k(y, ·)⟩Hk = k(x, y), so that k acts as an inner
+product between feature maps x 7→k(x, ·).
+Maximum mean discrepancy. Given two probability measures P, Q on Rd, the maximum mean
+discrepancy associated with k is defined as the largest difference in expectations over the unit
+ball of Hk:
+(24)
+MMDk(P, Q) :=
+sup
+∥f∥Hk≤1
+n
+EX∼P
+f(X)
+ −EY ∼Q
+f(Y )
+ o
+.
+Intuitively, MMD searches for a witness function f in the RKHS unit ball that best distinguishes
+samples from P and Q.
+Kernel mean embedding. Assume the integrability condition EX∼P [
+p
+k(X, X)] < ∞. The kernel
+mean embedding of P is the element of Hk defined by
+(25)
+µP (·) := EX∼P
+k(X, ·)
+ ∈Hk.
+By the reproducing property, it satisfies EX∼P [f(X)] = ⟨f, µP ⟩Hk for all f ∈Hk, i.e. integration
+against P is represented by an inner product with µP .
+MMD as a distance between embeddings. Substituting EP [f] = ⟨f, µP ⟩Hk and EQ[f] = ⟨f, µQ⟩Hk
+into (24), the supremum over the unit ball is attained at f = (µP −µQ)/∥µP −µQ∥Hk, and the
+MMD reduces to the RKHS distance between the mean embeddings:
+(26)
+MMDk(P, Q) =
+µP −µQ
+
+Hk.
+Expansion via the reproducing property. Expanding the squared norm in (26) and using
+⟨k(x, ·), k(y, ·)⟩Hk = k(x, y) gives the closed-form expression
+(27)
+MMD2
+k(P, Q) = EX,X′∼P
+k(X, X′)
+ + EY,Y ′∼Q
+k(Y, Y ′)
+ −2 EX∼P
+Y ∼Q
+k(X, Y )
+,
+where X, X′ (resp. Y, Y ′) are independent copies drawn from P (resp. Q). This form only
+involves expectations of kernel evaluations and is therefore directly estimable from samples,
+which is what makes the objective (14) tractable.
+Characteristic kernels. The kernel k is said to be characteristic if the embedding map P 7→µP
+is injective on the space of probability measures. Equivalently,
+MMDk(P, Q) = 0
+⇐⇒
+P = Q.
+Classical examples of characteristic kernels on Rd include the Gaussian kernel k(x, y) = exp(−∥x−
+y∥2/2σ2) and, more generally, mixtures of Gaussian kernels across several bandwidths, which we
+use as a stable default in our experiments.
+
+
+17
+MMD between finite measures. The objective of Proposition 4.1 compares unnormalized measures,
+for which we need the following version of the characteristic property.
+Lemma C.1. Let k(x, y) = k0(x −y) with k0(z) =
+R
+Rd ei ω·z ψ(ω) dω for an integrable function
+ψ > 0; for instance the Gaussian kernel k0(z) = e−|z|2/2σ2, for which ψ(ω) = (σ2/2π)d/2e−σ2|ω|2/2,
+or any finite positive mixture of Gaussian kernels. For finite nonnegative measures P, Q on Rd,
+let MMD2
+k(P, Q) :=
+RR k(x, y) (P −Q)(dx) (P −Q)(dy), which is (27) with expectations replaced
+by integrals. Then
+MMD2
+k(P, Q) =
+Z
+Rd
+ bP(ω) −bQ(ω)
+2 ψ(ω) dω,
+bP(ω) :=
+Z
+Rd ei ω·x P(dx),
+so that MMDk(P, Q) ≥0, with equality if and only if P = Q.
+Proof. Let ν := P −Q, a finite signed measure. Since |ei ω·(x−y)ψ(ω)| ≤ψ(ω) is integrable with
+respect to dω ⊗|ν|(dx) ⊗|ν|(dy), Fubini’s theorem gives
+ZZ
+k(x, y) ν(dx) ν(dy) =
+Z
+ψ(ω)
+ Z
+ei ω·xν(dx)
+ Z
+e−i ω·yν(dy)
+
+dω
+=
+Z
+|bν(ω)|2 ψ(ω) dω.
+If this vanishes, then bν = 0 almost everywhere because ψ > 0, hence everywhere because bν is
+continuous, and ν = 0 because the Fourier transform is injective on finite signed measures.
+□
+Reweighted kernel. Let µ∗be a bounded density with µ∗> 0 almost everywhere and ˜k(x, y) :=
+µ∗(x) k(x, y) µ∗(y). For integrable densities p, q, MMD2
+˜k(p, q) = MMD2
+k(µ∗p, µ∗q), which by
+Lemma C.1 vanishes if and only if µ∗p = µ∗q a.e., i.e. p = q a.e. This is the property used for
+the objective (14).
+Proof of Proposition 4.1. LMMD is the sum of two terms that are nonnegative by Lemma C.1;
+hence LMMD ≥0, with equality if and only if both terms vanish. By Lemma C.1, applied to
+the finite measures with densities φ(0, ·) ¯φ(T, ·) and µ0 for the first term, and ¯φ(0, ·)φ(T, ·) and
+G−1(−1
+c log φ(T, ·), ·) for the second, this holds if and only if both equations of (5) hold almost
+everywhere.
+□
+Appendix D. Standing assumptions for well-posedness
+(A1)-(A3) are structural conditions on the data; (A4) collects the properties of the solution of
+the forward-backward system (16)-(17) that are used in the proof of Theorem 2.1 (Appendix A).
+That proof is a verification argument: it uses (A1)-(A2), through the convexity of f and g
+(Lemma A.1), together with (A3)-(A4). The existence of a solution with the properties of (A4)
+is not part of the argument. For regularizing nonlocal couplings it is established in [8, 9] under
+regularity and growth conditions on F and G, to which we refer for precise statements. Local
+couplings such as F(m) = κm or F(m) = κ log m satisfy (A1)-(A2) but not those conditions and
+require separate arguments, which we do not reproduce; in the Gaussian case of Proposition H.1
+the solution is explicit.
+(A1) Differentiability. The functionals f (possibly depending on t) and g admit linear functional
+derivatives
+F(t, x, m) :=
+δf
+δm(t, x),
+G(x, m) :=
+δg
+δm(T, x),
+measurable in (t, x), in the sense that f(m) −f(m′) =
+R 1
+0
+R F
+ t, x, m′ + ε(m −m′)
+ (m −
+m′)(x) dx dε for all probability densities m, m′ at which f is finite, and similarly for g
+and G.
+(A2) Lasry - Lions monotonicity. For any probability densities m1, m2,
+Z
+Rd
+
+F(t, x, m1) −F(t, x, m2)
+  m1(x) −m2(x)
+ dx ≥0,
+∀t ∈[0, T],
+
+
+18
+and
+Z
+Rd
+
+G(x, m1) −G(x, m2)
+  m1(x) −m2(x)
+ dx ≥0.
+These monotonicity conditions ensure uniqueness of the mean-field equilibrium [8].
+(A3) Initial data. The initial law m(0, ·) = µ0 has sufficient regularity (e.g., µ0 ∈L1 ∩L∞
+with finite second moment).
+(A4) Regularity of the forward-backward solution. The system (16)-(17) has a solution (v∗, m∗)
+such that v∗∈C1,2([0, T]×Rd), ∇xv∗is Lipschitz in x uniformly in t, |v∗|+|∂tv∗|+|∆v∗| ≤
+C(1 + |x|2), and m∗
+t = Law(X∗
+t ), where dX∗
+t = −c∇xv∗(t, X∗
+t ) dt + dWt, X∗
+0 ∼µ0.
+Moreover x 7→F(t, x, m∗
+t ) and x 7→G(x, m∗
+T ) grow at most quadratically, uniformly in t,
+and
+R T
+0 f(m∗
+t ) dt + g(m∗
+T ) < ∞.
+In (A2), the condition on G is called strict if equality implies m1 = m2; it makes G−1 in (5) well
+defined.
+Appendix E. State dependence and relation to mean-field games
+One could allow the running and terminal costs to depend explicitly on the state variable x,
+e.g.
+Z T
+0
+Z
+Rd ℓ
+ t, x, m(t, ·)
+ m(t, dx) dt
+and
+Z
+Rd h
+ x, m(T, ·)
+ m(T, dx).
+This causes no loss of generality: by setting
+f
+ m(t, ·)
+ :=
+Z
+Rdℓ
+ t, x, m(t, ·)
+ m(t, dx),
+g
+ m(T, ·)
+ :=
+Z
+Rdh
+ x, m(T, ·)
+ m(T, dx),
+we recover exactly the functional form (1), so that any explicit x-dependence can be “integrated
+out” into a dependence on m(t, ·) and m(T, ·). The resulting stochastic optimal control with
+mean-field (law) costs is standard in the mean-field game (MFG) literature; the corresponding
+optimality system is a forward-backward pair of PDEs (Fokker-Planck for m and HJB for the
+value), coupled through the functional derivatives F = δf/δm and G = δg/δm (see, e.g., [8]) as
+made explicit in Theorem 2.1.
+Altogether, the functional (1) extends the original entropic optimal transport problem of
+Schrödinger to a rich class of mean-field type control problems. It preserves the central feature
+that the quadratic control cost corresponds to entropy minimization, thereby maintaining analytic
+tractability.
+Appendix F. Soft terminal constraint via Wasserstein cost
+Remark F.1 (Soft constraint via Wasserstein cost). In analogy with the f-divergence penalization
+of Remark 2.4, one may also impose a soft terminal condition through an optimal transport
+discrepancy. Specifically, taking
+g(m) = λ W p
+p (µT , m),
+λ > 0,
+the convex conjugate g∗can be expressed in terms of the c-transform associated with the cost
+|x −y|p:
+g∗(v) = EXT ∼µT
+h
+sup
+y∈Rd
+v(y) −λ|XT −y|p	i
+= −λ EXT ∼µT
+(v/λ)c(XT )
+,
+with the c-transform wc(x) := infy∈Rd
+|x −y|p −w(y)
+	.
+Indeed, writing W p
+p (µT , m) =
+infπ∈Π(µT ,m)
+R |x −y|p π(dx, dy), the supremum over m in g∗(v) = supm supπ∈Π(µT ,m)
+R  v(y) −
+λ|x −y|pπ(dx, dy) frees the second marginal of π, and the remaining supremum over couplings
+with first marginal µT equals
+R supy{v(y) −λ|x −y|p} µT (dx) (transport each x to a measurable
+ε-maximizer of y 7→v(y)−λ|x−y|p). In practice, directly computing v c in Rd may be challenging;
+a common approach is to consider an entropic relaxation of the transport cost, which yields a
+simpler expression more amenable to computation while retaining the same geometric intuition.
+
+
+19
+Appendix G. Link to the (complex) semilinear Schrödinger equation and
+Gross-Pitaevskii
+Consider the classical semilinear Schrödinger equation (NLS) on physical time τ ∈R (and its
+complex conjugate):
+i ∂τψ
+= −1
+2∆ψ + c ψ F(|ψ|2),
+(28)
+−i ∂τ ¯ψ
+= −1
+2∆¯ψ + c ¯ψ F(|ψ|2),
+(29)
+where |ψ|2 = ¯ψ ψ and F is a (real-valued) nonlinearity acting on the density. The Gross-Pitaevskii
+(cubic NLS) corresponds to the choice F(u) = u (see e.g. [32]):
+i ∂τψ = −1
+2∆ψ + c ψ |ψ|2.
+Perform a Wick rotation to imaginary time by setting τ = i t (so that ∂τ = −i ∂t). Substituting
+into (28)-(29) yields
+∂tψ + 1
+2∆ψ = c ψ F( ¯ψψ),
+(30)
+−∂t ¯ψ + 1
+2∆¯ψ = c ¯ψ F( ¯ψψ).
+(31)
+Identifying (ψ, ¯ψ) with (φ, ¯φ), we recover exactly our system (3)-(4) written in forward-backward
+form (see Remark 2.3). In the cubic case (Gross-Pitaevskii), the sign of c distinguishes two
+qualitatively different regimes:
+• Defocusing / repulsive (c > 0). The nonlinearity disperses mass, counteracting concen-
+tration. Classically, this regime admits global-in-time solutions for broad classes of initial
+data (e.g., in H1), scattering in low dimensions, and exhibits no finite-time blow-up [33].
+After Wick rotation (imaginary time), the system becomes a well-behaved gradient(-like)
+flow for the energy; in our forward-backward formulation (3)-(4) this corresponds to a
+monotone mean-field interaction.
+• Focusing / attractive (c < 0). The nonlinearity promotes concentration and can balance
+dispersion to form bright solitons; it may also produce finite-time blow-up (collapse) for
+sufficiently concentrated initial data (depending on the spatial dimension and mass) [34].
+Under Wick rotation, the flow may descend a nonconvex energy landscape; in (3)-(4)
+this yields a mean-field term with negative monotonicity.
+Appendix H. Special cases of semilinear Schrödinger bridges
+H.1. Confining potentials. When the interaction term reduces to a potential F(t, x, m) ≡
+V (t, x), the Schrödinger system (3)-(4) becomes linear. In this case, the optimal drift admits a
+Feynman-Kac representation:
+(32)
+dXt = ∇log E
+"
+φ
+ T, Bt,Xt
+T
+ exp
+
+−c
+Z T
+t
+V (s, Bt,Xt
+s
+) ds
+#
+dt + dWt,
+where (Bt,x
+s )s≥t is a Brownian motion starting from x at time t.
+A natural choice in generative modeling is a confining potential
+V (x) = Λ 1x/∈D,
+which restricts the diffusion to a prescribed open domain D as Λ →∞. In this limit, the optimal
+diffusion (32) takes the form
+dXt = ∇log E
+h
+φ(T, Bt,Xt
+T
+) 1{Bt,Xt
+·
+∈D}
+i
+dt + dWt
+= ∇log
+Z
+D
+φ(T, y) pD
+T−t(Xt, y) dy
+
+dt + dWt,
+where pD
+τ (x, y) denotes the heat kernel on D with absorbing (Dirichlet) boundary conditions.
+
+
+20
+H.1.1. Coxeter domains and Dyson-type diffusions. When D is a Coxeter chamber associated
+with a finite reflection group [35], the heat kernel pD
+τ (x, y) can be computed explicitly from the
+Coxeter reflection principle, which generalizes the Karlin-McGregor determinant formula and
+expresses it as a signed sum of free Gaussian kernels
+pτ(x, y) = (2πτ)−d/2 exp
+
+−|x −y|2
+2τ
+
+.
+Let R ⊂Rd be a root system with positive roots R+, and W the corresponding finite Coxeter
+group∗generated by reflections ωα(x) = x −2⟨α,x⟩
+⟨α,α⟩α. The corresponding Coxeter chamber is
+D = {x ∈Rd : ⟨α, x⟩> 0 for all α ∈R+}.
+For the classical Coxeter types A and C, the corresponding chambers are
+DA := {x ∈Rd : x1 < x2 < · · · < xd},
+DC := {x ∈Rd : 0 < x1 < x2 < · · · < xd}.
+These domains impose symmetry-breaking constraints relevant to generative modeling. For type
+A, the chamber DA enforces a strict coordinate ordering, providing a ranked representation that
+removes permutation ambiguity in exchangeable systems (e.g., sorted eigenvalues or ordered
+latent features). For type C, the positivity constraint (xi > 0) confines the process to the positive
+orthant, suitable for modeling nonnegative and ordered latent variables such as intensities or
+squared singular values. Thus, Coxeter chambers like DA and DC serve as geometric priors for
+generative diffusions on manifolds with permutation or reflection symmetries.
+From the Coxeter reflection principle,† we obtain the general Coxeter–reflection formula
+pD
+τ (x, y) =
+X
+w∈W
+det(w) pτ
+ x, wy
+,
+x, y ∈D,
+where det(w) ∈{±1} is the sign of the orthogonal transformation w.
+For µ0 = δX0, the
+potentials of the (linear, F ≡0 inside D) bridge are φ(T, y) ∝µT (y)/pD
+T (X0, y) and φ(t, x) =
+R
+D pD
+T−t(x, y) φ(T, y) dy, so that
+dXt = ∇log
+Z
+D
+µT (dy) pD
+T−t(Xt, y)
+pD
+T (X0, y) dt + dWt.
+∗A Coxeter group is a finite group W generated by reflections ωα across hyperplanes orthogonal to a finite
+set of nonzero vectors R ⊂Rd, called the root system. The reflections satisfy the relations (ωαωβ)mαβ = 1 for
+integers mαβ ≥2, which determine the group structure via a Coxeter matrix. The subset R+ ⊂R of positive roots
+selects one of the two connected components of Rd \ S
+α∈R Hα, where Hα = {x : ⟨α, x⟩= 0} are the reflection
+hyperplanes. The corresponding Coxeter (or fundamental) chamber is D = {x ∈Rd : ⟨α, x⟩> 0, ∀α ∈R+}.
+When the root system is crystallographic, W coincides with a Weyl group associated with a simple Lie algebra,
+but more general (noncrystallographic) Coxeter types such as H3, H4, or I2(m) also fit this framework.
+†Proof sketch. Let W be a finite Coxeter group acting orthogonally on Rd, generated by reflections {ωα}
+across the hyperplanes Hα = {x : ⟨α, x⟩= 0}, and let D be a fundamental chamber. We verify pD
+τ is the
+fundamental solution of the heat kernel on D with Dirichlet boundary conditions:
+(i) Heat equation. Each term pτ(x, wy) satisfies (∂τ −1
+2∆x)pτ = 0 in x, hence so does their finite signed sum
+by linearity.
+(ii) Boundary condition (reflection principle). Every reflection ωα ∈W is an orthogonal involution with
+det(ωα) = −1, so |ωαx −wy| = |x −ωαwy|, i.e. pτ(ωαx, wy) = pτ
+ x, ωαwy
+, for all x. Since w 7→ωαw is a
+bijection of W and det(ωαw) = −det(w),
+pD
+τ (ωαx, y) =
+X
+w∈W
+det(w) pτ(x, ωαwy) =
+X
+w′∈W
+det(ωαw′) pτ(x, w′y) = −pD
+τ (x, y).
+Thus pD
+τ (·, y) is odd under each reflection. For x ∈Hα, ωαx = x gives pD
+τ (x, y) = 0; as ∂D ⊂S
+α∈R+ Hα, pD
+τ
+vanishes on ∂D.
+(iii) Initial condition. As τ ↓0, pτ(·, wy) →δwy. For y ∈D and w̸ = e, the point wy lies in the chamber wD,
+which is disjoint from D (W acts simply transitively on the chambers). Hence only w = e contributes on D, and
+pD
+τ (·, y) →δy there.
+
+
+21
+Remark H.1 (Dyson Brownian motion (Type A), λ = ∞). For type A and the hard constraint
+λ = ∞, let µ0 = µT = δX0 with X0 ∈DA. Then φ(t, x) ∝pDA
+T−t(x, X0) = det
+p(1)
+T−t(xk, Xl
+0)
+d
+k,l=1,
+where p(1) is the one-dimensional Gaussian kernel (the Coxeter formula for W = Sd is the
+Karlin-McGregor determinant). The optimal process supported on DA is the non-colliding
+Brownian bridge
+dXi
+t =
+Xi
+0 −Xi
+t
+T −t
++ ∂xi log det
+h
+exk(Xl
+0−Xk
+0 )/(T−t)id
+k,l=1
+
+x=Xt
+
+dt + dW i
+t ,
+i = 1, . . . , d.
+For d = 2 the interaction term equals −X2
+0−X1
+0
+T−t
+ e(X2
+t −X1
+t )(X2
+0−X1
+0)/(T−t) −1
+−1. By the Cauchy-
+Binet formula, det[exkyl/τ]k,l = τ −d(d−1)/2∆(x)∆(y)
+  Qd−1
+j=1 j!
+−1 1 + O(τ −1)
+ as τ →∞, with
+∆(x) := Q
+k<l(xl −xk); the determinant in the drift equals e−P
+k xkyk/τ det[exkyl/τ]k,l with
+y = X0, τ = T −t, so its logarithmic derivative has the same limit. Hence, in the long-time limit
+T →∞(t fixed), the bridge term vanishes, the interaction term tends to ∂xi log ∆(Xt), and we
+recover the celebrated Dyson Brownian motion
+dXi
+t =
+X
+j̸=i
+1
+Xi
+t −Xj
+t
+dt + dW i
+t ,
+i = 1, . . . , d,
+which describes the eigenvalue dynamics of Hermitian Brownian ensembles (GUE). Thus, the
+linear Schrödinger bridge framework naturally connects to classical random-matrix diffusions.
+Remark H.2 (Type C, λ = ∞). Analogously, for type C with µ0 = µT = δX0, X0 ∈DC, the
+group W is the group of signed permutations, pDC
+τ
+(x, y) = det
+p(1)
+τ (xk, yl) −p(1)
+τ (xk, −yl)
+d
+k,l=1,
+and the optimal diffusion confined to DC reads
+dXi
+t = ∂xi log det
+h
+p(1)
+T−t(xk, Xl
+0) −p(1)
+T−t(xk, −Xl
+0)
+id
+k,l=1
+
+x=Xt dt + dW i
+t ,
+i = 1, . . . , d.
+Since p(1)
+τ (x, y) −p(1)
+τ (x, −y) = 2(2πτ)−1/2e−(x2+y2)/2τ sinh(xy/τ), the same expansion (with
+odd powers 1, 3, . . . , 2d −1) shows that, as T →∞, the drift tends to ∂xi log h(Xt) with
+h(x) := Q
+k xk
+Q
+k<l(x2
+l −x2
+k), a harmonic function vanishing on ∂DC:
+dXi
+t =
+
+1
+Xi
+t
++
+X
+j̸=i
+2Xi
+t
+(Xi
+t)2 −(Xj
+t )2
+
+dt + dW i
+t ,
+i = 1, . . . , d.
+This is the type-C analogue of Dyson Brownian motion [35]: three-dimensional Bessel processes
+(drift 1/x) conditioned never to collide.
+H.2. Score-based generative modeling as an exact linear-SB solution (F ≡0, noised-
+data prior). Take F ≡0 (classical Schrödinger bridge), set µT = pdata, and choose the reference
+marginal as a noisy version of µT : µ0 := µT ∗N(0, T Id). The (φ, ¯φ) system of Theorem 2.1
+collapses to two linear (backward) heat equations:
+∂tφ + 1
+2∆φ = 0,
+∂t ¯φ + 1
+2∆¯φ = 0.
+We claim the exact solution is ¯φ ≡1 and
+φ(t, x) =
+ pdata ∗N(0, (T −t)Id)
+(x) =: pT−t(x).
+Indeed: (i) both solve the heat equations trivially; (ii) the coupling φ(0, x) ¯φ(T, x) = µ0(x) holds
+since φ(0, ·) = pT = µT ∗N(0, T Id) = µ0; (iii) m(T, x) = ¯φ(0, x)φ(T, x) = pdata(x), so the hard
+terminal constraint m(T, ·) = µT holds. Consequently the optimal drift of Theorem 2.1 reduces
+to
+∇log φ(t, Xt) = ∇log pT−t(Xt),
+the score function of the Gaussian-smoothed data at noise level T −t. Simulating dXt =
+∇log φ(t, Xt) dt + dWt, X0 ∼µ0, coincides with the reverse-time score-based sampler of Song
+et al. [5], Ho et al. [36]: DDPM / score-based diffusion is the classical-SB solution with noised-data
+prior and ¯φ ≡1.
+
+
+22
+H.3. Analytical semilinear bridge between Gaussians for F(m) = κ log m and G(x, m(T, ·)) =
+λ log m(T,x)
+µT (x) .
+Proposition H.1 (Optimal diffusion between Gaussians). Let the initial and terminal laws be
+Gaussian,
+µ0 = N(m0, Σ0),
+µT = N(mT , ΣT ),
+with Σ0, ΣT ∈Sd
+++ and m0, mT ∈Rd. We take F(m) = κ log m and G(x, m(T, ·)) = λ log m(T,x)
+µT (x)
+with κ, λ > 0, and assume that the forward-backward system of ODEs
+˙At = c A2
+t + κ ˆΣ−1
+t ,
+AT = λ(Σ−1
+T
+−ˆΣ−1
+T )
+˙bt = c Atbt −κ ˆΣ−1
+t
+ˆµt,
+bT = λ(ˆΣ−1
+T ˆµT −Σ−1
+T mT )
+˙ˆµt = −c (Atˆµt + bt),
+ˆµ0 = m0
+˙ˆΣt = −c (At ˆΣt + ˆΣtAt) + Id,
+ˆΣ0 = Σ0
+has a solution on [0, T] with At ∈Sd symmetric, bt, ˆµt ∈Rd and ˆΣt ∈Sd
+++. Then the optimal
+diffusion process is
+dXt = −c (AtXt + bt) dt + dWt,
+X0 ∼µ0,
+with Law(Xt) = N(ˆµt, ˆΣt), and it is the unique optimal control.
+The proof is provided below in Appendix I. It proceeds by inserting a Gaussian ansatz for m(t, ·)
+and a quadratic ansatz for v(t, ·) into the forward Fokker-Planck and backward HJB equations,
+matching the coefficients in x, and concluding with the verification argument of Appendix A.
+Remark. When κ = 0 and λ →∞, this system reduces to the classical Schrödinger bridge
+between Gaussian marginals, yielding the well-known result that the bridge is a linear Gaussian
+diffusion with quadratic potentials governed by coupled Riccati-type ODEs [27].
+H.4. Lifted (semilinear) Schrödinger bridge and Gyöngy’s Markov projection. Gyöngy’s
+Markov projection theorem [37] has played a central role in mathematical finance. It provides a
+way to construct a Markov diffusion in Rd with prescribed marginal distributions at each time.
+This idea underlies the calibration of local volatility and local stochastic volatility models, as
+pioneered by Dupire’s formula [38] and systematically developed in the monograph [39].
+In this subsection, we apply Gyöngy’s projection to the setting of Schrödinger bridges. The key
+observation is that one may lift the marginals µ0, µT to an augmented space Rd+1 (eventually
+higher), solve the Schrödinger bridge there, and then project back onto Rd. Gyöngy’s mimicking
+theorem, in the form of Brunick and Shreve [40], then provides a solution of a Markovian SDE
+in Rd with the correct marginals µ0, µT . Although this projected diffusion has the right one-time
+marginals, it is in general not itself a Schrödinger bridge. It therefore defines a new class of
+generative models, obtained by combining lifted SB with Markov projection.
+˜µ0
+˜µT
+µ0
+µT
+SB in Rd+1
+projection
+projection
+Markov proj.
+Proposition H.2 (Lifted Schrödinger bridge and Gyöngy projection). Let µ0, µT ∈P(Rd) be
+given marginals, and let ˜µ0, ˜µT ∈P(Rd+1) be their lifted versions via conditional distributions
+ν0, νT :
+˜µ0(dx, dy) = µ0(dx) ν0(dy|x),
+˜µT (dx, dy) = µT (dx) νT (dy|x).
+Consider the Schrödinger bridge in Rd+1 between ˜µ0 and ˜µT under the Wiener reference P0, with
+dynamics
+d ˜Xt = ∇(x,y) log φ(t, ˜Xt) dt + d ˜Wt,
+˜Xt = (Xt, Yt),
+
+
+23
+where (φ, ¯φ) are the Schrödinger potentials in Rd+1, and assume that the bridge has finite energy,
+E
+R T
+0 |∇(x,y) log φ(t, ˜Xt)|2 dt < ∞. Consider
+(33)
+dXt = b(t, Xt) dt + dWt,
+X0 ∼µ0,
+b(t, x) :=
+Z
+∇xφ(t, x, y) ¯φ(T −t, x, y) dy
+Z
+φ(t, x, y) ¯φ(T −t, x, y) dy
+,
+with b(t, x) := 0 where the denominator vanishes. Then (33) has a weak solution X such that
+Law(Xt) is the x-marginal of Law( ˜Xt) for every t ∈[0, T]; in particular Law(X0) = µ0 and
+Law(XT ) = µT . If moreover ∇x log φ is bounded, every solution of (33) has these marginals.
+The proof is deferred to Appendix J.
+Appendix I. Proof of Proposition H.1
+Proof. We look for a solution of (16)-(17) of the form
+m(t, ·) = N
+ ˆµt, ˆΣt
+,
+v(t, x) = 1
+2x⊤Atx + b⊤
+t x + at,
+At ∈Sd,
+where (At, bt, ˆµt, ˆΣt) solves the system of the proposition and at is determined below.
+Fokker-Planck equation. The feedback drift −c∇xv(t, x) = −c(Atx + bt) is affine. Hence the
+solution of dXt = −c(AtXt + bt) dt + dWt, X0 ∼N(m0, Σ0), is Gaussian, and Itô’s formula gives
+for its mean and covariance ˙ˆµt = −c(Atˆµt + bt) and ˙ˆΣt = −c(At ˆΣt + ˆΣtAt) + Id, with ˆµ0 = m0,
+ˆΣ0 = Σ0. Therefore m(t, ·) = N(ˆµt, ˆΣt) is the law of Xt and solves (17).
+HJB equation. We have κ log m(t, x) = −κ
+2(x−ˆµt)⊤ˆΣ−1
+t (x−ˆµt)+γt, with γt := −κ
+2 log det(2πˆΣt),
+and |∇xv|2 = x⊤A2
+t x+2b⊤
+t Atx+|bt|2 since At is symmetric. The left-hand side of (16) is therefore
+1
+2x⊤  ˙At −cA2
+t −κˆΣ−1
+t
+x +
+ ˙bt −cAtbt + κˆΣ−1
+t
+ˆµt
+⊤x +
+
+˙at + 1
+2 tr At −c
+2|bt|2 −κ
+2 ˆµ⊤
+t ˆΣ−1
+t
+ˆµt + γt
+
+.
+The first two terms vanish by the equations for At and bt, and the third one vanishes when at
+solves the corresponding linear ODE; at does not enter the drift.
+Terminal condition. G(x, m(T, ·)) = λ log m(T,x)
+µT (x) = λ
+2x⊤ Σ−1
+T −ˆΣ−1
+T
+x+λ
+ ˆΣ−1
+T ˆµT −Σ−1
+T mT
+⊤x+
+const, so that v(T, ·) = G(·, m(T, ·)) is equivalent to the stated values of AT and bT , together
+with aT = const.
+Optimality. The functionals f(m) = κ
+R (m log m −m) and g(m) = λ
+R  m log m
+µT −m
+ have
+derivatives F = κ log m and G = λ log m
+µT , which satisfy (A2), strictly, for κ, λ > 0. The pair
+(v, m) satisfies (A4): ∇xv is affine with bounded coefficients on [0, T], and v, F(t, ·, m(t, ·)) and
+G(·, m(T, ·)) are quadratic in x. Steps 2 and 3 of Appendix A then show that the affine feedback
+−c(Atx + bt) is the unique optimal control.
+□
+Appendix J. Proof of Proposition H.2
+Proof. Write ˜Xt = (X(x)
+t
+, Yt) ∈Rd × R for the lifted bridge. By Theorem 2.1 applied in Rd+1
+with f ≡0, ˜Xt has density ˜m(t, x, y) = φ(t, x, y) ¯φ(T −t, x, y). Since φ ∇x log φ = ∇xφ, the
+drift b of (33) is the conditional expectation
+b(t, x) =
+R ∇x log φ(t, x, y) ˜m(t, x, y) dy
+R ˜m(t, x, y) dy
+= E
+∇x log φ(t, ˜Xt)
+ X(x)
+t
+= x
+.
+The x-component is the Itô process dX(x)
+t
+= δt dt + dWt, with δt := ∇x log φ(t, ˜Xt) and identity
+diffusion matrix, and E
+R T
+0 |δt| dt ≤
+ T E
+R T
+0 |δt|2 dt
+1/2 < ∞by the finite-energy assumption.
+Corollary 3.7 of Brunick and Shreve [40], which extends Gyöngy [37] to random initial conditions
+and removes its boundedness and nondegeneracy assumptions, provides a weak solution ˆX of
+d ˆXt = ˆb(t, ˆXt) dt + d ˆWt, ˆX0 ∼µ0, with Law( ˆXt) = Law(X(x)
+t
+) for all t, where ˆb(t, X(x)
+t
+) is a
+version of E[δt | X(x)
+t
+] for almost every t. By the display above, b(t, ·) = ˆb(t, ·) Law(X(x)
+t
+)-a.e. for
+almost every t; since ˆXs has the law of X(x)
+s
+, Fubini’s theorem gives E
+R T
+0 |b −ˆb|(s, ˆXs) ds = 0,
+so ˆX also solves (33). If ∇x log φ is bounded, so is b, and (33) is unique in law by Girsanov’s
+
+
+24
+theorem, so every solution has these marginals. Consistently, integrating in y the Fokker-Planck
+equation of ˜X, whose ∂y-divergence term integrates to zero, shows that ρt :=
+R ˜m(t, ·, y) dy
+solves ∂tρ = −∇x · (b ρ) + 1
+2∆xρ, the Fokker-Planck equation of (33). Finally, ρ0 and ρT are the
+x-marginals of ˜µ0 and ˜µT , that is µ0 and µT .
+□
+Appendix K. Numerical sanity check: branching with time-reflected coupling
+Marked branching for systems of coupled semilinear equations is established [25, 26, 28]; the
+bridge system (3)-(4) is special in that the nonlinearity pairs φ(t, ·) with ¯φ(T −t, ·) (see the
+main text diagram). The scalar model below isolates u(t, x) u(T −t, x) as an analytic benchmark
+for that T−t product.
+K.1. Sanity check. We illustrate the branching diffusion method on a simple one-dimensional
+semilinear PDE for a single potential u:
+(34)
+
+
+
+
+
+∂tu(t, x) + 1
+2 ∂xxu(t, x) + u(t, x) u(T −t, x) = 0,
+(t, x) ∈R × R,
+u(T, x) = 3 sech2(x) −1 −tanh
+T
+2
+
+.
+The explicit solution is given by
+u(t, x) = 3 sech2(x) −1 −tanh
+
+t −T
+2
+
+,
+so that u(0, ·) is known in closed form. This example is used only as a numerical sanity check of
+the branching implementation. In this toy case, we work with a single family of particles (say
+“black” particles, representing u). We rewrite the nonlinearity u(t, x)u(T −t, x) in (34) using
+the canonical form introduced in (10):
+∂tu(t, x) + 1
+2 ∂xxu(t, x) + 1 ×
+
+1
+2 × 2u(t, x) u(T −t, x) + 1
+2 × 2u(t, x) −u(t, x)
+
+= 0,
+i.e. branching rate 1, probabilities p0 = p1 = 1
+2 and weights ak/pk = 2: at a branching time s,
+the particle either restarts alone at (s, Xs), or is replaced by two particles started at (s, Xs) and
+(T −s, Xs).
+Figure 8 compares the analytical solution u(0, x) as a function of x with the Monte Carlo
+branching algorithm for T = 1. The branching estimator closely matches the analytical curve,
+confirming the correctness of the branching scheme. To assess the impact of the nonlinear term,
+we also include the solution of the heat kernel with terminal condition u(T, x).
+Figure 8. Comparison of the analytic solution u(0, x) with the Monte Carlo
+estimate ˆuM(0, x), in the branching case and the heat kernel, highlighting the
+impact of the nonlinearity.
+
+
+25
+Appendix L. Proof of Proposition 3.1
+Notation and mild solutions. We write φT := φ(T, ·), ¯φT := ¯φ(T, ·), A := ∥φT ∥∞, B := ∥¯φT ∥∞,
+bk := ∥ak∥L∞([0,T]×Rd) and ¯K := P
+k k pk (the mean mark). Only pk > 0 for ak̸ ≡0 is needed,
+with the convention 0/0 = 0 in the ratios ak/pk and b2
+k/pk. Let Psh(x) := E[h(x+Ws)] be the heat
+semigroup. In the canonical form (10), (3) reads ∂tφ+ 1
+2∆φ−cφ = −c P
+k ak(t, ·) φ(t, ·)k+1 ¯φ(T −
+t, ·)k, and symmetrically for (4). A mild solution is a pair (φ, ¯φ) of measurable functions on
+[0, T] × Rd such that, for all (t, x), with absolutely convergent integrals,
+(35)
+φ(t, x) = e−c(T−t)PT−tφT (x)
++
+Z T
+t
+c e−c(s−t) Ps−t
+h P
+k ak(s, ·) φ(s, ·)k+1 ¯φ(T −s, ·)ki
+(x) ds,
+¯φ(t, x) = e−c(T−t)PT−t ¯φT (x)
++
+Z T
+t
+c e−c(s−t) Ps−t
+h P
+k ak(T −s, ·) φ(T −s, ·)k ¯φ(s, ·)k+1i
+(x) ds.
+These are the Duhamel formulas of (3)-(4) for the operator ∂t + 1
+2∆−c.
+The tree. Particles are labelled by finite words (Ulam-Harris labelling), and each label carries an
+independent Brownian motion, an independent Exp(c) lifetime τ and an independent mark K
+with law (pk). A particle born at time b (on its own clock) at the point y moves as y + W·−b. If
+b + τ ≥T, it is a leaf and contributes φT (y + WT−b) if it is white, ¯φT (y + WT−b) if it is black.
+Otherwise, with s := b + τ and z := y + Wτ, it contributes the factor aK(s◦, z)/pK of (12), and
+it is replaced by K + 1 particles of its own type born at (s, z) and K particles of the other type
+born at (T −s, z). The root has generation 0, the children of a particle of generation j have
+generation j + 1, and D ∈N ∪{∞} denotes the largest generation. On {D < ∞}, Φ is the
+product of all factors and of all leaf contributions; Φ◦
+t,x (resp. Φ•
+t,x) is Φ for a white (resp. black)
+root born at (t, x). We use the branching property: conditionally on the lifetime, the mark and
+the path of the root, the subtrees rooted at its children are independent, and each is distributed
+as a tree rooted at the type and birth point of that child.
+Because of the time reflection, a black child born at T −s may live longer than its white
+parent, so the finiteness of the tree is not automatic: it is the object of Lemma L.1.
+Lemma L.1 (Size of the tree). Let n(t) ∈[1, ∞] be the expected number of particles of a tree
+whose root is born at time t; it depends neither on the type nor on the position of the root. If
+cT ¯K < 1, then
+n(t) ≤1 + c (T −t) (1 + 2 ¯K)
+1 −cT ¯K
+< ∞
+and, in particular, D < ∞almost surely. If cT ¯K ≥1, n is unbounded on [0, T].
+Proof. Let nj(t) be the expected number of particles of generation at most j. The root branches
+at s ∈[t, T) with density c e−c(s−t), and then has on average 1 + ¯K children born at s and ¯K
+children born at T −s. By the branching property, n0 = 1 and
+nj+1(t) = 1 +
+Z T
+t
+c e−c(s−t)(1 + ¯K) nj(s) + ¯K nj(T −s)
+ ds.
+A direct computation shows that N(t) := 1 + c(T −t)(1 + 2 ¯K)/(1 −cT ¯K) satisfies the same
+equation with nj and nj+1 both replaced by N. As N ≥1 = n0 and the right-hand side is
+nondecreasing in nj, induction gives nj ≤N for all j, and n = limj nj ≤N by monotone
+convergence.
+Conversely, if n is bounded, it solves the equation above (monotone convergence), hence is
+continuously differentiable, with n′(t) = c (n(t)−1)−c
+(1+ ¯K)n(t)+ ¯K n(T −t)
+ = −c
+ 1+ ¯KS(t)
+,
+where S(t) := n(t) + n(T −t). Then S′(t) = n′(t) −n′(T −t) = 0 because S(T −t) = S(t), so S
+is a constant, n(t) = 1 + c(1 + ¯KS)(T −t) since n(T) = 1, and evaluating S = n(t) + n(T −t)
+gives S (1 −cT ¯K) = 2 + cT > 0. This is impossible when cT ¯K ≥1.
+□
+
+
+26
+Lemma L.2 (Time-reflected majorant system). Let α0, β0 > 0, qk ≥0 for k = 0, . . . , K, and
+Q(r) := P
+k qkrk. Consider, for bounded nonnegative functions U, ¯U on [0, T], the system
+(36)
+U(t) = α0e−c(T−t) +
+Z T
+t
+c e−c(s−t) P
+k qk U(s)k+1 ¯U(T −s)k ds,
+¯U(t) = β0e−c(T−t) +
+Z T
+t
+c e−c(s−t) P
+k qk U(T −s)k ¯U(s)k+1 ds.
+(a) (U, ¯U) solves (36) if and only if U(t) = α0ec(T−t)(Q(r)−1) and ¯U(t) = β0ec(T−t)(Q(r)−1)
+for some r > 0 such that
+(37)
+r = Ψ(r) := α0β0 exp
+ cT (Q(r) −1)
+;
+then U(t) ¯U(T −t) = r for all t ∈[0, T].
+(b) (37) has a root if and only if Ψ(¯r) ≤¯r for some ¯r > 0. The smallest root r∗is then the
+limit of the nondecreasing sequence r0 = 0, rj+1 = Ψ(rj).
+(c) Let M be the functional of the tree obtained by replacing every branching factor by
+qK/pK and every white (resp. black) leaf contribution by α0 (resp. β0), and let u(t) :=
+E[M 1{D<∞}] and ¯u(t) be its expectations for a white and a black root born at t. If (37)
+has a root, (u, ¯u) is the solution of (a) with r = r∗. Otherwise, u or ¯u is unbounded.
+Proof. (a) Let (U, ¯U) be a bounded nonnegative solution. The right-hand sides are continuous in
+t, hence so are U, ¯U, and then they are C1. Since P
+k qkUk+1 ¯Uk
+T−t = U Q(U ¯UT−t), differentiation
+gives
+U′(t) = c U(t)
+1 −Q
+ U(t) ¯U(T −t)
+,
+¯U′(t) = c ¯U(t)
+1 −Q
+ U(T −t) ¯U(t)
+.
+For R(t) := U(t) ¯U(T −t), this yields R′(t) = U′(t) ¯U(T −t) −U(t) ¯U′(T −t) = c R [1 −Q(R)] −
+c R [1−Q(R)] = 0. Hence R ≡r, U′ = c(1−Q(r)) U with U(T) = α0, so U(t) = α0ec(T−t)(Q(r)−1);
+similarly for ¯U; and r = U(0) ¯U(T) = α0β0ecT(Q(r)−1).
+Conversely, if r > 0 solves (37),
+the functions above satisfy U(t) ¯U(T −t) = α0β0ecT(Q(r)−1) = r, hence the linear equation
+U′ −cU = −c P
+k qkUk+1 ¯Uk
+T−t with U(T) = α0, whose variation-of-constants formula is the first
+line of (36); the second line is obtained in the same way.
+(b) Ψ is continuous and nondecreasing, with Ψ(0) > 0. If Ψ(¯r) ≤¯r, induction gives rj ≤
+rj+1 ≤¯r, so rj converges to a root r∗≤¯r; any root r satisfies rj ≤r for all j, hence r∗≤r. The
+converse is obvious.
+(c) Let uj(t) := E[M 1{D≤j}] and ¯uj(t) be the analogous quantities. The root is a leaf with
+probability e−c(T−t), and {D ≤j + 1} means that all the subtrees of its children have depth
+at most j. Hence, by the branching property, u0(t) = α0e−c(T−t), ¯u0(t) = β0e−c(T−t), and
+(uj+1, ¯uj+1) is the right-hand side of (36) evaluated at (uj, ¯uj); note that pk · qk/pk = qk. If a
+root exists, let (U∗, ¯U∗) be the solution of (a) with r = r∗. Since U∗≥u0, ¯U∗≥¯u0 and the
+right-hand side is nondecreasing, uj ≤U∗and ¯uj ≤¯U∗for all j. By monotone convergence,
+(u, ¯u) = limj(uj, ¯uj) is a bounded solution of (36), so by (a) it is associated with a root
+r = u(0) β0 ≤U∗(0) β0 = r∗; hence r = r∗and (u, ¯u) = (U∗, ¯U∗). If no root exists, (u, ¯u) cannot
+be bounded, since it would then solve (36).
+□
+Proof of Proposition 3.1. Step 1: finiteness. By (i) and Lemma L.1, D < ∞a.s., so that Φ◦
+t,x
+and Φ•
+t,x are well defined.
+Step 2: square integrability. Let M1 be the functional of Lemma L.2(c) with qk = bk, α0 = A
+and β0 = B, and M◦
+1 , M•
+1 its values for a white, resp. black, root born at t. Since |ak(s◦, z)| ≤bk,
+|φT | ≤A and | ¯φT | ≤B, we have |Φ| ≤M1 pathwise. Moreover, M2
+1 is the functional of
+Lemma L.2(c) with qk = b2
+k/pk, α0 = A2 and β0 = B2, because (bK/pK)2 = (b2
+K/pK)/pK.
+Condition (ii) is Ψ(r) ≤r for this choice, so Lemma L.2(b)-(c) gives E[Φ2] ≤E[M2
+1 ] = U2(t) < ∞,
+where U2 is the corresponding bounded solution: Φ ∈L2. By Cauchy-Schwarz, E[M1] ≤
+p
+U2(t)
+is bounded on [0, T], so by Lemma L.2(c) the equation r = AB exp
+ cT(P
+k bkrk −1)
+ has a
+
+
+27
+smallest root r1, and
+(38)
+E
+|Φ◦
+t,x|
+ ≤E[M◦
+1 ] = U1(t) := A ec(T−t)(P
+k bkrk
+1−1),
+E
+|Φ•
+t,x|
+ ≤E[M•
+1 ] = ¯U1(t) := B ec(T−t)(P
+k bkrk
+1−1).
+Step 3: mild solution. Let u(t, x) := E[Φ◦
+t,x] and ¯u(t, x) := E[Φ•
+t,x]. Consider a white root
+born at (t, x), with lifetime τ, mark K and path x + W. On {τ ≥T −t}, which has probability
+e−c(T−t), Φ = φT (x + WT−t). On {τ < T −t}, with s := t + τ and z := x + Wτ, the branching
+property gives
+E
+Φ
+ τ, K, W
+ = aK(s, z)
+pK
+u(s, z)K+1 ¯u(T −s, z)K.
+The bound |Φ| ≤M1 justifies Fubini’s theorem. Averaging over K ∼(pk), over W, and over τ
+with density c e−cr on [0, T −t) yields the first line of (35). The second line follows in the same
+way, the factor of a black root branching at s being aK(T −s, z)/pK. Hence (u, ¯u) is a mild
+solution, and |u| ≤U1, |¯u| ≤¯U1 by (38).
+Step 4: uniqueness in the dominated class. Let (φ, ¯φ) be a mild solution with |φ(t, x)| ≤U1(t)
+and | ¯φ(t, x)| ≤¯U1(t). For j ≥0, let Φj be the functional of the tree stopped at generation j:
+particles of generation j are not evolved and contribute φ (white) or ¯φ (black), evaluated at their
+birth time and position. Iterating (35) j times, with the branching property as in Step 3, gives
+φ(t, x) = E[Φj] for a white root born at (t, x). On {D < j} no particle of generation j exists, so
+that Φj = Φ. Let M1,j be M1 stopped at generation j in the same way, with contributions U1,
+¯U1 for the particles of generation j; then |Φj| ≤M1,j, and E[M1,j] = U1(t) because (U1, ¯U1) is a
+fixed point of (36) with qk = bk. Therefore
+φ(t, x) −E
+Φ 1{D<j}
+ ≤E
+M1,j 1{D≥j}
+ = U1(t) −E
+M1 1{D<j}
+ −−−→
+j→∞U1(t) −E[M1] = 0,
+by monotone convergence, Step 1 and (38). Since E[Φ 1{D<j}] →E[Φ] = u(t, x) by dominated
+convergence, φ = u; similarly ¯φ = ¯u.
+□
+Remark L.1 (Checking (i)-(ii) in practice). (a) Linear cases (F ≡0, or F = V as in Appendix O.3):
+K = 0, so (i) holds trivially, and Q is constant, so (ii) holds with r = A2B2ecT(b2
+0/p0−1), for every
+horizon T. This covers all the experiments of Section 5 except the Gross-Pitaevskii ones, as soon
+as the trained potentials are bounded.
+(b) Gross-Pitaevskii coupling F(m) = κm, i.e. a0 = 1 and a1 = −κ in (10): (i) reads cTp1 < 1.
+Since r = αeβr has a positive root if and only if e αβ ≤1, (ii) reads
+e cT κ2
+p1
+A2B2 ecT(1/p0−1) ≤1.
+In the Gross-Pitaevskii experiments of Section 5 (c ≤0.3, with the horizon T = 2 of Appendix N),
+(i) holds whatever p1, since cTp1 ≤0.6. Condition (ii) involves the sup norms A, B of the
+trained potentials and has to be checked a posteriori; when it fails, the trees remain finite by (i),
+but the estimator may have infinite variance.
+(c) The conditions cannot be dropped.
+If ak ≥0 and φT ≡A, ¯φT ≡B are constants,
+then Φ = M1, and by Lemma L.2(c) t 7→E[Φ◦
+t,x] or t 7→E[Φ•
+t,x] is unbounded as soon as
+r = AB exp
+ cT(P
+k akrk −1)
+ has no root, although all the data are bounded. For instance, for
+a = (0, 1), p = (1
+2, 1
+2) and c = T = 1, a root exists if and only if AB ≤1.
+Appendix M. Feynman-Galton-Watson diagrams
+Each realization of the branching system is a Galton-Watson tree: lines correspond to
+Brownian trajectories between branching events, and vertices represent branchings. This is
+directly analogous to tree Feynman diagrams: dashed lines depict white particles (φ), solid lines
+depict black particles ( ¯φ), and trivalent vertices encode the cubic nonlinearity. For the cubic
+nonlinearity Fp(m) = m in (10) (i.e. a0 = 0, a1 = 1, and we take p1 = 1), the only branching is
+k = 1:
+◦→2 ◦+1 •,
+• →1 ◦+2 •,
+
+
+28
+so each vertex corresponds to one incoming line splitting into three outgoing lines. Iterating
+these vertices yields a perturbative expansion in the coupling constant c: a diagram with n
+branchings contributes a weight of order cn.
+Importantly, if we truncate the Galton-Watson expansion to order 0 (no branching), the dynamics
+are given only by free Brownian propagation. In this case, the system reduces to the classical
+Schrödinger bridge, and the PDEs collapse to the linear forward-backward heat equations.
+Higher-order branchings then represent nonlinear corrections beyond this baseline. Appendix K
+gives a scalar toy sanity check of the branching scheme for the T−t coupling in (3)-(4).
+c0
+t
+0
+T
++
+c1
+t
+0
+T
+s T −s
++
+c2
+t
+0
+T
+s1 T −s1s2
+T −s2
+Figure 9. First three contributions in the perturbative expansion (Gross-
+Pitaevskii cubic branching). Dashed lines represent white particles (φ), solid lines
+represent black particles ( ¯φ). Weights with a1 = p1 = 1: order c0, no branching,
+i.e. classical Schrödinger bridge / linear heat kernel; order c1 with one branching
+at s (white offspring starting at s, black offspring at T −s); order c2 with two
+branchings at s1, s2 : offspring of the same type as the parent start at si, while
+offspring of the other type start at T −si. The horizontal time axes (all at the
+same vertical level) show time from 0 to T, with dashed vertical lines indicating
+the splitting times.
+Appendix N. Implementation details
+Training and sampling both rely on stochastic quantities built from branching trees and on
+differentiating log bφ(t, x) with respect to x (Algorithm 2). When coordinates have very different
+scales or heavy tails, (i) products of terminal factors in the branching estimator can span many
+orders of magnitude, inflating Monte Carlo variance, and (ii) autograd through log φθ and
+the reweighted score becomes ill-conditioned relative to the isotropic unit-variance reference
+noise in the SDE. We therefore normalize inputs before bridge estimation, using one of the two
+mechanisms below depending on dimensionality and data modality.
+N.1. Covariance whitening in data space. Let X0 ∼µ0 and XT ∼µT . We define
+ˆX0 := C
+−1
+2
+0
+ X0 −Eµ0[X0]
+,
+C0 := Cov(µ0),
+ˆXT := σ C
+−1
+2
+T
+ XT −EµT [XT ]
+,
+CT := Cov(µT ),
+σ2 = 2,
+train the bridge on ˆµ0 := Law( ˆX0) and ˆµT := Law( ˆXT ), and map generated samples back to the
+original coordinates by the inverse affine map. If µ0 and µT are Gaussian, then ˆµ0 ∼N(0, I),
+ˆµT ∼N(0, σ2I) and ˆµT = ˆµ0 ⋆N(0, I), which matches the classical Schrödinger bridge with
+(φNN, ¯φNN) = (0, 0) at horizon T = 1. In practice we set T = 2 to retain nontrivial interpolation;
+when µT is close to Gaussian, initializing (φNN, ¯φNN) = (0, 0) is already near optimal with little
+additional training.
+N.2. Latent representations for imaging. For high-dimensional images, empirical covariances
+are singular or badly conditioned (e.g. near-constant background pixels), so C−1/2
+T
+is unstable
+and pixel-space whitening is inappropriate. We instead encode images with a pretrained VAE
+(MNIST) or ALAE (FFHQ), yielding low-dimensional codes that are approximately standardized
+
+
+29
+and better aligned with the isotropic diffusion reference; the bridge is trained in that latent
+space and decoded for visualization.
+Appendix O. Results details
+O.1. 2D synthetic experiments. We adopt synthetic two-dimensional distributions commonly
+used in the literature [7]:
+• µ0 := Gaussian →µT := Mixture of Gaussians. The source µ0 is a centered
+Gaussian with variance σ2I (σ = 5), and the target µT is a mixture of 8 Gaussians.
+• µ0 := Moon curves →µT := Swiss curves. The source µ0 is a composition of two
+Moon-shaped distributions, and the target µT is a Swiss curve.
+The recovered Schrödinger bridges for these two cases are shown in Figure 10. The temporal
+evolution of the interpolating flow illustrates how the source progressively deforms into the target
+(Figures 2).
+Training dynamics are summarized in Figure 27, see Appendix P.1. As the number of epochs
+increases, the generated terminal distribution Law(XT ) gradually converges toward the target
+law µT (Figure 27). At the same time, the potentials (φθ, ¯φη) sharpen as training progresses,
+reflecting improved discrimination between source and target (Figures 28 and 29, see Appendix
+P.1).
+(10a) Gaussian →mixture of Gaussians.
+(10b) Moon curves →Swiss curve.
+Figure 10. Classical Schrödinger bridges in R2.
+Figure 11. Extended view of the temporal evolution of Law(Xt) (Moons →
+Swiss).
+O.2. Comparison on the 2D benchmark. We compare SBNL with LightSB [13], LightSBB-
+M [15], DSBM [12] and BranchSBM [17] on the Gaussian →mixture of 8 Gaussians benchmark
+from Appendix O. We report (i) terminal samples for each method (Figure 12), (ii) the closed-
+form mixture W2 distance between the generated terminal law and µT (Figure 14a), and (iii)
+the per-mode coverage of the 8 components (Figure 15).
+O.2.1. Computation of the comparison metrics. Let ˆµT denote the empirical distribution of
+N = 104 generated terminal samples and µT the target mixture of 8 isotropic Gaussians in R2.
+
+
+30
+Mixture Wasserstein MW2. We first fit a Gaussian mixture with K = 8 components to the
+generated samples by expectation–maximization (sklearn’s GaussianMixture, full covariances,
+restarted 5 times, best log-likelihood kept), obtaining ˆp = PK
+k=1 ˆwk N( ˆmk, ˆΣk). We compare it
+to the known target mixture p⋆= PK
+k=1 w⋆
+k N(m⋆
+k, Σ⋆
+k) using the mixture Wasserstein distance
+[41]
+MW 2
+2 (ˆp, p⋆) =
+min
+π∈Π( ˆw,w⋆)
+X
+k,ℓ
+πkℓW 2
+2
+ N( ˆmk, ˆΣk), N(m⋆
+ℓ, Σ⋆
+ℓ)
+,
+where the W2 distance between Gaussians has the closed form W 2
+2 (N(m1, Σ1), N(m2, Σ2)) =
+∥m1 −m2∥2 + Tr
+ Σ1 + Σ2 −2(Σ1/2
+1
+Σ2Σ1/2
+1
+)1/2, so MW2 reduces to a small linear program on
+the K × K cost matrix and is computed in closed form.
+Sliced Wasserstein SW2. We use the standard Monte Carlo estimator of the sliced 2-Wasserstein
+distance,
+SW 2
+2 (ˆµT , µT ) = 1
+L
+L
+X
+ℓ=1
+W 2
+2
+ Pθℓ♯ˆµT , Pθℓ♯µT
+,
+where θℓare L = 200 directions drawn uniformly on S1 and Pθx = θ⊤x; each 1D W 2
+2 is evaluated
+exactly on the sorted projected samples (with 104 samples for both ˆµT and µT ).
+Empirical W emp
+2
+. We solve the discrete optimal transport between ˆµT and an i.i.d. sample of size
+104 from µT using the POT library (exact LP solver on the squared Euclidean cost), reporting
+W emp
+2
+= (P
+ij π⋆
+ij∥xi −yj∥2)1/2.
+Energy distance E. We use the kernel-based energy distance [42], estimated by U-statistics on
+the same 104 samples from ˆµT and µT :
+E2(ˆµT , µT ) = 2 E∥X −Y ∥−E∥X −X′∥−E∥Y −Y ′∥,
+X, X′ ∼ˆµT , Y, Y ′ ∼µT .
+E ≥0, with E = 0 iff the two distributions coincide.
+Moment and coverage diagnostics. The mean error |∆µ| = ∥EˆµT [X]−EµT [X]∥and the covariance
+error ∥∆Σ∥F = ∥Cov(ˆµT ) −Cov(µT )∥F are computed from empirical moments. The per-mode
+coverage assigns each generated sample to its nearest component center in µT and reports the
+resulting empirical frequencies (Figure 15); the uniform reference is 1/K = 1/8.
+Confidence intervals. Each metric is a random variable of the generated sample, so every value
+reported in Table 3b and Figures 14a-14b is accompanied by a bootstrap confidence interval.
+For every method and every metric we draw B = 5 resamples with replacement of both the
+prediction tensor (size N = 104) and a freshly drawn reference sample from µT , then recompute
+the entire metric pipeline on each replica-including refitting the 8-component GMM with a
+fresh seed for MW2, so that variability from the GMM fit is also captured. The reported point
+estimate is the mean across replicas and the ± value is the sample standard deviation (with
+Bessel correction). For the empirical Wasserstein distance, the 104 × 104 EMD is too heavy
+inside the bootstrap loop, so we down-sample to 2000 points per side in each replica (hence the
+W emp
+2
+label in Figure 14b). Per-mode coverage error bars in Figure 15 are obtained the same
+way. Each method is evaluated from a single trained checkpoint, so the reported intervals reflect
+sample/estimator uncertainty rather than training-seed variability.
+Figure 12. Terminal samples on Gaussian →mixture of 8 Gaussians for each
+method.
+
+
+31
+(13a) Target µT
+(13b) SBNL
+(13c) LightSB
+(13d) LightSBB-M
+(13e) DSBM
+(13f) BranchSBM
+(13g) DeepGSB
+Figure 13. Terminal samples per method on the Gaussian →mixture of 8
+Gaussians benchmark.
+(14a) Closed-form mixture W2 between generated
+terminal law and µT .
+(14b) Empirical W2 between generated terminal law
+and µT .
+Figure 14. Per-method comparison on the Gaussian →mixture of 8 Gaussians
+benchmark (lower is better; mean ± std over 5 bootstraps).
+
+
+32
+Figure 15. Per-mode coverage of the 8 target components. The dashed line
+marks the uniform reference 1/8.
+O.3. Potential running cost. We now consider a state-dependent running cost of potential
+type,
+f
+ m(t, ·)
+ =
+Z
+Rd V (x) m(t, x) dx
+=⇒
+F(t, x, φ, ¯φ) = V (x),
+so that the canonical PDE (3) reads ∂tφ + 1
+2∆φ = c φ
+ 1 −(1 −V (x))
+. The interaction is thus
+fully specified by a single callable V : Rd →R, passed to the model and evaluated on the fly
+during both training and sampling to encode the environment.
+Branching mechanism. Matching the canonical form F = 1 −Fp with Fp(t, x, m) = 1 −V (x)
+gives a single degree-zero coefficient a0(x) = 1 −V (x) (and ak = 0 for k ≥1). With p0 = 1, the
+only branching outcome is that a particle continues as a single copy of the same type, and each
+branching event reweights the tree by
+W −→W · a0(Xs)
+p0
+= W ·
+ 1 −V (Xs)
+.
+There are no offspring and no type flips: the branching estimator of Proposition 3.1 reduces to a
+pure Feynman-Kac weighting of Brownian paths (Appendix H, confining potentials), with V
+bounded so that 1 −V > 0 keeps the weights positive.
+Training and sampling. Because F is state- but not density-dependent, the system (3)-(4) is
+linear and φ(0, x) is estimated by the reweighted trees above; the potentials are trained with the
+MMD objective (14). Two practical ingredients make the importance-sampled estimator stable.
+First, the interior weights W = bA ¯φη/µ∗(resp. bB φθ/µ∗) are heavy-tailed when µ∗is too narrow,
+so we take a wide Gaussian reference µ∗covering the region actually explored by the branching
+diffusion. Second, we use self-normalized importance sampling (dividing each weight vector by
+its own sum, gradient preserved), which turns the interior expectations into low-variance ratio
+estimators comparing the normalized residual measures. At sampling time, the drift ∇log φ
+is estimated by the same weighted trees (Algorithm 2), so V deflects trajectories away from
+high-V regions.
+Endpoint offset trick. When V has an asymmetric geometry (e.g. gates at different heights, a
+curved valley), we place µ0 and µT at different anchor points aligned with the entrance/exit of
+the low-energy corridor, rather than symmetrically. This gives the score a clear valley to follow
+through the obstacle. Transporting mass over a distance ∼ℓrequires the drift to integrate to
+∼ℓ, so we also use a longer horizon T (with a small rate c): too small a T leaves the drift no
+time to route the mass around the barrier.
+
+
+33
+Figure 16. Gated maze: SBNL transport and estimated density evolution m(t, ·) = φ(t, ·) ¯φ(T −
+t, ·).
+Figure 17. S-curve: SBNL transport and estimated density evolution m(t, ·) = φ(t, ·) ¯φ(T −t, ·).
+
+
+34
+Figure 18. Valley: SBNL transport and estimated density evolution m(t, ·) = φ(t, ·) ¯φ(T −t, ·).
+Figure 19. Spiral: SBNL transport and estimated density evolution m(t, ·) = φ(t, ·) ¯φ(T −t, ·).
+
+
+35
+Figure 20. Three Gaussians: SBNL transport and estimated density evolution m(t, ·) =
+φ(t, ·) ¯φ(T −t, ·).
+O.4. 50D synthetic experiments. We consider a nonlinear bridge between Gaussian mixtures
+in R50 with c = 0.1. Samples and trajectories are visualized by projection onto the first two
+PCA directions, with the PCA basis fit on pooled validation draws from µ0 and µT . Figure 21
+compares generated and target marginals after training; Figure 22 shows the evolution of
+projected trajectories.
+Figure 21. Generated vs. true samples in R50 (PCA projection).
+Figure 22. Temporal evolution in R50 (PCA projection).
+
+
+36
+(23a) Mean of the generated sam-
+ples across different dimensions
+(target mean: 0).
+(23b) Std of the generated sam-
+ples across different dimensions
+(target std:
+√
+2).
+(23c) Skewness of the generated
+samples across different dimen-
+sions (target skewness: 0).
+Figure 23. Evolution of the first three moments (mean, standard deviation,
+skewness) of the generated samples over training epochs, for different latent
+dimensions.
+O.5. MNIST in latent space. We consider a nonlinear bridge between MNIST digits in latent
+space with c = 0.1. Samples and trajectories are visualized by projection onto the first two
+PCA directions, with the PCA basis fit on pooled validation draws from µ0 and µT (Figure 6).
+Figure 24a projects the d=32 latent codes onto the first two PCA directions (basis fit on pooled
+validation samples from µ0 and µT ): the left panel shows the initial law µ0, and the right panel
+overlays generated terminal latents on the target µT , illustrating that the bridge maps the
+source geometry into the target bulk while preserving local structure visible in the point colors.
+Figure 24b compares generated and target digits after training.
+(24a) PCA view of µ0 (left) and of generated ter-
+minal samples vs. target µT (right; target in gray,
+generated colored).
+(24b) Generated MNIST digits obtained by decod-
+ing latent interpolations.
+Figure 24. MNIST latent bridge (d=32): latent PCA visualization and decoded
+samples.
+
+
+37
+Figure 25. FFHQ young-to-old: decoded trajectories during sampling.
+
+
+38
+O.6. FFHQ in latent space.
+O.7. Comparison on FFHQ. We extend the FFHQ young-to-old comparison from Figure 7a
+to a larger panel of source children and all baselines, in ALAE latent space. Figure 26 shows,
+for each row, the source child (µ0) on the left, the terminal samples produced by SBNL,
+LightSB, LightSBB-M, DSBM and BranchSBM (with separate female and male conditioning for
+BranchSBM), and a reference adult image drawn at random from µT on the right.
+Figure 26. FFHQ young-to-old comparison in ALAE latent space, extended
+panel.
+
+
+39
+Appendix P. Additional figures
+Figure 27. Convergence of Law(XT ) with training (Moon curves →Swiss).
+Figure 28. Evolution of potential φ (Moon curves →Swiss).
+Figure 29. Evolution of potential ¯φ (Moon curves →Swiss).
+P.1. Evolution of the potentials during training.
+
+
+40
+Figure 30. Flow evolution for λ ∈{105, 104, 5×103, 103, 102}.
+P.2. Relaxation of the hard constraint and finite penalty λ.

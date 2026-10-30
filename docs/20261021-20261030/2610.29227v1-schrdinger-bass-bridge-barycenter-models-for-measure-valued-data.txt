@@ -1,0 +1,2957 @@
+SCHRÖDINGER-BASS BRIDGE BARYCENTER MODELS FOR
+MEASURE-VALUED DATA
+Ngoc-Hai Nguyen
+Department of Electrical and Computer Engineering
+Tufts University
+Ngoc-Hai.Nguyen@tufts.edu
+Thuan Nguyen
+Department of Engineering, Engineering Technology
+East Tennessee State University
+nguyent11@etsu.edu
+Prakash Ishwar
+Department of Electrical and Computer Engineering
+Boston University
+pi@bu.edu
+Shuchin Aeron
+Department of Electrical and Computer Engineering
+Tufts University
+NSF AI Institute for Artificial Intelligence and Fundamental Interactions
+shuchin@ece.tufts.edu
+October 22, 2026
+ABSTRACT
+Barycenter models, based on stochastic and deterministic optimal transport bridges between proba-
+bility measures, have proven to be useful for supervised and unsupervised learning for (probability)
+measure-valued data. In this paper, we utilize the directional asymmetry and dual drift-diffusion
+control arising in the recently proposed Schrödinger-Bass Bridge (SBB) between two measures, and
+propose SBB-encoder, SBB-decoder, SBB-symmetric, and SBB-Markovian barycenter models. For
+each of these novel models, our first theoretical result establishes the existence of the SBB-barycenter
+under mild assumptions. Our second theoretical result characterizes the decoder SBB-barycenter
+of Gaussians where we show that for Gaussian input measures, the decoder formulation admits
+a Gaussian minimizer, reducing barycenter computation to a finite-dimensional optimization and
+yielding a compact algorithm. For general input measures, we derive a hybrid Wasserstein gradient
+particle descent scheme for all four formulations using the SBB dual representation. Finally, we
+utilize these algorithms for solving distributional-inverse/interpolation problems arising in the context
+of spatial images and single-cell RNA sequencing data, where we show that the SBB-decoder and
+Markovian barycenter allow us to interpolate between successive time points. Results show that our
+method outperforms existing barycenter models for measure interpolation and inference.
+1
+INTRODUCTION
+Barycenter models, that use metrics and divergences between probability measures, provide a means for averaging
+and analyzing (probability) measure-valued data, where each observation may itself be a distribution rather than a
+single vector, in both supervised and unsupervised settings. Among the most popular models, are the Wasserstein
+barycenter model Xu et al. [2018], Schmitz et al. [2018], Werenski et al. [2022], Cheng et al. [2021] which defines a
+geometric average through optimal displacement, and Schrödinger-bridge based formulations which incorporate entropic
+regularization into the transport process Mallery et al. [2025]. Other examples include Werenski et al. [2025], Gunsilius
+et al. [2024], Bai et al. [2023]. Such models have proved useful whenever one seeks a representative distribution that
+arXiv:2610.29227v1  [stat.ML]  21 Oct 2026
+
+
+A PREPRINT - OCTOBER 22, 2026
+summarizes several heterogeneous populations. However, in many applications, the observed distributions are not
+simply different realizations of the same population. Rather, they may arise from a common latent source through
+a combination of systematic transformation and stochastic dispersion. For instance, multiple cell populations can
+correspond to different stages of a developmental process, while several image distributions may share the same latent
+shape but differ through translation, rescaling, and spatial diffusion. In such settings, directly averaging the observed
+endpoint distributions may fail to recover the underlying latent structure, because the variability introduced by the
+observation process is itself part of the geometry that should be modeled. This motivates a barycenter construction that
+can distinguish deterministic transport from stochastic spreading. The recently introduced Schrödinger–Bass Bridge
+(SBB) provides exactly such a mechanism by jointly controlling the drift and the volatility of a stochastic process
+[Henry-Labordère et al., 2026, Hasenbichler et al., 2026]. Unlike the classical Schrödinger Bridge, whose volatility is
+fixed, SBB allows the diffusion component to adapt; unlike Bass martingale transport, it does not impose a zero-drift or
+convex-order constraint on the endpoints. Building on this flexibility, we introduce SBB barycenter models, in which
+a shared probability measure is connected to the input distributions through SBB bridges. Because the SBB cost is
+intrinsically asymmetric, the position of the barycenter relative to the input measures carries modeling meaning, leading
+naturally to encoder, decoder, symmetric, and Markovian formulations.
+Main Contributions.
+• We introduce the encoder, decoder, symmetric, and Markovian SBB barycenter formulations and establish
+their existence on P2(Rd).
+• We derive the marginal first variations of the SBB objective. Using these we derive a hybrid Wasserstein
+gradient particle descent scheme that is orientation-specific, to solve these barycenter computation problems
+efficiently.
+• For the decoder SBB problem with Gaussian distributions, we present a static Gaussian projection result that
+reduces the decoder search to Gaussian laws, together with a covariance-action description for Gaussian pairs.
+We then specialize the particle update to means and covariances.
+• Finally, we provide two applications that showcase the utility of the SBB barycenter models: (1) Recovery
+of 2-D measures from geometric deformation and spatial blur; (2) Ancestor reconstruction and held-out
+interpolation reconstruction in single-cell RNA sequencing data. We show that SBB models and proposed
+methods significantly outperform existing barycenter models/methods and baselines.
+2
+RELATED WORK
+Wasserstein barycenter and entropic regularization.
+Wasserstein barycenters average probability measures through
+optimal displacement [Agueh and Carlier, 2011], whose dynamic formulation minimizes kinetic transport energy
+[Benamou and Brenier, 2000]. Entropic regularization enabled scalable barycenter algorithms, notably the methods of
+Cuturi and Doucet [2014] and the iterative Bregman projections of Benamou et al. [2015]. At the same time, entropic
+regularization modifies the underlying averaging geometry: entropy terms that are constant when both marginals are
+fixed become nonconstant once one marginal is an optimized variable, and can therefore change the resulting barycenter.
+On studying EOT barycenter, debiased Sinkhorn barycenters [Janati et al., 2020a] address the resulting entropic bias,
+while Chizat [2023] distinguishes regularization of the transport plans from an additional entropy penalty imposed
+directly on the barycenter. Mallery et al. [2025] studies the recovery of marginal measure weights through quadratic
+optimization.
+In the Gaussian setting, Wasserstein barycenters inherit Gaussian structure with Bures–Wasserstein covariance geometry
+[Agueh and Carlier, 2011, Nguyen et al., 2025], and related Gaussian closure and closed-form results are known
+for entropic transport [del Barrio and Loubes, 2020, Mallasto et al., 2022, Janati et al., 2020b, Bunne et al., 2023].
+Computationally, prior barycenter methods include fixed-point schemes [Álvarez-Esteban et al., 2016], first-order
+methods with convergence guarantees Altschuler et al. [2021], Nguyen et al. [2025], and particle descent for regularized
+barycenters [Chizat, 2023].
+Schrödinger bridges and multi-marginal barycenters.
+The Schrödinger problem originates with Schrödinger [1931]
+and connects entropy minimization to stochastic control [Dai Pra, 1991, Léonard, 2014]. For a Brownian reference,
+the diffusion coefficient is prescribed and the drift is controlled. Multi-marginal extensions already provide stochastic
+formulations of distributional averaging: Haasler et al. [2021] study tree-structured transport costs and Schrödinger
+problems; Noble et al. [2023] develop TreeDSB and apply it to barycenters through a star-shaped construction; and
+Howard et al. [2025] extend bridge matching to tree-structured problems and entropic barycentres. Thus, coupling
+multiple distributions through a shared stochastic representation has attracted substantial attention in prior work.
+2
+
+
+A PREPRINT - OCTOBER 22, 2026
+Bass martingales and weak optimal transport.
+Bass’s stochastic-integral construction [Bass, 1983] underlies the
+martingale Benamou–Brenier problem studied by Backhoff-Veraguas et al. [2020]. Here the drift is fixed to zero,
+volatility is optimized, and endpoint feasibility requires convex order. The static formulation belongs to weak optimal
+transport, where the cost depends on conditional distributions rather than only on pairs of points. General foundations
+were developed by Gozlan et al. [2017] and Backhoff-Veraguas et al. [2019]. This distinction is essential for SBB: its
+finite-parameter static cost is also a weak transport cost, but allowing nonzero drift removes the martingale convex-order
+restriction on its endpoints [Hasenbichler et al., 2026].
+Schrödinger–Bass Bridge.
+Joint drift and diffusion control belongs to the broader theory of semimartingale optimal
+transport [Tan and Touzi, 2013]. Within this framework, Alouadi et al. [2026b] give a one-dimensional PDE derivation
+of the Schrödinger–Bass bridge, while Henry-Labordère et al. [2026] develop its semimartingale formulation, duality,
+and coupled bridge characterization. Hasenbichler et al. [2026] establish an equivalent static weak-transport formulation
+and a dual-ascent computational scheme. On the computational side, Alouadi et al. [2026a] introduce LightSBB-M for
+sample-based pairwise bridge estimation. These works provide the pairwise theoretical foundations on which our work
+builds.
+3
+SCHRÖDINGER-BASS BRIDGE (SBB)
+Let T > 0 be lenghth of time and let Ω= C
+ [0, T], Rd
+be the canonical space with a canonical process X, i.e.
+Xt(ω) = ω(t) for all ω ∈Ω, t ∈[0, T]. We denote by P =: P(Ω) the set of probability measures P on Ωunder which
+X has the controlled dynamic
+dXt = αt dt + σt dWt,
+with drift αt and volatility σt. Its action according to a specific law P is defined by
+J(P) = EP
+Z T
+0
+h
+1
+2∥αt∥2 + β
+2 ∥σt −√εId∥2
+F
+i
+dt.
+(1)
+Let P2(Rd) denote the probability measures on Rd with a finite second moment. For two distributions µ, ν ∈P2(Rd),
+the Schrödinger–Bass cost [Henry-Labordère et al., 2026, Hasenbichler et al., 2026] is
+SBBβ,ε,T (µ, ν) =
+inf
+P∈P(Ω): X0∼µ, XT ∼ν J(P).
+(2)
+See Appendix A for the comparison table of formulation between Schrödinger Bridge, Bass Martingale and SBB.
+The SBB unifies these two viewpoints by allowing both the drift (αt) and volatility (σt) to be controlled, thereby
+interpolating between entropic diffusion transport and martingale transport. Importantly, SBB is asymmetric. Indeed,
+let HT µ = µ ∗N(0, τId) with τ = εT and ∗is convolution operator. Consider αt = 0, σt = √εId, leading to
+control dynamic dXt = √ε dWt, X0 ∼µ; which gives XT ∼HT µ and hence, SBB(µ, HT µ) = 0. Now reverse the
+endpoints. If a zero-cost process existed from HT µ to µ, then necessarily αt = 0, σt = √εId almost everywhere,
+since both nonnegative terms in the SBB action would have to vanish. Starting instead from X0 ∼HT µ, this dynamic
+gives XT ∼HT (HT µ) = H2T µ̸ = µ for every µ ∈P2(Rd) whenever τ > 0. Therefore the reverse transport
+SBB(HT µ, µ)̸ = 0. Thus SBB is asymmetric, hence not a metric. More properties of SBB appear in Appendix A.
+4
+PROPOSED SBB BARYCENTERS MODELS
+Because the SBB cost is directed, the position of the barycenter variable in Equation (2) matters.
+Given input measures µi ∈P2(Rd) and weights λi > 0 with P
+i λi = 1, we define different oriented-based Barycenter
+models
+• Encoder Barycenter
+ρenc ∈arg min
+ρ∈P2(Rd)
+[Benc(ρ) :=
+N
+X
+i=1
+λiSBB(µi, ρ)],
+(3)
+• Decoder Barycenter
+ρdec ∈arg min
+ρ∈P2(Rd)
+[Bdec(ρ) :=
+N
+X
+i=1
+λiSBB(ρ, µi)],
+(4)
+• Symmetric Barycenter
+ρsym ∈arg min
+ρ∈P2(Rd)
+[Bsym(ρ) := 1
+2
+
+Benc(ρ) + Bdec(ρ)
+
+].
+(5)
+3
+
+
+A PREPRINT - OCTOBER 22, 2026
+An encoder barycenter is a common terminal law reached from all input domains. A decoder barycenter learns a
+common source from which the inputs are generated by domain-specific bridges. The symmetric barycenter uses both
+directions and consequently avoids asymmetry. Also, when there are only two marginals, one for the initial and the
+other for the final time point, we can interpolate the marginal at an intermediate time point as the barycenter of the
+initial and final marginals (see our application in Section 7.3 about single-cell RNA intermediate-state reconstruction).
+This motivates us to propose the following interpolation-variant of the barycenter:
+• SBB Markovian Barycenter
+ρMar ∈arg min
+ρ∈P2(Rd)
+[Bmar(ρ) := λ1 SBB (µ1, ρ) + λ2 SBB (ρ, µ2)],
+(6)
+where µ1 and µ2 are the initial and final marginals and λ1, λ2 are non-negative weights.
+Existence.
+We establish that these SBB barycenter formulations are well posed by proving the existence of minimizers.
+In particular, we have the following result
+Theorem 4.1 (Existence). Let µ1, . . . , µN ∈P2(Rd). Then the decoder barycenter problem 4 admits at least one
+minimizer in P2(Rd). The same conclusion holds for the encoder 3, symmetric 5 and Markovian 6 barycenter problem.
+The full proof is provided in Appendix B.1. We present the decoder case in detail, as it is technically more challenging.
+The encoder, symmetric and Markovian case follows essentially the same argument, as explained in the remark after the
+proof. The key ingredient is based on this inequality characterizing the bound of SBB using W2
+SBB(ρ, µi) ≥W 2
+2 (ρ, µi) −4εdT
+4T + 8/β
+.
+We leave the question of uniqueness to future work.
+5
+A HYBRID WASSERSTEIN GRADIENT PARTICLE DESCENT SCHEME
+The main goal of this section is to design an efficient numerical algorithm to solve for the SBB-Barycenter. Since the
+optimization problem is posed over probability measures, a natural direction is to employ a particle-based gradient
+scheme. We represent the current barycenter by ρk = M −1 PM
+m=1 δXk
+m and update the particles Xk
+m instead. The
+update is done on manifold using Wasserstein gradient descent (WGD) (for the background, see Yang et al. [2023]).
+Our key step is to compute the Wasserstein gradient of either SBB(µ, ρ) or SBB(ρ, µ) with respect to the variable
+measure ρ. We show that for the SBB functional, its first variation may be expressible in terms of a suitable dual
+potential. If this dual potential can be computed for each term in the objective, then we can use its gradient to update
+the particles, yielding a practical particle-based scheme for approximating the barycenter.
+First Variation of SBB and Update Rules
+Alouadi et al. [2026a] proved the following dual variational characterization of the pairwise SBB
+SBB(µ0, µT ) = sup
+(ψ,v)
+Z
+ψ(x) µT ( dx) −
+Z
+v(0, x) µ0( dx)
+
+.
+(7)
+The function v solves the associated backward Hamilton–Jacobi–Bellman (HJB) equation with v(T, ·) = ψ and
+curvature constraint D2v < βId. The reduced SBB system introduces heat potentials h∗
+t and maps Yt through
+Φt(y) = |y|2
+2
++ ε
+β log h∗
+t (y),
+Yt = (∇Φt)−1.
+Equivalently, we have the computationally crucial identity
+∇v∗(t, x) = β
+ x −Yt(x)
+
+= ε∇log h∗
+t
+ Yt(x)
+
+.
+(8)
+To have the information of Yt or h∗
+t and thereby trace back the corresponding dual quantities v and ψ, we employ a
+pairwise SBB solver that provides a representation of the pairwise bridge. Specifically, the solver may return either
+the inverse map Yi(t, x) or a score/drift field si(t, y) = ε∇log hi,t(y). In practice, we choose LightSBB Alouadi et al.
+[2026a].
+In the Appendix C, we provide the detailed derivation of the SBB convex subgradient and the resulting first-variation
+formulas. Under suitable regularity assumptions on the dual solutions, the main results are summarized as follows.
+4
+
+
+A PREPRINT - OCTOBER 22, 2026
+• Encoder Marginal First Variation
+∇W SBB(µ, ρ)(x) = ∇ψ∗
+µ→ρ(x).
+• Decoder Marginal First Variation
+∇W SBB(ρ, µ)(x) = −∇v∗
+ρ→µ(0, x).
+Note the sign change, which arises because in the decoder case the optimized marginal changes its position in the dual
+objective. Using above calculation for Benc 3, we have
+δBenc
+δρ (x) =
+N
+X
+i=1
+λiψ∗
+i (x),
+where ψ∗
+i is the terminal dual potential for the pairwise bridge µi →ρ. Using the Moreau-envelope representation,
+β
+ x −Y (i)
+T (x)
+
+∈∂ψ∗
+i (x). So the explicit particles update for any particle m = 1 : M with step size ηk is
+Xk+1
+m
+= Xk
+m −ηk
+N
+X
+i=1
+λiβ
+ Xk
+m −Y (i,k)
+T
+(Xk
+m)
+
+.
+(9)
+Using above calculation for Bdec 4, we have
+δBdec
+δρ (x) = −
+N
+X
+i=1
+λiv∗
+i (0, x),
+where v∗
+i is the HJB value for the pairwise bridge ρ →µi. Thus the descent velocity is PN
+i=1 λiβ
+ x −Y (i)
+0 (x)
+
+The
+explicit particle update is
+Xk+1
+m
+= Xk
+m + ηk
+N
+X
+i=1
+λiβ
+ Xk
+m −Y (i,k)
+0
+(Xk
+m)
+
+.
+(10)
+For Bsym 5, the natural smoothed descent velocity is the average of the decoder and encoder velocities
+vsym(x) = 1
+2
+N
+X
+i=1
+λi
+h
+β
+ x −Y (i,k),dec
+0
+(x)
+
+−β
+ x −Y (i,k),enc
+T
+(x)
+i
+.
+Thus
+Xk+1
+m
+= Xk
+m + ηkvsym(Xk
+m).
+(11)
+Finally, for the Markovian objective Bmar 6
+vmar(x) = λ2β
+ x −Y (2,k),dec
+0
+(x)
+
+−λ1β
+ x −Y (1,k),enc
+T
+(x)
+
+,
+thus
+Xk+1
+m
+= Xk
+m + ηkvmar(Xk
+m).
+(12)
+In practice, since the encoder first variation is represented by the terminal dual potential, its spatial derivative may
+be less regular at t = T. For numerical stability, we therefore may evaluate the encoder duality at T −δk, with
+δk > 0 small, where the HJB provides additional smoothing. This regularization could be applied whenever an encoder
+component enters the update, including the symmetric and Markovian barycenters.
+Algorithm 1 displays the common outer loop. Appendix C.3 contains the full pseudocode. The Gaussian specialization
+in the next section gives a lower-dimensional implementation when the problem reduces to optimizing its mean and
+covariance.
+5
+
+
+A PREPRINT - OCTOBER 22, 2026
+Algorithm 1 SBB Barycenter particle descent (outer loop)
+Require: Input {µi}n
+i=1, initial particles X0
+m, step sizes ηk, pairwise bridge solver (which accounts for inner loop)
+1: for k = 0, . . . , K −1 do
+2:
+ρk ←M −1 P
+m δXk
+m
+3:
+for each i do
+4:
+Bridge fit ρk →µi for decoder terms
+5:
+Bridge fit µi →ρk for encoder terms
+6:
+end for
+7:
+Update Xk+1
+m
+by 9, 10, 11 or 12 for all m
+8: end for
+9: return M −1 P
+m δXK
+m
+6
+THE GAUSSIAN CASE
+The goal of this section is to study the geometry of the SBB barycenter when the input measures are Gaussian, i.e.
+µi = N(mi, Σi), and, in particular, to determine whether the barycenter can also be chosen Gaussian.
+Gaussian closure is natural in related transport models. For the Schrödinger Bridge, this behavior is consistent with
+its static entropic optimal transport formulation Léonard [2014] together with the Gaussian closure of Wasserstein
+barycenters Agueh and Carlier [2011]. Meanwhile, for Bass martingale, in Gaussians setting, due to convex order
+constraint, a common Gaussian source can exist only when all terminal means coincide, say m1 = · · · = mN =: m.
+In that case, N(m, S) is feasible precisely when 0 ⪯S ⪯Σi for all i, and the covariance is obtained from the
+finite-dimensional convex problem min0≺S⪯Σi, ∀i 1
+2
+PN
+i=1 λi
+(Σi −S)1/2 −
+√
+εT I
+
+2
+F .
+The SBB setting is different from both cases. It is not a linear combination of the Schrödinger and Bass problems: unlike
+Bass transport, SBB allows nonzero drift and therefore does not impose convex order on the endpoints, while unlike the
+Schrödinger Bridge, the adaptive volatility in SBB prevents it from being reduced to an ordinary point-to-point transport
+problem. Our main result in this section is that, nevertheless, the decoder SBB barycenter of Gaussian marginals admits
+a Gaussian solution; see Theorem 6.2.
+To prove this result, we work with a static representation rather than directly with the dynamic control problem. This
+viewpoint also clarifies the relation with the two limiting geometries. The Schrödinger Bridge admits a static entropic
+transport formulation Léonard [2014], whereas the Bass martingale problem leads to a weak transport problem whose
+cost depends on conditional distributions Backhoff-Veraguas et al. [2020]. For SBB, building on the measure-valued
+static formulation of Hasenbichler et al. [2026], we derive an equivalent three-variable representation in Proposition
+6.1. The variables have distinct roles: X is the physical initial state, Y is a hidden terminal state, and Z is the physical
+terminal state. This representation is the key tool for the Gaussian projection argument.
+Three-variable static representation.
+Define A(µ, ν) to be the set of all probability measures
+Γ ∈P2
+ Rd × Rd × Rd
+on variables (X, Y, Z) satisfying ΓX = µ, ΓZ = ν, and
+EΓ[Y | X] = EΓ[Z | X]
+Γ-a.s.
+Equivalently, if Γ(dx dy dz) = µ(dx)Γx(dy dz), then
+Z
+Rd×Rd(y −z) Γx(dy dz) = 0
+µ-a.e. x.
+For Γ ∈A(µ, ν), with the notation γx,τ = N(x, τId), define
+Jβ,ε,T (Γ) := εH(ΓXY | µ(dx)γx,τ(dy)) + β
+2
+Z
+∥y −z∥2 Γ(dx dy dz).
+(13)
+Proposition 6.1 (Exact triple representation). For every µ, ν ∈P2(Rd),
+SBBβ,ε,T (µ, ν) =
+inf
+Γ∈A(µ,ν) Jβ,ε,T (Γ).
+(14)
+6
+
+
+A PREPRINT - OCTOBER 22, 2026
+Next, we present our main result, Theorem 6.2, which shows that replacing the source marginal measure by its Gaussian
+projection can only decrease the SBB cost. This projection principle is the key ingredient for establishing the existence
+of a Gaussian solution to the decoder SBB barycenter problem in Corollary 6.3.
+Theorem 6.2 (Gaussian projection). Let ν = N(mν, Σν) be Gaussian, with Σν ⪰0. For µ ∈P2(Rd), let µG :=
+N(Eµ[X], Covµ(X)) be a Gaussian which has the same first and second moment as µ. Then, for every β, ε, T > 0,
+SBBβ,ε,T (µG, ν) ≤SBBβ,ε,T (µ, ν).
+Corollary 6.3. When all µi = N(mi, Σi),
+Σi ⪰0,
+i = 1, . . . , N are Gaussians; we have for every ρ ∈P2(Rd),
+Bdec(ρG) ≤Bdec(ρ).
+Consequently,
+inf
+ρ∈P2(Rd) Bdec(ρ) =
+inf
+m∈Rd,S∈Sd
++
+Bdec
+ N(m, S)
+
+,
+or problem 4 admits a Gaussian minimizer.
+Appendix B.2 contains the complete triple-representation, entropy-lemma, projection, and corollary proofs. By
+establishing that the decoder SBB barycenter of Gaussian marginals is itself Gaussian, the barycenter problem reduces
+to a finite-dimensional optimization over its mean and covariance. Building on this reduction, we propose a specialization
+of Algorithm 1 tailored to the Gaussian setting.
+Gaussian Specialization of SBB Decoder Barycenter Particle Descent.
+To exploit this reduction computationally,
+we first characterize the geometry of the pairwise SBB problem between two Gaussian measures. This pairwise
+problem will subsequently serve as the inner problem of the Gaussian barycenter algorithm. Let µ = N(mµ, Σµ), ν =
+N(mν, Σν), with Σµ, Σν ≻0. For Σ ≻0 and a symmetric matrix U, let K denote the unique symmetric solution of
+the Lyapunov equation KΣ + ΣK = U, and define ΓΣ(U) := Tr(KΣK). We then introduce the covariance action
+Gβ,ε,T (Σ0, Σ1)
+:= inf
+Σt,At
+Z T
+0
+"
+1
+2ΓΣt
+  ˙Σt −At
+
++ β
+2
+A1/2
+t
+−√εId
+
+2
+F
+#
+dt,
+(15)
+where Σ(0) = Σµ, Σ(T) = Σν, At ⪰0. The following result separates the Gaussian SBB geometry into a Euclidean
+mean component and a covariance component.
+Theorem 6.4 (Gaussian covariance-action decomposition). We have
+SBBβ,ε,T (µ, ν) = ∥mµ −mν∥2
+2T
++ Gβ,ε,T (Σµ, Σν).
+(16)
+The complete proof is given in Appendix B. Importantly, the proof also characterizes the attaining Gaussian dynamics.
+In particular, the optimal bridge can be represented by an affine Gaussian process
+dXt = ˙mt dt + Kt(Xt −mt) dt + A1/2
+t
+dWt,
+where mt =
+ 1 −t
+T
+
+mµ + t
+T mν, and KtΣt + ΣtKt = ˙Σt −At. By the affine Gaussian dynamics above, the dual
+variable in Section 5 takes the form
+∇vk
+i (0, x) = mi −mk
+T
++ Kk
+i,0(x −mk),
+(17)
+where Kk
+i,0 is obtained from the corresponding pairwise Gaussian SBB bridge. Substituting (17) into 10 gives
+Xk+1 = mk + ηk
+T ( ¯m −mk) + Lk(Xk −mk).
+with ¯m = PN
+i=1 λimi,
+¯Kk
+0 := PN
+i=1 λiKk
+i,0,
+Lk := Id + ηk ¯Kk
+0 . Taking expectation yields the mean update
+mk+1 = mk + ηk
+T ( ¯m −mk).
+Hence, Xk+1 −mk+1 = Lk(Xk −mk), and therefore the covariance update is according to
+Sk+1 = LkSkL⊤
+k .
+The algorithm based on this analysis is given in Appendix C.2. Compared with the general algorithm, the Gaussian
+specialization replaces the M barycenter particles by a single mean vector and covariance matrix. The pairwise Gaussian
+SBB problems remain as inner problems, but their outputs are summarized via matrices Kk
+i,0.
+7
+
+
+A PREPRINT - OCTOBER 22, 2026
+Remark.
+Whether Gaussian closure holds for the encoder barycenter remains an open theoretical question. However,
+the anisotropic Gaussian experiment in Section 7.1, with results shown in Appendix E, provides numerical evidence
+suggesting that this property may fail.
+7
+APPLICATIONS
+Unlike Wasserstein transport, the SBB model can account for stochastic spreading through its volatility component.
+Our experiments are organized around this interpretation. We now exploit the asymmetry and directionality of SBB.
+We begin with a simple particle example illustrating why the direction of the SBB barycenter matters in Section 7.1.
+We then consider two complementary latent-recovery problems for handwritten digits in Section 7.2 and single-cell
+RNA sequencing in Section 7.3. Detailed settings of all experiments are in Appendix E. All experiments are run on a
+NVIDIA H200.
+7.1
+Directionality of the SBB Barycenter
+Since SBB(µ, ν)̸ = SBB(ν, µ) in general (Section 4), the encoder, decoder, and symmetric formulations need not
+produce the same barycenter. Figure E.1-E.3 in Appendix E visualize this effect on two-dimensional particles using
+three anisotropic Gaussian distributions as marginals. The same collection of input distributions is used in all three
+panels, but the resulting barycenter particles differ in both shape and spread. In this particular example, the decoder
+barycenter is more concentrated, while the encoder and symmetric formulations produce visibly different geometries.
+The figure is intended only to illustrate the directional nature of SBB; it should not be interpreted as a comparison of
+convergence rates or numerical accuracy.
+This observation motivates the choice of direction in the applications below. Our objective is to infer a common latent
+distribution from several observed, corrupted domains. The natural generative picture is therefore ρ⋆−→ν1, . . . , νN,
+where ρ⋆is an unknown source and the νi are its observed endpoints. Consequently, the decoder barycenter ρdec is the
+formulation aligned with the latent-recovery task.
+7.2
+Recovering a Sharp Spatial Measure
+This application is inspired by the spatial barycenter experiment of Cuturi and Doucet [2014]. Here an image is
+interpreted as a probability measure on the pixel plane: after normalizing its intensity, the pixel values specify how
+probability mass is distributed over spatial locations.
+Starting from a clean latent digit ρ⋆
+c, we generate N = 32 observations of the form νc,i = (Ti)#ρ⋆
+c ∗N(0, Ωi), where
+Ti applies deterministic geometric transformations such as translation and scaling, with rotation included as an ablation,
+while the Gaussian convolution introduces spatial diffusion. Moreover, each observation receives a different anisotropic
+blur. The clean source ρ⋆
+c is never supplied to any barycenter method. It is retained only as ground truth for evaluation.
+We report average results across the ten test images using W2 distance to the latent source, rendered pixel error, and
+SSIM Nilsson and Akenine-Möller [2020].
+Table 1: MNIST latent-source recovery. Report paired averages across latent digits.
+Barycenter Method
+W2 error ↓
+Pixel ℓ1 error ↓
+SSIM ↑
+Arithmetic
+3.21 ± 0.20
+1.35 ± 0.09
+0.9808 ± 0.005
+Wasserstein
+1.01 ± 0.11
+0.62 ± 0.07
+0.9964 ± 0.0013
+RegWB
+2.08 ± 0.04
+1.15 ± 0.01
+0.9727 ± 0.0015
+Debiased Sinkhorn
+0.99 ± 0.11
+0.62 ± 0.06
+0.9964 ± 0.0012
+Decoder SBB
+0.79 ± 0.09
+0.45 ± 0.07
+0.9975 ± 0.0010
+We compare against Euclidean arithmetic mean, Wasserstein/Bures barycenters, regularized Wasserstein barycenter
+(RegWB) Noble et al. [2023] and debiased Sinkhorn barycenters Janati et al. [2020a]. For all methods, preprocessing,
+data splits, and corruption draws are kept identical. Table 1 confirms the qualitative results in Figure E.4 in Appendix E.
+Wasserstein and debiased Sinkhorn substantially outperform the arithmetic mean, while decoder SBB achieves the best
+performance on all three metrics. In particular, SBB reduces the W2 error and pixel ℓ1 error notably, while increasing
+SSIM. This suggests that the main gain of SBB lies in recovering a sharper and better localized latent spatial measure.
+8
+
+
+A PREPRINT - OCTOBER 22, 2026
+7.3
+Single-cell developmental trajectory reconstruction
+Single-cell RNA sequencing provides population snapshots rather than trajectories of individual cells, since cells
+are destroyed during measurement Kester and Van Oudenaarden [2018]. This makes developmental reconstruction
+naturally a distributional problem: at each time t, the cell population is represented by an empirical measure Pt in
+gene-expression space, and the goal is to infer how these distributions evolve. We consider the Waddington-OT iPSC
+reprogramming dataset Schiebinger et al. [2019], which contains a dense 18-day time course of mouse embryonic
+fibroblast reprogramming. Cells were collected at 39 time points approximately every 12 hours (every 6 hours between
+days 8 and 9), yielding more than 2.5 × 105 high-quality cells. The original work infers ancestor–descendant couplings
+and shows that iPSC, epithelial, trophoblast, and neural lineages share a common MET-like ancestry until approximately
+day 8.
+Recovering a common ancestor distribution.
+Motivated by this finding, we test whether a decoder SBB barycenter of
+late-stage populations resembles the observed MET population around day 8, which serves as a biological reference for
+evaluating population-level reconstruction. In the serum condition, we take late-stage iPSC, epithelial, trophoblast, and
+neural populations as descendant measures ν1, . . . , νK and compute their ρdec. The recovered barycenter is interpreted
+as a population-level common ancestor rather than as a set of individually identified ancestral cells. Importantly, the
+observed day-8 MET population is not used to fit the barycenter; it is retained only for evaluation. We compare the
+recovered distribution with the target population using W2 for distance between two distributions, MMD for differences
+in location, spread, and shape in PCA space; cell-type TV for differences in cell-type proportions; signature MAE
+for differences in population-level MET/epithelial and pluripotency activity. Baselines are the arithmetic mixture of
+descendant samples, W2, RegWB and Waddington-OT Schiebinger et al. [2019] barycenters. Results are summarized
+as mean and standard deviation across five seeds, with identical endpoint and target samples across methods within
+each seed.
+Table 2: Ancestor reconstruction results. Lower values indicate better agreement for all four metrics. Serum: a culture
+medium containing serum, which provides components that support cell growth. Serum + stromal: negative-control
+experiment that adds the stromal population to the four serum-condition descendant populations
+Barycenter Method
+W2 ↓
+MMD↓
+Cell-type TV↓
+Signature MAE↓
+serum condition
+Arithmetic
+19.92 ± 0.31
+0.235 ± 0.003
+0.073 ± 0.006
+0.080 ± 0.012
+Wasserstein
+15.99 ± 0.03
+0.241 ± 0.003
+0.068 ± 0.016
+0.078 ± 0.011
+RegWB
+16.06 ± 0.10
+0.515 ± 0.002
+0.091 ± 0.007
+0.075 ± 0.012
+Waddington-OT
+15.87 ± 0.05
+0.254 ± 0.003
+0.070 ± 0.010
+0.086 ± 0.013
+SBB Decoder (ours)
+15.85 ± 0.05
+0.214 ± 0.003
+0.064 ± 0.013
+0.068 ± 0.004
+serum + stromal condition
+Arithmetic
+21.00 ± 0.12
+0.254 ± 0.008
+0.068 ± 0.003
+0.070 ± 0.007
+Wasserstein
+16.70 ± 0.13
+0.261 ± 0.003
+0.052 ± 0.008
+0.068 ± 0.004
+RegWB
+16.68 ± 0.07
+0.266 ± 0.004
+0.058 ± 0.020
+0.073 ± 0.014
+Waddington-OT
+16.42 ± 0.05
+0.271 ± 0.005
+0.060 ± 0.009
+0.089 ± 0.016
+SBB Decoder (ours)
+16.40 ± 0.04
+0.248 ± 0.001
+0.064 ± 0.012
+0.059 ± 0.007
+As shown in Table 2, the decoder SBB barycenter achieves the best overall ancestor reconstruction. It obtains the lowest
+error on all four metrics in the serum condition and the lowest W2, MMD and Signature MAE under stromal. While
+some baselines give slightly better Cell-type TV under stromal, SBB more consistently recovers the global distributional
+geometry and gene-signature activity of the held-out ancestor.
+Intermediate-state reconstruction.
+We evaluate whether SBB barycenters can reconstruct intermediate cell-state
+distributions from two temporal endpoints separated by one, two, or three days. Target-time cells are excluded from
+transport fitting. For three consecutive times t−< t0 < t+, we remove all cells at mid-point time t0 and approximate
+the barycenters. For example, a one-day interval uses cells from days 1 and 2 to reconstruct the distribution at day 1.5,
+while a two-day interval uses days 1 and 3 to reconstruct day 2. We report means and standard deviations aggregated over
+9
+
+
+A PREPRINT - OCTOBER 22, 2026
+all temporal windows of each duration and five random seeds. Each run uses 512 cells per endpoint, 512 reconstructed
+particles, and 512 target cells, all represented in a shared, transductively fitted 30-dimensional PCA space.
+In addition to the SBB decoder, we also evaluate SBB-Markovian barycenter 6. Baselines include linear arithmetic,
+Wasserstein barycenter, RegWB, Waddington-OT barycenter and TrajectoryNet Tong et al. [2020]. We report W2
+distance, MMD, cell-type TV, gene-signature MAE. Due to space constraints, Table 3 presents the quantitative results
+for one-day intervals. Appendix E provides quantitative results for two-day and three-day intervals, together with
+qualitative examples.
+Table 3: Intermediate-state reconstruction one-day intervals result. 2i: a serum-free culture medium containing two
+inhibitors.
+Interpolation Method
+W2 ↓
+MMD↓
+Cell-type TV↓
+Signature MAE↓
+serum condition
+Arithmetic mixture
+11.9916 ± 0.1855
+0.4044 ± 0.0120
+0.0588 ± 0.0289
+0.0364 ± 0.0062
+Wasserstein
+10.9134 ± 0.2175
+0.4189 ± 0.0155
+0.0859 ± 0.0284
+0.0359 ± 0.0008
+RegWB
+11.0323 ± 0.2059
+0.4154 ± 0.0151
+0.0892 ± 0.0171
+0.0370 ± 0.0029
+TrajectoryNet
+14.6255 ± 0.2413
+0.5539 ± 0.0123
+0.0658 ± 0.0119
+0.0329 ± 0.0043
+Waddington-OT
+10.6621 ± 0.0752
+0.4034 ± 0.0080
+0.2383 ± 0.0491
+0.0385 ± 0.0036
+SBB Decoder (ours)
+10.3515 ± 0.1308
+0.3778 ± 0.0118
+0.0534 ± 0.0336
+0.0375 ± 0.0097
+SBB Markovian (ours)
+10.1848 ± 0.1203
+0.3408 ± 0.0106
+0.0553 ± 0.0329
+0.0349 ± 0.0072
+2i condition
+Arithmetic mixture
+11.9001 ± 0.6598
+0.1731 ± 0.0196
+0.1536 ± 0.0530
+0.0882 ± 0.0422
+Wasserstein
+11.3029 ± 0.7513
+0.1797 ± 0.0234
+0.1745 ± 0.0368
+0.1146 ± 0.0458
+RegWB
+11.5855 ± 0.7610
+0.1773 ± 0.0247
+0.1816 ± 0.0508
+0.1128 ± 0.0392
+TrajectoryNet
+12.3068 ± 0.4723
+0.1857 ± 0.0110
+0.1700 ± 0.0175
+0.1037 ± 0.0071
+Waddington-OT
+12.6290 ± 1.2882
+0.2239 ± 0.0400
+0.1901 ± 0.0587
+0.1024 ± 0.0323
+SBB Decoder (ours)
+10.9584 ± 0.7523
+0.1572 ± 0.0236
+0.1530 ± 0.0536
+0.0791 ± 0.0384
+SBB Markovian (ours)
+11.5364 ± 0.5676
+0.1698 ± 0.0191
+0.1536 ± 0.0530
+0.0684 ± 0.0374
+Table 3 demonstrates that the SBB formulations remain competitive when reconstructing an unobserved intermediate
+population from its temporal endpoints. In the serum condition, SBB Markovian achieves the lowest W2 and MMD
+errors and also provides strong agreement in gene-signature activity, while SBB Decoder remains competitive in
+cell-type composition. This behavior is consistent with the construction of the Markovian objective: an intermediate
+population simultaneously acts as the terminal state of the preceding bridge and the initial state of the subsequent
+bridge, so exploiting both SBB directions provides additional temporal information. Under the 2i condition, SBB
+Decoder instead gives the lowest W2 and MMD errors, whereas SBB Markovian remains competitive on the biological
+metrics. Thus, neither directional variant uniformly dominates across all criteria; rather, the results indicate that the
+decoder formulation is particularly effective at matching the geometry of the held-out distribution, while the Markovian
+formulation can better exploit the two-sided temporal structure when reconstructing intermediate states.
+8
+CONCLUSION
+We introduced Schrödinger–Bass Bridge barycenters as a directed framework for averaging measure-valued data while
+accounting jointly for systematic transport and stochastic dispersion. Exploiting the intrinsic asymmetry of SBB, we
+formulated encoder, decoder, symmetric, and Markovian barycenters. We develop the theory of existence, a Wasserstein
+gradient particle scheme, and Gaussian analysis. The spatial-MNIST and single-cell RNA experiments show that our
+method improves latent recovery beyond different baselines. Future work includes establishing convergence guarantees
+for the particle scheme and exploring applications of SBB barycenters (including encoder and symmetric model also) in
+a broader range of domains.
+9
+Acknowledgment
+This work is supported via NSF under Cooperative Agreement PHY-2019786 and PHY-2525568. Shuchin Aeron would
+also like to acknowledge funding via NSF DMS 2309519.
+10
+
+
+A PREPRINT - OCTOBER 22, 2026
+References
+Martial Agueh and Guillaume Carlier. Barycenters in the wasserstein space. SIAM Journal on Mathematical Analysis,
+43(2):904–924, 2011.
+Alexandre Alouadi, Pierre Henry-Labordère, Grégoire Loeper, Othmane Mazhar, Huyên Pham, and Nizar Touzi.
+LightSBB-M: Bridging Schrödinger and Bass for generative diffusion modeling, 2026a. URL https://arxiv.
+org/abs/2601.19312v2. Version 2, May 5, 2026.
+Alexandre Alouadi, Pierre Henry-Labordère, Grégoire Loeper, Othmane Mazhar, Huyên Pham, and Nizar Touzi. A
+PDE derivation of the Schrödinger–Bass bridge, 2026b. URL https://arxiv.org/abs/2601.17863v1.
+Jason M. Altschuler, Sinho Chewi, Patrik R. Gerber, and Austin J. Stromme. Averaging on the Bures–Wasserstein
+manifold: Dimension-free convergence of gradient descent. In Advances in Neural Information Processing Systems,
+volume 34, pages 22132–22145, 2021. URL https://proceedings.neurips.cc/paper_files/paper/2021/
+hash/b9acb4ae6121c941324b2b1d3fac5c30-Abstract.html.
+Pedro C. Álvarez-Esteban, Eustasio del Barrio, J. A. Cuesta-Albertos, and Carlos Matrán. A fixed-point approach to
+barycenters in Wasserstein space. Journal of Mathematical Analysis and Applications, 441(2):744–762, 2016. doi:
+10.1016/j.jmaa.2016.04.045.
+Julio Backhoff-Veraguas, Mathias Beiglböck, and Gudmund Pammer. Existence, duality, and cyclical monotonicity
+for weak transport costs. Calculus of Variations and Partial Differential Equations, 58(6):203, 2019. doi: 10.1007/
+s00526-019-1624-y.
+Julio Backhoff-Veraguas, Mathias Beiglböck, Martin Huesmann, and Sigrid Källblad. Martingale Benamou–Brenier: A
+probabilistic perspective. The Annals of Probability, 48(5):2258–2289, 2020. doi: 10.1214/20-AOP1422.
+Yikun Bai, Ivan Vladimir Medri, Rocio Diaz Martin, Rana Shahroz, and Soheil Kolouri. Linear optimal partial transport
+embedding. In International Conference on Machine Learning, pages 1492–1520. PMLR, 2023.
+Richard F. Bass. Skorokhod imbedding via stochastic integrals. Séminaire de Probabilités, 17:221–224, 1983. URL
+https://www.numdam.org/item/SPS_1983__17__221_0/.
+Jean-David Benamou and Yann Brenier. A computational fluid mechanics solution to the Monge–Kantorovich mass
+transfer problem. Numerische Mathematik, 84:375–393, 2000. doi: 10.1007/s002110050002.
+Jean-David Benamou, Guillaume Carlier, Marco Cuturi, Luca Nenna, and Gabriel Peyré. Iterative Bregman projections
+for regularized transportation problems. SIAM Journal on Scientific Computing, 37(2):A1111–A1138, 2015. doi:
+10.1137/141000439.
+Patrick Billingsley. Convergence of Probability Measures. John Wiley & Sons, 2013.
+Charlotte Bunne, Ya-Ping Hsieh, Marco Cuturi, and Andreas Krause. The Schrödinger bridge between Gaussian
+measures has a closed form. In Proceedings of the 26th International Conference on Artificial Intelligence and
+Statistics, volume 206 of Proceedings of Machine Learning Research, pages 5802–5833, 2023. URL https:
+//proceedings.mlr.press/v206/bunne23a.html.
+Kevin Cheng, Shuchin Aeron, Michael C Hughes, and Eric L Miller. Dynamical wasserstein barycenters for time-series
+modeling. Advances in Neural Information Processing Systems, 34:27991–28003, 2021.
+Lénaïc Chizat. Doubly regularized entropic Wasserstein barycenters, 2023. URL https://arxiv.org/abs/2303.
+11844.
+Antoine Conze and Pierre Henry-Labordere. Bass construction with multi-marginals: Lightspeed computation in a new
+local volatility model. Available at SSRN 3853085, 2021.
+Marco Cuturi and Arnaud Doucet. Fast computation of Wasserstein barycenters. In Proceedings of the 31st International
+Conference on Machine Learning, volume 32 of Proceedings of Machine Learning Research, pages 685–693, 2014.
+URL https://proceedings.mlr.press/v32/cuturi14.html.
+Paolo Dai Pra. A stochastic control approach to reciprocal diffusion processes. Applied Mathematics and Optimization,
+23:313–329, 1991. doi: 10.1007/BF01442404.
+Eustasio del Barrio and Jean-Michel Loubes. The statistical effect of entropic regularization in optimal transportation.
+arXiv preprint arXiv:2006.05199, 2020.
+Nathaël Gozlan, Cyril Roberto, Paul-Marie Samson, and Prasad Tetali. Kantorovich duality for general transport costs
+and applications. Journal of Functional Analysis, 273(11):3327–3405, 2017. doi: 10.1016/j.jfa.2017.08.015.
+Florian Gunsilius, Meng Hsuan Hsieh, and Myung Jin Lee. Tangential wasserstein projections. Journal of Machine
+Learning Research, 25(69):1–41, 2024. URL http://jmlr.org/papers/v25/23-0708.html.
+11
+
+
+A PREPRINT - OCTOBER 22, 2026
+Isabel Haasler, Axel Ringh, Yongxin Chen, and Johan Karlsson. Multimarginal optimal transport with a tree-structured
+cost and the Schrödinger bridge problem. SIAM Journal on Control and Optimization, 59(4):2428–2453, 2021. doi:
+10.1137/20M1320195.
+Manuel Hasenbichler, Gudmund Pammer, and Stefan Thonhauser. A weak transport approach to the Schrödinger–Bass
+bridge, 2026. URL https://arxiv.org/abs/2604.02312v2. Version 2, June 30, 2026.
+Pierre Henry-Labordère, Grégoire Loeper, Othmane Mazhar, Huyên Pham, and Nizar Touzi. Bridging Schrödinger and
+Bass: A semimartingale optimal transport problem with diffusion control, 2026. URL https://arxiv.org/abs/
+2603.27712v2. Version 2, May 29, 2026.
+Samuel Howard, Peter Potaptchik, and George Deligiannidis. Schrödinger bridge matching for tree-structured costs and
+entropic Wasserstein barycentres. In Advances in Neural Information Processing Systems, volume 38, 2025. URL
+https://openreview.net/forum?id=DliPKnn6e0.
+Hicham Janati, Marco Cuturi, and Alexandre Gramfort. Debiased Sinkhorn barycenters. In Proceedings of the 37th
+International Conference on Machine Learning, volume 119 of Proceedings of Machine Learning Research, pages
+4692–4701, 2020a. URL https://proceedings.mlr.press/v119/janati20a.html.
+Hicham Janati,
+Boris Muzellec,
+Gabriel Peyré,
+and Marco Cuturi.
+Entropic optimal transport be-
+tween unbalanced Gaussian measures has a closed form.
+In Advances in Neural Information Pro-
+cessing Systems,
+volume 33,
+2020b.
+URL https://proceedings.neurips.cc/paper/2020/hash/
+766e428d1e232bbdd58664b41346196c-Abstract.html.
+Lennart Kester and Alexander Van Oudenaarden. Single-cell transcriptomics meets lineage tracing. Cell stem cell, 23
+(2):166–179, 2018.
+Christian Léonard. A survey of the Schrödinger problem and some of its connections with optimal transport. Discrete
+and Continuous Dynamical Systems, 34(4):1533–1574, 2014. doi: 10.3934/dcds.2014.34.1533.
+Anton Mallasto, Augusto Gerolin, and Hà Quang Minh. Entropy-regularized 2-Wasserstein distance between Gaussian
+measures. Information Geometry, 5:289–323, 2022. doi: 10.1007/s41884-021-00052-8.
+Brendan Mallery, James M Murphy, and Shuchin Aeron. Synthesis and analysis of data as probability measures with
+entropy-regularized optimal transport. arXiv preprint arXiv:2501.07446, 2025.
+Ngoc-Hai Nguyen, Hoang-Phi Nguyen, Tung Pham, Nhat Ho, et al. On barycenter computation: Analyzing semi-
+unbalanced optimal transport-based method on bures-wasserstein manifold. In The 29th International Conference on
+Artificial Intelligence and Statistics, 2025.
+Jim Nilsson and Tomas Akenine-Möller. Understanding ssim. arXiv preprint arXiv:2006.13846, 2020.
+Maxence Noble, Valentin De Bortoli, Arnaud Doucet, and Alain Durmus.
+Tree-based diffusion Schrödinger
+bridge with applications to Wasserstein barycenters.
+In Advances in Neural Information Processing Sys-
+tems, volume 36, 2023.
+URL https://proceedings.neurips.cc/paper_files/paper/2023/hash/
+ad08767706825033b99122332293033d-Abstract-Conference.html.
+Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh Solomon, Joshua Gould,
+Siyan Liu, Stacie Lin, Peter Berube, et al. Optimal-transport analysis of single-cell gene expression identifies
+developmental trajectories in reprogramming. Cell, 176(4):928–943, 2019.
+Morgan A Schmitz, Matthieu Heitz, Nicolas Bonneel, Fred Ngole, David Coeurjolly, Marco Cuturi, Gabriel Peyré,
+and Jean-Luc Starck. Wasserstein dictionary learning: Optimal transport-based unsupervised nonlinear dictionary
+learning. SIAM Journal on Imaging Sciences, 11(1):643–678, 2018.
+Erwin Schrödinger. Über die umkehrung der naturgesetze. Sitzungsberichte der Preussischen Akademie der Wis-
+senschaften, Physikalisch-mathematische Klasse, pages 144–153, 1931.
+Erwin Schrödinger. Sur la théorie relativiste de l’électron et l’interprétation de la mécanique quantique. In Annales de
+l’institut Henri Poincaré, volume 2, pages 269–310, 1932.
+Xiaolu Tan and Nizar Touzi. Optimal transportation under controlled stochastic dynamics. The Annals of Probability,
+41(5):3201–3240, 2013. doi: 10.1214/12-AOP797.
+Alexander Tong, Jessie Huang, Guy Wolf, David Van Dijk, and Smita Krishnaswamy. Trajectorynet: A dynamic
+optimal transport network for modeling cellular dynamics. In International conference on machine learning, pages
+9526–9536. PMLR, 2020.
+Matthew Werenski, Ruijie Jiang, Abiy Tasissa, Shuchin Aeron, and James M Murphy. Measure estimation in the
+barycentric coding model. In International Conference on Machine Learning, pages 23781–23803. PMLR, 2022.
+12
+
+
+A PREPRINT - OCTOBER 22, 2026
+Matthew Werenski, Brendan Mallery, Shuchin Aeron, and James M. Murphy. Linearized wasserstein barycenters:
+Synthesis, analysis, representational capacity, and applications. In The 28th International Conference on Artificial
+Intelligence and Statistics, 2025. URL https://openreview.net/forum?id=MWCHedOm2L.
+Hongteng Xu, Wenlin Wang, Wei Liu, and Lawrence Carin. Distilled wasserstein learning for word embedding and
+topic modeling. Advances in Neural Information Processing Systems, 31, 2018.
+Yibo Yang, Stephan Eckstein, Marcel Nutz, and Stephan Mandt. Estimating the rate-distortion function by Wasserstein
+gradient descent. In Advances in Neural Information Processing Systems, volume 36, pages 2768–2794, 2023. URL
+https://arxiv.org/abs/2310.18908.
+13
+
+
+Contents
+1
+INTRODUCTION
+1
+2
+RELATED WORK
+2
+3
+SCHRÖDINGER-BASS BRIDGE (SBB)
+3
+4
+PROPOSED SBB BARYCENTERS MODELS
+3
+5
+A HYBRID WASSERSTEIN GRADIENT PARTICLE DESCENT SCHEME
+4
+6
+THE GAUSSIAN CASE
+6
+7
+APPLICATIONS
+8
+7.1
+Directionality of the SBB Barycenter . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8
+7.2
+Recovering a Sharp Spatial Measure . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8
+7.3
+Single-cell developmental trajectory reconstruction . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9
+8
+CONCLUSION
+10
+9
+Acknowledgment
+10
+A MORE BACKGROUND ON SCHRÖDINGER BASS BRIDGE AND PROPERTIES
+14
+B
+MATHEMATICAL PROOFS FOR THE MAIN RESULTS
+16
+C DUAL POTENTIALS AND THE PARTICLE SCHEME
+25
+D MEAN–COVARIANCE IMPLEMENTATION OF AFFINE PARTICLE UPDATES
+29
+E
+EXPERIMENTAL DETAILS AND RESULTS
+29
+F
+RUNNING TIME
+37
+A
+MORE BACKGROUND ON SCHRÖDINGER BASS BRIDGE AND PROPERTIES
+The table below summarizes the main differences in intuition and dynamic formulation among the Schrödinger Bridge,
+Bass Martingale, and SBB frameworks. We also note that the feasibility of the Bass martingale problem is characterized
+by the convex-order condition, whereas no such constraint is required in the SBB formulation.
+Schrödinger Bridge Schrödinger [1932]
+Bass Martingale Conze and Henry-Labordere [2021]
+SBB Henry-Labordère et al. [2026]
+Drift
+Controlled
+Zero
+Controlled
+Volatility
+Fixed
+Controlled
+Controlled
+Dynamics
+dXt = αtdt + √ε dWt
+dXt = σt dWt
+dXt = αtdt + σt dWt
+Main constraint
+Endpoint marginals
+Endpoint marginals + martingale
+Endpoint marginals
+We present some useful properties of SBB which might be helpful in analysis this problem
+• Translation invariance: For a ∈Rd, let τa(x) = x + a. Then
+
+
+A PREPRINT - OCTOBER 22, 2026
+SBB (τa#µ, τa#ρ) = SBB(µ, ρ).
+Proof. Take any admissible process Xt from µ to ρ
+X0 ∼µ,
+XT ∼ρ,
+and
+dXt = αtdt + σtdWt.
+Define the translated process
+Yt = Xt + a.
+Then
+Y0 = X0 + a ∼τa#µ,
+YT = XT + a ∼τa#ρ.
+Also,
+dYt = dXt = αtdt + σtdWt.
+So the drift and volatility are exactly the same. Therefore the cost is unchanged.
+• Orthogonal invariance: For an orthogonal matrix Q,
+SBB(Q#µ, Q#ρ) = SBB(µ, ρ).
+Proof. Take any admissible process
+dXt = αtdt + σtdWt,
+X0 ∼µ,
+XT ∼ρ.
+Define
+Yt = QXt.
+Then
+Y0 = QX0 ∼Q#µ,
+YT = QXT ∼Q#ρ.
+Now compute the dynamics:
+dYt = QdXt = Qαtdt + QσtdWt.
+Since Q is orthogonal, the process
+Bt = QWt
+is again a standard Brownian motion. Equivalently,
+dWt = Q⊤dBt.
+Thus
+dYt = Qαtdt + QσtQ⊤dBt.
+So the transformed drift and volatility are
+αQ
+t = Qαt,
+σQ
+t = QσtQ⊤.
+Now compare the cost. For the drift part,
+αQ
+t
+
+2
+= ∥Qαt∥2 = α⊤
+t Q⊤Qαt = ∥αt∥2 .
+For the volatility part,
+QσtQ⊤−√εId = QσtQ⊤−√εQIdQ⊤= Q
+ σt −√εId
+
+Q⊤.
+The Frobenius norm is invariant under orthogonal transformations, so
+Q
+ σt −√εId
+
+Q⊤
+F =
+σt −√εId
+
+F .
+Therefore
+J
+ Y, αQ, σQ
+= J(X, α, σ).
+• Not affine invariant because the reference volatility √εId fixes an isotropic Euclidean scale.
+15
+
+
+A PREPRINT - OCTOBER 22, 2026
+• Directed heat-flow bias
+SBB (µ, HT µ) = 0,
+HT µ = µ ∗N (0, εTId)
+Proof. Indeed, let
+αt = 0,
+σt = √εId.
+Therefore the cost integrand is
+1
+2 ∥αt∥2 + β
+2
+σt −√εId
+2
+F = 0
+Hence
+J
+ X, 0, √εId
+
+= 0.
+Also,
+XT = X0 + √εWT .
+Since
+√εWT ∼N (0, εTId) ,
+we get
+XT ∼µ ∗N (0, εTId) = HT µ.
+Thus there exists an admissible process from µ to HT µ with zero cost.
+B
+MATHEMATICAL PROOFS FOR THE MAIN RESULTS
+B.1
+Proof for the existence of the decoder SBB barycenter (Theorem 4.1)
+Proof. First, the functional is finite somewhere. For example, fix a candidate ρ ∈P2(Rd). For each i, choose a
+quadratic optimal coupling (U, V ) of ρ and µi. Consider
+Xt =
+
+1 −t
+T
+
+U + t
+T V.
+Then X0 ∼ρ, XT ∼µi, and
+αt = V −U
+T
+,
+σt = 0.
+Hence
+J(P) = 1
+2T E∥V −U∥2 + βεdT
+2
+= W 2
+2 (ρ, µi)
+2T
++ βεdT
+2
+.
+Therefore
+0 ≤SBBβ,ε,T (ρ, µi) ≤W 2
+2 (ρ, µi)
+2T
++ βεdT
+2
+< ∞.
+Then the infimum exists and there is a minimizing sequence {P
+i λiSBBβ,ε,T (ρ, µin)}n converging to this value.
+Now take any admissible process from ρ to µi,
+XT −X0 =
+Z T
+0
+αt dt +
+Z T
+0
+σt dWt,
+We have
+W 2
+2 (ρ, µi) ≤E∥XT −X0∥2.
+Using Cauchy-Schwarz,
+E
+
+Z T
+0
+αtdt
+
+2
+≤TE
+Z T
+0
+∥αt∥2 dt.
+Using Ito isometry (details in B.1),
+E
+
+Z T
+0
+σtdWt
+
+2
+= E
+Z T
+0
+∥σt∥2
+F dt
+16
+
+
+A PREPRINT - OCTOBER 22, 2026
+So
+E ∥XT −X0∥2 ≤2TE
+Z T
+0
+∥αt∥2 dt + 2E
+Z T
+0
+∥σt∥2
+F dt
+Also, by Cauchy-Schwarz
+∥σt∥2
+F ≤2∥σt −√εId∥2
+F + 2εd.
+Therefore, for
+J(P) = EP
+Z T
+0
+1
+2∥αt∥2 + β
+2 ∥σt −√εId∥2
+F
+
+dt,
+we obtain
+W 2
+2 (ρ, µi) ≤
+
+4T + 8
+β
+
+J(P) + 4εdT.
+Indeed, for the drift part
+E
+Z T
+0
+∥αt∥2dt ≤2J(P)
+For the diffusion part,
+E
+Z T
+0
+∥σt∥2
+F dt ≤2E
+Z T
+0
+σt −√εId
+2
+F dt + 2εdT.
+And since
+β
+2 E
+Z T
+0
+σt −√εId
+2
+F dt ≤J(P),
+we have
+E
+Z T
+0
+σt −√εId
+2
+F dt ≤2
+β J(P).
+So
+E
+Z T
+0
+∥σt∥2
+F dt ≤4
+β J(P) + 2εdT
+Plugging back:
+E ∥XT −X0∥2 ≤2T(2J(P)) + 2
+ 4
+β J(P) + 2εdT
+
+.
+So
+E ∥XT −X0∥2 ≤
+
+4T + 8
+β
+
+J(P) + 4εdT.
+Therefore,
+W 2
+2 (µi, ρ) ≤
+
+4T + 8
+β
+
+J(P) + 4εdT.
+Taking the infimum over P,
+SBBβ,ε,T (ρ, µi) ≥W 2
+2 (ρ, µi) −4εdT
+4T + 8/β
+.
+Thus, as SBB(ρn, µi) is upper bounded, then W 2
+2 (ρn, µi) ≤C′
+i for a constant C′
+i that is independent of n; hence
+every minimizing sequence (ρn) has uniformly bounded W2(ρn, µi). Then it has uniformly bounded second moments.
+Indeed, let Xn ∼ρn, we want to prove that E∥Xn∥2 is bounded. To do this, let X0 ∼µi, as µi ∈P2(Rd), E∥X0∥2 is
+bounded. We use the inequality
+∥Xn∥2 = ∥Xn −X0 + X0∥2 ≤2∥Xn −X0∥2 + 2∥X0∥2.
+Take the expectation
+E∥Xn∥2 ≤2E∥Xn −X0∥2 + 2E∥X0∥2.
+As the inequality holds for all coupling of (X0, Xn), we have
+E∥Xn∥2 ≤2W 2
+2 (ρn, µi) + 2E∥X0∥2
+Therefore the minimizing sequence {ρn} is uniformly tight in P2(Rd). Then by theorem of Prokhorov Billingsley
+[2013], there exists a subsequence {ρ′
+n} ⊂{ρn} that converges weakly to a limit ρ′ ∈P2(Rd).
+17
+
+
+A PREPRINT - OCTOBER 22, 2026
+By the weak lower semicontinuity Lemma B.1, for every i,
+SBBβ,ε,T (ρ′, µi) ≤lim inf
+n→∞SBBβ,ε,T (ρn, µi).
+Therefore
+Bdec(ρ′) =
+N
+X
+i=1
+λiSBBβ,ε,T (ρ′, µi)
+≤
+N
+X
+i=1
+λi lim inf
+n→∞SBBβ,ε,T (ρn, µi)
+≤lim inf
+n→∞Bdec(ρn)
+= b∗.
+By definition of b∗, the reverse inequality is automatic. Thus
+Bdec(ρ′) = b∗,
+and therefore ρ′ ∈arg minρ∈P2(Rd)
+PN
+i=1 λiSBBβ,ε,T (ρ, µi).
+□
+Remark.
+The
+proof
+above
+can
+be
+straightforwardly
+adapted
+to
+the
+encoder
+SBB
+barycenter
+case
+ρ 7→P
+i λiSBBβ,ε,T (µi, ρ).
+Indeed, from the beginning of the argument up to the extraction of a weakly
+convergent subsequence {ρ′
+n} ⇀ρ′ step, all the techniques employed are independent of the ordering of ρ and µi in
+SBB functional. The final step is even simpler, thanks to continuity of the SBB for the second marginal according to
+W2 proved in Henry-Labordère et al. [2026] (and also metrizes the weak convergence), which implies that ρ′ achieves
+the infimum.
+Meanwhile,
+for the symmetric and Markovian cases,
+the same proof strategy applies to F(ρ)
+=
+Pn
+i=1 [ai SBB (µi, ρ) + bi SBB (ρ, µi)]. For the symmetric objective, take ai = bi = λi/2. For the Markovian
+objective, take a1 = λ1, b2 = λ2, and all other coefficients zero. Since the Wasserstein bound holds in either orientation,
+combining it with the joint weak lower semicontinuity of SBB, established from the encoder and decoder cases above,
+yields the conclusion.
+Proof of Ito isometry step.
+Consider
+M =
+Z T
+0
+σtdWt
+Here Wt is a d-dimensional Brownian motion, and σt is a matrix-valued process. The stochastic integral is vector-valued.
+The Ito isometry says:
+E
+
+Z T
+0
+σtdWt
+
+2
+= E
+Z T
+0
+∥σt∥2
+F dt.
+Here ∥σt∥F is the Frobenius norm:
+∥σt∥2
+F =
+d
+X
+i=1
+d
+X
+j=1
+
+σij
+t
+2
+.
+To see why, write the i-th coordinate of M :
+M i =
+d
+X
+j=1
+Z T
+0
+σij
+t dW j
+t .
+Then
+∥M∥2 =
+d
+X
+i=1
+ M i2
+By Itô isometry and independence/orthogonality of Brownian coordinates,
+E[
+ M i2] = E
+Z T
+0
+d
+X
+j=1
+
+σij
+t
+2
+dt
+18
+
+
+A PREPRINT - OCTOBER 22, 2026
+Summing over i,
+E∥M∥2 =
+d
+X
+i=1
+E[
+ M i2] = E
+Z T
+0
+d
+X
+i=1
+d
+X
+j=1
+
+σij
+t
+2
+dt.
+Therefore,
+E
+
+Z T
+0
+σtdWt
+
+2
+= E
+Z T
+0
+∥σt∥2
+F dt.
+□
+Weak lower semicontinuity in the source marginal
+Lemma B.1 (Weak lower semicontinuity in the source marginal). Fix ν ∈P2(Rd). If
+ρn ⇀ρ
+weakly and ρn, ρ ∈P2(Rd), then
+SBBβ,ε,T (ρ, ν) ≤lim inf
+n→∞SBBβ,ε,T (ρn, ν).
+Proof. Define Px = {P ∈P : X0 = x
+P-a.s., J(P) < ∞}. Let Ψ be a class of continuous terminal potentials ψ that
+are bounded above and have at most quadratic growth. By the dual formulation of the SBB problem,
+SBBβ,ε,T (ρ, ν) = sup
+ψ∈Ψ
+Z
+Rd ψ(y) ν(dy) −
+Z
+Rd vψ(0, x) ρ(dx)
+
+.
+with
+vψ(0, x) := sup
+X0=x
+{E[ψ(XT )] −J(P)} ,
+We first show that vψ(0, ·) is finite, continuous, and bounded above. Since J(P) ≥0,
+vψ(0, x) ≤sup
+y∈Rd ψ(y).
+(B.1)
+On the other hand, the deterministic path
+Xt =
+
+1 −t
+T
+
+x
+satisfies X0 = x and XT = 0, with drift −x/T and volatility 0. Therefore
+vψ(0, x) ≥ψ(0) −∥x∥2
+2T
+−βεdT
+2
+.
+Hence vψ(0, ·) is finite everywhere. Now fix Q ∈P0 and define, under Q,
+Xx
+t := Xt +
+
+1 −t
+T
+
+x,
+Px := LawQ(Xx).
+Then Px ∈Px, and
+J(Px) = J(Q) −x
+T EQ[XT ] + ∥x∥2
+2T .
+Since this translation is invertible, we obtain
+vψ(0, x) + ∥x∥2
+2T
+= sup
+Q∈P
+n
+EQ[ψ(XT )] −J(Q) + x
+T EQ[XT ]
+o
+.
+The right-hand side is a supremum of affine functions of x, hence is convex. Since it is finite on all of Rd, it is
+continuous. Therefore vψ(0, ·) is continuous. Moreover, by B.1, −vψ is continuous and bounded below. Hence, by the
+Portmanteau theorem,
+Z
+Rd −vψ(0, x) ρ(dx) ≤lim inf
+n→∞
+Z
+Rd −vψ(0, x) ρn(dx).
+19
+
+
+A PREPRINT - OCTOBER 22, 2026
+Therefore, for every ψ ∈Ψ,
+Z
+ψ dν −
+Z
+vψ dρ ≤lim inf
+n→∞
+Z
+ψ dν −
+Z
+vψ dρn
+
+≤lim inf
+n→∞SBBβ,ε,T (ρn, ν).
+Taking the supremum over ψ ∈Ψ proves the claim.
+B.2
+Proof for the Gaussian geometry of the decoder SBB Barycenter
+B.2.1
+Proof for Proposition 6.1
+Proof. The work of Hasenbichler et al. [2026] gives the pointwise static SBB cost as
+Cβ,ε,T (x, η) =
+inf
+κ∈P2(Rd)
+κ=η
+
+εH(κ | γx,τ) + β
+2 W 2
+2 (κ, η)
+
+,
+and the global weak-transport formulation is
+SBBβ,ε,T (µ, ν) =
+inf
+π∈Π(µ,ν)
+Z
+Cβ,ε,T (x, πx) µ(dx).
+Let Γ ∈A(µ, ν), and disintegrate it as
+Γ(dx dy dz) = µ(dx)Γx(dy dz).
+Set
+κx := (prY )#Γx,
+ηx := (prZ)#Γx.
+Because of the conditional-mean constraint,
+κx = ηx
+µ-a.e.
+i.e.
+Z
+Rd yκx(dy) =
+Z
+Rd zηx(dz)
+µ-a.e.
+Chain rule for relative entropy gives
+H(ΓXY | µ(dx)γx,τ(dy)) = H(ΓX | µ) +
+Z
+H((prY )#Γx | γx,τ) ΓX(dx)
+=
+Z
+H(κx | γx,τ) µ(dx)
+(as ΓX = µ).
+Moreover, since Γx is a coupling of κx and ηx,
+Z
+∥y −z∥2 Γx(dy dz) ≥W 2
+2 (κx, ηx).
+It follows that Jβ,ε,T (Γ) ≥Cβ,ε,T (x, ηx)
+∀x. Then
+Jβ,ε,T (Γ) ≥
+Z
+Cβ,ε,T (x, ηx) µ(dx) ≥SBBβ,ε,T (µ, ν).
+Taking the infimum over Γ yields
+inf
+Γ∈A(µ,ν) Jβ,ε,T (Γ) ≥SBBβ,ε,T (µ, ν).
+For the last inequality, we note that
+π(dx dz) := µ(dx)ηx(dz)
+belongs to Π(µ, ν), hence is feasible for the infimum defining.
+Conversely, fix δ > 0. Choose an endpoint coupling
+π(dx dz) = µ(dx)πx(dz) ∈Π(µ, ν)
+and a measurable kernel x 7→κx such that
+κx = πx
+µ-a.e.
+20
+
+
+A PREPRINT - OCTOBER 22, 2026
+and
+Z "
+εH(κx | γx,τ) + β
+2 W 2
+2 (κx, πx)
+#
+µ(dx) ≤SBBβ,ε,T (µ, ν) + δ.
+For µ-almost every x, choose an optimal quadratic coupling
+λx ∈Π(κx, πx).
+Such a family can be chosen measurably because the underlying spaces are Polish and the quadratic cost is continuous;
+alternatively one may use universally measurable δ-optimal selectors.
+Define
+Γ(dx dy dz) := µ(dx)λx(dy dz).
+Then
+Γ ∈A(µ, ν)
+and
+Jβ,ε,T (Γ) ≤SBBβ,ε,T (µ, ν) + δ.
+Then by definition of infimum, SBBβ,ε,T (µ, ν) = infΓ∈A(µ,ν) Jβ,ε,T (Γ).
+B.2.2
+Proof for Theorem Theorem 6.2
+Proof. If the right-hand side is +∞, the claim is immediate. Otherwise fix Γ ∈A(µ, ν) with Jβ,ε,T (Γ) < ∞. Take
+(X, Y, Z) ∼Γ.
+Let ΓG denote the jointly Gaussian law on (Rd)3 having exactly the same joint mean vector and joint covariance matrix
+as Γ. Take (XG, Y G, ZG) ∼ΓG. We will show that
+ΓG ∈A(µG, ν)
+and
+Jβ,ε,T (ΓG) ≤Jβ,ε,T (Γ).
+Part 1.
+Since XG is Gaussian with the same mean and covariance as X,
+XG ∼µG.
+Likewise ZG is Gaussian and has the same mean and covariance as Z. Since Z ∼ν and ν is already Gaussian,
+ZG ∼ν.
+Now we prove the preservation of the conditional-mean constraint. Set
+D := Y −Z.
+Since
+E[D | X] = 0,
+we obtain
+E[D] = 0.
+Then
+Cov(D, X) = E
+
+D(X −E[X])⊤
+= E
+
+E[D | X](X −E[X])⊤
+= 0.
+Define
+DG := Y G −ZG.
+Since ΓG has the same first and second moments as Γ,
+E[DG] = 0,
+Cov(DG, XG) = 0.
+The pair (DG, XG) is jointly Gaussian. Zero cross-covariance therefore implies independence. Hence
+E[DG | XG] = E[DG] = 0.
+Thus
+E[Y G | XG] = E[ZG | XG].
+Therefore
+ΓG ∈A(µG, ν).
+21
+
+
+A PREPRINT - OCTOBER 22, 2026
+Part 2.
+Now we work on two components of Jβ,ε,T . For the Wasserstein part, because Γ and ΓG have the same joint
+first and second moments,
+EΓG∥Y G −ZG∥2 = ∥EΓ[Y ] −EΓ[Z]∥2 + Tr (Cov(Y ) + Cov(Z) −Cov(Y, Z) −Cov(Z, Y ))
+= EΓ∥Y −Z∥2.
+For the relative entropy term, we want to prove that
+H
+ ΓG
+XGY G
+ µG(dx)γx,τ(dy)
+
+≤H(ΓXY | µ(dx)γx,τ(dy)) .
+By chain rule for relative entropy, as in Proposition 6.1’s proof, we have
+H(ΓXY | µ(dx)γx,τ(dy)) =
+Z
+H(κx | γx,τ) µ(dx)
+Similarly, since we have already shown that ΓG ∈A(µG, ν), the same disintegration argument yields
+H
+ ΓG
+XGY G
+ µG(dx)γx,τ(dy)
+
+=
+Z
+H(κG
+x | γx,τ) µG(dx)
+Note that κG
+x and γx,τ are two Gaussians. It is the fact that for two Gaussians N(m1, Σ1) and N(m2, Σ2), the relative
+entropy has the explicit form
+H(N(m1, Σ1) | N(m2, Σ2)) = 1
+2
+
+tr
+
+Σ†
+2Σ1
+
++ (m2 −m1)T Σ†
+2 (m2 −m1) −d + ln
+det∗Σ2
+det∗Σ1
+
+where det∗is pseudodeterminant, i.e. the product of the nonzero eigenvalues. Then the relative entropy function
+H
+ κG
+x | γx,τ
+
+a quadratic polynomial in x. Because µ and µG share identical first and second moments, their integrals
+against any quadratic polynomial are exactly equal, i.e.
+Z
+H(κG
+x | γx,τ) µG(dx) =
+Z
+H(κG
+x | γx,τ) µ(dx)
+Lemma B.2 below also gives
+Z
+H(κx | γx,τ) µ(dx) ≥
+Z
+H(κG
+x | γx,τ) µ(dx)
+Combining the preceding identities with this inequality, we obtain
+H
+ ΓG
+XGY G
+ µG(dx)γx,τ(dy)
+
+≤H(ΓXY | µ(dx)γx,τ(dy)) .
+Combining two parts,
+Jβ,ε,T (ΓG) ≤Jβ,ε,T (Γ).
+Since
+ΓG ∈A(µG, ν),
+it implies
+SBBβ,ε,T (µG, ν) ≤Jβ,ε,T (ΓG) ≤Jβ,ε,T (Γ).
+Taking the infimum over all finite-cost Γ ∈A(µ, ν) yields
+SBBβ,ε,T (µG, ν) ≤SBBβ,ε,T (µ, ν).
+Lemma B.2. Let µ be a probability measure on X, and for µ-almost every x ∈X, let px be a probability measure on
+Rd with finite second moment. Let pG
+x be the Gaussian measure having the same mean and covariance as px. Suppose
+that qx is itself Gaussian. Then, whenever the relative entropies are well defined,
+H(px | qx) = H(px | pG
+x ) + H(pG
+x | qx).
+In particular,
+H(px | qx) ≥H(pG
+x | qx)
+for µ-a.e. x.
+Consequently,
+Z
+X
+H(px | qx) µ(dx) ≥
+Z
+X
+H(pG
+x | qx) µ(dx).
+Equality holds if and only if
+H(px | pG
+x ) = 0
+for µ-almost every x, i.e., px = pG
+x for µ-almost every x.
+22
+
+
+A PREPRINT - OCTOBER 22, 2026
+Proof. For µ-almost every x, we have
+H(px | qx) −H(px | pG
+x ) =
+Z
+Rd log
+dpG
+x
+dqx
+(y)
+
+px(dy).
+Since both pG
+x and qx are Gaussian,
+y 7−→log
+dpG
+x
+dqx
+(y)
+
+is a polynomial of degree at most two in y. Since px and pG
+x have the same first and second moments, it follows that
+Z
+Rd log
+dpG
+x
+dqx
+
+dpx =
+Z
+Rd log
+dpG
+x
+dqx
+
+dpG
+x .
+The right-hand side is precisely
+H(pG
+x | qx).
+Hence
+H(px | qx) = H(px | pG
+x ) + H(pG
+x | qx).
+The desired inequality follows from the non-negativity of relative entropy H(px | pG
+x ) ≥0. Integrating the pointwise
+inequality with respect to µ(dx) gives
+Z
+X
+H(px | qx) µ(dx) ≥
+Z
+X
+H(pG
+x | qx) µ(dx).
+Finally, equality holds precisely when H(px | pG
+x ) = 0 for µ-almost every x, which is equivalent to px = pG
+x µ-almost
+everywhere.
+B.2.3
+Proof for Corollary 6.3
+Proof. Applying Theorem 6.2 to each pair (ρ, µi),
+SBBβ,ε,T (ρG, µi) ≤SBBβ,ε,T (ρ, µi)
+∀i = 1, . . . , n.
+Multiplying by λi and summing yields the first conclusion.
+Since Gaussian laws form a subset of P2(Rd),
+inf
+µ∈P2(R) Bdec(ρ) ≤
+inf
+m∈Rd,S∈Sd
++
+Bdec(N(m, S)).
+Conversely, for every ρ,
+Bdec(ρG) ≤Bdec(ρ).
+Taking the infimum over ρ gives the reverse inequality, proving the second conclusion. Finally, if ρ⋆minimizes Bdec,
+then
+inf Bdec ≤Bdec(ρG⋆) ≤F(ρ⋆) = inf Bdec,
+so ρG⋆is also a minimizer.
+B.3
+Proof for Theorem 6.4
+Proof. Let Xt be any admissible semimartingale with finite cost. Define
+mt = E[Xt],
+Σt = Cov(Xt).
+Since
+dXt = αt dt + σt dWt,
+we have
+˙mt = E[αt].
+Therefore, by Jensen,
+E∥αt∥2 ≥∥˙mt∥2.
+Thus
+Z T
+0
+1
+2E∥αt∥2 dt ≥
+Z T
+0
+1
+2∥˙mt∥2 dt ≥∥m1 −m0∥2
+2T
+,
+23
+
+
+A PREPRINT - OCTOBER 22, 2026
+with equality when ˙mt is constant in time i.e. ˙mt = mν−mµ
+T
+or
+mt = (1 −t/T)mµ + (t/T)mν.
+Now center the process:
+˜Xt = Xt −mt,
+˜αt = αt −˙mt.
+Let
+At = E[σtσ⊤
+t ],
+Ct = E[˜αt ˜X⊤
+t ].
+Differentiating the covariance gives
+˙Σt = Ct + C⊤
+t + At.
+So, with
+St = ˙Σt −At,
+we need
+Ct + C⊤
+t = St.
+For any random vectors U, V with covariance Σ = E[V V ⊤], the regression inequality gives
+E∥U∥2 ≥Tr(CΣ−1C⊤),
+C = E[UV ⊤].
+Applying this to U = ˜αt, V = ˜Xt,
+E∥˜αt∥2 ≥Tr(CtΣ−1
+t C⊤
+t ).
+Minimizing over all Ct such that Ct + C⊤
+t = St gives
+E∥˜αt∥2 ≥ΓΣt(St).
+Indeed, write C = KΣ. Then
+C + C⊤= KΣ + ΣK⊤.
+The minimizer is the symmetric K solving
+KΣ + ΣK = S,
+and the minimum is
+Tr(KΣK) = ΓΣ(S).
+Next, consider the diffusion term,
+E∥σt −√εId∥2
+F = Tr(At) −2√ε E Tr(σt) + εd.
+For fixed At = E[σtσ⊤
+t ], the quantity is minimized by deterministic symmetric volatility
+σt = A1/2
+t
+,
+giving
+E∥σt −√εId∥2
+F ≥∥A1/2
+t
+−√εId∥2
+F .
+Combining the drift and diffusion lower bounds yields
+SBB(µ, ν) ≥∥mν −mµ∥2
+2T
++ Gβ,ε,T (Σµ, Σν).
+It remains to show equality for Gaussian endpoints. Choose optimal paths (Σt, At) for the covariance problem and
+define Kt by
+KtΣt + ΣtKt = ˙Σt −At.
+Consider the affine Gaussian SDE
+dXt = ˙mt dt + Kt(Xt −mt) dt + A1/2
+t
+dWt,
+X0 ∼N(mµ, Σµ).
+Then Xt remains Gaussian, its mean is mt, and its covariance satisfies
+˙Σt = KtΣt + ΣtKt + At.
+Thus XT ∼N(mν, Σν). Its cost is exactly the lower bound. Therefore equality holds.
+24
+
+
+A PREPRINT - OCTOBER 22, 2026
+C
+DUAL POTENTIALS AND THE PARTICLE SCHEME
+C.1
+Dual Formulation of SBB
+Thanks to Alouadi et al. [2026a], the pairwise SBB dual has the form
+SBB(µ0, µT ) = sup
+(ψ,v)
+Z
+ψ(x) µT ( dx) −
+Z
+v(0, x) µ0( dx)
+
+,
+(C.1)
+where v solves a Hamilton–Jacobi–Bellman equation
+∂tv + H∗
+β,ε(∇v, D2v) = 0,
+v(T, ·) = ψ,
+(C.2)
+under the curvature constraint
+D2v(t, x) ≺βI.
+The optimal feedback controls are
+α∗
+t (x) = ∇v∗(t, x),
+σ∗
+t (x) = √ε
+
+I −1
+β D2v∗(t, x)
+−1
+.
+The reduced SBB system introduces heat potentials h∗
+t and maps Yt through
+Φt(y) = |y|2
+2
++ ε
+β log h∗
+t (y),
+Yt = (∇Φt)−1.
+Equivalently,
+Yt(x) = x −1
+β ∇v∗(t, x).
+Hence
+∇v∗(t, x) = β
+ x −Yt(x)
+
+.
+(C.3)
+The optimal controls can also be written as
+α∗
+t (x) = ε∇log h∗
+t
+ Yt(x)
+
+,
+σ∗
+t (x) = √ε D2Φt
+ Yt(x)
+
+.
+(C.4)
+Combining (C.3) and (C.4) gives the computationally crucial identity
+∇v∗(t, x) = β
+ x −Yt(x)
+
+= ε∇log h∗
+t
+ Yt(x)
+
+.
+C.2
+First Variation of SBB
+Our result holds under the regularity assumptions made on the dual solutions. We leave it to future work to precisely
+quantify under what conditions on the measures those assumptions will hold.
+We first show that optimal dual potentials provide convex subgradients with respect to linear perturbations of the
+marginals. Recall that for F to be a functional on probability measures, A function fρ is a linear functional subgradient
+(or convex subgradient) at ρ if
+F(ν) −F(ρ) ≥
+Z
+fρ d(ν −ρ)
+for every measure ν in the domain under consideration. We write fρ ∈∂linF(ρ).
+Encoder Marginal
+Fix µ and define Fµ(ρ) := SBB(µ, ρ). The dual representation can be written as
+Fµ(ρ) = sup
+ψ
+{⟨ψ, ρ⟩−Aµ(ψ)} ,
+(C.5)
+where Aµ is the value term induced by the HJB solution at time 0. Indeed, fix µ in the pairwise SBB dual Equation (C.1).
+For each terminal potential ψ, solve the HJB backward and call the solution vψ. Define Aµ(ψ) :=
+R
+vψ(0, x)µ(dx);
+then the dual becomes Equation (C.5)
+Let ψ∗be an active maximizer at ρ. Then for any perturbation ˜ρ,
+Fµ((1 −θ)ρ + θ˜ρ) ≥⟨ψ∗, (1 −θ)ρ + θ˜ρ⟩−Aµ(ψ∗)
+= Fµ(ρ) + θ
+Z
+ψ∗d(˜ρ −ρ).
+Thus ψ∗is a convex subgradient of Fµ at ρ.
+25
+
+
+A PREPRINT - OCTOBER 22, 2026
+Decoder Marginal
+Fix µ and define Gµ(ρ) := SBB(ρ, µ). From the two-marginal dual,
+Gµ(ρ) = sup
+(ψ,v)
+{⟨ψ, µ⟩−⟨v(0, ·), ρ⟩} .
+Let (ψ∗, v∗) be an active dual pair at ρ. Then
+Gµ((1 −θ)ρ + θ˜ρ) ≥⟨ψ∗, µ⟩−⟨v∗(0, ·), (1 −θ)ρ + θ˜ρ⟩
+= Gµ(ρ) −θ
+Z
+v∗(0, x) d(˜ρ −ρ)(x).
+Thus −v∗(0, ·) is a subgradient.
+We now state assumptions under which a convex subgradient could be used to obtain the first variation. Recall that A
+first variation is a function fρ satisfying
+lim
+θ↓0
+F((1 −θ)ρ + θν) −F(ρ)
+θ
+=
+Z
+fρ d(ν −ρ)
+(C.6)
+for every admissible direction ν −ρ.
+Let U ⊂P2 be a W2-open neighborhood of ρ, and assume:
+1. Finite values and attained duals. The dual solution exists for every σ ∈U, F(σ) < ∞. Select its active
+marginal coefficient fσ and normalize it by fσ(0) = 0.
+2. Uniform spatial regularity. The selected coefficients belong to C1(Rd), and there are constants Lx, C0 < ∞
+such that, for every σ ∈U and x, y ∈Rd,
+|∇fσ(x) −∇fσ(y)| ≤Lx|x −y|,
+|∇fσ(0)| ≤C0.
+(C.7)
+3. Stability with respect to the marginal. If σn, ρ ∈U and W2(σn, ρ) →0, then
+∇fσn −→∇fρ
+locally uniformly on Rd.
+(C.8)
+The normalization and (C.7) imply
+|∇fσ(x)| ≤C0 + Lx|x|,
+|fσ(x)| ≤C0|x| + Lx
+2 |x|2.
+(C.9)
+Consequently, all selected coefficients are integrable against measures in P2, and ∇fρ ∈L2(ρ; Rd). Furthermore, (C.8)
+and the normalization give fσn →fρ locally uniformly.
+When the dual is attained at both ρ and σ, then we have two-sided dual bound ⟨fρ, σ−ρ⟩≤F(σ)−F(ρ) ≤⟨fσ, σ−ρ⟩.
+Now define ρθ = (1 −θ)ρ + θν. Since W 2
+2 (ρ, ρθ) ≤θW 2
+2 (ρ, ν), the measures ρθ lie in U for sufficiently small θ > 0.
+The two-sided bound gives
+Z
+fρ d(ν −ρ) ≤F(ρθ) −F(ρ)
+θ
+≤
+Z
+fρθ d(ν −ρ).
+The normalized coefficients fρθ converge locally uniformly to fρ. By (C.9), they are dominated in absolute value by a
+common quadratic function, integrable against ρ + ν. Thus the integral on the right converges to the integral on the left.
+This gives the first variation.
+Put everything together, we get
+δ
+δρSBB(µ, ρ) = ψ∗
+µ→ρ
+up to an additive constant.
+and therefore
+∇W SBB(µ, ρ)(x) = ∇ψ∗
+µ→ρ(x).
+Also,
+δ
+δρSBB(ρ, µ) = −v∗
+ρ→µ(0, ·)
+up to an additive constant.
+and therefore
+∇W SBB(ρ, µ)(x) = −∇v∗
+ρ→µ(0, x).
+26
+
+
+A PREPRINT - OCTOBER 22, 2026
+C.3
+Pseudocode
+Algorithm C.1. SBB-Barycenters Hybrid Wasserstein Gradient Particle Descent Scheme
+Require: Data measures {µi}N
+i=1 with weights {λi}N
+i=1; β, ε, T such that βT > 1; Number of barycenter particles M;
+Outer iterations K; Step sizes {ηk}K−1
+k=0 ; (Optional) Terminal smoothing schedule {δk}K−1
+k=0 , with 0 < δk ≪T;
+Tolerance ϵ; PAIRWISE_SBB_SOLVER (e.g. LIGHTSBB(µsrc, µtgt; warm_start)) which returns a representation
+of the pairwise bridge; MODE ∈{Decoder, Encoder, Symmetric, Markovian}
+1: Initialize particles X0
+1, . . . , X0
+M for ρ0
+2: (Optional) Initialize warm starts Wi,dec and Wi,enc for all i
+3: for k = 0, 1, . . . , K −1 do
+4:
+Form the empirical barycenter iterate
+ρk = 1
+M
+M
+X
+m=1
+δXk
+m.
+5:
+for all i = 1, . . . , N in parallel do
+6:
+if MODE ∈{Decoder, Symmetric, Markovian} then
+7:
+▷Decoder bridge: ρk →µi
+8:
+BridgeDeci ←PAIRWISE_SBB_SOLVER(ρk, µi)
+9:
+else if MODE ∈{Encoder, Symmetric, Markovian} then
+10:
+▷Encoder bridge: µi →ρk
+11:
+BridgeEnci ←PAIRWISE_SBB_SOLVER(µi, ρk)
+12:
+end if
+13:
+end for
+14:
+for m = 1, . . . , M do
+15:
+vdec ←0, venc ←0
+16:
+for i = 1, . . . , N do
+17:
+if MODE ∈{Encoder, Symmetric, Markovian} then
+18:
+genc,i ←β
+ Xk
+m −Y (i,k),enc
+T
+(Xk
+m)
+
+.
+19:
+venc ←venc −λigenc,i
+20:
+else if MODE ∈{Decoder, Symmetric, Markovian} then
+21:
+gdec,i ←β
+ Xk
+m −Y (i,k),dec
+0
+(Xk
+m)
+
+22:
+vdec ←vdec + λigdec,i
+23:
+end if
+24:
+end for
+25:
+if MODE = Symmetric then
+26:
+vsym ←1
+2 (vdec + venc)
+27:
+else if MODE = Markovian then
+28:
+vmar ←λ2gdec,2 −λ1genc,1
+29:
+end if
+30:
+end for
+31:
+for m = 1, . . . , M do
+32:
+▷Particle update according to MODE
+33:
+Xk+1
+m
+←Xk
+m + ηkv{enc,dec,sym,mar}
+34:
+end for
+35:
+▷Stopping check
+36:
+if
+1
+M
+PM
+m=1∥v{enc,dec,sym,mar}∥2 < ϵ then
+37:
+break
+38:
+end if
+39: end for
+Ensure: Final particle measure
+ρK = 1
+M
+M
+X
+m=1
+δXK
+m.
+27
+
+
+A PREPRINT - OCTOBER 22, 2026
+Algorithm C.2 Gaussian Specialization of Decoder SBB Barycenter
+Require: Gaussian
+targets
+{νi
+=
+N(mi, Σi)}N
+i=1;
+weights
+{λi}N
+i=1;
+PAIRWISE_SBB_SOLVER
+(e.g.
+LIGHTSBB(µsrc, µtgt, warm_start)); initial covariance S0 ≻0; step sizes {ηk}K−1
+k=0
+1: Compute the barycenter mean
+¯m ←
+N
+X
+i=1
+λimi.
+2: for k = 0, . . . , K −1 do
+3:
+for i = 1, . . . , N in parallel do
+4:
+Solve the Gaussian SBB bridge
+N( ¯m, Sk) −→N(mi, Σi).
+5:
+Extract its initial linear drift coefficient Kk
+i,0.
+6:
+end for
+7:
+Aggregate
+¯Kk
+0 ←
+N
+X
+i=1
+λiKk
+i,0.
+8:
+Set
+Lk ←Id + ηk ¯Kk
+0 .
+9:
+Update the covariance
+Sk+1 ←LkSkL⊤
+k .
+10: end for
+11: return
+ρK = N( ¯m, SK).
+28
+
+
+A PREPRINT - OCTOBER 22, 2026
+D
+MEAN–COVARIANCE IMPLEMENTATION OF AFFINE PARTICLE UPDATES
+This section gives the additional computational specialization of the particle scheme. The premise is that the pairwise
+oracle supplies affine update, as in the Gaussian dynamics of Section 6.
+D.1
+The general affine update
+Let the current measure have mean m and covariance S, and suppose its chosen descent velocity is
+u(x) = b + C(x −m).
+The particle update X+ = X + ηu(X) can be written as
+X+ = m + ηb + (Id + ηC)(X −m).
+Taking its expectation gives
+m+ = m + ηb.
+(D.1)
+Subtracting this mean from X+ gives X+ −m+ = (Id + ηC)(X −m). Hence
+S+ = (Id + ηC)S(Id + ηC)⊤.
+(D.2)
+These are algebraic identities for any input law with a finite second moment. When the input is Gaussian, the output is
+also Gaussian, since the update is affine. For a finite cloud, they are exact for the empirical covariance computed with
+normalization 1/M.
+D.2
+Decoder SBB Gaussian Barycenter update
+For the bridge N(m, S) →N(mi, Σi), write the Gaussian affine drift at the initial time as
+gi,dec(x) = mi −m
+T
++ Ki,0(x −m).
+Using the decoder sign in the particle scheme gives
+bdec = ¯m −m
+T
+,
+Cdec =
+X
+i
+λiKi,0,
+¯m =
+X
+i
+λimi.
+Equations (D.1)–(D.2) give the two updates in the main paper. The covariance coefficient is determined by the fitted
+bridge, not by a Euclidean covariance gradient introduced in place of that bridge.
+E
+EXPERIMENTAL DETAILS AND RESULTS
+E.1
+Complete toy visualizations
+We illustrate the directional geometry of SBB barycenters using three anisotropic Gaussian distributions in two
+dimensions, with equal weights λi = 1/3. The reference setting uses 512 samples per distribution and 512 barycenter
+particles. Decoder, encoder, and symmetric objectives share the same input samples and Gaussian initialization.
+Pairwise models use T = 1, β = 50, ϵ = 1, and 32 Gaussian potential components. Adam uses a learning rate of 10−3,
+mini-batches of 256. Barycenter optimization runs for at most 50 iterations with step size ηk = 0.15(0.95)k and a mean
+squared velocity norm stopping threshold of 10−3.
+Figures E.1–E.3 provide the complete particle evolution for the three SBB barycenter orientations considered in the
+main text. All experiments start from the same three two-dimensional input measures and use the same initialization of
+the barycenter particles. Each figure contains three panels. The left panel shows the three input measures, which are kept
+fixed throughout the optimization. The middle panel shows the evolution of the barycenter particles during Wasserstein
+subgradient descent: the trajectories indicate how particles move from their initialization toward the final barycenter
+configuration. The right panel overlays the final barycenter particles in black with the original input measures, making
+it possible to compare directly the location, shape, and spread selected by each orientation.
+29
+
+
+A PREPRINT - OCTOBER 22, 2026
+Figure E.1: Decoder Barycenter visualization
+Figure E.2: Encoder Barycenter visualization
+Figure E.3: Symmetric Barycenter visualization
+30
+
+
+A PREPRINT - OCTOBER 22, 2026
+E.2
+Spatial MNIST: protocol
+Probability-measure representation.
+We represent each digit image as a probability measure over the two-
+dimensional pixel plane. Given a pixel grid G, the nonnegative image intensities are normalized to define
+ρ =
+X
+x∈G
+p(x)δx,
+X
+x∈G
+p(x) = 1.
+Under this representation, image mass is distributed over spatial locations rather than treated as a vector of pixel
+intensities. Consequently, a diffusion-like corruption is naturally modeled by spatial convolution of the measure with
+a Gaussian kernel, rather than by adding independent noise directly to the pixel values. Our experiment follows this
+viewpoint as a modification of the spatial barycenter experiment of Cuturi and Doucet [2014].
+Latent sources and observations.
+We construct the experiment around a latent-source recovery task. We select one
+approximately centered clean image from each digit class as the latent source ρ⋆. From each latent source, we generate
+N ∈{32, 64, 128} corrupted observations, using N = 32 as the default configuration. The original train/test split is
+kept fixed throughout the experiment, and the latent test images are never used for hyperparameter selection. Each
+observed measure is first obtained by applying a random geometric transformation to the latent source. On a 32 × 32 or
+40 × 40 canvas, we define
+Ti(x) = siRϑi(x −x0) + x0 + bi,
+where x0 denotes the image center, si controls scaling, Rϑi is a planar rotation, and bi is a translation. We sample
+translations from [−6, 6]2 and recenter them so that the average translation is approximately zero; one convenient
+construction is to use pairs (b, −b). The scale is sampled as
+si ∼Unif(0.7, 1.4),
+while the optional rotation ablation uses
+ϑi ∼Unif(−20◦, 20◦).
+A sufficiently padded canvas is used to limit boundary artifacts, and any mass loss or renormalization caused by the
+transformation is recorded. To ensure a fair comparison, all barycenter methods are evaluated using exactly the same
+geometric transformations and image-rendering procedure.
+Blur regimes.
+After the deterministic transformation, we introduce spatial diffusion by convolving the transformed
+measure with a Gaussian kernel. We consider several regimes in order to separate the effects of deterministic transport
+and stochastic dispersion. In the common isotropic setting, all observations generated from the same latent source use
+the same covariance,
+Ωi = σ2I2,
+so that the stochastic component is shared across domains.
+Our main SBB-specific setting instead uses heterogeneous anisotropic diffusion. For each observation, we define
+Ωi = Rφi diag
+ σ2
+i,1, σ2
+i,2
+
+R⊤
+φi,
+where the principal blur scales and orientation vary across observations. In the default configuration, we use
+σi,1 ∈[0.4, 2.0],
+σi,2 ∈[0.2, 1.2],
+φi ∈[0, π].
+The resulting observed distribution is therefore
+νi = (Ti)#ρ⋆∗N(0, Ωi).
+Hyperparameter Setting.
+The selected SBB parameters are T = 1, β = 10, and ϵ = 0.03 , equivalently θ = βT = 10
+and τ = ϵT = 0.03. Each pairwise model uses 64 diagonal Gaussian potential components, diagonal initialization
+0.1, and a learned inverse network with spatial width 64 and time-embedding width 16 . We use 4,096 barycenter
+particles and sample 4,096 points from each observation. Optimization performs exactly 95 outer updates with step size
+ηk = 0.1(0.995)k, with velocity-based early stopping disabled. Every outer update fits the pairwise models through
+two inner stages, each containing 100 gradient updates for the potential network and 100 for the inverse network. Both
+networks use Adam with learning rate 0.003 , minibatch size 256, and per-network gradient clipping at norm 1. The
+terminal smoothing fraction is 0.01 , sampling chunks contain 2,048 points, and the independent pairwise models are
+batched on the GPU in float32. Hyperparameters were selected using clean-training-image W2 and frozen before test
+evaluation. The completed comparison uses one test image per digit 0-9, W2 is estimated using 512 samples from each
+rendered image. The Wasserstein baseline uses exact transport subproblems with at most 100 outer iterations, while
+debiased Sinkhorn uses fixed regularization 0.03 and a maximum of 200,000 grid iterations. RegWB solves the static
+empirical objective on the full 40 × 40 pixel grid, using regularization 0.03 in source-normalized coordinates, at most
+4,000 iterative proportional fitting sweeps.
+31
+
+
+A PREPRINT - OCTOBER 22, 2026
+Figure E.4: Qualitative latent-source recovery on MNIST. Each column corresponds to one digit class, from 0 to 9. The
+first row shows the clean latent source, while the remaining rows show the barycenters reconstructed by the arithmetic
+mean, Wasserstein barycenter, Regularized Wasserstein Barycenter, debiased Sinkhorn barycenter, and decoder SBB
+barycenter, respectively. The decoder SBB reconstruction is generally sharper and more closely preserves the geometry
+of the clean source, consistent with the quantitative results in Table 1
+E.3
+Single-cell RNA: protocol
+Preprocessing.
+We normalize the expression matrix and embed all cells from the considered condition into a
+common 30-dimensional PCA space. Each time point or cell subset is then represented by the empirical measure
+Pt =
+1
+nt
+Pnt
+j=1 δx(t)
+j . The same embedding is used for all competing methods. We analyze the serum and 2i conditions
+separately and subsample the same number of cells from each distribution when necessary to control computational
+cost.
+Hyperparameter Setting
+• Common-ancestor reconstruction. Evaluation uses MET cells from days 7.5-8.5. The supplied log-
+normalized expression values are preserved, 2,000 genes are selected by log-expression variance. Each
+run uses 512 cells per input population, 512 barycenter particles, and 512 evaluation cells. Particles are
+initialized from a Gaussian matching the weighted input mixture’s mean and covariance, with covariance
+stabilization 10−4I. The selected pairwise parameters are T = 1, β = 30, and ϵ = 0.3, with 64 diagonal
+Gaussian components initialized at 0.1 , inverse-network spatial width 64 , time-embedding width 16 , terminal
+smoothing fraction 0.01 , and sampling chunk size 2,048. Adam uses learning rate 0.005 , minibatch size
+256 , and gradient clipping at norm 1 . Each pairwise fit has two stages with 200 and 163 gradient updates,
+respectively, for each network. Barycenter optimization permits 75 outer iterations with constant step size
+0.3 and a stopping threshold of 10−3 on the mean squared particle velocity. Pairwise network parameters
+are warm-started between outer iterations, while Adam states are reset for each pairwise fit. Wasserstein
+and Waddington-OT baselines permit 100 outer iterations with tolerance 10−6; Sinkhorn uses regularization
+0.1 , the dual L-BFGS inner solver, a 10,000 -iteration inner cap, and inner tolerance 10−8. RegWB uses
+regularization 0.1 in source-normalized coordinates, 65536 importance-quadrature nodes, and at most 12,000
+iterative proportional fitting sweeps.
+• Held-out population reconstruction: shared setup. We reconstruct the intermediate population at t0 from
+populations at t−= t0 −∆/2 and t+ = t0 + ∆/2, where ∆∈{1, 2, 3} denotes the total endpoint separation
+32
+
+
+A PREPRINT - OCTOBER 22, 2026
+in days. Consequently, the temporal fraction is α = (t0 −t−)/(t+ −t−) = 1/2. SBB Decoder and SBB
+Markovian use separately selected parameters and adjusted barycenter weights λ2 = cα/(1 −α + cα) =
+c/(1 + c) and λ1 = 1 −λ2. We preserve the provided log-normalized expression, select 2,000 highly variable
+genes per condition. The quantitative tuning and assessment runs use 512 cells per endpoint, 512 reconstructed
+particles, and 512 target cells. Observed cells are sampled without replacement within each population. The
+two SBB variants share an initialization sampled from the chronological arithmetic mixture (1−α)Pt−+αPt+,
+independently of c. Unless specified otherwise below, each pairwise model uses time horizon T = 1 for all
+∆, 64 diagonal Gaussian potential components with diagonal scale parameters initialized to 0.1 and uniform
+initial component weights, inverse-network spatial and temporal widths 64 and 16, terminal smoothing fraction
+0.01, and sampling chunks of 2,048 points. The full finite-β inverse is used throughout. Adam uses learning
+rate 0.003, minibatch size 256, and gradient clipping at norm 1 per network. Each outer update contains two
+inner stages with 128 gradient steps. Networks are warm-started between outer iterations, whereas Adam is
+reinitialized at each outer iteration. We use a constant barycenter step size η, a selected fixed number L of outer
+iterations, and no velocity-based early stopping. Arithmetic mixture, Wasserstein displacement interpolation,
+and Waddington-OT use the chronological weights (1/2, 1/2). Waddington-OT uses regularization 0.05,
+marginal-relaxation penalties 1 and 50, three growth iterations, the supplied growth-rate metadata, and the
+actual endpoint separation ∆. RegWB uses chronological weights, regularization 0.1, and analytic elimination
+of the central variable; the endpoint coupling is solved with an iteration cap of 12,000. TrajectoryNet uses
+three hidden layers of width 64 with LeakyReLU, Adam with learning rate 10−3 and weight decay 5 × 10−5,
+and minibatches of 1,000 cells sampled with replacement per endpoint.
+One-day intervals. We evaluate 64 midpoint triplets, comprising 32 triplets per condition, with t−= t0 −0.5
+and t+ = t0 + 0.5. The global SBB Decoder configuration uses β = 100, ϵ = 0.3, η = 0.03, c = 1, and
+L = 60; the global SBB Markovian configuration uses β = 100, ϵ = 0.1, η = 0.03, c = 2, and L = 60.
+Two-day intervals. We evaluate 66 midpoint triplets, comprising 33 triplets per condition, with t−= t0 −1
+and t+ = t0 + 1. The global Decoder configuration uses β = 30, ϵ = 0.3, η = 0.1, c = 1, and L = 40; the
+global Markovian configuration uses β = 100, ϵ = 0.1, η = 0.03, c = 2, and L = 40.
+Three-day intervals. We evaluate 62 midpoint triplets, comprising 31 triplets per condition, with t−= t0−1.5
+and t+ = t0 + 1.5. The global Decoder configuration uses β = 30, ϵ = 0.1, η = 0.1, c = 2, and L = 60 for
+serum and 40 for 2i; the global Markovian configuration uses β = 10, ϵ = 0.1, η = 0.3, c = 1, and L = 60
+for serum and 40 for 2i.
+33
+
+
+A PREPRINT - OCTOBER 22, 2026
+E.3.1
+1-day interval
+Table E.1: Intermediate-state reconstruction 1-day intervals result.
+Interpolation Method
+W2 ↓
+MMD↓
+Cell-type TV↓
+Signature MAE↓
+serum condition
+Arithmetic mixture
+11.9916 ± 0.1855
+0.4044 ± 0.0120
+0.0588 ± 0.0289
+0.0364 ± 0.0062
+Wasserstein
+10.9134 ± 0.2175
+0.4189 ± 0.0155
+0.0859 ± 0.0284
+0.0359 ± 0.0008
+RegWB
+11.0323 ± 0.2059
+0.4154 ± 0.0151
+0.0892 ± 0.0171
+0.0370 ± 0.0029
+TrajectoryNet
+14.6255 ± 0.2413
+0.5539 ± 0.0123
+0.0658 ± 0.0119
+0.0329 ± 0.0043
+Waddington-OT
+10.6621 ± 0.0752
+0.4034 ± 0.0080
+0.2383 ± 0.0491
+0.0385 ± 0.0036
+SBB Decoder (ours)
+10.3515 ± 0.1308
+0.3778 ± 0.0118
+0.0534 ± 0.0336
+0.0375 ± 0.0097
+SBB Markovian (ours)
+10.1848 ± 0.1203
+0.3408 ± 0.0106
+0.0553 ± 0.0329
+0.0349 ± 0.0072
+2i condition
+Arithmetic mixture
+11.9001 ± 0.6598
+0.1731 ± 0.0196
+0.1536 ± 0.0530
+0.0882 ± 0.0422
+Wasserstein
+11.3029 ± 0.7513
+0.1797 ± 0.0234
+0.1745 ± 0.0368
+0.1146 ± 0.0458
+RegWB
+11.5855 ± 0.7610
+0.1773 ± 0.0247
+0.1816 ± 0.0508
+0.1128 ± 0.0392
+TrajectoryNet
+12.3068 ± 0.4723
+0.1857 ± 0.0110
+0.1700 ± 0.0175
+0.1037 ± 0.0071
+Waddington-OT
+12.6290 ± 1.2882
+0.2239 ± 0.0400
+0.1901 ± 0.0587
+0.1024 ± 0.0323
+SBB Decoder (ours)
+10.9584 ± 0.7523
+0.1572 ± 0.0236
+0.1530 ± 0.0536
+0.0791 ± 0.0384
+SBB Markovian (ours)
+11.5364 ± 0.5676
+0.1698 ± 0.0191
+0.1536 ± 0.0530
+0.0684 ± 0.0374
+Figure E.5: Some qualitative figures for reconstruction of intermediate cell populations using 1-day intervals.
+34
+
+
+A PREPRINT - OCTOBER 22, 2026
+E.3.2
+2-day interval
+Table E.2: Intermediate-state 2-day intervals reconstruction result.
+Interpolation Method
+W2 ↓
+MMD↓
+Cell-type TV↓
+Signature MAE↓
+serum condition
+Arithmetic mixture
+12.5039 ± 0.4085
+0.5773 ± 0.0140
+0.2077 ± 0.0502
+0.2725 ± 0.0218
+Wasserstein
+12.2979 ± 0.4909
+0.6103 ± 0.0145
+0.1699 ± 0.0052
+0.3029 ± 0.0146
+RegWB
+12.4198 ± 0.4824
+0.6058 ± 0.0139
+0.1654 ± 0.0216
+0.2993 ± 0.0222
+TrajectoryNet
+14.1794 ± 0.5810
+0.6762 ± 0.0221
+0.3835 ± 0.0329
+0.3046 ± 0.0040
+Waddington-OT
+12.2477 ± 0.3275
+0.6125 ± 0.0102
+0.1660 ± 0.0254
+0.3613 ± 0.0135
+SBB Decoder (ours)
+11.6635 ± 0.3243
+0.5858 ± 0.0115
+0.2070 ± 0.0559
+0.2672 ± 0.0231
+SBB Markovian (ours)
+12.0708 ± 0.3970
+0.5652 ± 0.0124
+0.2077 ± 0.0502
+0.2491 ± 0.0212
+2i condition
+Arithmetic mixture
+13.3831 ± 0.0608
+0.3970 ± 0.0029
+0.2565 ± 0.0147
+0.2382 ± 0.0171
+Wasserstein
+13.3287 ± 0.2158
+0.4305 ± 0.0084
+0.1224 ± 0.0079
+0.2386 ± 0.0152
+RegWB
+13.4550 ± 0.2619
+0.4251 ± 0.0093
+0.1283 ± 0.0236
+0.2412 ± 0.0156
+TrajectoryNet
+14.9870 ± 0.5248
+0.5024 ± 0.0230
+0.2865 ± 0.0049
+0.2030 ± 0.0187
+Waddington-OT
+13.6357 ± 0.2592
+0.4465 ± 0.0079
+0.1465 ± 0.0156
+0.2485 ± 0.0279
+SBB Decoder (ours)
+12.1139 ± 0.1595
+0.3859 ± 0.0070
+0.2520 ± 0.0085
+0.1991 ± 0.0294
+SBB Markovian (ours)
+12.6380 ± 0.1817
+0.3781 ± 0.0074
+0.2559 ± 0.0160
+0.2219 ± 0.0254
+Figure E.6: Some qualitative figures for reconstruction of intermediate cell populations using 2-day intervals.
+35
+
+
+A PREPRINT - OCTOBER 22, 2026
+E.3.3
+3-day interval
+Table E.3: Intermediate-state 3-day intervals reconstruction result.
+Interpolation Method
+W2 ↓
+MMD↓
+Cell-type TV↓
+Signature MAE↓
+serum condition
+Arithmetic mixture
+12.4681 ± 0.3015
+0.4484 ± 0.0148
+0.1458 ± 0.0283
+0.0377 ± 0.0124
+Wasserstein
+11.8049 ± 0.2348
+0.4653 ± 0.0114
+0.1992 ± 0.0676
+0.0354 ± 0.0019
+RegWB
+11.9078 ± 0.2552
+0.4611 ± 0.0112
+0.1634 ± 0.0511
+0.0349 ± 0.0026
+TrajectoryNet
+13.9434 ± 0.2421
+0.5383 ± 0.0125
+0.3945 ± 0.0234
+0.0584 ± 0.0050
+Waddington-OT
+12.1768 ± 0.1722
+0.4949 ± 0.0046
+0.1133 ± 0.0263
+0.0422 ± 0.0029
+SBB Decoder (ours)
+11.3402 ± 0.2609
+0.4213 ± 0.0106
+0.0553 ± 0.0316
+0.0635 ± 0.0160
+SBB Markovian (ours)
+11.8330 ± 0.3609
+0.4293 ± 0.0138
+0.0625 ± 0.0220
+0.0384 ± 0.0107
+2i condition
+Arithmetic mixture
+11.1038 ± 0.2972
+0.1605 ± 0.0068
+0.1406 ± 0.0301
+0.1404 ± 0.0241
+Wasserstein
+11.3868 ± 0.4181
+0.1785 ± 0.0104
+0.2865 ± 0.0479
+0.1596 ± 0.0359
+RegWB
+11.5925 ± 0.3414
+0.1741 ± 0.0081
+0.2799 ± 0.0352
+0.1556 ± 0.0284
+TrajectoryNet
+15.0934 ± 0.3651
+0.3007 ± 0.0156
+0.3210 ± 0.0177
+0.2251 ± 0.0095
+Waddington-OT
+13.0232 ± 0.4104
+0.2425 ± 0.0104
+0.2812 ± 0.0374
+0.2316 ± 0.0437
+SBB Decoder (ours)
+10.0232 ± 0.4708
+0.1590 ± 0.0106
+0.1243 ± 0.0414
+0.1417 ± 0.0394
+SBB Markovian (ours)
+11.1622 ± 0.4522
+0.1627 ± 0.0108
+0.1465 ± 0.0404
+0.1228 ± 0.0363
+Figure E.7: Some qualitative figures for reconstruction of intermediate cell populations using 3-day intervals.
+36
+
+
+A PREPRINT - OCTOBER 22, 2026
+F
+RUNNING TIME
+Table F.1: Selected training budgets and recorded times for L outer iterations, G directed bridges per iteration
+Case
+Method
+L
+G
+Updates
+Time (s)
+Anisotropic Gaussian
+Decoder
+50
+3
+298,500
+907.6
+Anisotropic Gaussian
+Encoder
+50
+3
+298,500
+902.5
+Anisotropic Gaussian
+Symmetric
+50
+6
+597,000
+1799.7
+MNIST: 10 images
+Decoder
+95
+32
+1,216,000
+128.2 ± 6.1
+Ancestor, serum
+Decoder
+75
+4
+217,800
+176.4 ± 1.7
+1 day, serum
+Decoder
+60
+2
+55,680
+194.4 ± 2.7
+1 day, serum
+Markovian
+60
+2
+55,680
+192.9 ± 3.5
+1 day, 2i
+Decoder
+60
+2
+55,680
+215.7 ± 2.4
+1 day, 2i
+Markovian
+60
+2
+55,680
+213.4 ± 3.8
+2 days, 2i
+Decoder
+40
+2
+37,120
+162.5 ± 2.3
+2 days, 2i
+Markovian
+40
+2
+37,120
+165.3 ± 0.4
+2 days, serum
+Decoder
+40
+2
+37,120
+115.7 ± 23.1
+2 days, serum
+Markovian
+40
+2
+37,120
+115.4 ± 14.1
+3 days, 2i
+Decoder
+40
+2
+37,120
+217.0 ± 0.1
+3 days, 2i
+Markovian
+40
+2
+37,120
+200.2 ± 2.6
+3 days, serum
+Decoder
+60
+2
+55,680
+284.0 ± 2.9
+3 days, serum
+Markovian
+60
+2
+55,680
+285.9 ± 0.3
+37

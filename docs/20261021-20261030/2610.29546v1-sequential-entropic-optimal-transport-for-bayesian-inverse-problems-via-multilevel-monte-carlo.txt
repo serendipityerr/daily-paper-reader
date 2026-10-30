@@ -1,0 +1,2021 @@
+Sequential Entropic Optimal Transport for Bayesian Inverse
+Problems via Multilevel Monte Carlo
+JASON BEH1, PIERRE DEL MORAL2 & AJAY JASRA1
+1Computing & Mathematical Sciences Division, Mohamed Bin Zayed University of Artificial Intelligence, Abu
+Dhabi, UAE.
+2Centre de Recherche Inria Bordeaux Sud-Ouest, Talence, FR.
+E-Mail: Jason.KaiXun,Ajay.Jasra@mbzuai.ac.ae, pierre.del_moral@inria.fr
+Abstract
+We consider the problem of Bayesian estimation associated to inverse problems governed by
+partial differential equations (PDEs). In most cases of practical interest, one must use numerical
+solvers to implement computational methods based on Monte Carlo methods. This inevitably
+leads to an adaptation of multilevel Monte Carlo (MLMC) methods to reduce computational
+efforts to achieve a pre-specified mean square error (MSE). MLMC is based on sampling coupled
+versions of Bayesian posteriors associated to increasingly precise numerical solves of the PDE.
+In this article we present a novel method to implement MLMC based upon sequential entropic
+optimal transport couplings learned with light Schrödinger bridges, and correct the transport
+with Metropolis–Hastings steps that preserve the pairing.
+We bound the mean square error
+associated to a version of our new estimation method and show, for an elliptic inverse problem,
+that to achieve a MSE of O(δ2) (δ > 0) one can have an optimal cost of O(δ−2). The results
+feature explicit bounds on the effect of the fitted transport and of the Metropolis–Hastings
+correction. From a numerical perspective, on elliptic, Darcy-flow and Navier–Stokes problems,
+the method reduces the variance of the most precise solver by a factor of five to ten and is faster
+than multilevel sequential Monte Carlo [6] at tight accuracies.
+Keywords: Entropic Optimal Transport, Light Schrödinger Bridges, Bayesian Inverse Prob-
+lems, Multilevel Monte Carlo.
+1
+Introduction
+Inverse problems and their Bayesian counterparts are found in a large class of practical applications,
+which include physics, engineering, finance, and applied mathematics; see e.g. [40] and the references
+therein. In many cases, these types of models are related to partial differential equations (PDEs),
+which require numerical solution, and, in addition, the associated Bayesian estimation problem relates
+to a posterior density that can only be computed point-wise and with numerical error associated to
+the PDE solver. This naturally means that one must resort to computational methods based on,
+for example, Markov chain simulation, for which there have been numerous contributions; see for
+example [5, 14, 25, 6].
+The intention of this article is to introduce a new methodology, using machine learning methods,
+which can improve in terms of accuracy and speed, when related to these afore-mentioned Markov
+chain methods. Our approach will be based on entropic optimal transport and to that end, we give
+some mathematical background to provide context going forward.
+1.1
+Discretized Bayesian inverse problems
+Let π be a probability measure on a measurable space (X, X ) with X ⊆Rd. For a π-integrable
+φ : X →R we wish to compute
+π(φ) :=
+Z
+X
+φ(x)π(dx).
+We assume that π has a density with respect to a σ-finite measure dx on (X, X ),
+π(dx) = γ(x)dx
+Z
+,
+1
+arXiv:2610.29546v1  [math.NA]  21 Oct 2026
+
+
+where γ : X →R+ and Z =
+R
+X γ(x)dx.
+We are interested in the case where γ cannot be evaluated, but approximations γl : X →R+,
+l ∈N0, can. We assume that, for each l ∈N0, Zl =
+R
+X γl(x)dx is finite and positive, so that
+πl(dx) = γl(x)dx
+Zl
+is a probability measure, and that for every π-integrable φ : X →R,
+lim
+l→∞πl(φ) = π(φ),
+where πl(φ) :=
+R
+X φ(x)πl(dx). This is the situation in Bayesian inverse problems, the class of problem
+of interest, where γl involves the numerical solution of a PDE at resolution l.
+1.2
+Background on entropic optimal transport
+Our main objective is to sample couplings of the targets πl and πl−1 as we will now describe. Let
+µ and ν be probability measures on (Rd, B(Rd)) with Lebesgue densities, also denoted µ and ν,
+and let Π(µ, ν) be the set of their couplings; that is the collection of probability measures that have
+marginals µ and ν respectively. For a probability density ξ on Rp, H(ξ) = −
+R
+Rp ξ(x) log{ξ(x)}dx is
+its differential entropy. For ε > 0, the entropic optimal transport (EOT) problem is
+inf
+ξ∈Π(µ,ν)
+1
+2
+Z
+R2d ∥x −y∥2
+2ξ(x, y) dx dy −εH(ξ)
+
+,
+(1)
+where ∥·∥2 is the Euclidean norm. As noted by several authors (e.g., [18]), the optimal coupling can
+be written as
+ξ⋆(x, y) = µ(x)
+exp
+n
+⟨x,y⟩
+ε
+o
+v⋆(y)
+R
+Rd exp
+n
+⟨x,y⟩
+ε
+o
+v⋆(y)dy
+,
+where the potential v⋆: Rd →R+ is unknown.
+For a potential v : Rd →R+ write Zv(x) :=
+R
+Rd exp
+n
+⟨x,y⟩
+ε
+o
+v(y)dy. To approximate v⋆, let vθ be a potential with finite-dimensional parameter
+θ ∈Θ ⊆Rdθ. In [26], θ is fitted by minimizing
+L(θ) =
+Z
+Rd log{Zvθ(x)}µ(x)dx −
+Z
+Rd log{vθ(y)}ν(y)dy,
+with the Gaussian-mixture potential
+vθ(y) =
+J
+X
+j=1
+ϑjϕd(y; mj, Σj),
+where ϕd(y; m, Σ) is the d-dimensional Gaussian density with mean m and covariance matrix Σ,
+ϑj ≥0, PJ
+j=1 ϑj = 1 and θ = (m1:J, Σ1:J, ϑ1:J−1). With this choice Zvθ(x) is available in closed
+form and the conditional law of y given x is a Gaussian mixture that can be sampled exactly, which
+gives a fast, though possibly biased, approximation of ξ⋆.
+1.3
+Related work, contributions and paper structure
+The main idea of this article is to use EOT to sample couplings of πl and πl−1 within the context
+of Multilevel Monte Carlo [9, 16, 17, 19] (MLMC). MLMC writes πL(φ) as a telescoping sum of
+corrections between consecutive levels and estimates each one using coupled samples. The utility
+2
+
+
+of doing so is that for sufficiently good couplings one gains a variance reduction and choosing the
+number of simulated samples appropriately, one can reduce the computational cost to achieve a mean
+square error (MSE), versus just considering sampling from πL say. The ‘good couplings’ we mention
+above will be obtained by using EOT.
+In the context of MLMC, and for Bayesian inverse problems, couplings have been built with
+Markov chains [14, 21] or with sequential Monte Carlo samplers [12], as in the multilevel sequential
+Monte Carlo (MLSMC) method of [6], later extended with likelihood-informed proposals [7] and
+with tempering [27]. Sequential Monte Carlo methods of this type have been applied, for instance,
+to inference for the Navier–Stokes equations [25], Lagrangian data assimilation with unknown ob-
+servation locations [38] and, more recently, zeroth-order stochastic bilevel optimization [8]. Instead
+of reweighting samples of one distribution to represent another, optimal transport moves samples,
+through a deterministic map or a Markov kernel that pushes the first distribution onto the second;
+see [30] for an introduction. Transport maps have been used to sample posteriors directly [15], also
+as compositions of maps between consecutive tempered densities [10, 41], to accelerate Markov chain
+Monte Carlo [35, 36], and to combine annealing with multi-fidelity models [39]. In multilevel estima-
+tors they have been used to couple the levels [23, 32], for instance by pushing a common reference
+sample through a map fitted to each level. In sequential Monte Carlo, normalizing flows [2, 31], con-
+trolled transitions [20] and Schrödinger bridges [4] have been learned between consecutive tempered
+distributions, with importance weights to correct the transport.
+Rather than a deterministic map, entropic optimal transport [28, 33] gives a coupling of two
+distributions: the joint law with the prescribed marginals that minimizes the expected squared
+distance between the coupled points plus an entropy penalty. Its conditional laws act as a stochastic
+transport map, and the coupled pairs are close when the two distributions are close. The coupling is
+computed by Sinkhorn iterations between empirical measures [11, 37], whose stability is studied in
+[13]. The light Schrödinger bridge [18, 26] parametrizes the potential by a Gaussian mixture, which
+makes the coupling cheap to fit from samples and exact to simulate.
+In this article we present two distinct methods for implementing MLMC via EOT. In the first,
+we use a light Schrödinger bridge to learn the EOT between each πl and πl−1 and combine this with
+a type of particle simulation method. In the second, this approach is augmented with Metropolis-
+Hastings steps.
+We then provide a mathematical analysis of our approach in terms of an MSE
+analysis. We bound the MSE associated to a version of our new estimation method and show, for
+an elliptic inverse problem, that to achieve a MSE of O(δ2) (δ > 0) one can have an optimal cost
+of O(δ−2), depending on the cost of the solver. The results feature explicit bounds on the effect of
+the fitted transport and of the Metropolis–Hastings correction. We then consider three numerical
+examples associate to elliptic, Darcy-flow and Navier–Stokes problems. We show that the second
+method reduces the variance of the most precise solver by a factor of five to ten and is faster than
+multilevel sequential Monte Carlo [6] at tight accuracies.
+This article is structured as follows. In section 2 our methodology is detailed. In Section 3 we
+present our mathematical results, with some proofs deferred to the appendix. Section 4 details our
+numerical results.
+2
+Multilevel Estimation with Learned Entropic Couplings
+2.1
+Notation
+Throughout, X ⊆Rd is the state space and x a point of X; ∥·∥2 and ⟨·, ·⟩are the Euclidean norm and
+inner product. Probability measures with a Lebesgue density are identified with that density. For a
+probability measure µ and a function φ, µ(φ) =
+R
+φ dµ and Varµ(φ) is the variance of φ under µ; Eξ is
+the expectation under a law ξ. A function φ is Lipschitz if ∥φ∥Lip = supx̸=x′ |φ(x)−φ(x′)|/∥x−x′∥2 <
+∞. For a Markov kernel K, µK(dy) =
+R
+µ(dx)K(x, dy) and (µ ⊗K)(dx, dy) = µ(dx)K(x, dy).
+For probability measures µ and ν, Π(µ, ν) is the set of couplings, i.e., of laws on X × X with
+marginals µ and ν, and W 2
+2 (µ, ν) = infξ∈Π(µ,ν) Eξ∥X−Y ∥2
+2. We write ∥µ−ν∥TV = supA |µ(A)−ν(A)|,
+3
+
+
+KL(µ∥ν) =
+R
+log(dµ/dν) dµ, and H(ξ) = −
+R
+ξ log ξ for the differential entropy of a density ξ.
+N(m, Σ) is the Gaussian law with mean m and covariance Σ and ϕd(· ; m, Σ) its density on Rd. For
+nonnegative sequences, al ≲bl means al ≤Cbl for a constant C that does not depend on l.
+2.2
+Multilevel transport with light Schrödinger bridges
+We approximate πL(φ) through the telescoping sum
+πL(φ) = π0(φ) +
+L
+X
+l=1
+{πl(φ) −πl−1(φ)} .
+If one can sample from couplings ξl ∈Π(πl−1, πl) whose transport cost
+Z
+R2d ∥x −y∥2
+2ξl(x, y) dx dy
+is small, each correction can be estimated from few samples, and a prescribed mean square error
+is reached at lower cost than by sampling from πL alone; see [6] and the references therein. The
+method of [6] achieves this with a combination of sequential and Markov chain Monte Carlo. We
+instead learn, at each level, an entropic coupling of consecutive targets with the light Schrödinger
+bridge of [26].
+Throughout the paper, the numbers of particles satisfy 1 ≤NL ≤· · · ≤N0 < ∞, so that every
+particle at level l has a parent at level l−1. Given the Gaussian-mixture potentials vθ of Section 1.2,
+the parameter of the transition from level l to level l + 1 is fitted by stochastic gradient descent on
+the self-normalized empirical loss
+LNl(θ) = 1
+Nl
+Nl
+X
+i=1
+log{Zvθ(Xi
+l )} −
+1
+Nl
+PNl
+i=1
+γl+1(Xi
+l )
+γl(Xi
+l ) log{vθ(Xi
+l )}
+1
+Nl
+PNl
+i=1
+γl+1(Xi
+l )
+γl(Xi
+l )
+,
+(2)
+and the particles are moved with the kernel
+Kθ(x, dy) = exp{⟨x, y⟩/ε} vθ(y)
+Zvθ(x)
+dy,
+(3)
+with ε = εl+1 the entropic parameter of the transition from level l to level l + 1. The resulting
+method is Algorithm 1. The particles at level l have law πθ
+l , where πθ
+0 = π0 and πθ
+l+1 = πθ
+l Kθl+1.
+Algorithm 1 Multilevel estimation with light Schrödinger bridge transport
+Require: horizon L, sample sizes N0 ≥· · · ≥NL, entropic parameters ε1, . . . , εL
+1: sample X1
+0, . . . , XN0
+0
+i.i.d. from π0
+2: for l = 0, . . . , L −1 do
+3:
+compute θl+1 by stochastic gradient descent on LNl(θ) in (2)
+4:
+for i = 1, . . . , Nl+1 do
+5:
+sample Xi
+l+1 ∼Kθl+1(Xi
+l , ·), with Kθ in (3) and ε = εl+1
+6:
+end for
+7: end for
+8: return bπL(φ) in (4)
+The estimator of πL(φ) is
+bπL(φ) = 1
+N0
+N0
+X
+i=1
+φ(Xi
+0) +
+L
+X
+l=1
+1
+Nl
+Nl
+X
+i=1
+{φ(Xi
+l ) −φ(Xi
+l−1)},
+(4)
+4
+
+
+in which each correction is a paired difference along the transport. Line 1 of Algorithm 1 assumes
+i.i.d. samples from π0, as in [6]. This is realistic when the level-0 solver is coarse enough for rejection
+sampling from the prior to be efficient; otherwise π0 can be approximated by a tempered sequential
+Monte Carlo sampler, as in Section 4. The same mechanism gives approximate samples from any
+sequence of related probability measures on a common state space.
+2.3
+Transport followed by Metropolis–Hastings
+The particles produced in line 5 of Algorithm 1 have law πθ
+l+1 = πθ
+l Kθl+1 rather than πl+1, and this
+error accumulates over levels. A simple correction is to follow each transport step by a few iterations
+of a Markov kernel Ml+1 that leaves πl+1 invariant, started at the transported particle. We call the
+resulting method TransportMH; it is given in Algorithm 2. The estimator is bπL(φ) in (4), computed
+Algorithm 2 TransportMH: transport followed by Metropolis–Hastings
+Require: horizon L, sample sizes N0 ≥· · · ≥NL, entropic parameters ε1, . . . , εL, numbers of sweeps
+n1, . . . , nL ≥0, Markov kernels M1, . . . , ML with πlMl = πl
+1: sample X1
+0, . . . , XN0
+0
+i.i.d. from π0
+2: for l = 0, . . . , L −1 do
+3:
+compute θl+1 by stochastic gradient descent on LNl(θ) in (2)
+4:
+for i = 1, . . . , Nl+1 do
+5:
+sample e
+Xi
+l+1 ∼Kθl+1(Xi
+l , ·)
+6:
+apply nl+1 steps of Ml+1 started at e
+Xi
+l+1, and call the result Xi
+l+1
+7:
+end for
+8: end for
+9: return bπL(φ) in (4)
+with the particles after the Metropolis–Hastings (MH) step.
+In our implementation Ml+1 is a preconditioned Crank–Nicolson Metropolis–Hastings (pCN-MH)
+kernel. Let (m, AA⊤) be the mean and covariance of { e
+Xi
+l+1}i≤Nl+1. The proposal is
+x′ = m + A
+
+ρ A−1(x −m) + (1 −ρ2)1/2U
+	
+,
+U ∼N(0, Id),
+which is reversible with respect to N(m, AA⊤), and it is accepted with probability
+min
+n
+1, γl+1(x′) ϕd(x; m, AA⊤)
+γl+1(x) ϕd(x′; m, AA⊤)
+o
+,
+so Ml+1 leaves πl+1 invariant for any (m, A) and ρ ∈[0, 1). The step and the number of sweeps
+adapt to the difficulty of the transition, measured by the effective sample size (ESS) fraction el+1 of
+the weights γl+1/γl on the level-l cloud. With tl+1 = min{1, max(0, log(el+1/0.05)/ log 10)}, which
+is 0 if el+1 ≤5% and 1 if el+1 ≥50%,
+nl+1 = round(30 −27tl+1),
+log(1 −ρ2
+l+1) = (1 −tl+1) log(1 −0.82) + tl+1 log(1 −S2
+l+1),
+where Sl+1 = {(ε2
+l+1 + 4)1/2 −εl+1}/2 is the correlation of the EOT coupling of N(0, Id) with itself
+at parameter εl+1 [1, 24, 29]. After a hard transition the chain makes 30 sweeps of large moves
+(ρ = 0.8); once the weights are close to uniform it makes 3 sweeps of moves at the scale of the
+transport noise, since 1 −S2
+l+1 = εl+1Sl+1.
+Four remarks are in order.
+• With nl+1 = 0 for all l, Algorithm 2 reduces to Algorithm 1.
+5
+
+
+• Since Ml+1 is πl+1-invariant, ∥µMl+1 −πl+1∥TV ≤∥µ −πl+1∥TV for any µ, so the MH step
+can only reduce the distance of the particle law to πl+1. Finitely many sweeps do not remove
+this distance, so bπL(φ) remains biased for πL(φ).
+• Each chain starts at the transported particle, so Xi
+l+1 stays paired with its parent Xi
+l . When
+ρ is close to one the pairing is barely affected; larger moves trade a weaker pairing, and hence
+a larger variance of φ(Xi
+l+1) −φ(Xi
+l ), for a smaller bias.
+• The transition from level l to level l + 1 costs Nl evaluations of γl+1 for the training weights,
+Nl+1(1 + nl+1) for the transported particles and the MH sweeps, and the stochastic gradient
+fit, which needs no evaluation of γl+1.
+3
+Mathematical Analysis
+We analyze the paired estimator (4). Section 3.1 bounds its mean square error when each transition
+is an exact coupling of consecutive targets, in terms of the transport costs between levels, and derives
+the multilevel rates and complexity. Section 3.2 applies these bounds to posteriors with bounded
+misfit, such as the elliptic problem of Section 4.2, and extends them to the fitted kernels, with
+and without the Metropolis–Hastings correction. The proofs of the results stated without proof are
+collected in Appendix A.
+The results concern Algorithms 1 and 2 and idealized versions of them, as follows.
+• Theorem 3.1 and Corollaries 3.2 and 3.4 analyze Algorithm 1 with the fitted kernel Kθl+1 of
+line 5 replaced by an exact coupling kernel Kl+1, which moves the particles of level l exactly
+onto πl+1, and with line 3 omitted. This oracle version isolates the effect of the transport cost
+between levels.
+• Corollary 3.6 analyzes Algorithm 1 itself, with the fit of line 3 computed on samples independent
+of the particles.
+• Corollary 3.7 analyzes Algorithm 2, with the same fits and Metropolis–Hastings kernels in
+line 6 that contract in total variation.
+We first state the assumption under which the oracle version is analyzed in Section 3.1.
+(A1) For each l ≥1 there exists a Markov kernel Kl such that ξl(dx, dy) = πl−1(dx)Kl(x, dy) has
+second marginal πl, that is, πl−1Kl = πl and ξl ∈Π(πl−1, πl).
+3.1
+MSE under exact couplings
+Each particle index i defines a lineage Xi
+0 →Xi
+1 →· · · →Xi
+ℓi, where ℓi = max{l : Nl ≥i}. Exactly
+Nl lineages reach level l, and a lineage that reaches level l reaches all levels k < l. For Markov kernels
+K1, K2, . . . , exact or not, let πK
+0 = π0 and πK
+l
+= πK
+l−1Kl. Each lineage is a Markov chain with initial
+law π0 and transition kernels K1, K2, . . . , so consecutive states (Xi
+l−1, Xi
+l ) have joint law πK
+l−1 ⊗Kl,
+and distinct lineages are independent. For Kl = Kθl, πK
+l
+is the law πθ
+l of Section 2. Under (A1),
+πK
+l
+= πl and (Xi
+l−1, Xi
+l ) ∼ξl. Along a lineage define the increments
+D0 = φ(X0) and Dl = φ(Xl) −φ(Xl−1) for l ≥1,
+and write Vl = Var(Dl) and Ckl = Cov(Dk, Dl).
+If φ ∈L1(πK
+l ) for all l, then EbπL(φ) = πK
+L (φ). Under (A1), EbπL(φ) = πL(φ), so the bias with
+respect to π(φ) is only the discretization error πL(φ) −π(φ). Since the lineages are independent and
+identically distributed, for φ ∈L2(πK
+l ) for all l,
+Var
+ bπL(φ)
+
+=
+L
+X
+l=0
+Vl
+Nl
++ 2
+X
+0≤k<l≤L
+Ckl
+Nk
+.
+6
+
+
+For l ≥1, let Wl := Eξl∥X −Y ∥2
+2 be the transport cost of ξl and Cφ := ∥φ∥2
+Lip. If φ is Lipschitz,
+then Vl ≤Eξl|φ(Y ) −φ(X)|2 ≤CφWl. Write
+s0 := Varπ0(φ)1/2,
+sl := (Cφ Wl)1/2
+(l ≥1).
+The following theorem concerns the oracle version of Algorithm 1, in which line 5 uses the kernel
+Kl+1 of (A1). It shows that the mean square error of the estimator with respect to πL(φ) is controlled
+by the transport costs Wl of the couplings: the covariances between levels, which are not zero for
+the paired estimator, at most square the sum of the level standard deviations.
+Theorem 3.1. Assume (A1). Then for any Lipschitz φ we have
+E
+
+{bπL(φ) −πL(φ)}2
+≤
+L
+X
+l=0
+s2
+l
+Nl
++ 2
+X
+0≤k<l≤L
+sk sl
+Nk
+≤
+
+L
+X
+l=0
+sl
+√Nl
+2
+.
+Proof. Since EbπL(φ) = πL(φ),
+E[{bπL(φ) −πL(φ)}2] = Var(bπL(φ)) =
+L
+X
+l=0
+Vl
+Nl
++ 2
+X
+0≤k<l≤L
+Ckl
+Nk
+.
+Here V0 = s2
+0, Vl ≤CφWl = s2
+l by the Lipschitz property of φ, and |Ckl| ≤√VkVl ≤sksl by
+the Cauchy–Schwarz inequality, which gives the first inequality. The second follows from 1/Nk ≤
+1/√NkNl for k < l, since Nl ≤Nk.
+We denote by α, β and ζ the rates of the discretization bias, the level variances and the cost
+per sample: |πl(φ) −π(φ)| ≲hα
+l , Vl ≲hβ
+l , and one evaluation of γl costs ≲h−ζ
+l
+. The next result
+turns Theorem 3.1 into a complexity statement: once the level variances, the bias and the cost decay
+at these rates, the classical allocation of the sample sizes [9] applies to the paired estimator, even
+though its level corrections are not independent. Below let hl = h02−l a scale attached to level l, for
+instance the mesh size of the solver that defines πl.
+Corollary 3.2. Assume (A1), let φ be Lipschitz, hl = h02−l. Suppose that there exist constants c1,
+c2 and c3 such that |πl(φ) −π(φ)| ≤c1hα
+l , Vl ≤c2hβ
+l for l ≥1, and the cost is at most c3
+P
+l Nlh−ζ
+l
+.
+Then, with cβ = 2−β/2/(1 −2−β/2), we have
+E
+
+{bπL(φ) −π(φ)}2
+≤c2
+1h2α
+L + V0 + 2cβ
+√V0c2 hβ/2
+0
+N0
++ (1 + 2cβ)c2
+L
+X
+l=1
+hβ
+l
+Nl
+.
+Moreover, if α ≥1
+2 min(β, ζ), the choice Nl ∝δ−2h(β+ζ)/2
+l
+gives a mean square error at most δ2 at
+cost
+• O(δ−2) for β > ζ (coarse levels),
+• O(δ−2 log2 δ) for β = ζ (moderate levels), or
+• O(δ−2−(ζ−β)/α) for β < ζ (fine levels).
+In Corollary 3.2, c1 and c3 are properties of the problem and of the solver, c2 depends also on the
+couplings, and the user chooses the couplings and the Nl. Since Vl ≤∥φ∥2
+LipWl, the level variances
+decay at rate β as soon as the transport costs do; the next section gives conditions for this.
+7
+
+
+3.2
+Posteriors with bounded misfit
+Theorem 3.1 does not require any particular form of the levels. We now consider posteriors on a
+compact parameter space whose misfit is bounded and converges uniformly, the setting of [6, Section
+4]. Let X = [−1, 1]d carry the uniform prior πpr, let Gl : X →Rdy be the forward map computed
+at level l and G the exact one, and let γl(x) = exp{−Φl(x)} with Φl(x) = ∥y −Gl(x)∥2
+2/(2σ2
+η). We
+make the following assumption on the forward maps.
+(A2) There exist RG < ∞and cG < ∞, independent of x and l, such that
+sup
+x∈X
+∥Gl(x)∥2 ≤RG,
+sup
+x∈X
+∥Gl(x) −Gl−1(x)∥2 ≤cGhl,
+sup
+x∈X
+∥Gl(x) −G(x)∥2 ≤cGhl, (5)
+and the first bound also holds for G.
+The elliptic inverse problem of [6], which is test case 1 of Section 4.2, satisfies (A2).
+There x
+parametrizes the coefficient k(·; x) = ¯k + P
+j xjσjbj of the equation −(k p′)′ = f on (0, 1) with
+p(0) = p(1) = 0, and Gl(x) collects point values of its finite-element solution on a mesh of size hl.
+Since k ≥¯k −P
+j σj > 0 uniformly in x, the solution is bounded uniformly, and the finite-element
+error gives the other two bounds [6, Section 4]. The analysis below therefore covers the test case
+of [6]. As for the Darcy-flow and Navier–Stokes problems of Section 4, their Gaussian priors are not
+compactly supported and fall outside (A2), but they constitute more complicated problems on which
+we can test our methods. We set Φ∗= (RG + ∥y∥2)2/(2σ2
+η) and cΦ = cG(RG + ∥y∥2)/σ2
+η.
+The following lemma shows that, under (A2), consecutive posteriors are close in the 2-Wasserstein
+distance, at the rate of the forward-map error. It is a property of the targets alone and involves no
+coupling used by the algorithm.
+Lemma 3.3. Assume (A2). Then there exists C0 < ∞, independent of d, such that for l ≥1 we
+have
+W 2
+2 (πl−1, πl) ≤2C0eΦ∗ e2cΦhl −1
+2,
+W 2
+2 (πl, π) ≤2C0eΦ∗ e2cΦhl −1
+2.
+To turn Lemma 3.3 into a bound on the estimator, the coupling used at each level must have a
+cost close to the optimal one. We formalize this as follows.
+(A3) For each l ≥1 there exist ξl ∈Π(πl−1, πl), with conditional law Kl, κ ≥1 and ωl ≥0 such
+that Eξl∥X −Y ∥2
+2 ≤κ W 2
+2 (πl−1, πl) + ωl.
+Under (A2) and (A3), Lemma 3.3 and Theorem 3.1 give the level variances and the bias, and hence
+the multilevel rates of Corollary 3.2.
+Corollary 3.4. Assume (A2)–(A3). Then (A1) holds and, for any Lipschitz φ : X →R and l ≥1,
+we have
+Vl ≤∥φ∥2
+Lip
+
+8κC0c2
+ΦeΦ∗+4cΦh0h2
+l + ωl
+	
+,
+|πL(φ) −π(φ)| ≤∥φ∥Lip
+ 2C0eΦ∗1/2 e2cΦhL −1
+
+.
+In particular, if ωl ≤cωh2
+l for some cω < ∞, the conclusions of Corollary 3.2 hold with α = 1 and
+β = 2.
+The optimal coupling for W2(πl−1, πl), which exists since X is compact, satisfies (A3) with κ = 1
+and ωl = 0. The entropic coupling, which LightSB approximates, also satisfies (A3) with κ = 1; the
+next lemma bounds its excess cost ωl in terms of the entropic parameter, for any two measures on
+X.
+Lemma 3.5. Let µ and ν be probability measures on X with finite entropy, ε > 0, and ξε be their
+EOT coupling (1). Then we have
+Eξε∥X −Y ∥2
+2 ≤W 2
+2 (µ, ν) + 2dε
+n
+log
+
+1 + 2
+ε
+
++ 4 + 2ε
+o
+.
+8
+
+
+For the EOT couplings of the levels, ωl ≤cωh2
+l as soon as εl ≲h2
+l /{d log(1/hl)}: the entropic
+parameter should decrease like h2
+l up to a logarithmic factor. The schedule of Section 4, εl ∝4−l ∝h2
+l ,
+has this form, although there the coupling is learned in other coordinates. Together, Corollary 3.4 and
+Lemma 3.5 give the following cost statement. For the one-dimensional elliptic problem of Section 4.2,
+a solve on level l is a tridiagonal system of cost O(h−1
+l
+), so ζ = 1, while α = 1 and β = 2; hence β > ζ
+and α ≥1
+2 min(β, ζ). With the entropic couplings and εl ≲h2
+l /{d log(1/hl)}, Corollary 3.2 therefore
+gives a mean square error at most δ2 at cost O(δ−2), the cost of estimating a single expectation with
+independent samples of unit cost. For a solver whose cost grows faster with the resolution, ζ ≥β,
+and the cost is O(δ−2 log2 δ) or O(δ−2−(ζ−β)/α) instead.
+This statement concerns the oracle version of Algorithm 1; Corollaries 3.6 and 3.7 quantify what
+fitting adds.
+The rates are those obtained for MLSMC in [6, Section 4], and a bound of order
+h2
+l in (5) would give β = 4 in the same way. The constant eΦ∗grows as ση decreases, as do the
+constants of [6], so these results explain the rates rather than the gain of TransportMH at small
+noise. The observable φ(x) = p( 1
+2; x) of Section 4.2 is Lipschitz on X, because k(·; x) is affine in
+x and ∥k(·; x) −k(·; x′)∥∞≤(P
+j σ2
+j )1/2∥x −x′∥2. Finally, an exact coupling does not depend on
+the coordinates in which the particles are represented, so the bounds apply to the paired estimator
+whether the samplers work in x or, as in Section 4.2, in z = atanh(x).
+The fitted kernels do not give an exact coupling, but the same argument bounds their effect.
+We consider Algorithm 1, and then Algorithm 2, under the following assumption on line 3, which
+separates the fit from the particles it is applied to.
+(A4) For each l ≥1, the parameter θl of Kθl is fitted on samples independent of the particles.
+With ξ⋆
+l , of conditional law K⋆
+l , the coupling of (A3), write
+El = KL
+ ξ⋆
+l ∥πl−1 ⊗Kθl
+
+=
+Z
+KL
+ K⋆
+l (x, ·) ∥Kθl(x, ·)
+
+πl−1(dx),
+∆l =
+l
+X
+k=1
+Ek,
+for the fitting error of level l and its accumulation; for the EOT coupling, El is the excess of the
+LightSB loss over its minimum [26]. The next corollary bounds the mean square error of Algorithm 1,
+which has no Metropolis–Hastings steps, in terms of these fitting errors.
+Corollary 3.6. Assume (A2)–(A4). Then for any Lipschitz φ : X →R we have
+E
+
+{bπL(φ) −π(φ)}2
+≤
+n
+|πL(φ) −π(φ)| + ∥φ∥Lip(2d∆L)1/2o2
++
+
+L
+X
+l=0
+˜sl
+√Nl
+2
+,
+with ˜s0 = Varπ0(φ)1/2 and ˜s 2
+l = ∥φ∥2
+Lip
+
+κW 2
+2 (πl−1, πl) + ωl + 2d(2∆l)1/2	
+for l ≥1.
+Compared with Corollary 3.4, fitting adds a bias of order (d∆L)1/2 and a term of order d∆1/2
+l
+to each level variance. Since ∆l ≥E1 does not decrease with l, keeping β = 2 requires ∆L ≲h4
+L/d2:
+every fit, including the coarse ones, must be accurate at the scale of the finest level. The bound is
+crude, since it charges the mismatched mass at the diameter of X, but it shows the mechanism seen
+in Section 4.5: without correction, the fitting errors accumulate into a bias that does not decrease
+with L, and LightSB stalls.
+The Metropolis–Hastings steps in line 6 of Algorithm 2, which leave each πl invariant, are what
+removes this accumulation in practice. To show this, we assume that they contract in total variation.
+(A5) For each l ≥1, the transported particles are followed by nl steps of a Markov kernel Ml that
+leaves πl invariant and has Dobrushin coefficient τl = supx,x′∈X ∥Ml(x, ·) −Ml(x′, ·)∥TV < 1.
+Condition (A5) holds, for instance, under the minorization condition verified for a blockwise Gibbs
+kernel in [6, Proposition 4.3]. Write πθ
+l for the law of the particles at level l, Tl = ∥πθ
+l −πl∥TV, with
+T0 = 0, and ςl = E∥Xi
+l −e
+Xi
+l ∥2
+2 for the mean squared displacement of the Metropolis–Hastings steps.
+The next corollary shows that each level now contracts the error it inherits, so that the bias stays
+bounded uniformly in the number of levels.
+9
+
+
+Corollary 3.7. Assume (A2)–(A5). Then for l ≥1 we have
+Tl ≤τ nl
+l
+
+Tl−1 + (El/2)1/2	
+,
+and, for any Lipschitz φ : X →R,
+|EbπL(φ) −πL(φ)| ≤2d1/2∥φ∥Lip TL,
+Var(bπL(φ)) ≤
+
+L
+X
+l=0
+˜sl
+√Nl
+2
+,
+with ˜s0 = Varπ0(φ)1/2 and ˜s 2
+l = 2∥φ∥2
+Lip
+
+κW 2
+2 (πl−1, πl)+ωl +4d
+ Tl−1 +(El/2)1/2
++ςl
+	
+. Moreover,
+if τ nl
+l
+≤¯τ < 1 and El ≤¯E for all l, then TL ≤¯τ(1 −¯τ)−1( ¯E/2)1/2 for every L.
+The price of the contraction is the displacement ςl, which loosens the pairing and enters the level
+variances: more steps reduce the bias through τ nl
+l
+but increase ςl. This is the trade-off observed
+in Section 4.5, where at fine levels, with the weights nearly uniform, the three sweeps multiply the
+variance of the paired differences by about four.
+4
+Numerical Experiments
+Section 3 covers exact couplings and, through crude bounds, the fitted kernels with and without
+the Metropolis–Hastings correction. We now assess them numerically, comparing TransportMH with
+the multilevel sequential Monte Carlo (MLSMC) sampler of [6] on three Bayesian inverse problems:
+the one-dimensional elliptic problem of [6], with a smaller observation noise than in that paper; a
+two-dimensional Darcy-flow problem; and, in the spirit of [25], the recovery of the initial vorticity
+of a two-dimensional Navier–Stokes flow from noisy point observations at later times. The first two
+have finite-element forward maps; the third is nonlinear and time dependent. In all three the first
+transition is hard and the later ones are easy: the ESS fraction of γ1/γ0 on a π0 cloud is 3%, 1.2%
+and 1.8%, whereas at the second transition it is already about 60% and 73% in test cases 2 and 3.
+All computations are in Python (NumPy/SciPy for the PDE solves, PyTorch for the LightSB fits)
+on a single CPU thread of an Apple M4 Pro laptop. Implementation details, the sample sizes, the
+computation of the reference values and a breakdown of the computing time are in Appendix B.
+4.1
+Common setup
+Targets.
+For an unknown parameter x with prior πpr, data y ∈Rdy and a forward map Gl computed
+on a mesh of size hl (finite elements in test cases 1 and 2, finite differences in space and time in test
+case 3), level l has unnormalized density
+γl(x) = exp
+
+−
+1
+2σ2η
+y −Gl(x)
+2
+2
+
+πpr(x),
+πl(dx) = γl(x)dx
+Zl
+,
+and the incremental weights are γl/γl−1, the ratio of the level-l and level-(l −1) likelihoods. All
+samplers work in unconstrained coordinates z ∈Rd, a bijective reparametrization of x defined for
+each problem below, and πl also denotes the target in these coordinates. The quantity of interest is
+πL(φ) for an observable φ given for each problem.
+Methods.
+All four methods start from the same N0 samples of π0 and use the same N0 ≥· · · ≥NL.
+(i) MLSMC-pCN : the sampler of [6]: reweight by γl/γl−1, resample to Nl particles, and mutate
+with 3 sweeps of the pCN-MH kernel of Section 2.3, with (m, AA⊤) the mean and covariance
+of the current cloud and ρ = 0.78.
+(ii) MLSMC-pCN + ESS sweeps: as (i), with nl sweeps chosen by the rule of Section 2.3, so that
+(ii) and (iv) differ only by the transport.
+10
+
+
+(iii) LightSB: Algorithm 1, without correction.
+(iv) TransportMH : Algorithm 2, with the pCN-MH kernel and the adaptive nl and ρl of Section 2.3.
+The mutations of (i) and (ii) and the MH step of (iv) leave πl invariant; (iii) and (iv) use the paired
+estimator (4). TransportMH evaluates γl at the transported particles and runs its MH sweeps at
+every level, including L, where MLSMC does not mutate; at equal L it is therefore the most expensive
+method (Appendix B.2), and it can only win at equal accuracy.
+LightSB fits.
+The potentials vθ have four components with diagonal covariances and are fitted
+with Adam on the whitened level-(l −1) cloud (Appendix B.1). The entropic parameter decreases
+geometrically, εl = 0.05·4−(l−1), floored at 10−5, following the shrinking distance between consecutive
+levels.
+Sample sizes.
+We choose the sample sizes as Corollary 3.2 advises, as in [6]:
+Nl ∝δ−2
+
+X
+k≤L
+h(β−ζ)/2
+k
+
+h(β+ζ)/2
+l
+for a tolerance δ, floored at Nl ≥100 so that the cloud covariance up to d = 50 is well defined. With
+the rates of Table 1, β > ζ in all three problems, so this allocation targets a mean square error δ2 at
+cost O(δ−2), the regime of the cost statement of Section 3.2; increasing the horizon L by one halves
+δ, as for α = 1, which multiplies N0 by about four. Table 1 gives the rates used and Appendix B.3
+the resulting Nl.
+Error and cost.
+Each configuration is run R = 30 times independently. With reference value ¯π
+and estimates bπL,r(φ),
+relRMSE = 1
+|¯π|
+n 1
+R
+R
+X
+r=1
+ bπL,r(φ) −¯π
+2o1/2
+,
+relbias = 1
+|¯π|
+ 1
+R
+R
+X
+r=1
+bπL,r(φ) −¯π
+
+,
+and the standard error of the relative bias combines the spread of the runs and the standard error of
+¯π. Cost is the mean wall time per run, including LightSB fitting and all PDE solves and excluding
+the generation of the level-0 samples, which is shared by all methods. Varying the horizon L traces
+an error–cost curve per method.
+4.2
+Test case 1: one-dimensional elliptic problem
+This is the example of [6], in our own implementation.
+Model.
+On D = (0, 1),
+−d
+ds
+
+k(s; x)dp
+ds(s; x)
+
+= 100 s,
+p(0; x) = p(1; x) = 0,
+with
+k(s; x) = 0.15 +
+50
+X
+j=1
+xj σj bj(s),
+σj = 0.4 · 4−j,
+bj(s) =
+(
+sin(jπs),
+j odd,
+cos(jπs),
+j even,
+and prior x ∼U([−1, 1]50), so that k ≥0.15−P
+j σj > 0. The samplers work in z = atanh(x) ∈R50,
+where the prior density is Q
+j sech2 zj.
+11
+
+
+Discretization and data.
+Level l uses continuous piecewise-linear finite elements on 2l+3 uni-
+form elements, hl = 2−(l+3); one solve is a tridiagonal system, of cost O(h−1
+l
+).
+The data are
+y = (p( 1
+4; x†), p( 3
+4; x†)) + η, η ∼N(0, σ2
+ηI2), with x† ∼U([−1, 1]50) (fixed seed), computed on 220
+elements, and ση = 0.05 ([6] use 0.25; the smaller noise makes consecutive levels further apart). The
+observable is φ(x) = p( 1
+2; x), computed from the exact solution of the continuum problem, the same
+at every level.
+4.3
+Test case 2: two-dimensional Darcy flow
+Model.
+On D = (0, 1)2,
+−∇·
+ k(s; x)∇p(s; x)
+
+= 0,
+p = 1 on s1 = 0,
+p = 0 on s1 = 1,
+k∇p · n = 0 on s2 ∈{0, 1},
+with log-permeability
+log k(s; x) =
+25
+X
+j=1
+xj λ1/2
+j
+ej(s),
+x ∼N(0, I25),
+where the ej are the L2-normalized cosine modes cmcn cos(mπs1) cos(nπs2), (m, n)̸ = (0, 0), with
+eigenvalues λ ∝{π2(m2 + n2) + 9}−2, the 25 largest modes are kept, and the λj are scaled so that
+the average pointwise variance of log k is 1. The constant mode is excluded because p is invariant
+under k 7→ck. The samplers work in z = x ∈R25.
+Discretization and data.
+Level l uses P1 finite elements on a uniform mesh of (4 · 2l) × (4 · 2l)
+squares, each cut into two triangles. Pressure is observed at the 5×5 points (i/6, j/6), i, j = 1, . . . , 5,
+with ση = 0.025, from x† ∼N(0, I25) (fixed seed) on level 6; sensor values converge at rate h2
+l . The
+observable is the mean permeability over the center of the domain, φ(x) = 4
+R
+[1/4,3/4]2 k(s; x) ds,
+which needs no PDE solve. It is not globally Lipschitz in x, so Section 3 does not cover it.
+4.4
+Test case 3: two-dimensional Navier–Stokes
+Model.
+On the unit torus T2 = [0, 1)2, the vorticity w(s, t) of an incompressible flow satisfies
+∂tw + u · ∇w = ν∆w + f,
+u = (∂2Ψ, −∂1Ψ),
+−∆Ψ = w,
+t ∈(0, 1],
+with viscosity ν = 0.01 and fixed forcing f(s) = 1
+2{sin 2π(s1 + s2) + cos 2π(s1 + s2)}. The unknown
+is the initial vorticity
+w(s, 0; x) =
+36
+X
+k=1
+xk λ1/2
+k
+ek(s),
+x ∼N(0, I36),
+where the ek are the L2-normalized real Fourier modes
+√
+2 cos(2πq · s),
+√
+2 sin(2πq · s) for the 18
+wavevectors q ∈Z2 \ {0} of smallest |q| (one from each pair ±q), λk ∝(4π2|q|2 + 9)−2, and the λk
+are scaled so that the average pointwise prior standard deviation of w(·, 0) is 2. The samplers work
+in z = x ∈R36.
+Discretization and data.
+Level l uses an (8·2l)×(8·2l) grid with second-order central differences
+in space and the classical fourth-order Runge–Kutta method with an integrating factor for the viscous
+term, with 8 · 2l time steps. Sensor values converge at rate h2
+l and the cost of a solve grows like h−3
+l
+up to a logarithm. We use finite differences rather than a pseudo-spectral discretization on purpose:
+for this smooth flow the spectral solution converges exponentially and the level corrections vanish
+once the grid resolves the flow, which leaves nothing for a multilevel method to do. The vorticity
+is observed at the 4 × 4 points (i/4, j/4), i, j = 0, . . . , 3, at times t = 0.5 and t = 1, giving 32
+observations with ση = 0.25, from x† ∼N(0, I36) (fixed seed) on level 5. The observable is the mean
+initial vorticity over a quarter of the domain, φ(x) = 4
+R
+[0,1/2]2 w(s, 0; x) ds, which needs no PDE
+solve and is linear in x, hence Lipschitz.
+12
+
+
+problem
+d
+(α, β, ζ)
+horizons
+N0 at finest L
+target
+reference (SE)
+1D elliptic
+50
+(1, 2, 1)
+L = 1, . . . , 9
+105
+π(φ)
+50.33335 (0.00010)
+Darcy flow
+25
+(·, 4, 2.5)
+L = 1, . . . , 6
+8 × 104
+π5(φ)
+0.99780 (0.00112)
+Navier–Stokes
+36
+(·, 4, 3)
+L = 1, . . . , 4
+2 × 104
+π3(φ)
+0.7981 (0.0029)
+Table 1: Settings of the three test cases: dimension, rates used for the sample sizes, horizons, level-0
+sample size at the finest horizon, target of the scored estimates and reference value with its standard
+error. For the Darcy-flow and Navier–Stokes problems the finer levels change the target by much
+less than the reference standard error. Appendix B.3 gives the full allocations and how the reference
+values were computed.
+4.5
+Results
+Error against cost.
+Figure 1 and Tables 2–3 give the main comparison. In test cases 1 and 2
+the MLSMC variants are cheaper at loose accuracy, where the LightSB fit is a fixed overhead, and
+TransportMH is faster at tight accuracy: it reaches a relative RMSE of 3×10−4 in 3.5 s against 5.9 s
+in test case 1, and 10−2 in 13 s against 40 s in test case 2, and it is the only method to reach the
+smallest targets. In test case 3 it is faster at every accuracy (2 × 10−2 in 5.0 s against 59 s), and at
+L = 4 its mean squared error is 4.5 times smaller than that of MLSMC-pCN with ESS sweeps, for 1.8
+times the wall time; plain MLSMC-pCN hardly improves beyond L = 2. LightSB without correction
+stalls at a relative bias of order 10−3–10−2, several standard errors from zero: the transport error
+accumulates over levels, and the MH step is what removes it.
+1D elliptic (×10−4)
+Darcy flow (×10−3)
+Navier–Stokes (×10−3)
+method
+L RMSE
+bias (SE) time L RMSE
+bias (SE)
+time L RMSE
+bias (SE)
+time
+MLSMC-pCN
+7
+9.4
+−1.5 (1.7)
+0.2
+4
+25 −8.6 (4.4)
+1.4
+2
+36 +7.8 (7.4)
+1.6
+8
+12
++2.2 (2.1)
+0.8
+5
+22 −5.4 (4.1)
+7.1
+3
+30 −4.5 (6.6)
+9.0
+9
+3.2 −0.70 (0.58)
+3.2
+6
+10 +0.1 (2.2)
+37.6
+4
+29
+−10 (6)
+49.1
++ ESS sweeps
+7
+7.1
+−3.0 (1.2)
+0.6
+4
+24 −9.7 (4.2)
+2.0
+2
+33 +6.7 (7.0)
+3.4
+8
+6.3
++1.0 (1.2)
+2.5
+5
+17 −1.8 (3.3)
+9.7
+3
+26 −5.0 (5.9)
+16.6
+9
+1.9 −0.54 (0.33)
+10.2
+6
+9.3 +0.6 (2.1)
+48.6
+4
+19 −8.3 (4.8)
+81.0
+LightSB
+7
+24
+−23 (2)
+1.7
+4
+40
+−31 (5)
+2.9
+2
+38 +7.0 (7.8)
+2.8
+8
+22
+−21 (1)
+2.9
+5
+38
+−28 (5)
+8.0
+3
+33
+−12 (7)
+9.9
+9
+20
+−19 (1)
+5.2
+6
+31
+−29 (2)
+33.6
+4
+33
+−20 (6)
+45.7
+TransportMH
+7
+5.0
+−3.3 (0.7)
+2.2
+4
+18 −3.3 (3.5)
+5.8
+2
+18 −4.2 (4.9)
+6.1
+8
+2.1 −0.87 (0.35)
+4.9
+5
+6.8 −1.6 (1.7)
+22.6
+3
+14 −4.0 (4.4)
+26.8
+9
+0.99 −0.47 (0.16)
+13.5
+6
+5.5 −3.4 (1.4) 118.9
+4
+8.8 −5.6 (3.8) 145.7
+Table 2: Relative RMSE and relative bias with its standard error, in the units given in each column
+header, and mean wall time per run in seconds, at the three finest horizons L; 30 runs each. “+ ESS
+sweeps” is MLSMC-pCN with ESS-adaptive sweeps.
+1D elliptic (×10−4)
+Darcy flow (×10−3)
+Navier–Stokes (×10−3)
+relRMSE target
+10
+3
+1.5
+1
+30
+20
+10
+6.6
+30
+20
+15
+10
+MLSMC-pCN
+0.2
+–
+–
+–
+0.9
+8.8
+–
+–
+8.3
+–
+–
+–
++ ESS sweeps
+0.2
+5.9
+–
+–
+1.2
+4.4
+40
+–
+6.1
+59
+–
+–
+TransportMH
+1.0
+3.5
+7.6
+13.3
+3.0
+5.1
+13
+27
+2.1
+5.0
+17
+90
+Table 3: Wall time (seconds) to reach a relative RMSE target, given in the units of each column
+header, by log–log interpolation between consecutive horizons; “–”: not reached at the finest horizon.
+LightSB reaches none of these targets.
+13
+
+
+10−2
+10−1
+100
+101
+mean wall time per run (s)
+10−4
+10−3
+relative RMSE
+L1
+L9
+1D elliptic
+10−2
+10−1
+100
+101
+102
+mean wall time per run (s)
+10−2
+10−1
+relative RMSE
+L1
+L6
+Darcy flow
+100
+101
+102
+mean wall time per run (s)
+10−2
+2 × 10−2
+3 × 10−2
+4 × 10−2
+relative RMSE
+L1
+L4
+Navier–Stokes
+TransportMH
+MLSMC-pCN + ESS sweeps
+MLSMC-pCN
+LightSB (no MH)
+Figure 1: Relative RMSE against mean wall time per run, over horizons L (30 runs per point): test
+case 1, L = 1, . . . , 9; test case 2, L = 1, . . . , 6; test case 3, L = 1, . . . , 4. Labels on the TransportMH
+curve give the smallest and largest L.
+14
+
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+level l (horizon L9)
+10−6
+10−5
+10−4
+10−3
+10−2
+s.d. of level-l correction
+1D elliptic
+1
+2
+3
+4
+5
+6
+level l (horizon L6)
+10−4
+10−3
+10−2
+s.d. of level-l correction
+Darcy flow
+1
+2
+3
+4
+level l (horizon L4)
+10−3
+10−2
+s.d. of level-l correction
+Navier–Stokes
+TransportMH
+MLSMC-pCN + ESS sweeps
+MLSMC-pCN
+LightSB (no MH)
+Figure 2: Standard deviation over the 30 runs of the level-l correction at the finest horizon. For
+the paired methods the level-l correction is N −1
+l
+P
+i≤Nl{φ(Xi
+l ) −φ(Xi
+l−1)}; for MLSMC it is the lth
+increment of [6]. Up to covariances between levels, which are small here, the variance of the estimator
+is the sum of the squared values plotted; TransportMH is lowest at level 1, which dominates for all
+methods.
+15
+
+
+Where the gain comes from.
+Figure 2 shows that the level-1 correction dominates the variance
+for all methods, and that TransportMH reduces its variance by factors of about 6, 5 and 10 in
+test cases 1–3 (standard deviations 0.0037, 0.0040 and 0.0044 against 0.0090, 0.0089 and 0.0139 for
+MLSMC-pCN). In MLSMC the level-1 increment is an importance-sampling average over the N0
+particles at an ESS of a few percent, computed before the mutation, so extra sweeps cannot reduce
+it: the level-1 curves of the two MLSMC variants coincide, and the sweeps only help from level 2
+on, where MLSMC-pCN with ESS sweeps has the smaller corrections. In TransportMH the level-1
+correction is a paired difference along the transport, whose variance is controlled by the transport
+cost rather than by the ESS.
+Computing time.
+TransportMH and MLSMC-pCN with ESS sweeps make almost the same num-
+ber of PDE solves, most of them in the 30 sweeps at the first transition, but the extra solves of
+TransportMH, at the transported particles and in the MH sweeps at the final levels, sit where solves
+are most expensive (Appendix B.4). The LightSB fits cost about 3 s per run whatever the Nl: a fifth
+of the total in test case 1, where solves are cheap, and 2–2.5% in test cases 2 and 3. At fine levels,
+where el ≈1, the MH sweeps move little (acceptance 94–99%) but each adds about as much noise to
+Xi
+l −Xi
+l−1 as the transport, so three sweeps multiply the variance of the paired differences by about
+four. Skipping them there would bring the L = 6 run of test case 2 from 119 s to roughly 60–65 s;
+we have not tested its effect on the bias.
+Limitations.
+Two features of TransportMH call for comment.
+(a) Fine-level variances. The level-l correction standard deviation of TransportMH levels off at
+about 3×10−4 in test case 1 (levels 7–9), while those of the MLSMC variants keep decreasing, to
+2×10−6 at level 9, because their fine-level increments are importance-sampling corrections with
+weights close to one. The plateau comes from two implementation choices rather than from
+the transport: the floor εl ≥10−5, reached at level 7, stops the transport noise from decreasing
+(the variance of the paired differences before MH is 3.0, 2.6 and 2.5 × 10−6 at levels 7–9), and
+the MH sweeps multiply it by about four; with Nl = 100, (9.7 × 10−6/100)1/2 ≈3 × 10−4. In
+test case 2, where the floor is not reached, the correction standard deviation roughly halves
+per level at fixed Nl = 100 (1.2 × 10−3, 5.8 × 10−4 and 3.4 × 10−4 at levels 4–6), the decay
+Vl ≲hβ
+l of Corollary 3.2 with β = 2 from εl ∝h2
+l . The gain of TransportMH is nevertheless
+concentrated at the coarse, hard transitions.
+(b) Bias at the finest horizon. TransportMH has a small negative relative bias at the finest horizon:
+(−4.7±1.6)×10−5 in test case 1 and (−3.4±1.4)×10−3 in test case 2, about 3 and 2.4 standard
+errors, and (−5.6 ± 3.8) × 10−3 in test case 3, where the standard error is dominated by the
+reference value. This is consistent with an inexact transport followed by finitely many MH
+sweeps, which reduce but do not remove the transport bias.
+On problems where all transitions have a high ESS (not shown) the MLSMC variants are faster
+at every accuracy we tested: the advantage of the transport is specific to transitions where the
+incremental weights degenerate.
+5
+Discussion
+Learned entropic transport between consecutive posteriors, corrected by Metropolis–Hastings steps
+that keep the pairing, helps most at the coarse transitions where the incremental weights degenerate;
+at fine levels the importance-sampling corrections of MLSMC are already accurate. This suggests
+a hybrid scheme, with transport only where the effective sample size is low and fewer or no fine-
+level sweeps, together with an adaptive choice of εl and of the number of mixture components.
+On the theoretical side, the analysis covers exact couplings and bounds the effect of the fitted
+16
+
+
+kernels only crudely; a sharper treatment requires bounds on the error of the stochastic gradient fit,
+on the approximation of the oracle potential by Gaussian mixtures, and on the contraction of the
+preconditioned Crank–Nicolson kernel used in practice. Finally, higher-dimensional parameters, such
+as discretized random fields, would call for more structured potentials, for instance with low-rank
+covariances.
+A
+Proofs for Section 3
+Proof of Corollary 3.2. The proof has two steps: the first bound of Theorem 3.1 is summed with
+the assumed rate of the level variances, and the result is fed to the standard multilevel complexity
+argument.
+(i) Bias and variance. Under (A1), EbπL(φ) = πL(φ) and the mean square error is the squared
+discretization bias plus the variance:
+E
+
+{bπL(φ) −π(φ)}2
+= {πL(φ) −π(φ)}2 + Var
+ bπL(φ)
+
+≤c2
+1h2α
+L + Var
+ bπL(φ)
+
+.
+(ii) Summing the covariances.
+The proof of Theorem 3.1 gives Var(bπL(φ)) ≤P
+l Vl/Nl +
+2 P
+k<l
+√VkVl/Nk. Grouping the second sum by k,
+Var
+ bπL(φ)
+
+≤
+L
+X
+l=0
+Vl
+Nl
++ 2
+L−1
+X
+k=0
+√Vk
+Nk
+L
+X
+l=k+1
+p
+Vl.
+Since hl = hk2−(l−k), the inner sum is a geometric series: by assumption,
+L
+X
+l=k+1
+p
+Vl ≤√c2 hβ/2
+k
+X
+m≥1
+2−mβ/2 = cβ
+√c2 hβ/2
+k
+.
+For k = 0 this contributes 2cβ
+√V0c2 hβ/2
+0
+/N0. For k ≥1, the assumption also gives √Vk ≤√c2 hβ/2
+k
+,
+so the contribution is at most 2cβc2hβ
+k/Nk; adding Vk/Nk ≤c2hβ
+k/Nk gives (1 + 2cβ)c2hβ
+k/Nk.
+Together with (i) this is the displayed bound.
+(iii) Complexity. The displayed bound has the form
+E
+
+{bπL(φ) −π(φ)}2
+≤c2
+1h2α
+L +
+L
+X
+l=0
+vl
+Nl
+,
+vl ≤c′
+2hβ
+l ,
+with c′
+2 = max{(1+2cβ)c2, h−β
+0 (V0+2cβ
+√V0c2 hβ/2
+0
+)}. This is exactly what the proof of the multilevel
+complexity theorem of [9] (Theorem 1; see [16] for the original result) uses: there, independence of
+the level corrections serves only to obtain a variance of the form P
+l vl/Nl, and the remaining inputs
+are the bias bound and the cost bound, both assumed here. That proof takes L as the smallest level
+with c2
+1h2α
+L ≤δ2/2 and Nl = ⌈2 δ−2c′
+2SL h(β+ζ)/2
+l
+⌉with SL = PL
+k=0 h(β−ζ)/2
+k
+, so that the variance is
+at most δ2/2, and the cost c3
+P
+l Nlh−ζ
+l
+then gives the three regimes. These Nl are non-increasing
+in l, as Theorem 3.1 requires, because hl decreases.
+Proof of Lemma 3.3. We say that a probability measure µ on Rd satisfies a logarithmic Sobolev in-
+equality with constant C if Entµ(f 2) ≤2C
+R
+∥∇f∥2
+2 dµ for all smooth f, where Entµ(g) = µ(g log g)−
+µ(g) log µ(g).
+Density ratio. Write ∆l = Φl −Φl−1. Since Φl −Φl−1 = ⟨Gl−1 −Gl, 2y −Gl −Gl−1⟩/(2σ2
+η), (5)
+and the Cauchy–Schwarz inequality give supX |∆l| ≤cΦhl. The density of πl with respect to πl−1
+is gl = e−∆l/πl−1(e−∆l), a ratio of two quantities in [e−cΦhl, ecΦhl], so gl ∈[e−2cΦhl, e2cΦhl] and
+|gl −1| ≤e2cΦhl −1. Hence
+KL(πl∥πl−1) ≤χ2(πl∥πl−1) =
+Z
+(gl −1)2 dπl−1 ≤
+ e2cΦhl −1
+2,
+17
+
+
+using KL ≤log(1 + χ2) ≤χ2.
+Transport inequality. The uniform law on [−1, 1] satisfies a logarithmic Sobolev inequality with
+some constant C0 [3], and such inequalities tensorize, so πpr satisfies one with the same constant,
+whatever d. The measure πl−1 has density proportional to e−Φl−1 with respect to πpr, and 0 ≤
+Φl−1 ≤Φ∗on X by (5). By the perturbation lemma of [22], πl−1 satisfies a logarithmic Sobolev
+inequality with constant C0eΦ∗, and by [34] it then satisfies the transport inequality W 2
+2 (ν, πl−1) ≤
+2C0eΦ∗KL(ν∥πl−1) for every probability measure ν. With ν = πl and the bound on the Kullback–
+Leibler divergence, this gives the first bound. The second follows in the same way, with Φ −Φl in
+place of ∆l, the last bound in (5), and the transport inequality for π.
+Proof of Corollary 3.4. (A1) holds because ξl ∈Π(πl−1, πl). As in the proof of Theorem 3.1,
+Vl ≤∥φ∥2
+LipEξl∥X −Y ∥2
+2 ≤∥φ∥2
+Lip{κW 2
+2 (πl−1, πl) + ωl},
+and by Lemma 3.3 and e2x −1 ≤2xe2x, W 2
+2 (πl−1, πl) ≤8C0c2
+ΦeΦ∗+4cΦh0h2
+l . For the bias,
+|πL(φ) −π(φ)| ≤∥φ∥LipW1(πL, π) ≤∥φ∥LipW2(πL, π),
+with W1 defined as W2 with the cost ∥X −Y ∥2, and Lemma 3.3 applies.
+Proof of Lemma 3.5. Reformulation. For ξ ∈Π(µ, ν), H(ξ) = H(µ) + H(ν) −KL(ξ∥µ ⊗ν), so ξε
+also minimizes 1
+2Eξ∥X −Y ∥2
+2 + ε KL(ξ∥µ ⊗ν) over Π(µ, ν). Comparing with any ˜ξ ∈Π(µ, ν) and
+dropping KL(ξε∥µ ⊗ν) ≥0,
+Eξε∥X −Y ∥2
+2 ≤E˜ξ∥X −Y ∥2
+2 + 2ε KL(˜ξ∥µ ⊗ν).
+Competitor. Let Nε = ⌈2/ε⌉and partition X into N d
+ε half-open cubes Q of side r = 2/Nε ≤ε,
+of diameter r
+√
+d.
+Let ξ0 be an optimal coupling for W2(µ, ν) and ¯ξQQ′ = ξ0(Q × Q′).
+Draw
+(X0, Y0) ∼ξ0 and, given that (X0, Y0) ∈Q × Q′, draw X and Y independently from µ restricted
+to Q and ν restricted to Q′, normalized. The law ˜ξ of (X, Y ) has density ¯ξQQ′/{µ(Q)ν(Q′)} with
+respect to µ ⊗ν on Q × Q′, and marginals P
+Q µ(Q) µ(· | Q) = µ and ν, so ˜ξ ∈Π(µ, ν).
+Cost. Since ∥X −X0∥2 and ∥Y −Y0∥2 are at most r
+√
+d, and E∥X0 −Y0∥2 ≤W2(µ, ν) ≤2
+√
+d,
+E˜ξ∥X −Y ∥2
+2 ≤E
+ ∥X0 −Y0∥2 + 2r
+√
+d
+2 ≤W 2
+2 (µ, ν) + 8dr + 4dr2 ≤W 2
+2 (µ, ν) + 8dε + 4dε2.
+Entropy. KL(˜ξ∥µ⊗ν) = P
+QQ′ ¯ξQQ′ log[¯ξQQ′/{µ(Q)ν(Q′)}] is the mutual information of the cells
+of X0 and Y0, which is at most the entropy of the cell of X0, hence at most log N d
+ε ≤d log(1 + 2/ε).
+Combining the three displays gives the bound.
+Proof of Corollary 3.6. Write πθ
+l for the law of the particles at level l and ξθ
+l = πθ
+l−1 ⊗Kθl for the
+law of (Xi
+l−1, Xi
+l ); we condition on the fitted parameters, which are independent of the particles by
+(A4).
+Accumulation. By the chain rule for the Kullback–Leibler divergence,
+KL(ξ⋆
+l ∥ξθ
+l ) = KL(πl−1∥πθ
+l−1) + El,
+and since πl and πθ
+l are the second marginals of ξ⋆
+l and ξθ
+l , KL(πl∥πθ
+l ) ≤KL(ξ⋆
+l ∥ξθ
+l ). With πθ
+0 = π0,
+induction gives KL(πl∥πθ
+l ) ≤∆l and KL(ξ⋆
+l ∥ξθ
+l ) ≤∆l, and by Pinsker’s inequality ∥πl −πθ
+l ∥TV and
+∥ξ⋆
+l −ξθ
+l ∥TV are at most (∆l/2)1/2.
+Variance. The lineages are independent and identically distributed whatever the kernels, so the
+variance formula of Section 3 and the argument of Theorem 3.1 give Var(bπL(φ)) ≤(P
+l ˜sl/√Nl)2 as
+soon as Vl ≤˜s 2
+l . For l ≥1, Vl ≤∥φ∥2
+LipEξθ
+l ∥X −Y ∥2
+2, and since 0 ≤∥x −y∥2
+2 ≤4d on X × X,
+Eξθ
+l ∥X −Y ∥2
+2 ≤Eξ⋆
+l ∥X −Y ∥2
+2 + 4d∥ξ⋆
+l −ξθ
+l ∥TV ≤κW 2
+2 (πl−1, πl) + ωl + 2d(2∆l)1/2.
+18
+
+
+Bias. EbπL(φ) = πθ
+L(φ), and the oscillation of φ on X is at most 2d1/2∥φ∥Lip, so |πθ
+L(φ)−πL(φ)| ≤
+2d1/2∥φ∥Lip(∆L/2)1/2 = ∥φ∥Lip(2d∆L)1/2.
+The mean square error is the squared bias plus the
+variance.
+Proof of Corollary 3.7. We condition on the fitted parameters, which are independent of the particles
+by (A4), and write eπθ
+l = πθ
+l−1Kθl for the law of the transported particles, so that πθ
+l = eπθ
+l M nl
+l .
+Bias. Since πl = πl−1K⋆
+l ,
+∥eπθ
+l −πl∥TV ≤∥πθ
+l−1Kθl −πl−1Kθl∥TV + ∥πl−1Kθl −πl−1K⋆
+l ∥TV ≤Tl−1 + (El/2)1/2,
+because a Markov kernel does not increase the total variation distance, and the second term is at
+most ∥πl−1 ⊗Kθl −ξ⋆
+l ∥TV ≤(El/2)1/2 by Pinsker’s inequality. Since Ml leaves πl invariant and has
+Dobrushin coefficient τl, ∥µMl −πl∥TV ≤τl∥µ −πl∥TV for every µ, which gives the recursion for Tl.
+Iterating it with τ nl
+l
+≤¯τ and El ≤¯E gives TL ≤( ¯E/2)1/2 P
+k≥1 ¯τ k. As in the proof of Corollary 3.6,
+|EbπL(φ) −πL(φ)| = |πθ
+L(φ) −πL(φ)| ≤2d1/2∥φ∥LipTL.
+Variance. The lineages remain independent and identically distributed, so it suffices to bound
+Vl. With e
+Xl the transported particle and Xl the particle after the Metropolis–Hastings steps, ∥Xl −
+Xl−1∥2
+2 ≤2∥e
+Xl−Xl−1∥2
+2+2∥Xl−e
+Xl∥2
+2. The pair (Xl−1, e
+Xl) has law πθ
+l−1⊗Kθl, whose total variation
+distance to ξ⋆
+l is at most Tl−1 +∥πl−1 ⊗Kθl −ξ⋆
+l ∥TV ≤Tl−1 +(El/2)1/2, and ∥x−y∥2
+2 ≤4d on X×X,
+so
+E∥e
+Xl −Xl−1∥2
+2 ≤κW 2
+2 (πl−1, πl) + ωl + 4d
+ Tl−1 + (El/2)1/2
+.
+Hence Vl ≤∥φ∥2
+LipE∥Xl −Xl−1∥2
+2 ≤˜s 2
+l .
+B
+Implementation Details
+B.1
+LightSB fits
+At each transition l−1 →l the potential is vθ(y) = P4
+j=1 ϑj ϕd(y; mj, Σj) with diagonal Σj, fitted by
+minimizing the self-normalized objective LNl−1(θ) of Section 2 on the level-(l −1) cloud with Adam,
+minibatches of min(Nl−1, 1024), gradient-norm clipping at 10 and a cosine learning-rate schedule
+from 10−2εl/0.05. The cloud is whitened by its own mean and covariance before fitting, and the
+fit is initialized at the identity coupling: Σj = εlSlId and mj = (1 −Sl)aj for anchors aj drawn
+from the weighted cloud, so that initially Y | x, j ∼N(Slx + (1 −Sl)aj, (1 −S2
+l )Id). Most of the
+fitting error sits at the first few transitions, so the number of Adam iterations is set per transition:
+(300, 300, 300, 300, 100, . . . ) for the first problem and (1000, 1000, 1000, 300, 100, . . . ) for the second
+and third.
+B.2
+PDE solves per method
+At transition l −1 →l the methods solve the level-l PDE at the following numbers of points (with
+nl the number of MCMC sweeps):
+method
+level-l solves
+purpose
+MLSMC-pCN (both variants)
+Nl−1 + nlNl
+weights γl/γl−1; mutation (none at l = L)
+LightSB
+Nl−1 + Nl
+training weights γl/γl−1; transported particles
+TransportMH
+Nl−1 + Nl + nlNl
+as LightSB; MH sweeps (also at l = L)
+The transported particles are new points, so γl must be evaluated there, for the MH ratio and for the
+training weights of the next transition. LightSB and TransportMH also spend time on the stochastic
+gradient fits, which involve no PDE solve. In test case 1 the element averages of k and the load
+integrals are exact; in test case 2 k is evaluated at triangle centroids and the systems are solved by
+sparse LU (dense Cholesky for l ≤1); in test case 3 the spatial derivatives are applied through FFTs
+with the modified wavenumbers sin(qhl)/hl and {2 sin(qhl/2)/hl}2 for a wavenumber q, and a level-4
+solve (1282 grid points, 128 steps) takes about 0.4 s.
+19
+
+
+B.3
+Sample sizes and reference values
+Test case 1.
+α = 1, β = 2, ζ = 1, horizons L = 1, . . . , 9, N0 = 105 at L = 9:
+L = 9 : N = (100000, 35356, 12500, 4420, 1563, 553, 196, 100, 100, 100).
+Level-0 samples are i.i.d. from π0 by rejection from the prior. The reference value of π(φ) is 50.33335±
+0.00010, from self-normalized importance sampling with 2 × 108 samples on the continuum model,
+using a Student-t/prior defensive mixture proposal with bounded weights.
+Test case 2.
+Within a run Nl ∝h3.25
+l
+(β = 4 from the h2
+l convergence of the sensor values, ζ = 2.5
+from the solve time), floored at 100, and N0 grows by a factor 4 per added level:
+L = 5 : N = (20000, 2103, 221, 100, 100, 100),
+L = 6 : N = (80000, 8409, 884, 100, 100, 100, 100).
+Prior rejection is not feasible at level 0, so the level-0 samples come from an adaptive tempered SMC
+sampler on π0 (likelihood tempering with ESS 50%, five pCN-MH sweeps per stage). There is no
+continuum reference; the target is π5(φ), with reference value 0.99780±0.00112 from 40 independent
+runs of method (ii) at ten times the L = 5 allocation. The level-6 correction is (1 ± 1) × 10−5, far
+below this standard error, so the L = 6 runs are scored against the same value.
+Test case 3.
+Nl ∝h3.5
+l
+(β = 4 from the h2
+l convergence of the sensor values, ζ = 3 from the solve
+cost), floored at 100, with N0 growing by a factor 4 per added level:
+L = 4 : N = (20000, 1768, 156, 100, 100),
+and (5000, 442, 100, 100), (1250, 110, 100), (312, 100) for L = 3, 2, 1. The level-0 samples come from
+the tempered SMC sampler of test case 2. The target is π3(φ), with reference value 0.7981 ± 0.0029
+from 20 independent runs of method (ii) with N = (20000, 1768, 400, 400), independent of the runs
+being scored. The level-4 correction is at most 6 × 10−4 in absolute value for every method, below
+this standard error, so the L = 4 runs are scored against the same value. The reference standard
+error is 0.36% of ¯π, which is not negligible next to the smallest errors in Table 2: it contributes about
+a sixth of the mean squared error of TransportMH at L = 4, and it is included in the standard errors
+of the relative bias.
+B.4
+Breakdown of the computing time
+Table 4 splits the cost at the finest horizon. Three points explain the runtime differences in Figure 1.
+(1) The 30 sweeps at the first transition dominate the solve count of both ESS-adaptive methods:
+they are run on N1 = 35 356 particles in test case 1 and 8 409 in test case 2, i.e., 1.06 × 106 of
+the 1.37×106 solves of MLSMC-pCN with ESS sweeps in test case 1 and 2.5×105 of 4.25×105
+in test case 2. Level-1 solves are cheap, but there are many: they take 7.2 s in test case 1 and
+12 s in test case 2. Plain MLSMC-pCN does not pay this, which is why it is the fastest method
+at equal L; it pays in accuracy at level 2, whose correction standard deviation is 0.0061 against
+0.0011 with the sweeps (test case 1).
+(2) TransportMH and MLSMC-pCN with ESS sweeps make almost the same number of solves
+(1.43 against 1.37 × 106; 4.35 against 4.25 × 105), but the extra solves of TransportMH, Nl
+transported particles plus 3Nl MH solves at every level including L, sit at the finest and most
+expensive levels. In test case 1 every solve is cheap (a tridiagonal system), the element work
+differs by only 13%, and most of the time difference is the LightSB fitting: 2.7 s per run, a
+20
+
+
+1D elliptic, L = 9
+Darcy flow, L = 6
+Navier–Stokes, L = 4
+method
+solves
+work
+PDE
+fit solves
+work
+PDE
+fit solves
+work
+PDE
+fit
+(105) (107)
+(s)
+(s)
+(105) (107)
+(s)
+(s)
+(104) (108)
+(s)
+(s)
+MLSMC-pCN
+4.2
+1.2 2.9 (1.2)
+–
+2.0
+5.4
+35.9 (10.6)
+–
+4.8
+5.2
+49.1 (10.5)
+–
++ ESS sweeps
+13.7
+2.8 9.4 (7.6)
+–
+4.25
+8.3
+46.9 (21.5)
+–
+9.6
+7.1
+81.0 (41.7)
+–
+LightSB
+3.1
+0.84
+2.2 2.8
+1.8
+4.2
+29.0 3.0
+4.4
+4.4
+42.8 2.9
+TransportMH
+14.3
+3.1 9.7 (8.0) 2.7
+4.35
+14.1 114.0 (88.7) 3.0
+9.8
+15.9 142.7 (103.3) 3.0
+Table 4: Cost per run at the finest horizon (means over 30 runs): number of PDE solves; element
+work P
+l(level-l solves)×(elements on level l) (in test case 3, grid points times time steps); wall time
+of the PDE solves, with in parentheses the part inside MCMC (for TransportMH this includes the
+solves at the transported particles; LightSB has no MCMC); and wall time of the LightSB fits. The
+total wall times are those of Table 2; the remainder is resampling, the estimator and bookkeeping.
+fifth of the total; it hardly depends on Nl, because the minibatches are capped at 1024, so it
+weighs most when the solves are cheap. In test case 2 the fits cost 3.0 s (2.5%), but a level-6
+solve takes about 0.16 s and TransportMH makes 400 of them (100 transported particles and
+300 MH solves) where MLSMC, which does not mutate at the final level, makes none beyond
+the 100 for its weights. The transported particles and MH sweeps at levels 5 and 6 take 74 s
+of the 119 s of TransportMH at L = 6; the rest, mainly the γl/γl−1 solves (25 s), the level-1
+sweeps (12 s) and the fits (3 s), matches MLSMC-pCN with ESS sweeps. Test case 3 is similar:
+the two methods make 9.8 and 9.6 × 104 solves, but TransportMH makes 500 level-4 solves per
+run (100 for the weights, 100 at the transported particles and 300 MH solves) against 100 for
+MLSMC, and at 2.1 × 106 grid-point steps per level-4 solve these 400 extra solves are 8.4 × 108
+of the 8.8 × 108 difference in work. The fits cost 3.0 s, 2% of the total.
+(3) The fine-level MH sweeps of TransportMH move little. Where el ≈1, ρl = Sl and 1 −ρ2
+l =
+εlSl ≈εl ≤2 × 10−4 from level 5 on, and the acceptance rate is 94–99% (in test case 3,
+ε4 = 7.8 × 10−4 and the acceptance rate at level 4 is about 96%). Each sweep then adds about
+as much noise to Xi
+l −Xi
+l−1 as the transport itself, so three sweeps multiply the variance of
+the paired differences φ(Xi
+l ) −φ(Xi
+l−1) by about four: 2.3 × 10−6 before and 9.4 × 10−6 after
+MH at level 6 of test case 2, 2.5 × 10−6 and 9.7 × 10−6 at level 9 of test case 1. At the coarse
+transitions the sweeps are what make TransportMH accurate (without them, LightSB has a
+relative bias of −2×10−3 and −3×10−2), but at fine levels they cost three expensive solves per
+particle and inflate the variance. Skipping them where el ≥ehigh would, from the measured
+solve times, bring the L = 6 run of test case 2 from 119 s to roughly 60–65 s; we have not tested
+what it does to the bias.
+References
+[1] Akyildiz, Ö. D., Del Moral, P. & Míguez, J. (2026). Gaussian entropic optimal
+transport: Schrödinger bridges and the Sinkhorn algorithm. Foundations of Data Science,
+doi:10.3934/fods.2026004.
+[2] Arbel, M., Matthews, A. & Doucet, A. (2021). Annealed flow transport Monte Carlo. In
+Proceedings of the 38th International Conference on Machine Learning (ICML), PMLR 139,
+318–330.
+[3] Bakry, D., Gentil, I. & Ledoux, M. (2014). Analysis and Geometry of Markov Diffusion
+Operators. Grundlehren der mathematischen Wissenschaften 348. Cham: Springer.
+[4] Bernton, E., Heng, J., Doucet, A. & Jacob, P. E. (2019). Schrödinger bridge samplers.
+arXiv:1912.13170.
+21
+
+
+[5] Beskos, A., Jasra, A., Muzaffer, E. & Stuart, A. (2015). Sequential Monte Carlo methods
+for Bayesian elliptic inverse problems. Statistics and Computing, 25, 727–737.
+[6] Beskos, A., Jasra, A., Law, K. J. H., Tempone, R. & Zhou, Y. (2017). Multilevel sequential
+Monte Carlo samplers. Stochastic Processes and their Applications, 127, 1417–1440.
+[7] Beskos, A., Jasra, A., Law, K., Marzouk, Y. & Zhou, Y. (2018). Multilevel sequential
+Monte Carlo with dimension-independent likelihood-informed proposals. SIAM/ASA Journal
+on Uncertainty Quantification, 6, 762–786.
+[8] Chada, N. K., Salehi, M. S., Staudigl, M. & Weissmann, S. (2026). Multilevel Monte Carlo
+for zeroth-order stochastic bilevel optimization with inexact lower level solves. arXiv:2610.15047.
+[9] Cliffe, K. A., Giles, M. B., Scheichl, R. & Teckentrup, A. L. (2011). Multilevel Monte
+Carlo methods and applications to elliptic PDEs with random coefficients. Computing and
+Visualization in Science, 14, 3–15.
+[10] Cui, T. & Dolgov, S. (2022). Deep composition of tensor-trains using squared inverse Rosen-
+blatt transports. Foundations of Computational Mathematics, 22, 1863–1922.
+[11] Cuturi, M. (2013). Sinkhorn distances: lightspeed computation of optimal transport. In Ad-
+vances in Neural Information Processing Systems 26 (NeurIPS), 2292–2300.
+[12] Del Moral, P., Doucet, A. & Jasra, A. (2006). Sequential Monte Carlo samplers. Journal
+of the Royal Statistical Society: Series B, 68, 411–436.
+[13] Del Moral, P. & Jasra, A. (2026). New trends in the stability of Sinkhorn semigroups.
+Journal of Theoretical Probability, 39, 77.
+[14] Dodwell, T. J., Ketelsen, C., Scheichl, R. & Teckentrup, A. L. (2015). A hierarchical
+multilevel Markov chain Monte Carlo algorithm with applications to uncertainty quantification
+in subsurface flow. SIAM/ASA Journal on Uncertainty Quantification, 3, 1075–1108.
+[15] El Moselhy, T. A. & Marzouk, Y. M. (2012). Bayesian inference with optimal maps. Journal
+of Computational Physics, 231, 7815–7850.
+[16] Giles, M. B. (2008). Multilevel Monte Carlo path simulation. Operations Research, 56, 607–
+617.
+[17] Giles, M. B. (2015). Multilevel Monte Carlo methods. Acta Numerica, 24, 259–328.
+[18] Gushchin, N., Kholkin, S., Burnaev, E. & Korotin, A. (2024). Light and optimal
+Schrödinger bridge matching. In Proceedings of the 41st International Conference on Machine
+Learning (ICML).
+[19] Heinrich, S. (2001). Multilevel Monte Carlo methods. In Large-Scale Scientific Computing,
+Lecture Notes in Computer Science 2179, 58–67. Berlin: Springer.
+[20] Heng, J., Bishop, A. N., Deligiannidis, G. & Doucet, A. (2020). Controlled sequential
+Monte Carlo. Annals of Statistics, 48, 2904–2929.
+[21] Hoang, V. H., Schwab, C. & Stuart, A. M. (2013). Complexity analysis of accelerated
+MCMC methods for Bayesian inversion. Inverse Problems, 29, 085010.
+[22] Holley, R. & Stroock, D. (1987). Logarithmic Sobolev inequalities and stochastic Ising
+models. Journal of Statistical Physics, 46, 1159–1194.
+[23] Houssineau, J., Jasra, A. & Singh, S. S. (2018). Multilevel Monte Carlo for smoothing via
+transport methods. SIAM Journal on Scientific Computing, 40, A2315–A2335.
+22
+
+
+[24] Janati, H., Muzellec, B., Peyré, G. & Cuturi, M. (2020). Entropic optimal transport
+between unbalanced Gaussian measures has a closed form. In Advances in Neural Information
+Processing Systems 33 (NeurIPS).
+[25] Kantas, N., Beskos, A. & Jasra, A. (2014). Sequential Monte Carlo methods for high-
+dimensional inverse problems: a case study for the Navier–Stokes equations. SIAM/ASA Jour-
+nal on Uncertainty Quantification, 2, 464–489.
+[26] Korotin, A., Gushchin, N. & Burnaev, E. (2024). Light Schrödinger bridge. In International
+Conference on Learning Representations (ICLR).
+[27] Latz, J., Papaioannou, I. & Ullmann, E. (2018). Multilevel sequential2 Monte Carlo for
+Bayesian inverse problems. Journal of Computational Physics, 368, 154–178.
+[28] Léonard, C. (2014). A survey of the Schrödinger problem and some of its connections with
+optimal transport. Discrete and Continuous Dynamical Systems – Series A, 34, 1533–1574.
+[29] Mallasto, A., Gerolin, A. & Minh, H. Q. (2022). Entropy-regularized 2-Wasserstein dis-
+tance between Gaussian measures. Information Geometry, 5, 289–323.
+[30] Marzouk, Y., Moselhy, T., Parno, M. & Spantini, A. (2017). Sampling via measure trans-
+port: an introduction. In Handbook of Uncertainty Quantification, Ed. R. Ghanem, D. Higdon
+& H. Owhadi, 785–825. Cham: Springer.
+[31] Matthews, A., Arbel, M., Rezende, D. J. & Doucet, A. (2022). Continual repeated an-
+nealed flow transport Monte Carlo. In Proceedings of the 39th International Conference on
+Machine Learning (ICML), PMLR 162, 15196–15219.
+[32] Muchandimath, S. C., Martins, J. R. R. A. & Gorodetsky, A. A. (2025). Accelerating
+Bayesian inference via multi-fidelity transport map coupling. arXiv:2510.17946.
+[33] Nutz, M. (2021). Introduction to Entropic Optimal Transport. Lecture notes, Columbia Uni-
+versity.
+[34] Otto, F. & Villani, C. (2000). Generalization of an inequality by Talagrand and links with
+the logarithmic Sobolev inequality. Journal of Functional Analysis, 173, 361–400.
+[35] Parno, M. D. & Marzouk, Y. M. (2018). Transport map accelerated Markov chain Monte
+Carlo. SIAM/ASA Journal on Uncertainty Quantification, 6, 645–682.
+[36] Peherstorfer, B. & Marzouk, Y. (2019). A transport-based multifidelity preconditioner for
+Markov chain Monte Carlo. Advances in Computational Mathematics, 45, 2321–2348.
+[37] Peyré, G. & Cuturi, M. (2019). Computational optimal transport. Foundations and Trends
+in Machine Learning, 11, 355–607.
+[38] Ruzayqat, H., Beskos, A., Crisan, D., Jasra, A. & Kantas, N. (2024). Sequential Markov
+chain Monte Carlo for Lagrangian data assimilation with applications to unknown data loca-
+tions. Quarterly Journal of the Royal Meteorological Society, 150, 2418–2439.
+[39] Sharp, D., van Bloemen Waanders, B. & Marzouk, Y. (2026). Sampling through
+iterated approximation:
+gradient-free and multi-fidelity Bayesian inference via transport.
+arXiv:2603.12448.
+[40] Stuart, A. M. (2010). Inverse problems: a Bayesian perspective. Acta Numerica, 19, 451–559.
+[41] Zanger, B., Zahm, O., Cui, T. & Schreiber, M. (2024). Sequential transport maps using
+SoS density estimation and α-divergences. arXiv:2402.17943.
+23

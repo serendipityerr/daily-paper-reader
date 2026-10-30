@@ -1,0 +1,2140 @@
+Bridge change-of-measure for propagator estimation of diffusions
+Javier Aguilar
+Quantitative Life Sciences, The Abdus Salam Interna-
+tional Centre for Theoretical Physics (ICTP), Trieste, Italy
+jaguilar@ictp.it – orcid.org/0000-0001-7842-6261
+Riccardo Gatto
+Institute of Mathematical Statistics and Actuarial Science,
+University of Bern, Alpeneggstrasse 22, 3012 Bern, Switzerland
+riccardo.gatto@unibe.ch – orcid.org/0000-0001-8374-6964
+(Dated: 23 October 2026)
+Abstract The propagator of one-dimensional diffusions has relevant applications in sta-
+tistical inference and across many disciplines. Yet it is obtained in closed form only for
+very few simple models. Here we analyze an importance sampling strategy based on a
+bridge change of measure to estimate propagators: paths are generated under an auxiliary
+diffusion whose bridge between the two fixed boundary points is easy to generate, and the
+target propagator is recovered through a Radon–Nikodym derivative or likelihood ratio
+correction derived from Girsanov’s theorem. This method overcomes the main limitations
+of the crude Monte Carlo estimator, which relies on binning in state space, introducing
+bias and becoming inefficient with rare transitions. We apply the method to a range of
+benchmark processes and show that the bridge-based estimator matches the accuracy of
+crude Monte Carlo with orders of magnitude fewer sample paths. Finally, we elaborate on
+discretization schemes for the Radon–Nikodym derivative and on approximations to the
+best-in-class change of measure, both of which increase the efficiency of the method.
+Keywords Girsanov theorem – Importance sampling – Lamperti transform – Likelihood
+ratio – Markov property – Ornstein-Uhlenbeck process – Radon-Nikodym derivative – Rare
+transition – Wiener process
+MSC2020 60H10 Stochastic ordinary differential equations (aspects of stochastic analy-
+sis); 65C05 Monte Carlo methods
+1
+arXiv:2610.30213v1  [stat.ME]  21 Oct 2026
+
+
+CONTENTS
+I. Introduction
+3
+II. Crude Monte Carlo propagator estimation and its limitations
+5
+III. Bridge change-of-measure Monte Carlo propagator estimation
+7
+IV. Discretization of path integrals
+13
+V. Algorithms of Bridge change-of-measure Monte Carlo propagator
+estimation
+14
+V.A. Estimation algorithm with Wiener bridges
+15
+V.B. Estimation algorithm with arbitrary bridges
+18
+VI. Parametric approximation to the best-in-class bridge measure
+20
+VII. Numerical study
+22
+VII.A. Wiener bridges
+23
+VII.A.1. Ornstein-Uhlenbeck target process
+23
+VII.A.2. Cox-Ingersoll-Ross target process
+24
+VII.A.3. Stochastic logistic target process
+25
+VII.B. Ornstein-Uhlenbeck bridges
+27
+VII.B.1. Ornstein-Uhlenbeck target process
+27
+VII.B.2. Stochastic logistic target process
+28
+VII.C. Approximation to best-in-class Ornstein-Uhlenbeck bridge
+30
+VII.D. Comparing path integral discretizations
+31
+VIII. Discussion
+33
+IX. Code availability
+35
+X. Acknowledgements
+35
+XI. Appendix
+36
+XI.A. Two propagators
+36
+2
+
+
+References
+36
+I. INTRODUCTION
+The propagator represents the major tool for the analysis of the distributional properties
+of Markov processes. Since it encapsulates all the probabilistic information about the evo-
+lution of the process, it is a central object in the physical, biological, economic and social
+sciences where such models are used Azaele et al. (2016), C. W. Gardiner (1985), Risken
+(1996), van Kampen (2007). Moreover, the propagator is the important component for the
+construction of the likelihood of Markov models, making it essential for both Bayesian and
+maximum likelihood inference.
+In particular, we will consider the propagator of diffusions described through stochastic
+differential equation (SDE) of the form
+dXt = A(Xt) dt + B(Xt) dWt, t ≥0,
+(1)
+where A, B are appropriately chosen real continuous (thus measurable) functions and where
+W = {Wt}t≥0 is the standard Wiener process.
+Eq. (1) as well as all other SDEs and
+stochastic integrals in this text are meant in the Itˆo sense.
+Two important instances of the SDE in Eq. (1) that admit the strong solutions X =
+{Xt}t≥0 are the following. The geometric Brownian motion, with A(x) = µx, B(x) = Dx, for
+given µ ∈R, D > 0, is given by Xt = X0 exp{(µ−D2/2)t+DWt}. The Ornstein-Uhlenbeck
+(OU) process, with A(x) = −kx, B(x) = D, for given k, D > 0, is given by
+Xt = e−kt
+
+X0 + D
+Z t
+0
+eksdWs
+
+= e−ktX0 + D
+
+Wt −k
+Z t
+0
+e−k(t−s)Wsds
+
+;
+(2)
+the last formula demonstrating that it is clearly a strong solution. Further examples treated
+in this paper are listed in Table I.
+The propagator is defined as the conditional density of Xt given Xs, 0 ≤s < t, namely
+through
+ρX
+t|s (x | y) = lim
+h→0
+1
+hP
+
+Xt ∈[x, x + h)
+Xs = y
+
+, x, y ∈R,
+(3)
+provided P [Xs ∈[y, y + dy)] > 0.
+The objective of this article is to estimate Eq.
+(3).
+Because the process X is Markovian, the above conditional probability does not depend on
+3
+
+
+events generated by {Xu}0≤u<s. The propagator is characterized by the Fokker-Planck or
+forward Kolmogorov equation
+∂t ρX
+t|s (x | y) = −∂x
+
+A(x) ρX
+t|s (x | y)
+
++ ∂2
+x
+B2(x)
+2
+ρX
+t|s (x | y)
+
+,
+(4)
+with the initial condition ρX
+s|s(x | y) = δ(x −y), where δ stands for the Dirac delta function
+and ∂z for the operator of partial differentiation with respect to (w.r.t.) the real variable z.
+The propagator is one of the central objects for inference on SDEs from a sample
+(t1, x1), . . . , (tm, xm), since the associated likelihood reads
+L =
+m−1
+Y
+i=1
+ρX
+ti+1|ti(xi+1 | xi);
+(5)
+cf. Craigmile et al. (2023), Sørensen (2004).
+The general issue with the definition of the propagator in Eq. (3) and its PDE in Eq. (4) is
+that they lead to explicit solution in a few limited cases only. The inaccessibility of the closed-
+form expression of the propagator - and, consequently, of the likelihood - is widely regarded as
+one of the major problems of statistical inference with SDEs; cf. e.g. Craigmile et al. (2023),
+Iacus (2008), Sørensen (2004). Classical approaches to circumvent this difficulty include
+approximating the propagator, by numerically integrating Eq. (4) Toral and Colet (2014),
+through expansions in orthogonal functions Ait-Sahalia (2002) or by employing Monte Carlo
+(MC) methods.
+The aim of this work is to provide a rigorous analysis of a Monte Carlo method recently
+used in Aguilar et al. (2026) for statistical inference on model parameters. Specifically, we
+prove the main results on which the method rely and extend its range of applicability. This
+method belongs to the family of importance sampling or change-of-measure techniques and
+uses change-of-measure methods combined with bridge processes and their propagators.
+The structure of the article is the following. In Sec. II, the Crude Monte Carlo propaga-
+tor estimator is discussed. In Sec. III, the Bridge change-of-measure Monte Carlo estimator
+(BCMMCE) of the propagator is introduced. Two discretization schemes for the evaluation
+of a path integral appearing in the BCMMCE are presented in Sec. IV. On the practical side,
+Sec. V provides the two algorithms of Bridge change-of-measure Monte Carlo propagator
+estimation: the estimation algorithm with Wiener bridges in Sec. V.A and the estimation
+algorithm with arbitrary Markov bridges in Sec. V.B. Then, Sec. VI suggests a parametric
+4
+
+
+approximation to the best-in-class bridge measure. Sec. VII presents the results of the nu-
+merical study. Applications of Wiener bridges to the Ornstein-Uhlenbeck, Cox-Ingersol-Ross
+and stochastic logistic target processes are presented in Sec. VII.A. Applications of Ornstein-
+Uhlenbeck bridges to the Ornstein-Uhlenbeck and stochastic logistic target processes are
+given in Sec. VII.B. The approximation to a parametric best-in-class Ornstein-Uhlenbeck
+bridge is given in Sec. VII.C and comparisons of path integral discretizations can be found
+in Sec. VII.D. Sec. VIII concludes the article.
+The following notation is used.
+f ′(s) = (d/ds)f(s), f ′′(s) = (d/ds)2f(s)
+∂tf(s, t) = (∂/∂t)f(s, t)
+f (−1): inverse or reciprocal of f
+δ(x): Dirac delta function
+I{S}: indicator of statement or set S
+EQ: expectation under probability measure Q
+PZ: probability measure induced by stochastic process Z
+II. CRUDE MONTE CARLO PROPAGATOR ESTIMATION AND ITS
+LIMITATIONS
+Before introducing the proposed bridge change-of-measure Monte Carlo (BCMMC) esti-
+mator, we first introduce the underlying formal framework for SDEs and then summarize
+the steps for obtaining the sample mean or crude MC estimator of the propagator.
+Consider CT ⊂R[0,T] the space of continuous functions from [0, T] to R. Associated to
+the distance d(ω1, ω2) = supt∈[0,T] |ω1(t) −ω2(t)|, ∀ω1, ω2 ∈CT, the set CT forms a complete
+metric space. Denote by B(CT) the σ-algebra generated by the open sets of CT, that are
+obtained by the metric d. Then (CT, B(CT)) is a measurable space and a stochastic process
+with continuous sample paths in this space is an element denoted ω = ω[0,T] ∈CT. Let
+0 ≤s < t ≤T and denote by ω[s,t] = {ω(u)}s≤u≤t the truncated process. We then define the
+coordinate process
+Wt = W(t, ω) = ω(t) and W[s,t] = {W(u, ω)}s≤u≤t = ω[s,t].
+(6)
+With this, W = W[0,T] = {Wt}t∈[0,T] is a random element in (CT, B(CT)).
+Kolmogorov
+extension theorem tells that there exists a probability measure P on (CT, B(CT)) under which
+5
+
+
+ω[0,T] or the coordinate process W[0,T] is the standard Wiener process with time domain [0, T];
+cf. p. 200-203 of Shiryaev (2016). Note that, although this construction can be extended
+to the time interval [0, ∞), the analysis of absolute continuity of measures presented in the
+subsequent sections necessitates restricting attention to a finite time horizon [0, T], where T
+is arbitrary but fixed and may be chosen arbitrarily large.
+The process X = X[0,T] = {Xt}0≤t≤T, namely the diffusion implicitly defined through the
+SDE in Eq. (1) and restricted to [0, T], becomes a functional of the Wiener process W[0,T]
+taking the following form: Xt(ω[0,t]). Then, X induces a new probability measure on the
+same space (CT, B(CT)) that we denote PX. Define by PX;s,y the conditional probability
+measure
+PX;s,y[A] = PX[{ω ∈A | ws ∈[y, y + dy)}]
+PX[{ω ∈CT | ws ∈[y, y + dy)}],
+(7)
+for any s ∈[0, T], A ∈B(CT) and such that PX[{ω ∈CT | ws ∈[y, y + dy)}]̸ = 0. The
+propagator of the process X at the crossing points (s, y), (t, x) ∈[0, T] × R is ρX
+t|s (x | y),
+given in Eq. (3). According to the context, we use the alternative notations ρPX
+t|s (x | y) =
+ρX
+t|s (x | y), this notation holding not only for the process X but also for the other processes
+considered. The propagator can be re-expressed as
+ρX
+t|s (x | y) =
+Z
+CT
+δ(Xt(ω[0,t]) −x) dPX;s,y(ω) = EPX;s,y [δ(Xt −x)] .
+(8)
+We will use the induced distribution of the process instead of the process itself as upper index,
+whenever this will be required. For later use, we note that Eq. (8) gives ρX
+t|t (x | x) = 1 as
+well as the alternative formula
+ρX
+t|s (x | y) = EPX [δ(Xt −x) | Xs = y] .
+The sample mean or crude MC estimator (CMCE) of the propagator in Eq. (8) is as
+follows: one draws a large number n of trajectories from PX;s,y, using Euler-Maruyama’s
+or Milstein’s schemes, see e.g.
+Asmussen and Glynn (2007), Toral and Colet (2014), one
+replaces the Dirac delta function in Eq. (8) by the indicator of a small neighborhood of
+x, standardized by the size of the neighborhood, and one takes the mean. This yields the
+CMCE
+ˆρX CMC
+t|s;n
+(x|y) =
+1
+∆x
+1
+n
+n
+X
+i=1
+I
+n
+X(i)
+t
+∈[x, x + ∆x)
+o
+,
+(9)
+6
+
+
+where I{S} denotes the indicator of statement S, X(i)
+t
+the ith sampling from PX;s,y, for
+i = 1, . . . , n, and ∆x > 0 is an appropriately small chosen discretization unit. Due to the
+finiteness of ∆x, this estimator is neither unbiased nor consistent (as n →∞). According
+to Aguilar et al. (2024),
+EPX;s,y
+
+ˆρX CMC
+t|s;n
+(x|y) −ρt|s(x|y)
+
+= ε(∆x),
+(10)
+where ε(∆x) is an unknown function that obeys lim∆x→0 ε(∆x) = 0.
+Such bias can be
+particularly problematic in inference problems, where high-precision estimates of the prop-
+agator are required. Moreover, discretization units ∆x making ε(∆x) sufficiently small are
+problem-dependent, so each application requires a careful analysis. A second issue is that
+estimating the propagator in rare transitions (i.e., where varPX;s,y
+
+ˆρX CMC
+t|s;n
+(x|y)
+
+can become
+excessively large relative to {ρX
+t|s (x | y)}2, see Asmussen and Glynn (2007)) may require a
+prohibitively large number of generations in order to control the sampling error. The method
+proposed in this article makes use of a bridge change-of-measure in order to overcome these
+two limitations, as it completely avoids the use of discretizations and incorporates the nec-
+essary variance reduction needed to efficiently sample rare events.
+III. BRIDGE CHANGE-OF-MEASURE MONTE CARLO PROPAGATOR
+ESTIMATION
+The main idea of importance sampling is to introduce an alternate sampling process
+Y = Y[0,T] = {Yt}0≤t≤T on the measurable space (CT, B(CT)), such that PX ≪PY , i.e. PX
+is absolutely continuous w.r.t. to the induced probability measure of Y , PY . In this case,
+the Radom-Nikodym derivative dPX/dPY exists. In addition, Y or rather PY are chosen so
+to offer some desirable sampling properties that PX does not; see e.g. Asmussen and Glynn
+(2007), Gatto (2015).
+Let us first remind the change-of-measure or likelihood ratio formula for diffusions, com-
+monly known as Girsanov’s formula. We recall that P is the Wiener measure and W is its
+Wiener process, as given in Eq. (6), and that X = X[0,T] = {Xt}0≤t≤T is the strong solution
+of the SDE (1) rewritten below,
+dXt = A(Xt) dt + B(Xt) dWt, 0 ≤t ≤T.
+7
+
+
+Assume that, for the real continuous function ˜A, the SDE
+dYt = ˜A(Yt) dt + B(Yt) dWt, 0 ≤t ≤T,
+(11)
+admits the strong solution Y = Y[0,T] = {Yt}0≤t≤T. Then the following formula for the
+Radon-Nikodym derivative or likelihood ratio holds,
+LX|Y (Y[0,T]) = dPX
+dPY
+
+[0,T] = exp
+(Z T
+0
+A (Yu) −˜A (Yu)
+B2 (Yu)
+dYu −1
+2
+Z T
+0
+A2 (Yu) −˜A2 (Yu)
+B2 (Yu)
+du
+)
+,
+(12)
+which is PY -a.s. unique, see e.g. Eq. (10.60) at p. 287 of Klebaner (2012). This is Girsanov’s
+formula, which is basically the exponential tilt of a Gaussian random vector; see pp. 129-
+131 of Asmussen and Glynn (2007). Note that the fact that the SDEs in Eqs.
+(1) and
+(11) share the same volatility B implies that the measures PX and PY are equivalent. It
+is thus central to keep the same volatility, otherwise these two measures would be singular
+(namely probabilize disjoint subsets of CT).
+Let 0 ≤s < t ≤T and y ∈R.
+Denote
+by PY ;s,y the induced conditional probability of Y , defined in analogy with Eq. (7). The
+Change-of-measure theorem allows to re-express the propagator in Eq. (8) as
+ρX
+t|s (x | y) = EPY ;s,y
+
+δ(Xt −x)dPX;s,y
+dPY ;s,y
+
+[s,t]
+
+.
+(13)
+It follows from the Girsanov formula given in Eq. (12) and from the Markov property that
+the Radon-Nikodym derivative inside the expectation of Eq. (13) is PY ;s,y-a.s. uniquely
+given by
+LX|Y (Y[s,t]) = dPX;s,y
+dPY ;s,y
+
+[s,t] = e(t−s)lX|Y
+s,t ,
+(14)
+with
+lX|Y
+s,t
+=
+1
+t −s
+ Z t
+s
+A (Yu) −˜A (Yu)
+B2 (Yu)
+dYu −1
+2
+Z t
+s
+A2 (Yu) −˜A2 (Yu)
+B2 (Yu)
+du
+!
+.
+(15)
+We now construct a change-of-measure induced by a bridge process, which proves to be
+particularly well-suited for the present setting. By conditioning the induced measure PY
+to the points (s, a), (t, b) ∈[0, T] × R, s < t, which amounts to force the process Y to
+cross these two points, one obtains the bridge version of PY denoted Pt,b
+Y ;s,a. This bridge
+probability measure Pt,b
+Y ;s,a is given by
+Pt,b
+Y ;s,a[A] = PY [{ω ∈A | ws ∈[a, a + da), wt ∈[b, b + db)}]
+PY [{ω ∈CT | ws ∈[a, a + da), wt ∈[b, b + db)}],
+(16)
+8
+
+
+for any 0 ≤s < t ≤T, A ∈B(CT) and such that PX[{ω ∈CT | ws ∈[a, a + da), wt ∈
+[b, b + db)}]̸ = 0. Typically the bridge measure is characterized through its infinitesimal
+generator, which can be obtained as a Doob-h transform of the generator of the unconditional
+measure; see Asmussen and Glynn (2007), Chetrite and Touchette (2013, 2015).
+Clearly, Pt,b
+Y ;s,a[A] > 0 ⇒PY ;s,a[A] > 0, ∀A ∈B(CT): Pt,b
+Y ;s,a ≪PY ;s,a on CT. But for
+PY ;s,a ≪Pt,b
+Y ;s,a does not hold, in general: the process Y may not cross (s, a) and (t, b) but
+cross (s, a) alone. This leads us to consider a randomization procedure used in Aguilar
+and Gatto (2024) with discrete time Markov processes, in which the fixed value b at time t
+of the bridge is replaced by a random variable B. Assume that B has density g on R and
+consider the mixed bridge measure ˜Pt,B
+Y ;s,a characterized as follows. Under ˜Pt,B
+Y ;s,a, the diffusion
+Y conditional on B = b has same distribution as Y under Pt,b
+Y ;s,a. Without the condition
+B = b, the diffusion Y under ˜Pt,B
+Y ;s,a passes: through a at time s and, at time t, through the
+random variable B with density g; this for 0 ≤s < t ≤T. Because Yt = B under ˜Pt,B
+Y ;s,a-a.s.,
+then ˜Pt,B
+Y ;s,a prescribes the probability density g to Yt. In the limiting case
+g(x) = δ(x −b),
+(17)
+the two measures ˜Pt,B
+Y ;s,a and Pt,b
+Y ;s,a coincide. But this situation is the initial one, for which
+PY ;s,a ≪Pt,b
+Y ;s,a does not hold. A sufficient condition for the absolute continuity PY ;s,a ≪
+˜Pt,B
+Y ;s,a, namely PY ;s,a[A] > 0 ⇒˜Pt,B
+Y ;s,a[A] > 0, ∀A ∈B(CT), is that the density g is positive
+everywhere on R.
+These considerations lead to the practical Theorem 1.
+Theorem 1 (Bridge mixed likelihood ratio). Let 0 ≤s < t ≤T and a, b ∈R. Let B
+be a random variable with positive density g on R.
+Let the diffusion Y = Y[0,T] be the
+strong solution to Eq. (11). Consider the mixed bridge measure ˜Pt,B
+Y ;s,a on (CT, B(CT)) that,
+conditional on B = b, coincides with the measure Pt,b
+Y ;s,a. Then PY ;s,a and ˜Pt,B
+Y ;s,a are equivalent
+and, ˜Pt,B
+Y ;s,a-a.s.,
+dPY ;s,a
+d˜Pt,B
+Y ;s,a
+
+[s,t] =
+ρY
+t|s(B | a)
+g(B)
+=
+ρY
+t|s(Yt | a)
+g(Yt)
+,
+(18)
+Proof. The first claim of equivalence of measures is explained just before this theorem. Let
+0 ≤s < s′ < s′′ < t ≤T and a, b, x, y, ∈R, for the entire proof. Since ˜Pt,B
+Y ;s,a is a mixed
+Bridge measure, for any measurable functional Z : CT →R it holds
+E˜Pt,B
+Y ;s,a[Z(Y )] =
+Z
+R
+E˜Pt,B
+Y ;s,a[Z(Y ) | B = b]g(b)db =
+Z
+R
+EPt,b
+Y ;s,a[Z(Y )]g(b)db.
+(19)
+9
+
+
+Further, for any other arbitrary measurable functional ˜Z : CT →R we have
+EPY ;s,a[ ˜Z(Y )] =
+Z
+R
+EPY ;s,a[ ˜Z(Y ) | Yt = b]ρY
+t|s(b|a) db =
+Z
+R
+EPt,b
+Y ;s,a[ ˜Z(Y )] ρY
+t|s(b|a) db
+=
+Z
+R
+EPt,b
+Y ;s,a[ ˜Z(Y )ρY
+t|s(b|a)] db =
+Z
+R
+EPt,b
+Y ;s,a[ ˜Z(Y )ρY
+t|s(Yt|a)] db
+=
+Z
+R
+EPt,b
+Y ;s,a
+
+˜Z(Y )ρY
+t|s(Yt|a)g(b)
+g(b)
+
+db =
+Z
+R
+EPt,b
+Y ;s,a
+"
+˜Z(Y )
+ρY
+t|s(Yt|a)
+g(Yt)
+#
+g(b) db
+= E˜Pt,B
+Y ;s,a
+"
+˜Z(Y )
+ρY
+t|s(Yt|a)
+g(Yt)
+#
+,
+(20)
+where the last equality follows from Eq. (19) with Z(Y ) = ˜Z(Y )ρY
+t|s(Yt|a)/g(Yt). Comparing
+the Change-of-measure theorem
+EPY ;s,a[ ˜Z(Y )] = E˜Pt,B
+Y ;s,a
+"
+˜Z(Y )dPY ;s,a
+d˜Pt,B
+Y ;s,a
+
+[s,t]
+#
+with Eq. (20) and considering that ˜Z is arbitrary, we obtain the likelihood ratio formula
+dPY ;s,a
+d˜Pt,B
+Y ;s,a
+
+[s,t] =
+ρY
+t|s(Yt | a)
+g(Yt)
+,
+which coincides with Eq. (18).
+A convenient choice for the density of B is given by g(x) = ϕ(x; b, σ), where
+ϕ(x; µ, σ) =
+1
+√
+2πσ2e−(x−µ)2
+2σ2 ,
+∀x ∈R,
+(21)
+is the Gaussian density with mean µ ∈R and standard deviation σ > 0. Because we can
+chose σ as small as we wish, we can be arbitrarily close to the situation with the forbidden
+density (17).
+It is remarkable that the Radon-Nikodym derivative in Eq. (18) depends only on the
+initial and final states of the process, that are a and B = Yt, and not on the whole path, as
+it happens in Eq. (14).
+We can now show Theorem 2, which is our major result that relates the propagators
+under two different bridge measures.
+Theorem 2 (Bridge change-of-variable for propagator). Let 0 ≤s < t ≤T and b, y ∈R.
+Let PX;s,y and PY ;s,y respectively be the measures induced by X and Y , conditional on the
+crossing point with bridge point (s, y), as defined in (7). Assume that ρY
+t|s(x|y) is a bounded
+10
+
+
+and continuous function of x ∈R. The propagators of X and Y are related through the
+change-of-variable formula
+ρX
+t|s (b | y) = EPt,b
+Y ;s,y
+dPX;s,y
+dPY ;s,y
+
+[s,t]
+
+ρY
+t|s(b|y),
+(22)
+where dPX;s,y/dPY ;s,y |[s,t] is given in Eqs. (14) and (15).
+Proof. Let 0 ≤s < t < T and b, y ∈R.
+We first note that PX;s,y ≪≫PY ;s,y. This follows directly from PX ≪≫PY (given that
+X and Y share the same volatility function, as mentioned just after Eq. (12)) and from the
+definition of these measure conditioned on (s, y) in Eq. (7).
+Then, let us re-express the propagator as a limiting case. Define
+zσ = EPX;s,y [ϕ(Xt; b, σ)] .
+(23)
+We note that ∀ω ∈{Xt̸ = b}, the sequence ϕ(Xt(ω); b, n−1), n = 1, 2, . . ., decreases to 0.
+Because PX;s,y[Xt̸ = b] = 1, the Monotone convergence theorem (ϕ(Xt(ω); b, (n + 1)−1) <
+ϕ(Xt(ω); b, n−1)) and the propagator formula in Eq. (8) give us the limiting formula
+lim
+n→∞zn−1 = EPX;s,y
+h
+lim
+n→∞ϕ(Xt; b, n−1)
+i
+= ρX
+t|s(b|y).
+(24)
+We then apply the change-of-measure theorem, the chain rule and Theorem 1 to obtain
+zσ = E˜Pt,B
+Y ;s,y
+"
+ϕ(Xt; b, σ)dPX;s,y
+d˜Pt,B
+Y ;s,y
+
+[s,t]
+#
+= E˜Pt,B
+Y ;s,y
+"
+ϕ(Xt; b, σ)dPX;s,y
+dPY ;s,y
+
+[s,t]
+dPY ;s,y
+d˜Pt,B
+Y ;s,y
+
+[s,t]
+#
+= E˜Pt,B
+Y ;s,y
+ϕ(Xt; b, σ)
+g(Xt)
+dPX;s,y
+dPY ;s,y
+
+[s,t]ρY
+t|s(Xt|y)
+
+,
+given that PX;s,y ≪PY ;s,y. As before, the function g denotes the density of B, which is
+assumed positive over R. Note that PY ;s,y ≪˜Pt,B
+Y ;s,y is given by Theorem 1, which in turn
+implies PX;s,y ≪˜Pt,B
+Y ;s,y. But the above result simplifies when using g(x) = ϕ(x; b, σ):
+zσ = E˜Pt,B
+Y ;s,y
+dPX;s,y
+dPY ;s,y
+
+[s,t]ρY
+t|s(Xt|y)
+
+.
+Lastly, we take the limit σ →0 in the last formula to obtain the following bridge change-
+11
+
+
+of-measure formula for the propagator,
+ρX
+t|s (b | y) = lim
+σ→0 zσ = lim
+σ→0 E˜Pt,B
+Y ;s,y
+dPX;s,y
+dPY ;s,y
+
+[s,t]ρY
+t|s(B|y)
+
+= lim
+σ→0
+Z ∞
+−∞
+E˜Pt,B
+Y ;s,y
+dPX;s,y
+dPY ;s,y
+
+[s,t]ρY
+t|s(B|y)
+B = x
+
+ϕ(x; b, σ)dx
+= lim
+σ→0
+Z ∞
+−∞
+EPt,x
+Y ;s,y
+dPX;s,y
+dPY ;s,y
+
+[s,t]ρY
+t|s(x|y)
+
+ϕ(x; b, σ)dx
+=
+Z ∞
+−∞
+EPt,x
+Y ;s,y
+dPX;s,y
+dPY ;s,y
+
+[s,t]ρY
+t|s(x|y)
+
+δ(x −b)dx
+= EPt,b
+Y ;s,y
+dPX;s,y
+dPY ;s,y
+
+[s,t]ρY
+t|s(b|y)
+
+= EPt,b
+Y ;s,y
+dPX;s,y
+dPY ;s,y
+
+[s,t]
+
+ρY
+t|s(b|y),
+(25)
+where the first equality is due to (24), the fourth to the definition of ˜Pt,B
+Y ;s,y and the fifth one to
+the characterization of convergence in distribution in terms of convergence of expectations of
+bounded continuous functions, which follows from the assumption that ρY
+t|s(x|y) is bounded
+and continuous w.r.t. x.
+Eq. (22) leads to the definition of the BCMMCE of the propagator
+ˆρX
+t|s (b | y) = dPX;s,y
+dPY ;s,y
+
+[s,t]ˆρY
+t|s(b|y),
+(26)
+for which Y is sampled under the bridge measure Pt,b
+Y ;s,y.
+We note that the Dirac delta appearing in the first formula Eq. (13) disappears, so that
+the discretization required by the CMCE in Eq. (9) disappears with the BCMMCE. At first
+sight, Theorem 2 and the resuting BCMMCE in Eq. (26) do not seem particularly useful,
+since computing the propagator of the process X requires knowledge of the propagator of
+the process Y . However, this method gains relevance whenever Y has a known or easy
+to evaluate propagator. Suitable choices are obtained by any process Gaussian process Y ,
+thus with Gaussian propagator, for which bridges can be sampled exactly; see
+Aguilar
+et al. (2022), Majumdar and Orland (2015). Precise suggestions are given in Sec. V, which
+provides two generation algorithms: the first one with Wiener bridges, which is a special
+case of the second one with more general bridges.
+An obvious consequence of Theorem 2 is the following optimality result on the change-
+of-measure.
+Corollary 1 (Optimality of BCMMCE). Among all importance sampling estimators of
+the propagator ρX
+t|s (x | y), one with minimal zero variance is the BCMMCE in Eq. (26),
+12
+
+
+whenever ρY
+t|s (x | y) is available. In particular, it is the BCMMCE with bridge sampling
+measure Pt,x
+X;s,y, which is defined in analogy with Pt,x
+Y ;s,y in Eq. (16).
+Proof. Using PY ;s,y = PX;s,y in Eqs. (22) or (26) yields an estimator with zero variance,
+since dPX;s,y/dPY ;s,y |[s,t]= dPX;s,y/dPX;s,y |[s,t]= 1.
+Because any other minimal variance
+change-of-measure has variance zero or more, an optimal change-of-measure for estimating
+ρX
+t|s(x | y) is obtained from the bridge measure Pt,x
+X;s,y.
+However, this optimal BCMMCE is irrelevant for the practice, because the argument is
+circular: evaluating Eq. (26) with the optimal choice would require the very propagator we
+set out to estimate. Moreover, generating bridges from Pt,x
+X;s,y would also require knowledge
+of the propagator of the process X (cf.
+Majumdar and Orland (2015)).
+Nevertheless,
+these results provide useful intuitive guidance for choosing the bridge sampling measure, as
+suggested in Asmussen and Glynn (2007): selecting it as similar as possible to the one of
+the target process should lead to variance reduction
+IV. DISCRETIZATION OF PATH INTEGRALS
+Excepting few limited cases, computing the likelihood ratio of the BCMMCE in (26)
+requires the integration of the full path Y[s,t], as seen in Eq. (15). But the full path on the
+continuum is not accessible by simulation and only discretized versions, usually referred to
+as discrete skeletons (cf. p. 274 of Asmussen and Glynn (2007)) are available. This section
+provides two discrete approximations to the integral in Eq. (15).
+The first solution is the direct application of the left-point approximation to the integral.
+With the homogeneous time partition s = t1 < t2 < · · · < tm−1 < tm = t, with mesh
+∆t = ti+1 −ti = (t −s)/(m −1), for i = 1, . . . , m −1, the skeleton of Y[s,t] is given by
+yi = Yti(w[s,t]), for i = 1, . . . , m; m ≥2. This yields the following left-point approximation
+to Eq. (15),
+˜lX|Y
+s,t,∆t =
+1
+t −s
+m−1
+X
+i=1
+A (yi) −˜A (yi)
+B2 (yi)
+(yi+1 −yi) −
+1
+2(m −1)
+m−1
+X
+i=1
+A2 (yi) −˜A2 (yi)
+B2 (yi)
+,
+(27)
+provided B(yi)̸ = 0, for i = 1, . . . , m −1, as suggested by Aguilar et al. (2026). With this,
+the estimation of dPX;s,y/dPY ;s,y = LX|Y (Y[s,t]), given in Eq. (14), becomes
+˜LX|Y
+∆t ({yi}i=1,...,m) = e(t−s)˜ls,t,∆t.
+(28)
+13
+
+
+Necessarily, approximating L(Y[s,t]) in Eq. (22) by ˜L∆t({yi}i=1,...,m) introduces bias errors
+that tend to zero as ∆t →0. Of course, this homogeneous discretization is not the only
+possibility and the magnitude of the errors at finite ∆t depends on its choice.
+An specific discretization scheme can be obtained as follows. Define
+r(y) = A(y) −˜A(y)
+B2(y)
+and
+q(y) = A2 (y) −˜A2 (y)
+B2 (y)
++ r′(y)B2(y).
+Itˆo’s lemma yields
+d
+Z Yu
+r(y)dy
+
+= r(Yu)dYu + 1
+2r′(Yu)B2(Yu)du.
+This allows us to rewrite Eq. (15) as
+lX|Y
+s,t
+=
+1
+t −s
+Z Yt
+Ys
+r(y) dy −1
+2
+Z t
+s
+q (Yu) du
+
+.
+(29)
+Since Eq. (29) contains only Riemann integrals, its discretization has the several advantages:
+The first integral is deterministic,since it only depends on the extremal points of the bridge.
+Moreover, in many cases this first integral can be evaluated exactly, hence it does not
+introduce neither a statistical nor a bias errors. The second integral in Eq. (29) can be
+discretized using the trapezoidal rule, which has better convergence than the left-point
+approximation in Eq. (27). The resulting discretization scheme reads
+ˆlX|Y
+s,t,∆t =
+1
+t −s
+Z ym
+y1
+r(y) dy −
+1
+4(m −1)
+m−1
+X
+i=1
+[q(yi+1) + q(yi)] ,
+(30)
+Hence an alternative estimator to Eqs. (27) and (28), for the Radon-Nikodym derivative in
+Eq. (22), is given by Eq. (30) and
+ˆLX|Y
+∆t ({yi}i=1,...,m) = e(t−s)ˆlX|Y
+s,t,∆t.
+(31)
+V. ALGORITHMS OF BRIDGE CHANGE-OF-MEASURE MONTE CARLO
+PROPAGATOR ESTIMATION
+Theorem 2 yields the algorithms presented in this section. As noted after Theorem 2,
+the BCMMC technique is particularly well suited to sampling processes Y whose bridges
+are easy to simulate and whose propagators are known. In practice, however, requiring Y to
+share the volatility function B of the target process X is often too restrictive. We therefore
+14
+
+
+introduce two auxiliary processes K and H on (CT, B(CT)). The process K has an arbitrary
+volatility function β.
+The bridges of K are easy to sample.
+The process H shares the
+volatility function of K, by construction. Precisely, Ht = h(Xt), where the transformation
+h is chosen so that H has volatility function β. We then proceed in three steps: (i) sample
+bridges of K; (ii) use these bridges to estimate the propagator of H; (iii) transform this
+estimator into the propagator estimator of X.
+For didactic reasons, Sec. V.A first treats the case K = W, the Wiener process, for which
+β ≡1 and h is the classical Lamperti transform. Sec. V.B then extends the procedure to a
+general sampling process K with volatility function β, for which h is a generalized Lamperti
+transform.
+V.A. Estimation algorithm with Wiener bridges
+A basic choice of sampling process K for the bridge construction is the Wiener one
+K = W, whose propagator takes the simple form
+ρW
+t|s(x|y) = ϕ(x; y, t −s),
+(32)
+ϕ being the Gaussian density in Eq. (21). The corresponding Wiener bridge with extremal
+points (s, a) and (t, b) admits the SDE
+dW u = −W u −b
+t −u du + dWu,
+0 ≤s < u < t ≤T, a, b ∈R,
+(33)
+with W s = a; cf. Klebaner (2012) p. 133. Importantly, since the Wiener bridge W remains
+Gaussian, it can be sampled exactly: see Aguilar et al. (2022, 2026), Majumdar and Orland
+(2015). In principle, one could only make direct use of such Wiener bridges for the BCMMC
+technique in conjunction with any process X that is additive (in the sense of constant
+volatility) and with unit volatility B(x) = 1, ∀x ∈R, which is the one of W.
+Should
+the volatility function B differ, then the likelihood ratio could not be obtained through
+Girsanov’s formula in Eqs. (14) and (15). In the context of our one-dimensional processes,
+this restriction can be readily circumvented through the Lamperti transform; cf. e.g. p. 77
+of Pavliotis (2014). It transforms the target process X of Eq. (1) to some additive process
+Ht = h(Xt), for some Borel function h. This transform is any primitive of 1/B,
+h(x) =
+Z x
+ds
+B(s),
+(34)
+15
+
+
+whenever it exists. We require h injective, twice differentiable and with continuous second
+derivative h′′(x) = −B′(x)/B2(x).
+These conditions hold iff B has positive range and
+continuous first derivative B′. These conditions are fulfilled by all common diffusions. It
+follows from Itˆo’s formula that the dynamics of H follows the SDE
+dHt = Ah(Ht) dt + dWt, 0 ≤t ≤T,
+where the drift function Ah takes the form
+Ah(y) = h′ h(−1)(y)
+
+A
+ h(−1)(y)
+
++ 1
+2B2 h(−1)(y)
+
+h′′ h(−1)(y)
+
+.
+(35)
+Then, the propagators of the process X and of its Lamperti transform H, which is denoted
+ρH
+t|s(x|y), satisfy the propagator change-of-variable formula
+ρX
+t|s(x|y) = ρH
+t|s (h(x)|h(y)) |h′ (x) |.
+(36)
+The BCMMC method starts by estimating ρH
+t|s (h(x)|h(y)) with the change-of-measure for-
+mulae of Sec. III, with the measure PH replacing PX and the Wiener measure P replacing
+PY . First, Girsanov’s formulae in Eqs. (14) and (15) with A = Ah, ˜A = 0 and B = 1 give
+LH|W(W[s,t]) = dPH;s,y
+dPs,y
+
+[s,t] = exp
+Z t
+s
+Ah (Wu) dWu −1
+2
+Z t
+s
+A2
+h (Wu) du
+
+,
+(37)
+where dPH;s,y and dPs,y are defined in analogy with Eq. (7). This is used with the change-of
+variable formula in Eq. (22) and the Wiener propagator formula (32), leading to
+ρH
+t|s (x | y) = EPt,x
+s,y
+dPH;s,y
+dPs,y
+
+[s,t]
+
+ρW
+t|s(x|y) = EPt,x
+s,y
+dPH;s,y
+dPs,y
+
+[s,t]
+
+ϕ(x; y, t −s).
+(38)
+Numerical methods have only access to stochastic skeletons {wi}i=1...,m of W [s,t], with wi =
+W ti(ω[s,ti]) and ti = s + (i −1)∆t, for i = 1, . . . , m. We apply the left-point discretization
+formulae of Sec. IV to evaluate the path integrals over stochastic skeletons. Thus, Eqs. (27)
+and (28) lead to
+˜lH|W
+s,t,∆t =
+1
+t −s
+ m−1
+X
+i=1
+Ah (wi) (wi+1 −wi) −
+1
+2(m −1)
+m−1
+X
+i=1
+A2
+h (wi)
+!
+,
+(39)
+and
+˜LH|W
+∆t ({wi}i=1,...,m) = e(t−s)˜lH|W
+s,t,∆t.
+(40)
+16
+
+
+Finaly, one applies Eq. (36).
+These developments lead to Algorithm 1 for BCMMCE of of propagators of one-
+dimensional processes using the Wiener bridge.
+Algorithm 1 BCMMCE of ρX
+t|s(x|y) for X solving Eq. (1) with Wiener bridge W solving
+Eq. (33)
+1: Perform the Lamperti transform on data, ˜x = h(x), and ˜y = h(y), where h is given by Eq. (34).
+2: Generate n Wiener bridges through Eq. (33) with discretization ∆t = (t −s)/m, m ∈N≥3,
+connecting the points (s, ˜y) and (t, ˜x).
+These generated sample paths are the skeletons,
+{w(j)
+i }i=1,...,m, j = 1, . . . , n, that will be used to evaluate Eq. (39).
+3: Build the transformed drift function Ah through Eq. (35), which itself requires the functions
+h′, h′′, and h(−1).
+4: Using the bridge skeletons and the transformed drift function from Steps 2 and 3, evaluate the
+estimator ˜LH|W
+∆t
+({wi}i=1,...,m) of the likelihood ratio at each one of the n generated bridges,
+according to Eqs. (39) and (40) with ∆t = ∆t, yielding
+n
+˜L
+H|W (j)
+∆t
+o
+j=1,...,n.
+5: Estimate the propagator of the transformed process using Eq. (38):
+ˆρH
+t|s(˜x|˜y) = ϕ(˜x; ˜y, t −s)
+n
+n
+X
+j=1
+˜L
+H|W (j)
+∆t
+.
+(41)
+6: Finally, obtain the BCMMCE of the propagator of the target process X by the change-of-
+variable formula Eq. (36):
+ˆρX BCM
+t|s;n,∆t(x|y) = ˆρH
+t|s(˜x|˜y) |h′(x)|.
+We observe that when the target process X shares the same noise function as the bridge
+process W, i.e. B(x) = 1, Steps 1 and 6 are superfluous and can be omitted: in this case
+h(x) = x yielding H = X, ˜x = x, ˜y = y, and ˆρH
+t|s(˜x|˜y) = ˆρX
+t|s(˜x|˜y).
+The estimator obtained via Algorithm 1 is affected by two main sources of error. The
+first is statistical, governed by the number of generated bridge sample paths n. The second
+is a systematic bias arising from the fact that the generated trajectories are discrete-time
+skeletons of the underlying continuous process. Therefore they depend on the temporal
+discretization unit ∆t, as discussed in Sec. IV. Nevertheless, both sources of error are un-
+der control: by increasing n and refining the time step ∆t, the overall error can be made
+arbitrarily small, at the cost of increased computational effort.
+17
+
+
+V.B. Estimation algorithm with arbitrary bridges
+The estimation of propagators via a Wiener bridge change-of-measure can be readily
+generalized to arbitrary bridges.
+The procedure adheres to the framework presented in
+Sec. V.A. The first step consists in transforming the process X to some process denoted H
+so that the noise function β(x) coincides with the one of the new process K on (CT, B(CT)),
+which is used to create the bridge and which has a known propagator. The process underlying
+the bridge is the strong solution of the SDE
+dKu = α(Ku)du + β(Ku) dWu,
+0 ≤t ≤T,
+(42)
+where α and β are continuous functions. With α(k) = 0 and β(k) = 1, we have K = W
+as in Sec. V.A. Building bridges through the points (s, a) and (t, b) from the process K of
+Eq. (42) is theoretically feasible through h-Doob transforms, see e.g. Aguilar et al. (2022),
+Asmussen and Glynn (2007), Jamison (1975), Majumdar and Orland (2015), although nu-
+merical efficiency is only guaranteed for processes in which the propagator is known or easy
+to compute (e.g. Gaussian processes or the geometric Brownian motion). This leads to the
+bridge SDE
+dKu = α(Ku, u)du + β(Ku) dWu,
+0 ≤s < u < t ≤T,
+(43)
+where α(k, u) = α(k) + β2(k) ∂k log ρK
+t|u(b | k), and β(k) = β(k). Eq. (33) is the instance of
+Eq. (43) with α(k, u) = 0 + 12 ∂k log ϕ(k; b, t −u) = −(k −b)/(t −u) and β(k) = 1.
+As stated before, one needs to transform the process X of Eq. (1) to some other process
+H, in order to use the general bridge K of Eq. (43).
+We use the generalization of the
+Lamperti transform Ht = h(Xt) obtained from
+h(x) =
+Z x β(s)
+B(s)ds,
+(44)
+whenever the integral exists, with B representing the volatility of X, in Eq. (1). We require
+h injective, twice differentiable and with continuous second derivative h′′(x) = {β′(x)B(x)−
+β(s)B′(x)}/B2(x). These conditions hold if B and β have positive range and continuous
+first derivatives B′ and β′. The Lamperti transform in Eq. (34) is retrieved with β = 1. By
+Itˆo’s lemma, the SDE of Ht = h(Xt) reads
+dHt = αh(Ht) dt + β(Ht) dWt, 0 ≤t ≤T.
+(45)
+18
+
+
+where
+αh(y) = h′ h(−1)(y)
+
+A
+ h(−1)(y)
+
++ 1
+2h′′ h(−1)(y)
+
+B2 h(−1)(y)
+
+,
+(46)
+with h′ = β/B. Thus the SDEs in Eqs. (42) and (45) have the common volatility function
+β.
+The last part of the procedure is analogous to that presented in Sec. V.A, differing only by
+minor modifications in the principal formulae. We consider the Radon-Nikodym derivative
+in Eqs. (14) and (15) with the stochastic process X replaced by H and the process Y replaced
+by K. Thus A = αh, ˜A = α and B = β, leading to
+lH|K
+s,t
+=
+Z t
+s
+αh (Ku) −α (Ku)
+β2 (Ku)
+dKu −1
+2
+Z t
+s
+α2
+h (Ku) −α2 (Ku)
+β2 (Ku)
+du
+(47)
+and
+LH|K(K[s,t]) = dPH;s,y
+dPK;s,y
+
+[s,t] = exp
+n
+lH|K
+s,t
+o
+.
+(48)
+With the change-of-variable formula in Eq. (22) we obtain the propagator of the transformed
+process,
+ρH
+t|s (x | y) = EPt,x
+K;s,y
+dPH;s,y
+dPK;s,y
+
+[s,t]
+
+ρK
+t|s(x|y),
+(49)
+where PH;s,y and PK;s,y are defined like in Eq. (7). We apply the left-point discretization
+formulae of Sec. IV, that are Eqs. (27) and (28). Denote ki = Kti(ω[0,ti]), for i = 1, . . . , m−1,
+then the respective discretizations of Eqs. (47) and (48) are given by
+˜lH|K
+s,t,∆t =
+1
+t −s
+ m−1
+X
+i=1
+αh
+ ki
+
+−α
+ ki
+
+β2  ki
+
+(ki+1 −ki) −∆t
+2
+m−1
+X
+i=1
+α2
+h
+ ki
+
+−α2  ki
+
+β2  ki
+
+!
+(50)
+and
+˜LH|K
+∆t ({ki}i=1,...,m) = e(t−s)˜lH|K
+s,t,∆t.
+(51)
+Finally, we use the result that the propagators of the processes X and H are related as
+before through the change-of-variable formula (36).
+These formulae lead to Algorithm 2 for the BCMMC estimator of of the propagator of a
+one-dimensional process using a general bridge.
+19
+
+
+Algorithm 2 BCMMCE of ρX
+t|s(x|y) for X solving Eq. (1) with general bridges K solving
+Eq. (43)
+1: Perform the generalized Lamperti transform ˜x = h(x), and ˜y = h(y), where h is given by
+Eq. (44).
+2: Generate n bridges obtained through Eq. (43) with discretization unit ∆t = (t−s)/m, m ∈N≥3,
+that connect the points (s, ˜y) and (t, ˜x).
+These discrete stochastic skeletons {k
+(j)
+i }i=1,...,m,
+j = 1, . . . , n, are used to evaluate Eq. (50).
+3: Build the transformed drift function αh through Eq. (46), which itself requires the functions
+h′, h′′, and h(−1).
+4: Using the bridges and transformed drift from Steps 2 and 3, evaluate the estimator
+˜LH|K
+∆t ({ki}i=1,...,m) of the likelihood ratio at each one of the n generated bridges, according
+to Eqs. (50) and (51) with ∆t = ∆t, yielding
+n
+ˆLH|K(j)
+∆t
+o
+j=1,...,n.
+5: Estimate the propagator of the transformed process using Eq. (49):
+ˆρH
+t|s(˜x|˜y) = ρK
+s,t(˜x|˜y)
+n
+n
+X
+j=1
+ˆLH|K(j)
+∆t
+.
+6: Obtain the BCMMCE of the propagator of the target process X by the change-of-variable
+formula Eq. (36):
+ˆρX BCM
+t|s;n,∆t(x|y) = ˆρH
+t|s(˜x|˜y) | h′(x) | .
+Analogously to Algorithm 1, when the target process X shares the same noise coefficient
+as the bridge process, that is, when B(x) = β(x), Steps 1 and 6 become superfluous: in this
+case h(x) = x yielding H = X, ˜x = x, ˜y = y, and ˆρH
+t|s(˜x|˜y) = ˆρX
+t|s(x|y).
+Note that, both Algorithms 1 and 2 make use of the the left-point discretization formulae
+of Sec. IV, namely. Eqs. (27) and (28). These two algorithms can also be direclty adapted
+to the Riemannian trapezoidal formulae Eqs. (30) and (31).
+VI. PARAMETRIC APPROXIMATION TO THE BEST-IN-CLASS BRIDGE
+MEASURE
+Corollary 1 provides the optimal change-of-measure for the BCMMC approach: it is
+Pt,x
+X;s,y, the bridge measure of the process X whose propagator ρX
+t|s(x|y) needs to be estimated.
+20
+
+
+Then, in Sec. V, X is transformed to H through the (generalized) Lamperti transform
+h. In the practice, the bridge measure Pt,x
+H;s,y is not accessible as its construction requires
+prior knowledge of the unknown propagator itself. We therefore pursue a more practical
+goal: finding the best approximation to the optimal bridge measure within a tractable,
+parametrized family of bridge measures. Concretely, recall from Sec. V.B that K is the
+unconditional auxiliary process in Eq. (42), which is then conditioned to generate the bridge
+process K in Eq. (43). We now embed K into a larger class parametrized by the vector⃗θ
+belonging to some open set Θ of Rd, d ≥1. It is precisely the drift function in Eq. (42) that
+is generalized and the generalized sampling process K⃗θ = K⃗θ,[0,T] = {K⃗θ,t}0≤t≤T solves the
+SDE
+dK⃗θ,t = α(K⃗θ,t;⃗θ )dt + β(K⃗θ,t) dWt,
+0 ≤t ≤T.
+(52)
+The objective is to find the parameter⃗θ ∈Θ that brings Pt,x
+K⃗θ;s,y as close as possible to the
+optimal bridge measure Pt,x
+H;s,y. According to Corollary 1 the unconstrained optimal bridge
+measure is obtained with original process, K∗= H, this forcing LH|K∗(K∗
+[s,t]) = 1, namely
+lH|K∗
+s,t
+= 0, according to Eqs. (47) and (48). This tells that l
+H|K⃗θ
+[s,t]
+close to 0 indicates that the
+process K⃗θ is a close approximation to K∗. We thus propose the estimator of⃗θ given by
+ˆ⃗θ = arg min⃗
+θ∈Θ
+| l
+H|K⃗θ
+s,t
+|
+(53)
+and we define by ˆK = Kˆ⃗θ the resulting sampling process. Clearly, if K∗= H ∈{K⃗θ}⃗θ∈Θ,
+then ˆK = K∗.
+Conversely, if K∗/∈{K⃗θ}⃗θ∈Θ, then ˆK is the best change-of-measure
+within the family {K⃗θ}⃗θ∈Θ in terms of variance reduction, as var
+ LH|Kθ
+≥var
+
+LH| ˆ
+K
+≥
+var
+ LH|K∗
+= var
+ LH|H
+= 0, ∀θ ∈Θ. The minimization problem in Eq. (53) inherits the
+stochastic nature of the process H, making⃗θ a random variable. A standard strategy that
+eases the problem is to tackle a deterministic version of the minimization, replacing l
+H|K⃗θ
+s,t
+by
+its expectation in what is called the cross-entropy method; cf. De Boer et al. (2005). This
+leads to⃗
+θ† = arg min⃗
+θ∈Θ
+EPt,˜x
+K⃗θ;s,˜y
+hl
+H|K⃗θ
+s,t
+
+i
+,
+(54)
+where ˜y = h(y) and ˜x = h(x), h being the generalized Lamperti transform in (44). We can
+re-express l
+H|K⃗θ
+s,t
+in terms of an integral of an Itˆo integral as follows,
+l
+H|K⃗θ
+s,t
+=
+Z t
+s
+αh (Ku) −α
+
+Ku;⃗θ
+
+β (Ku)
+dWu −1
+2
+Z t
+s
+h
+αh (Ku) −α
+
+Ku;⃗θ
+i2
+β2 (Ku)
+du.
+21
+
+
+Thus, because Itˆo’s integrals have null expectation, we can simplify Eq. (54) to⃗
+θ† = arg min⃗
+θ∈Θ
+EPt,˜x
+K⃗θ;s,˜y
+
+
+Z t
+s
+n
+αh (Ku) −α
+
+Ku;⃗θ
+o2
+β2 (Ku)
+du
+
+.
+(55)
+Solving Eq. (55) might still be cumbersome in the general case, hence we consider the
+special case of two-parameter families, i.e. d = 2. Given that the integrand in Eq. (55) takes
+fixed values at the boundary points s and t under the bridge measure (of the expectation),
+we can easily approximate the integral by the trapezoidal rule. Consequently, we simplify
+the optimization problem to the minimization, w.r.t.⃗θ, of the square bracket at Ku = ˜y
+plus that bracket at Ku = ˜x. We are lead to solve w.r.t.⃗θ the the system of equations
+
+
+
+
+
+α(˜x;⃗θ) = αh(˜x),
+α(˜y;⃗θ) = αh(˜y),
+(56)
+which fully characterizes⃗θ‡ when d = 2 and ˜x̸ = ˜y. A key advantage of this approximation
+is that Eq. (56) admits an analytical solution in many useful cases. For example, when using
+OU bridges, i.e. Eq. (42) with α(x) = k(µ −x) and β(x) = D, with k, D ∈R>0 and µ ∈R
+being constants. Here⃗θ = (µ, k) and a solution to Eq. (56) reads
+k
+‡ = αh(˜x) −αh(˜y)
+˜x −˜y
+,
+µ‡ = αh(˜y)
+k
+‡
++ ˜y.
+(57)
+Since the evaluations of αh, ˜x and ˜y are already required in Algorithm 2, we obtain these
+two parameters of the bridge at essentially null computational cost.
+VII. NUMERICAL STUDY
+This section presents a numerical study of the accuracy of the BCMMC approach with
+three important target diffusions and two different bridge processes. The targets are the
+OU, the Cox-Ingersoll-Ross (CIR) and the stochastic logistic model (SL) processes; all of
+them defined in Table I. Both the OU, whose formula is in Eq. (2), and CIR processes
+are paradigmatic models of extended use in finance, physics, ecology and have many other
+interdisciplinary applications, see e.g. Azaele et al. (2016), Dornic et al. (2005), George and
+Dwyer (2023). Their propagators are known and given in Appendix XI.A. Note also that the
+OU process is a central stationary stochastic process and it is the continuous time version
+22
+
+
+of the autoregressive time series of order one, known as AR(1).
+Stationarity represents
+a fundamental property of both theoretical and applied relevance Gatto (2022). The SL
+model is widely used in ecology to describe logistic growth under environmental noise Grilli
+(2020). Its propagator is not available in closed-form. This complicates both its theoretical
+analysis and the statistical inference Aguilar et al. (2026), Brigatti and Azaele (2025). Thus,
+it provides non-tivial example for testing the BCMMC with relevant applications. Standard
+Target diffusion
+X in Eq. (1)
+Drift function
+A(x)
+Volatility function
+B(x)
+Domain of
+parameters
+Propagator
+ρX
+t|s(x|y)
+in Eq. (3)
+Ornstein-Uhlenbeck (OU)
+k(µ −x)
+D
+k, D ∈R>0, µ ∈R Closed-form in Eq. (59)
+Cox-Ingersoll-Ross (CIR)
+k(µ −x)
+D√x
+µ, k, D ∈R>0
+Closed-form in Eq. (60)
+Stochastic logistic (SL)
+k(µ −x)x
+Dx
+µ, k, D ∈R>0
+Closed-form not available
+Table I
+Description of the 3 target diffusions of the numerical examples
+Wiener and OU bridges are considered in this section. The parameters of the OU bridges
+are called as in Table I but with the overbar: k, D and µ.
+In Sec. VII.A, Wiener bridges are applied to all three OU, CIR and SL target processes.
+In Sec. VII.B, OU bridges are used for OU and SL targets.
+VII.A. Wiener bridges
+The BCMMC technique with Wiener bridges is studied in this section. We follow the
+methodology for Wiener bridges of Sec. V.A.
+VII.A.1. Ornstein-Uhlenbeck target process
+We first apply the BCMMC with the Wiener bridges of Eq. (33) to the OU process whose
+propagator is available: see Table I for the functions A(x), B(x) and for the propagator.
+Since both the Wiener and the OU processes are additive (i.e.
+have constant volatility
+function), the Lamperti transform in Eq. (34) is merely a constant rescaling of the OU and
+the functions required for the new drift function Ah(x), in Eq. (35) read: h(x) = x/D,
+23
+
+
+h(−1)(x) = Dx, h′(x) = 1/D and h′′(x) = 0. We are interested in the relative errors
+RE =
+ρX
+t|s(x|y) −ˆρX, BCM
+t|s;n,∆t (x|y)
+ρX
+t|s(x|y)
+.
+(58)
+Fig. 1 shows these relative errors, as obtained from Algorithm 1. The values of the param-
+eters and of the bridges are: µ = D = k = y = t = 1, s = 0 and x = 1.1 There are in fact
+r = 100 MC replications under the same conditions: the central point of each bar plot in
+Fig. 1, say RE, is the average of the r relative errors and the extremities of the bar plots
+provide the 95%-level asymptotic normal confidence intervals according to RE±r−1/21.96S,
+S being the standard deviation of the r replications of RE. Both axes have logarithmic scale
+and we consider various numbers of generated bridges 101 ≤n ≤105 and various values of
+the discretization unit 10−3 ≤∆t ≤10−1. We see that the largest relative errors are for
+¯n = 101, remain essentially below 10%. This is remarkably small with the given the minimal
+MC setup. As expected, the errors decrease as the number of bridges n increases and as the
+discretization unit ∆t decreases. First, the relative errors tend to decrease proportionally
+to n−1/2, which is indicated by the dashed line in Fig. 1 and which reflects the statistical or
+sampling contribution to the relative error. Then, the relative errors reach an asymptotic
+regime, which appears determined by ∆t. Achieving optimal accuracy requires balancing
+statistical or sampling error (controlled by n) and discretization bias (governed by ∆t). For
+example, for the blue curve with ∆t = 10−2 in Fig. 1, increasing the number of realizations
+beyond n = 104 does not yield a statistically significant improvement in precision, because
+the discretization-induced bias already constitutes the dominant contribution to the total
+relative error. See also Aguilar et al. (2024) in this context.
+VII.A.2. Cox-Ingersoll-Ross target process
+This section studies the BCMMCE of the propagator of the CIR process. The functions
+A(x) and B(x) of Eq. (1) are given in Table I. The propagator is known and given in Eq.
+(60) of Appendix XI.A. It is a multiplicative process in the sense that volatility function
+B(x) is nonconstant. Now the Lamperti transform (34) is essential for the use of Wiener
+bridges. The functions required by Algorithm 1 read: h(x) = 2√x/D, h(−1)(x) = (Dx/2)2,
+h′(x) = (D√x)−1, h′′(x) = −(2Dx3/2)−1. The values of the parameters and the bridges are:
+t = k = 1, D = 0.5, µ = y = 0.3 and s = 0. Fig. 2 shows the perfect agreement between the
+24
+
+
+Fig. 1 Relative error of BCMMCE for the OU target process with the Wiener bridge obtained
+by Algorithm 1, with varying number of bridge samples (n) and bridge discretization units (∆t).
+Logarithmic coordinates on both axes. The dashed line at n−1/2 indicates the trend of the relative
+errors in absence of bias.
+The error bars indicate the 95% confidence interval computed over
+r = 100 replications. Parameters values: µ = D = k = y = t = 1, s = 0 and x = 1.1.
+BCMMCE with Wiener bridge and the true propagator in Eq. (60): the density is shown in
+Fig. 2.a and the logarithm of the density in Fig. 2.b. The error bars show the 95% confidence
+intervals computed over r = 100 realizations. The discretization unit is ∆t = 0.01. Notably,
+using only n = 10 generated bridges yields highly accurate estimates of the propagator’s
+tail behavior. Obtaining such precision with the CMCE in (9) would necessarily require
+substantially more realizations, since we are accessing events with very low probability on
+the tails of the distribution. This last point will be illustrated numerically in Sec. VII.A.3,
+where the BCMMCE and the CMC estimator are compared.
+VII.A.3. Stochastic logistic target process
+We now consider the SL target process whose propagator is not available in closed-
+form expression.
+As before we refer to Table I for the functions A(x) and B(x).
+The
+functions required by Algorithm 2 read in this case: h(x) = log(x)/D, h′(x) = (Dx)−1,
+h′′(x) = −(Dx2)−1 and h(−1)(x) = eDx. Fig. 3 shows the BCMMCE with Wiener bridges
+according to Algorithm 2 as well as the CMCE of Eq. (9). We see a strong agreement
+between BCMMCE and CMCE. Notably, the BCMMCE achieves the same level of precision
+25
+
+
+Fig. 2 BCMMCE of CIR propagator with Wiener bridges (dots) and exact formula (solid lines).
+Original scale in Fig. a and logarithmic y-axis is Fig. b. The BCMMCE is computed with n = 10
+bridges and discretization unit ∆t = 0.01. Error bars show 95% confidence interval computed over
+r = 100 realizations. Bridge and parameter values: t = k = 1, D = 0.5, µ = y = 0.3 and s = 0.
+0.8
+1.0
+1.2
+1.4
+x
+10 5
+10 3
+10 1
+101
+ρSLM
+t|s
+(x|y)
+Fig. 3
+BCMMCE with n = 10 generations (dots) and CMCE with n = 104 generations (bars)
+of SL propagator.
+The two estimators exhibit similar fluctuations over the central region but
+only the BCMMCE effectively accesses the tails, not the CMCE. The 95% confidence intervals for
+BCMMCE computed with r = 100 realizations lie within the marker size. Bridge and parameters
+values: µ = k = 1, D = 0.1, s = 0 and t = 1.
+around the mode using three orders of magnitude fewer sample paths than the CMCE.
+Moreover, it permits accurate estimation in regions of the state space that are essentially
+inaccessible to crude MC, owing to the limited number of generations over such regions.
+Indeed, with n = 104 replications of the CMCE cannot access the regions below x = 0.75
+and above x = 1.25, while the BCMMC method can access these two tails with only n = 10
+realizations per end-point.
+26
+
+
+VII.B. Ornstein-Uhlenbeck bridges
+We now illustrate the BCMMC approach with general bridges, according to Sec. V.B,
+focusing on OU bridges. Note that although the OU has constant volatility function β(x),
+just like the Wiener process, we cannot rescale the OU and apply the methodology for
+Wiener bridges of Sec. V.A, because it assumes null drift function α(x). As mentioned,
+the method is particularly efficient when the bridge propagator is known. This allows for
+the exact evaluation of the propagator change-of-variable formula Eq. (36) and also for the
+exact generation of the bridges, according to Aguilar et al. (2022), Majumdar and Orland
+(2015). Bridges of the OU process are obtained by conditioning the process K in Eq. (42)
+with α(x) = k(µ −x) and β(x) = D, for given k, D ∈R>0 and µ ∈R. OU bridges can be
+generated exactly according to the method of Aguilar et al. (2026), Majumdar and Orland
+(2015) and the propagator of K is given in Eq. (59), upon replacing k, µ and D by k, D
+and µ, respectively.
+VII.B.1. Ornstein-Uhlenbeck target process
+Let us first start with the same problem of Sec. VII.A.1, where the aim is to estimate the
+OU propagator, but here with OU bridges. In particular, we focus on a simple, yet illustrative
+case in which the process K, used to generate bridges K, is almost identical to the target
+process X: we take k = k, D = D but µ̸ = µ. Now Algorithm 2 simplifies substantially: as
+explained immediately after Algorithm 2, the generalized Lamperti transform is the identity
+when B(x) = β(x).
+Fig. 4 shows the standard deviation of the BCMMCE with OU target and OU bridges,
+for varying values of the ratio of bridge over target means, µ/µ. The value of the bridges
+and of the model parameters are: y = µ = k = D = 1, x = 0.1, s = 0 and t = 1. The values
+of the simulation are: ∆t = 0.01 and n = 103. As claimed by Corollary 1, the standard
+deviation tends to zero as the process K approaches the target process X (i.e. as µ/µ →1).
+27
+
+
+Fig. 4 Standard deviation of the BCMMCE of OU propagator with OU bridges with n = 103
+generations and discretization unit ∆t = 0.01 for varying ratio of target over bridge means µ/µ.
+Target and bridge OU processes differ only through their means, µ and µ respectively. Values of
+bridges and parameters: y = µ = k = k = D = D = 1, x = 0.1, s = 0 and t = 1.
+VII.B.2. Stochastic logistic target process
+We now turn to the SL target process already considered with Wiener bridges in
+Sec. VII.A.3 but here with OU instead of Wiener bridges. We remind that the SL propagator
+is not available. We consider various OU bridges differing by the values of the parameter k.
+Algorithm 2 requires the generalized Lamperti transform that renders the SL process addi-
+tive: it is already given in Sec. VII.A.3. Fig. 5 shows the mean square error (MSE) between
+the BCMMCE and a surrogate to the exact, which is the CMCE with n = 105 replications,
+which is computed across parameter values of the bridges 0 ≤k ≤15 in Fig. 5.a and across
+the domain of propagator arguments 0.7 ≤x ≤1.4 in Fig. 5.b. The y-axis of both graphs are
+in logarithmic scale. The MSE is obtained by replicating r = 30 times the same simulation
+scheme, with the formula MSE = r−1 Pr
+j=1
+n
+ˆρX BCMMC (j)
+t|s;n
+(x|y) −ˆρX CMC
+t|s;n
+(x|y)
+o2
+. Since the
+auxiliary process K cannot coincide with the target process X and therefore the BCMMCE
+with minimal variance cannot be obtained, according to Corollary 1, k can be taken tuning
+parameter for the minimization of the MSE. Fig. 5.a shows that the MSE is minimized for
+k close to k = 3, which is marked by a dotted line. Notably, a poorly chosen value of k can
+perform substantially worse than the driftless Wiener bridge, obtained with k = 0, this by
+up to three orders of magnitude in this example. The values for the bridges and of the model
+28
+
+
+Fig. 5 BCMMCE of SL propagator with OU bridges. for varying values of the bridge parameter
+k and propagator argument x. Fig. a shows the MSE between BCMMCE and CMCE taken as
+reference, for various values of k and averaged over 0.9 ≤x ≤1.4. The dotted line at k = k = 3
+corresponds to the minimal MSE. Fig. b shows the BCMMCE using the best-performing (green
+circles) and worst-performing (red squares) values of k, taken from from Fig. a, compared with
+the CMCE reference (black curve). Values for bridges and parameters: y = x0 = µ = 1, k = 3,
+D = 0.3, s = 0, t = 0.75, µ = −0.05. Values of the MC scheme: ∆t = 0.01, n = 1, averaged over
+r = 30 same replications per k and n = 105 CMC replications.
+parameters are: y = x0 = µ = 1, k = 3, D = 0.3, s = 0, t = 0.75, µ = −0.05. The values of
+the MC study are ∆t = 0.01 and n = 1. There are r = 30 same replications per value of k
+and the CMC reference is based on n = 105 realizations. Matching qualitative features of
+the target X (e.g. mean-reversion) may not lead to an efficient auxiliary process K. What
+appears more important is the similarity between the auxiliary and target drift functions,
+α(x) and A(x) respectively, as suggested by Corollary 1. Fig. 5.b compares the BCMMCE
+obtained with the best- and the worst-performing values of k, against the reference curve
+of CMCE, for 0.7 ≤x ≤1.4. The best and worst k are identified in Fig. 5.a. The y-axes
+of the two graphs are in logarithmic scale. While the BCMMCE with best value of k is
+shown by green dots. They reproduce the target propagator accurately across the whole
+sampled range.
+The BCMMCE with worst k and shown by red squares.
+They display
+erratic fluctuations, especially away from the mode of the distribution.
+29
+
+
+VII.C. Approximation to best-in-class Ornstein-Uhlenbeck bridge
+Sec. VII.B illustrates the ability of parametrized bridge measures to compute propagators
+and the existence of a best-in-class parameter choice, which minimizes variance and thus
+statistical error of the BCMMCE, within the bridge family. We now test the analytical
+approximation presented in Sec. VI for finding such best-in-class bridge. For this purpose,
+we consider the CIR and SL propagators analyzed in previous sections and we use OU
+bridges.
+We first compute the BCMMCE for the CIR process using OU bridges, evaluating relative
+errors over a two-dimensional grid of parameters (µ, k), which is centered about the best-in-
+class approximation parameters (µ‡, k
+‡), given in Eq. (57). Because the exact propagator is
+known, relative errors can be computed. At each pair (µ, k) on the grid, the BCMMCE is
+evaluated using only ¯n = 1 replication and 103 such BCMMCEs are generated. Their average
+allow us to obtain the relative error in Eq. (58). This is done for all pairs (µ, k) and these
+pairs are then ordered according to their values of the relative error: rank 0 corresponding to
+the pair with smallest relative error and rank 103 −1 to the pair with largest one. The grid
+includes both the parameters of our best-in-class approximation (µ‡, k
+‡) and the parameters
+of the Wiener bridges (µ, 0). Fig. 6.a shows the relative errors w.r.t. to the ranks. The
+dashed gray lines mark the value obtained using Wiener bridges (k = 0), the dotted red
+lines mark the value obtained with the best-in-class approximation in Eq. (57) and the solid
+blue lines mark the smallest value found in the grid, namely the one at rank 0. The values
+of the parameters are the following: µ = 1, k = 1, D = 0.1, X0 = 1, s = 0, t = 1/k = 1,
+y = 1, x = µ + 10−4, n = 1, ∆t = 0.01. The grid has 31 × 31 values of (µ, k) within
+[µ‡ −20, µ‡ + 20] × [k
+‡ −3, k
+‡ + 3]. Fig. 6.a shows that the best-in-class approximation
+substantially improves on the Wiener bridge estimator, which already demonstrates good
+accuracy in Sec. VII.A.2. However, it does not attain the smallest error found within the
+grid.
+This is consistent with the fact that our solution in Eq.
+(57) represents only an
+easy-to-evaluate approximation to the true best-in-class parameters.
+Fig. 6.b shows the
+results of the analogue analysis for the SL propagator. The values of the parameters are
+as follows: µ = 1, k = 3, D = 0.3, X0 = 1, s = 0, t = 0.75, y = 1, x = 0.95, n = 1,
+∆t = 0.01. The grid has 31 × 32 values of (µ, k) spanning [−0.3, 0.3] × [0.5, 8.0], which is
+augmented with k = 0 for the Wiener bridge and with the analytical approximation (µ‡, k
+‡)
+30
+
+
+itself. At each pair (µ, k) on the grid and at the points of augmentation, the BCMMCE
+is evaluated using only ¯n = 1 replication and 103 such BCMMCEs are generated. Then
+the sample variance these values is computed. The ranking of the parameter pairs (µ, k) is
+now constructed for the variance instead of relative error. This is because the closed-form
+expression for the propagator, used to compute the relative error, is not available here, for
+the SL model. Instead of the relative error, the variance serves as a proxy for the statistical
+error of the BCMMCE. The various lines have the same identifications as in in Fig. 6.a. As
+before, the best-in-class approximation in Eq. (57) clearly outperforms the Wiener bridge
+BCMMCE, which is itself already a strong baseline. In this case, however, the variance
+of our approximation with (µ‡, k
+‡) coincides with the smallest variance found over the full
+grid, indicating that the approximation in Eq. (57) is very close to the true best-in-class
+parameters for this transition. In Fig. 6.b, the analytical approximation (µ‡, k
+‡) coincides
+with the 0-rank value, while in Fig. 6.a it remains above it, though still several orders of
+magnitude below the Wiener bridge baseline.
+While the shapes of the lines of Figs. 6.a and 6.b do depend on the specific parameters of
+the target process, we consistently observed across different tests that the best-in-class ap-
+proximation in Eq. (57) improves the efficiency of BCMMCE by several orders of magnitude
+relative to using Wiener bridges.
+VII.D. Comparing path integral discretizations
+Two discretization schemes for the evaluation of a path integral appearing in the
+BCMMCE are presented in Sec. IV. This section compares these two schemes.
+It pro-
+vides the relative errors of the BCMMCE under the CIR model and OU bridges, using the
+left-point approximation of the Radon-Nikodym derivative of Eqs. (27) and (28) (which was
+used in Aguilar et al. (2024)) and the Riemannian trapezoidal discretization of Eqs. (30)
+and (31)
+The values of the parameters are the following: µ = k = 1, D = 0.1, X0 = 1, s = 0,
+y = µ = 1, x = µ + 0.1 = 1.1 and n = 104 bridges per point. The parameters of the OU
+bridge are equal to the best-in-class approximation (µ‡, k
+‡), as given in Eq. (57). we refer
+to Table I for the functions A(x), B(x) and for the exact propagator, which allows for the
+computation of the relative errors. Fig. 7 shows the relative error of the two BCMMCE of
+31
+
+
+Fig. 6
+Approximation of the best-in-class parameters for BCMMCE of CIR and SL processes
+with OU bridges. Fig. a shows the relative error of the BCMMCE with the CIR model over a
+grid of bridge parameters (µ, k) centered at (µ‡, k
+‡), ranked in increasing order of relative error
+of BCMMCE: rank 0 for smallest relative error and rank 103 −1 for largest. Fig. b displays
+the variance of the BCMMCE with the SL model over a grid of bridge parameters (µ, k), ranked
+increasing order of variance of BCMMCE: rank 0 for smallest variance and rank above 103 for
+largest. In Fig. a and b the dashed gray lines mark the value obtained using Wiener bridges
+(k = 0), the dotted red lines mark the value at (µ‡, k
+‡) and the solid blue lines mark the smallest
+(or 0-rank) value found in the sampled grid. Parameter values for Fig. a (CIR): µ = 1, k = 1,
+D = 0.1, X0 = 1, s = 0, t = 1/k = 1.0, y = 1, x = µ+10−4, n = 1, ∆t = 0.01, grid of 31×31 values
+of (µ, k) spanning [µ‡ −20, µ‡ + 20] × [k
+‡ −3, k
+‡ + 3], each point with 103 independent realizations
+of the BCMMCE. Parameters values for Fig.
+b (SL): µ = 1, k = 3, D = 0.3, X0 = µ = 1,
+s = 0, t = 0.75, y = 1, x = 0.95, n = 1, ∆t = 0.01, grid of 31 × 32 values of (µ, k) spanning
+[−0.3, 0.3] × [0.5, 8.0], augmented with k = 0 for the Wiener bridge case and with (µ‡, k
+‡), each
+point with 103 independent realizations of the BCMMCE
+the CIR propagator as function of the time window t (given s = 0). The black circles mark
+the left-point discretization of the Radon-Nikodym derivative, as given in Eqs. (27) and (28)
+(and used in Aguilar et al. (2024)). The red squares mark the new Riemannian trapezoidal
+discretization, as given in Eqs. (30) and. (31). The bridge discretization step is kept at the
+fixed small fraction of the time window ∆t = t/100, so the number of bridge points ¯n is
+approximately the same across all sampled values within the window of size t.
+As expected, the Riemannian trapezoidal approximation outperforms the left-point
+32
+
+
+Fig. 7 Relative error of the BCMMC estimator of the CIR propagator with OU bridges w.r.t.
+time window t.
+Black circles: left-point discretization of the integral in likelihood ratio.
+Red
+squares: Riemannian trapezoidal discretization of the integral. Parameters fixed through the best-
+in-class approximation The bridge discretization step is kept at a fixed fraction of the time window,
+∆t = w/100, so the number of bridge points is approximately the same across all sampled values
+of dt. Parameters used: µ = k = 1, D = 0.1, s = 0, y = x0 = µ, x = µ + 0.1, ∆t = t/100, n = 104
+bridges per point, (µ, k) = (µ‡, k
+‡) given by Eq. (57).
+scheme at all windows times t.
+Fig. 7 shows also that the relative errors of both esti-
+mators grow steadily w.r.t. the time window t. This is a direct consequence of discretization
+bias: since the bridge step is kept at a fixed fraction of the window (∆t = t/100), it grows in
+absolute terms w.r.t. t, so each bridge point carries a coarser local approximation and the
+resulting bias accumulates over the whole path. This growth is, however, of limited practical
+relevance: as t increases, the propagator ρCIR
+t|s (x|y) converges to the stationary distribution
+of the process (a Gamma distribution for the CIR model), which no longer depends on the
+conditioning point y and which is available in closed-form for all diffusions solving the SDE
+in Eq. (1). In this regime the target quantity is therefore trivial to compute directly, without
+any need of the BCMMCE.
+VIII. DISCUSSION
+The first objective of this work was to place the BCMMC method for propagator estima-
+tion within a rigorous mathematical formalism. This objective was achieved through two
+33
+
+
+theorems. First, Theorem 1 establishes the absolute continuity of the measure induced by Y
+with a fixed point (PY ;s,a) w.r.t. the bridge process with a ramdom arrival point (˜Pt,B
+Y ;s,a) and
+derives the corresponding Radon-Nikodym derivative (dPY ;s,a/d˜Pt,B
+Y ;s,a |[s,t]). Second, Theo-
+rem 2 provides the bridge change-of-variable formula linking the two propagators ρX
+t|s (b | y)
+and ρY
+t|s(b|y).
+With Theorems 1 and 2 we could build the mathematical foundation Al-
+gorithms 1 and 2 of BCMMC, that are the practical contribution of the article.
+These
+algorithms rely also on a third essential mathematical result: the (generalized) Lamperti
+transform. The BCMMC can be applied to an arbitrary one-dimensional diffusion X by
+means of the (generalized) Lamperti Ht = h(Xt). The transformed process shares the same
+volatility function of the sampling process K, whose propagator is known. This implies
+that the required absolute continuity of the measures induced by H and K, thus providing
+the likelihood ratio of the respective bridges dPH;s,y/dPK;s,y |[s,t]. To broaden the applica-
+bility of the BCMMC technique, we also derived an approximate optimal choice of bridge
+parameters within a chosen parametric class, optimality being in the sense of variance re-
+duction. We developed a new specific discretization scheme for the path integrals appearing
+in the BCMMCE. These improvements reduce both the statistical and bias errors, thereby
+increasing the computational efficiency of the method. Finally, we presented several numeri-
+cal illustrations that demonstrate the usefulness of the approach. A Python implementation
+of the method, powered with NJIT for fast computations is shared at Ref. Aguilar (2026).
+Such code is easy to adapt to solve arbitrary one-dimension diffusions.
+Further contributions are the following. First, we identified two key advantages of the
+BCMMC over the CMC for propagator estimation. First, BCMMC removes the Dirac delta
+from the expectation defining the propagator, upon which CMC is based, thereby avoid-
+ing the need for the state space discretization of CMC. Second, Corollary 1 shows that a
+measure that minimizes the variance of the importance sampling propagator estimator is
+a bridge measure, suggesting that bridge processes are particularly efficient for propagator
+estimation. Intuitively, BCMMC can achieve greater precision than CMC when estimat-
+ing probability densities of specific transitions (from one specific point (s, y) to some other
+one (t, x), in [0, T] × R) because it concentrates the sampling effort on the target transi-
+tion, whereas CMC distributes samples across the entire time-state space. Consequently,
+BCMMC and CMC may be viewed as complementary approaches suited to different tasks:
+while BCMMC is particularly appropriate for estimating propagators associated with spe-
+34
+
+
+cific transitions, typically being rare events (see Aguilar and Gatto (2024), Aguilar et al.
+(2022)), CMC is preferable when one seeks to evaluate the propagator over broader regions
+of the time-state space, especially those surrounding the most likely states. This approach
+is also readily applicable to processes in which the functions A and B depend explicitly on
+time, since Lamperti transforms can be further generalized to this setting (cf. e.g. Di Bello
+et al. (2025)).
+However, extending this approach to multidimensional processes is more
+restrictive. When the volatility is matrix-valued, there is no general analogue of the one-
+dimensional Lamperti transform that can map an arbitrary diffusion matrix to a prescribed
+constant form. Consequently, the applicability of BCMMC to multidimensional processes
+is limited to specific classes of processes for which a suitable auxiliary bridge process can
+be efficiently sampled and whose measure is absolutely continuous with respect to that of
+the multidimensional target process. A detailed assessment of the limitations and possible
+extensions of the method in the multidimensional setting is an important direction for future
+research.
+We developed an improvement on both optimality (that reduces statistical errors of the
+method) and discretization schemes (that reduces bias). Nevertheless, an exhaustive analysis
+of these two refinements are outside the scope of this work and provide another important
+direction for future works. For example, a simple enhancement of the discretization can
+be achieved by using the general trapezoidal rule constructed on a non-uniform integration
+lattice, whose density is adapted to the local smoothness properties of the function q to be
+integrated.
+IX. CODE AVAILABILITY
+Codes used to generate the figures of this manuscript are available at Ref. Aguilar (2026).
+X. ACKNOWLEDGEMENTS
+J.A. acknowledges financial support from Project UNCOMMON “Unveiling the ecolog-
+ical dynamics of taxonomic and functional composition of microbial communities”, funded
+by the Italian Ministry of Research (MUR), Future in Science - FIS Programme (CUP
+J53C23002290001).
+35
+
+
+XI. APPENDIX
+XI.A. Two propagators
+For the sake of self-containment, we report here the analytical formulae of the OU and
+CIR propagators used throughout this work, which serve either to compute relative errors or
+to be employed in the BCMMC formulae. The OU and CIR processes are defined through
+the drift and volatility functions of Table I. The propagator of the OU process reads
+ρX
+t|0(x|y) = ϕ
+
+x; µ + (y −µ)e−kt, D
+√
+k
+p
+1 −e−2kt
+
+,
+(59)
+with ϕ(·; ·, ·) the Gaussian density of Eq. (21).
+The propagator for the CIR model is,
+ρX
+t|0(x|y) = c e−u−v u
+v
+q/2
+Iq
+ 2√uv
+
+,
+(60)
+where q = 2µk/D2 −1, u = cye−kt, v = cx, c = 2k/[D2(1 −exp(−kt))] and Iq(·) modified
+Bessel function I of order q ∈{0, 1, . . .}; cf. 9.6.19 at p. 376 of Abramowitz and Stegun
+(1964).
+We note that both the CIR and OU processes are stationary is the sense that ρX
+t|s(x |
+y) = ρX
+t−s|0(x | y).
+REFERENCES
+Milton
+Abramowitz
+and
+Irene
+A.
+Stegun,
+editors.
+Handbook
+of
+Mathe-
+matical
+Functions
+with
+Formulas,
+Graphs,
+and
+Mathematical
+Tables.
+Num-
+ber
+55
+in
+Applied
+Mathematics
+Series.
+National
+Bureau
+of
+Standards,
+Wash-
+ington,
+DC,
+1964.
+URL
+https://www.nist.gov/mathematics-statistics/
+handbook-mathematical-functions-abramowitz-and-stegun.
+Reprinted
+by
+Dover
+Publications (1965). No DOI was assigned for the original 1964 NBS volume.
+Javier Aguilar.
+Bridge change-of-measure for propagator estimation of diffusions: code
+to reproduce the figures. https://github.com/jvrglr/Bridge_change_of_measure_for_
+propagator_estimator, 2026. GitHub repository.
+36
+
+
+Javier Aguilar and Riccardo Gatto.
+Unified perspective on exponential tilt and bridge
+algorithms for rare trajectories of discrete Markov processes. Physical Review E, 109(3):
+034113, March 2024. ISSN 2470-0045. doi:10.1103/PhysRevE.109.034113. URL https:
+//link.aps.org/doi/10.1103/PhysRevE.109.034113.
+Javier Aguilar, Joseph W. Baron, Tobias Galla, and Ra´ul Toral. Sampling rare trajecto-
+ries using stochastic bridges. Physical Review E, 105(6):064138, June 2022. ISSN 2470-
+0045.
+doi:10.1103/PhysRevE.105.064138.
+URL https://link.aps.org/doi/10.1103/
+PhysRevE.105.064138.
+Javier Aguilar, Jos´e J. Ramasco, and Ra´ul Toral.
+Biased versus unbiased numerical
+methods for stochastic simulations. Communications Physics, 7(1):155, May 2024. ISSN
+2399-3650.
+doi:10.1038/s42005-024-01648-z.
+URL https://www.nature.com/articles/
+s42005-024-01648-z.
+Javier Aguilar, Miguel A. Mu˜noz, and Sandro Azaele. Limits of inference in complex systems:
+When stochastic models become indistinguishable. Phys. Rev. X, 16:031015, Jul 2026. doi:
+10.1103/tmkr-9kl2. URL https://link.aps.org/doi/10.1103/tmkr-9kl2.
+Yacine Ait-Sahalia. Maximum Likelihood Estimation of Discretely Sampled Diffusions: A
+Closed-form Approximation Approach. Econometrica, 70(1), January 2002. ISSN 0012-9682.
+doi:10.1111/1468-0262.00274. URL http://doi.wiley.com/10.1111/1468-0262.00274.
+Søren Asmussen and Peter W. Glynn.
+Stochastic Simulation: Algorithms and Analysis,
+volume 57.
+Springer New York, 2007.
+ISBN 978-0-387-30679-7.
+doi:10.1007/978-0-387-
+69033-9. URL http://link.springer.com/10.1007/978-0-387-69033-9.
+Sandro Azaele, Samir Suweis, Jacopo Grilli, Igor Volkov, Jayanth R. Banavar, and Amos
+Maritan. Statistical mechanics of ecological systems: Neutral theory and beyond. Reviews
+of Modern Physics, 88(3), July 2016. ISSN 15390756. doi:10.1103/RevModPhys.88.035003.
+E. Brigatti and S. Azaele. Growth-rate distributions of gut microbiota time series. Scientific
+Reports, 15(1):2789, January 2025. ISSN 2045-2322. doi:10.1038/s41598-024-82882-x. URL
+https://www.nature.com/articles/s41598-024-82882-x.
+C. W. Gardiner.
+C. W. Gardiner: Handbook of Stochastic Methods for Physics, Chem-
+istry and the Natural Sciences , Springer-Verlag, Berlin, Heidelberg, New York, Tokyo
+37
+
+
+1983. 442 Seiten, Preis:
+DM 115,-.
+Berichte der Bunsengesellschaft f¨ur physikalische
+Chemie, 89(6), June 1985. ISSN 0005-9021. doi:10.1002/bbpc.19850890629. URL https:
+//onlinelibrary.wiley.com/doi/10.1002/bbpc.19850890629.
+Rapha¨el Chetrite and Hugo Touchette. Nonequilibrium microcanonical and canonical en-
+sembles and their equivalence. Physical Review Letters, 111:120601, 9 2013. ISSN 0031-
+9007. doi:10.1103/PhysRevLett.111.120601. URL https://link.aps.org/doi/10.1103/
+PhysRevLett.111.120601.
+Rapha¨el Chetrite and Hugo Touchette.
+Nonequilibrium markov processes condi-
+tioned on large deviations.
+Annales Henri Poincar´e, 16:2005–2057, 9 2015.
+ISSN
+1424-0637.
+doi:10.1007/s00023-014-0375-8.
+URL http://link.springer.com/10.1007/
+s00023-014-0375-8.
+Peter Craigmile, Radu Herbei, Ge Liu, and Grant Schneider. Statistical inference for stochas-
+tic differential equations. Wiley Interdisciplinary Reviews: Computational Statistics, 15(2),
+March 2023. ISSN 19390068. doi:10.1002/wics.1585.
+Pieter-Tjerk De Boer, Dirk P Kroese, Shie Mannor, and Reuven Y Rubinstein. A tutorial
+on the cross-entropy method. Annals of operations research, 134(1):19–67, 2005.
+Costantino Di Bello, ´Edgar Rold´an, and Ralf Metzler. Exactly solvable diffusions from space-
+time transformations. New Journal of Physics, 27(7):074604, jul 2025. doi:10.1088/1367-
+2630/adecbb. URL https://doi.org/10.1088/1367-2630/adecbb.
+Ivan Dornic, Hugues Chat´e, and Miguel A. Munoz. Integration of langevin equations with
+multiplicative noise and the viability of field theories for absorbing phase transitions. Physical
+Review Letters, 94(10):18–21, 2005. ISSN 00319007. doi:10.1103/PhysRevLett.94.100601.
+Riccardo Gatto. Stochastic Simulation of Rare Events, pages 1–11. John Wiley & Sons,
+Ltd, 2015. ISBN 9781118445112. doi:https://doi.org/10.1002/9781118445112.stat07823.
+Riccardo Gatto. Stationary Stochastic Models - An Introduction, volume 4 of World Scien-
+tific Series on Probability Theory and its Applications. World Scientific Publishing, 2022.
+doi:10.1142/12710. URL https://doi.org/10.1142/12710.
+Ashish B. George and James O. Dwyer. Universal abundance fluctuations across microbial
+38
+
+
+communities, tropical forests, and urban populations. Proceedings of the National Academy
+of Sciences of the United States of America, 120(44):1–11, 2023.
+ISSN 10916490.
+doi:
+10.1073/pnas.2215832120.
+Jacopo Grilli. Macroecological laws describe variation and diversity in microbial communi-
+ties. Nature Communications, 11(1):1–11, 2020. ISSN 20411723. doi:10.1038/s41467-020-
+18529-y. URL http://dx.doi.org/10.1038/s41467-020-18529-y.
+Stefano M. Iacus. Simulation and Inference for Stochastic Differential Equations, volume 1.
+Springer New York, New York, NY, 2008. ISBN 978-0-387-75838-1. doi:10.1007/978-0-387-
+75839-8. URL https://link.springer.com/10.1007/978-0-387-75839-8.
+Benton Jamison. The Markov processes of Schrodinger. Zeitschrift fur Wahrscheinlichkeit-
+stheorie und Verwandte Gebiete, 32(4):323–331, 1975.
+ISSN 0044-3719, 1432-2064.
+doi:
+10.1007/BF00535844. URL http://link.springer.com/10.1007/BF00535844.
+Fima C Klebaner.
+Introduction to Stochastic Calculus with Applications.
+IMPERIAL
+COLLEGE PRESS, March 2012.
+ISBN 978-1-84816-831-2.
+doi:10.1142/p821.
+URL
+https://www.worldscientific.com/worldscibooks/10.1142/p821.
+Satya N Majumdar and Henri Orland.
+Effective Langevin equations for constrained
+stochastic processes.
+Journal of Statistical Mechanics:
+Theory and Experiment, 2015
+(6):P06039, June 2015. ISSN 1742-5468. doi:10.1088/1742-5468/2015/06/P06039. URL
+https://iopscience.iop.org/article/10.1088/1742-5468/2015/06/P06039.
+Grigorios A. Pavliotis. Stochastic Processes and Applications, volume 60. Springer New
+York, New York, NY, 2014. ISBN 978-1-4939-1322-0. doi:10.1007/978-1-4939-1323-7. URL
+https://link.springer.com/10.1007/978-1-4939-1323-7. Series Title: Texts in Ap-
+plied Mathematics.
+Hannes Risken. The Fokker-Planck equation: methods of solution and applications. Num-
+ber 18 in Springer series in synergetics. Springer, Berlin Heidelberg, second edition, 3rd
+printing edition, 1996. ISBN 978-3-540-61530-9 978-3-540-50498-6.
+A. N. Shiryaev. Probability-1. Springer New York, New York, NY, 2016. doi:10.1007/978-
+0-387-72206-1. URL https://link.springer.com/book/10.1007/978-0-387-72206-1.
+39
+
+
+Helle Sørensen. Parametric Inference for Diffusion Processes Observed at Discrete Points
+in Time: a Survey. International Statistical Review, 72(3):337–354, December 2004. ISSN
+0306-7734. doi:10.1111/j.1751-5823.2004.tb00241.x. URL https://onlinelibrary.wiley.
+com/doi/10.1111/j.1751-5823.2004.tb00241.x.
+Raul Toral and Pere Colet. Stochastic Numerical Methods, volume 111. Wiley, Weinheim,
+Germany, July 2014. ISBN 978-3-527-41149-8. doi:10.1002/9783527683147. URL https:
+//onlinelibrary.wiley.com/doi/book/10.1002/9783527683147. Publication Title: The
+British Journal of Psychiatry Issue: 479.
+N. G. van Kampen. Stochastic Processes in Physics and Chemistry. North-Holland Personal
+Library. Elsevier, 2007. ISBN 978-0-444-52965-7. doi:10.1016/B978-0-444-52965-7.X5000-4.
+URL https://linkinghub.elsevier.com/retrieve/pii/B9780444529657X50004.
+40

@@ -1,0 +1,1046 @@
+Image-Domain CT Metal Artifact Reduction Using an
+Endpoint-Conditioned Diffusion Bridge
+Hang Yu1, Mojtaba Safari2, Shansong Wang2, Mingzhe Hu2, and Xiaofeng Yang2,‡
+1Department of Physics and Astronomy, University of North Carolina at Chapel
+Hill, Chapel Hill, NC, United States,
+2Department of Radiation and Cellular Oncology, The University of Chicago,
+Chicago, IL, United States,
+‡Corresponding Author: xfyang@uchicago.edu
+1
+arXiv:2610.36319v1  [physics.med-ph]  26 Oct 2026
+
+
+Abstract
+Background: Metal implants can generate severe streaking and shading ar-
+tifacts in computed tomography (CT), obscuring nearby anatomy and alter-
+ing local Hounsfield-unit (HU) values. Conventional diffusion models typically
+map images toward a Gaussian distribution and initialize reverse reconstruction
+from Gaussian noise, requiring the target image to be recovered through iter-
+ative denoising from an uninformative starting state. For CT restoration, this
+formulation does not directly exploit anatomical information already present
+in the metal-artifact image.
+Purpose: To adapt a diffusion bridge framework for image-domain CT metal
+artifact reduction (MAR) by directly connecting paired metal-artifact and metal-
+free CT images. The proposed RDBM-MAR model initializes reverse recon-
+struction from the metal-artifact CT image rather than Gaussian noise, aiming
+to retain available anatomical information and learn a direct restoration tra-
+jectory toward the metal-free target.
+Methods: RDBM-MAR constructs an endpoint-conditioned diffusion bridge
+between paired metal-free and metal-artifact CT images. During training, in-
+termediate bridge states are generated between the two endpoints, and a con-
+ditional U-Net receives the bridge state, metal-artifact image, and timestep to
+estimate the metal-free CT image through an image-domain correction. The
+forward bridge used 100 timesteps, while inference used 10 deterministic re-
+verse steps initialized from the metal-artifact image. Training, validation, and
+quantitative testing used 14,000 paired hybrid-simulated CT slices from the
+AAPM CT Metal Artifact Reduction Grand Challenge. These slices were de-
+rived from the DeepLesion dataset and the UCLH Stroke EIT Dataset, with
+virtual metal objects and artifacts generated using CatSim in the open-source
+2
+
+
+XCIST toolkit. The data were divided into 12,045 training, 633 validation,
+and 1,322 held-out test slices. One case from the 29-case AAPM CT-MAR
+final scoring dataset was used for qualitative evaluation.
+RDBM-MAR was
+compared with CycleGAN, Pix2Pix, Res-SRDiff, I2I-Mamba, and I2SB using
+PSNR, SSIM, MAE, and LPIPS. Statistical analysis used the Friedman test
+followed by paired Wilcoxon signed-rank tests with Holm correction.
+Results: RDBM-MAR achieved the highest PSNR (43.67 ± 4.56 dB) and
+SSIM (0.9856 ± 0.0138) and the lowest MAE (14.74 ± 8.68 HU) among the
+evaluated methods. Significant between-method differences were observed for
+all four metrics (p < 0.001). Pairwise Wilcoxon signed-rank tests with Holm
+correction showed significantly better PSNR, SSIM, and MAE for RDBM-MAR
+than for all five comparison methods (adjusted p < 0.001). Res-SRDiff achieved
+the lowest LPIPS. Difference maps and HU line-profile analysis showed reduced
+artifact-related intensity errors with preservation of local anatomical structures.
+The AAPM final scoring case also showed qualitative reduction of visible metal-
+associated streaking.
+Conclusions: RDBM-MAR provides a direct restoration trajectory from the
+metal-artifact CT image toward the metal-free target while retaining anatomi-
+cal information in the input. The proposed formulation achieved strong struc-
+tural fidelity and HU accuracy on the held-out paired test set using 10 reverse
+sampling steps, supporting diffusion bridge modeling for image-domain CT
+MAR.
+3
+
+
+1
+Introduction
+Computed tomography (CT) is a cornerstone of clinical imaging, providing detailed
+visualization of anatomical structures together with quantitative tissue information
+through the Hounsfield unit (HU) scale. Metal implants, however, violate the as-
+sumptions underlying standard reconstruction: beam hardening, photon starvation,
+scatter, and the resulting inconsistencies in the projection data generate bright and
+dark streaks that radiate from the metal [1]. These artifacts distort local HU values,
+obscure the anatomy immediately adjacent to the implant, and propagate into down-
+stream tasks such as segmentation, anatomical localization, and quantitative image
+analysis. Metal artifact reduction (MAR) has therefore been studied extensively, yet
+suppressing artifacts while simultaneously preserving local anatomical structure and
+quantitative CT intensity remains an open problem [1, 2].
+Approaches to MAR fall broadly into projection-domain and image-domain fami-
+lies. Projection-domain methods, including linear interpolation [3], normalized MAR [4],
+and their learning-based successors [5], correct the inconsistent measurements at their
+physical origin and can therefore be highly effective, but they require access to raw
+projection data together with the scanner geometry, bowtie filter, and calibration pa-
+rameters used for reconstruction. Such data are proprietary and are rarely exported
+in clinical practice, where the archived product is the reconstructed image; models
+developed for one scanner geometry additionally transfer poorly to another. Errors
+introduced during sinogram completion also propagate along entire ray paths and
+can manifest as secondary artifacts remote from the implant [6], whereas corrections
+applied in the image domain remain spatially local. We therefore adopt an image-
+domain formulation, which is directly applicable to retrospective and clinical data for
+4
+
+
+which only reconstructed images are available.
+Within the image domain, a network learns the mapping from artifact-corrupted
+CT images to their metal-free counterparts from paired training data. Conditional
+image-to-image translation models [7] achieve strong performance on paired restora-
+tion tasks and have been applied directly to MAR [8], suppressing prominent streaks
+and restoring the appearance of corrupted regions. Their adversarial objectives, how-
+ever, are not intensity-preserving by construction, and reported failure modes include
+local HU shifts, residual streaking, and over-smoothing of fine anatomical detail [8, 6].
+This limitation reflects a broader tension between perceptual quality and distortion
+fidelity [9], and it is consequential in MAR, where the corrected image is frequently
+used for quantitative measurement.
+Diffusion models address part of this problem by modeling restoration as a gradual
+stochastic transformation between image distributions [10, 11], but in the conventional
+formulation sampling begins from Gaussian noise and the degraded observation enters
+only as conditioning information, even though that observation already carries most of
+the anatomical and intensity content of the target. A more efficient alternative is to let
+the residual between the paired images drive the process. We previously showed that
+shifting the forward process along the residual between low- and high-resolution MRI
+aligns the two distributions directly and permits high-fidelity reconstruction in as few
+as four sampling steps, at a fraction of the cost of conditional diffusion [12]. Related
+formulations construct an explicit stochastic bridge between the paired endpoints [13,
+14], and allow the residual, where available, to modulate where noise is injected and
+removed, so that perturbation concentrates on degraded regions while intact anatomy
+is left largely undisturbed [14].
+5
+
+
+Metal artifacts differ from the natural-image degradations considered in previous
+diffusion bridge studies. They are signed and non-local, correlated along ray paths
+rather than confined to a compact region, and the restoration target is a quanti-
+tative HU value rather than a plausible visual appearance. For CT metal artifact
+reduction, we therefore use the uniform-modulation Ornstein–Uhlenbeck bridge for-
+mulation. The paired clean-to-artifact difference remains in the bridge mean, while
+the Gaussian perturbation is spatially uniform. This provides a direct stochastic tran-
+sition between the paired metal-free and metal-artifact endpoints without residual-
+dependent noise modulation.
+In the proposed method, the metal-free CT image x0 and its paired metal-artifact
+image µ are defined as the two endpoints of the diffusion bridge, following the nota-
+tion of Wang et al. [14], in which µ denotes the degraded observation rather than the
+linear attenuation coefficient. During training, intermediate bridge states are sam-
+pled between the endpoints, and a conditional U-Net [15] receives the current bridge
+state, the metal-artifact image, and the timestep, and estimates the corresponding
+metal-free CT image. At inference, the reverse process is initialized directly from the
+observed metal-artifact image and recovers the clean image along a shortened sam-
+pling trajectory. Because the network predicts an image-domain correction relative
+to the degraded input rather than synthesizing a complete CT image from Gaussian
+noise, the restoration proceeds directly from the observed metal-artifact image toward
+the metal-free target while retaining the anatomy already present in the input.
+Our main contributions are as follows:
+• We adapt an endpoint-conditioned Ornstein-Uhlenbeck diffusion bridge to image-
+domain CT metal artifact reduction, in which the artifact-corrupted scan serves
+6
+
+
+as a fixed endpoint of the stochastic process and the network predicts an image-
+domain correction relative to the degraded input, preserving the anatomy and
+HU content already present in the scan. The contribution is the MAR-specific
+instantiation and systematic evaluation, rather than the bridge formulation it-
+self.
+• We use the uniform-modulation bridge formulation, in which the paired clean-
+to-artifact difference contributes to the bridge mean while the Gaussian pertur-
+bation remains spatially uniform, avoiding residual-dependent stochastic mod-
+ulation while retaining direct conditioning on the paired endpoints.
+• We benchmark the proposed method against representative methods from four
+distinct restoration families including adversarial (Pix2Pix [7], CycleGAN [16]),
+diffusion-based (Res-SRDiff [12]), bridge-based (I2SB [13]), and state-space (I2I-
+Mamba [17]), all trained and evaluated under identical data splits and prepro-
+cessing on a common held-out CT-MAR test set.
+• We evaluate both fidelity and perceptual quality using peak signal-to-noise ratio
+(PSNR), structural similarity index measure (SSIM) [18], mean absolute error
+(MAE), and learned perceptual image patch similarity (LPIPS) [19], and re-
+port slice-level metric distributions with paired statistical comparisons rather
+than cohort means alone, so that differences between methods are assessed for
+consistency as well as magnitude.
+• We separate artifact suppression from quantitative intensity recovery through
+localized difference maps and HU line-profile analysis, addressing a distinction
+that aggregate image-quality metrics do not capture.
+7
+
+
+• We assess generalization beyond the simulated training distribution on clinical
+CT data from the AAPM CT-MAR benchmark [20, 21].
+2
+Materials and methods
+2.1
+Data Preparation
+The proposed model was developed and evaluated on the paired image-domain CT
+data released by the AAPM CT Metal Artifact Reduction (CT-MAR) grand chal-
+lenge [20, 22].
+The challenge database was constructed with a hybrid simulation
+framework [21] that inserts virtual metal objects into clinical CT images drawn from
+DeepLesion [23] and the UCLH Stroke EIT dataset [24], covering head and body
+anatomy.
+Artifact-corrupted projections and their reconstructions were generated
+with the CatSim simulator in the open-source XCIST toolkit [25], which models
+quantum noise, beam hardening, and scatter.
+Each sample therefore comprises a
+metal-artifact CT image and its spatially registered metal-free reference, enabling
+supervised training in the image domain.
+All images were processed using the same preprocessing procedure. CT values
+were clipped to the range of [−1000, 2500] HU to standardize the intensity range and
+retain diagnostically relevant tissue information, followed by linear normalization to
+[0, 1]. The identical normalization procedure was applied to both the metal-artifact
+input images and their corresponding metal-free references. No spatial resizing was
+performed, and all images were retained at their native 512 × 512 resolution.
+A total of 12,045 paired samples were used for training, while 633 paired samples
+were allocated for validation. A separate held-out test set containing 1,322 paired
+8
+
+
+samples was reserved exclusively for final model evaluation and was not used during
+model training or model selection. The pairing between each metal-artifact image
+and its corresponding metal-free reference was strictly maintained throughout data
+partitioning and evaluation.
+For qualitative assessment, one clinical case from the AAPM CT-MAR scoring
+set was additionally evaluated [20, 21]. This case contained a metal implant, had
+no metal-free ground truth, and was not used during training. Metal regions were
+delineated from the unclipped HU image by thresholding at 3000 HU and are overlaid
+in red on all displayed images; the resulting mask was used for visualization only and
+was never supplied to the model during training or inference.
+2.2
+CT Metal Artifact Diffusion Bridge
+For each paired CT sample, the metal-free image is denoted by x0 and the correspond-
+ing metal-artifact image by µ. The forward process establishes a stochastic transition
+from the metal-free image to its degraded counterpart, whereas the reverse process
+reconstructs the metal-free image beginning from the observed metal-artifact CT.
+We adopt the generalized Ornstein–Uhlenbeck bridge [26], in which Doob’s h-
+transform conditions a mean-reverting OU process on the fixed terminal state xT = µ,
+eliminating the terminal variance and yielding a point-to-point mapping between the
+paired images. This formulation is the uniform-modulation case of the generalized
+bridge family described by Wang et al. [14]: the stochastic modulation term is held at
+unity, so the Gaussian perturbation is spatially uniform rather than residual-weighted.
+The resulting process is
+9
+
+
+A. Training Pipeline
+Paired Training Data
+1
+Preprocessing &
+Difference
+2
+Sample Timestep
+and Noise
+3
+Construct Bridge
+State 𝑥𝑡 
+4
+RDBM / U-Net
+5
+Training Loss
+6
+Artifact CT 𝜇
+Clean CT 𝑥0 
+Clean-to-artifact 
+difference
+ 𝑥0 − 𝜇
+Used to construct 𝑥𝑡
+t ~ Uniform({0, …, 
+T−1})
+T = 100
+𝜀 ~ 𝓝(0, I)
+𝑥𝑡= 𝜇+ 𝛩ₜ 𝑥0 − 𝜇
++ 𝛴ₜ𝜀
+Boundary:
+Θ0 = 1, Σ0 = 0,
+Θ𝑇= 0, Σ𝑇= 0
+𝑥𝑡
+t
+𝜇
+Learned
+correction
+Δ
++
+𝜇
+Predicted
+clean CT
+ො𝑥0 = 𝜇 + Δ
+𝐿𝑜𝑠𝑠
+= 𝐿₁(ො𝑥0, 𝑥0)
+Backpropagation
+&
+EMA update
+Symbols:   𝜇 = metal artifact CT 𝑥0 = clean CT target 𝑥𝑡 = bridge state  Θ𝑡= bridge mean coefficient Σ𝑡 = bridge noise scale 𝜀 ~ 𝓝(0, I)  ∆ = learned correction ෝ 𝑥0 = predicted clean CT  
+𝜆= bridge variance parameter 𝜏𝐾= selected reverse-sampling timestep K
+B. Forward Diffusion Process
+Forward bridge trajectory from 𝒙𝟎𝒕𝒐 𝝁
+Clean end
+Degraded end
+t = 0
+t = 10
+t = 30
+t = 50
+t = 70
+t = 90
+t = 98
+Doob’s h-transform conditioned forward  bridge
+𝑑𝑥𝑡= 𝜃𝑡coth( ҧ𝜃𝑡:𝑇)(𝜇−𝑥𝑡) 𝑑𝑡+ 2𝜆𝜃𝑡𝑑𝑤𝑡
+C. Inference / Sampling Pipeline
+K = 10 reverse steps
+Input Artifact
+CT 𝜇
+Initialize
+𝑥𝜏𝐾 = 𝜇
+𝑥𝜏𝐾
+⋯
+RDBM / U-Net  (shared weights at every step)
+Output predicted
+clean CT
+ො𝑥0
+(final output)
+First reverse update:   𝑥𝜏𝐾−1 = 𝜇+ 𝜃𝜏𝐾−1(ො𝑥0 −𝜇)
+General reverse update: 𝑥𝜏i−1 = 𝜇+
+Σ𝜏𝑖−1
+Σ𝜏𝑖
+𝑥𝜏𝑖−𝜇+ 𝜃𝜏𝑖−1 −𝜃𝜏𝑖
+Σ𝜏𝑖−1
+Σ𝜏𝑖
+(ො𝑥0 −𝜇)
+After the last step, output x̂₀ as the artifact-reduced CT.
+𝑥𝜏k
+𝑥𝜏2
+𝑥𝜏1
+(𝑥𝜏𝑘, 𝜏𝑘, 𝜇)
+(𝑥𝜏2, 𝜏2, 𝜇)
+(𝑥𝜏1, 𝜏1, 𝜇)
+ො𝑥(𝐾) = 𝜇+ ∆(𝐾)
+ො𝑥(𝑘) = 𝜇+ ∆(𝑘)
+ො𝑥(2) = 𝜇+ ∆(2)
+ො𝑥(1) = 𝜇+ ∆(1)
+(𝑥𝜏𝐾, 𝜏𝐾, 𝜇)
+Figure 1: Overview of the proposed diffusion bridge framework for image-domain CT
+metal artifact reduction. (A) During training, paired metal-free CT images x0 and
+metal-artifact CT images µ are used to construct intermediate bridge states, and a
+conditional U-Net predicts a correction to obtain the clean-image estimate ˆx0. (B)
+The forward bridge connects x0 to the degraded endpoint µ under the Doob’s h-
+transform-conditioned process. (C) During inference, reverse sampling starts from
+the observed metal-artifact image and reconstructs the artifact-reduced CT image
+using K = 10 reverse steps.
+dxt = θt coth
+ ¯θt:T
+
+(µ −xt) dt +
+p
+2λθt dωt,
+(1)
+10
+
+
+where θt is the time-dependent drift coefficient, ¯θt:T =
+R T
+t θs ds is the accumulated
+drift over the remaining interval, λ scales the bridge variance, and ωt is a standard
+Wiener process.
+The forward trajectory need not be simulated: an intermediate bridge state admits
+the closed form
+xt = µ + Θt(x0 −µ) + Σtϵ,
+ϵ ∼N(0, I),
+(2)
+with coefficients
+Θt = sinh
+ ¯θt:T
+
+sinh
+ ¯θ0:T
+,
+Σ2
+t = 2λ sinh
+ ¯θ0:t
+
+sinh
+ ¯θt:T
+
+sinh
+ ¯θ0:T
+
+.
+(3)
+Here Θt weights the metal-free-to-artifact difference x0 −µ and Σt sets the per-
+turbation magnitude. The construction satisfies both endpoint conditions: at t = 0,
+Θ0 = 1 and Σ0 = 0, recovering x0; at t = T, ΘT = 0 and ΣT = 0, so the state col-
+lapses to µ with no residual noise. The drift schedule θt follows a cosine profile [11],
+with λ = 10−4 and T = 100 discretization steps. A conditional U-Net receives the
+current bridge state xt, the metal-artifact image µ, and the corresponding time vari-
+able. The network predicts an image-domain correction ∆ϕ, which is combined with
+the metal-artifact image to obtain the metal-free estimate,
+ˆx0 = µ + ∆ϕ(xt, µ, t).
+(4)
+This residual parameterization confines the learning problem to the artifact-induced
+component of the image, so that anatomy already present in µ is carried through un-
+altered. The network is trained by minimizing an ℓ1 loss between ˆx0 and the paired
+11
+
+
+metal-free reference x0, computed on the normalized [0, 1] intensity scale over all
+image pixels.
+Inference uses a shortened trajectory {τK, . . . , τ0} of K = 10 steps selected by
+uniform spacing from the training discretization, and is initialized directly from the
+observation,
+xτK = µ.
+(5)
+Because ΣT = 0, the general update below is undefined at the first step, which is
+therefore evaluated directly from Eq. (2) with the noise term omitted:
+xτK−1 = µ + ΘτK−1
+
+ˆx(K)
+0
+−µ
+
+.
+(6)
+Subsequent states follow the deterministic update
+xτi−1 = µ + Στi−1
+Στi
+(xτi −µ)
++
+
+Θτi−1 −Θτi
+Στi−1
+Στi
+ 
+ˆx(i)
+0 −µ
+
+.
+(7)
+No stochastic term is injected during reverse sampling, so reconstruction is deter-
+ministic given µ and reproducible across runs. The estimate at τ0 is returned as the
+metal-artifact-reduced image and mapped back to HU by inverting the normalization
+of Section 2.1.
+12
+
+
+Algorithm 1 Training of the CT metal artifact diffusion bridge
+Require: Paired training set D = {(x0, µ)}; network ∆ϕ; bridge coefficients Θt, Σt
+from Eq. (3)
+1: repeat
+2:
+Sample a minibatch (x0, µ) ∼D
+3:
+Sample t ∼U{0, . . . , T −1}
+4:
+Sample ϵ ∼N(0, I)
+5:
+xt ←µ + Θt(x0 −µ) + Σtϵ
+▷Eq. (2)
+6:
+ˆx0 ←µ + ∆ϕ(xt, µ, t)
+▷Eq. (4)
+7:
+ϕ ←ϕ −η ∇ϕ L(ˆx0, x0)
+8: until convergence
+9: return ϕ
+Algorithm 2 Reverse sampling for CT metal artifact reduction
+Require: Metal-artifact image µ; trained network ∆ϕ; step sequence τK > · · · > τ0;
+coefficients Θτi, Στi
+1: xτK ←µ
+2: for i = K, K −1, . . . , 1 do
+3:
+ˆx(i)
+0 ←µ + ∆ϕ(xτi, µ, τi)
+4:
+if i = K then
+5:
+xτi−1 ←µ + Θτi−1
+
+ˆx(i)
+0 −µ
+
+▷Eq. (6); ΣτK = 0
+6:
+else
+7:
+Update xτi−1 by Eq. (7)
+8:
+end if
+9: end for
+10: return xτ0
+▷Θτ0 = 1, Στ0 = 0 ⇒xτ0 = ˆx(1)
+0
+2.3
+Implementation Details
+The forward bridge was discretized into T = 100 timesteps with bridge variance λ =
+10−4. At each training iteration, a timestep t was drawn uniformly from {0, . . . , T −1}
+and Gaussian noise ϵ ∼N(0, I) was used to construct the corresponding intermediate
+bridge state via Eq. (2). Because a single conditional network is shared across all
+timesteps, this sampling exposes the same weights to the full range of intermediate
+corruption levels, and the same trained model is applied at every reverse stage.
+13
+
+
+The network was trained using direct clean-image supervision. Specifically, the
+final prediction was parameterized as an additive image-domain correction relative to
+the observed metal-artifact image,
+ˆx0 = µ + ∆ϕ(xt, µ, t),
+(8)
+and optimized using an L1 reconstruction objective,
+L1 = ∥ˆx0 −x0∥1 .
+(9)
+The model was optimized using Adam [27] with a learning rate of 8×10−5 and ex-
+ponential decay coefficients (β1, β2) = (0.9, 0.99). Training was performed for 120,000
+iterations using a batch size of 10. Gradient clipping with a maximum norm of 1.0
+was applied during optimization. An exponential moving average of the model pa-
+rameters was maintained with a decay factor of 0.995 and used for validation and
+inference.
+At inference the schedule was reduced to K = 10 reverse steps, selected by uniform
+spacing from the training discretization.
+Reconstruction was initialized from the
+observed metal-artifact image and no stochastic term was injected, so inference is
+deterministic for a fixed input and parameter set. All slices were processed at their
+native 512 × 512 resolution, and outputs were mapped back to HU by inverting the
+normalization described in Section 2.1 before metric computation.
+14
+
+
+2.4
+Comparison Methods
+The proposed diffusion bridge model was evaluated against five representative image
+restoration approaches: Pix2Pix [7], CycleGAN [16], Res-SRDiff [12], I2I-Mamba [17],
+and I2SB [13]. These methods were selected to represent different image-to-image
+restoration paradigms and to provide comparisons with both conventional and more
+recent deep-learning approaches.
+Pix2Pix provides a supervised conditional generative adversarial network baseline
+that directly learns a mapping between paired source and target images. CycleGAN
+represents an unpaired adversarial translation framework and therefore does not re-
+quire one-to-one correspondence between source and target images during optimiza-
+tion. Res-SRDiff provides a residual-shifting diffusion-based restoration approach.
+I2I-Mamba uses selective state-space modeling for image-to-image transformation,
+while I2SB formulates paired image translation as a Schr¨odinger bridge between the
+source and target distributions. Together, these models cover adversarial, diffusion-
+based, state-space-based, and bridge-based image restoration strategies.
+For all comparison methods, the metal-artifact CT images were used as the source
+images and the corresponding metal-free CT images as the restoration targets. The
+same training, validation, and held-out test partitions were used across all methods,
+together with identical HU clipping, intensity normalization, and image resolution.
+For supervised approaches, the original artifact–metal-free pairing was preserved dur-
+ing training. CycleGAN used the same source and target training sets but did not
+use their paired correspondence, consistent with its original unpaired training formu-
+lation.
+Each comparison model was adapted only as required to accommodate the single-
+15
+
+
+channel 512 × 512 CT data and the artifact-to-metal-free restoration task while re-
+taining its original learning formulation as closely as possible. Model selection was
+performed using the corresponding validation set, and final quantitative evaluation
+was conducted exclusively on the same 1,322 held-out test slices. The identical metal-
+free reference images and evaluation procedure were used for all methods to ensure
+direct slice-level comparison.
+2.5
+Quantitative and Statistical Analysis
+Quantitative reconstruction performance was evaluated using PSNR, SSIM, MAE,
+and learned LPIPS. Higher PSNR and SSIM values indicate better performance,
+whereas lower MAE and LPIPS values indicate better performance.
+Each metric was calculated independently for every held-out test slice using the
+corresponding metal-free CT image as the reference. PSNR and SSIM were com-
+puted using the same normalized intensity representation for all evaluated methods.
+For MAE calculation, reconstructed and reference images were mapped back to the
+original HU scale, and MAE was therefore reported in HU. For LPIPS evaluation, the
+single-channel CT images were replicated across three channels and mapped to the
+input range required by the pretrained LPIPS network. The same evaluation pipeline
+was applied to all reconstruction methods. Quantitative results were summarized as
+mean ± standard deviation, and slice-level metric distributions were visualized using
+boxplots.
+Statistical comparisons were performed using nonparametric paired analyses. For
+each image-quality metric, differences among the six reconstruction methods were
+first assessed using the Friedman test for repeated measures, with each held-out test
+16
+
+
+slice treated as a matched observation across methods. The metal-artifact input was
+not included in the Friedman analysis. Kendall’s coefficient of concordance (W) was
+calculated to quantify the effect size of the overall between-model differences.
+Following a significant Friedman test, pairwise comparisons between the proposed
+method and each of the five comparison models were performed using the Wilcoxon
+signed-rank test on the paired slice-level metric values. Holm correction was applied
+separately within each image-quality metric to account for multiple comparisons. An
+adjusted p < 0.05 was considered statistically significant. Median paired differences
+were additionally reported for the closest-performing comparison method to describe
+the magnitude and direction of the observed differences.
+3
+Results
+3.1
+Qualitative Comparison
+Figures 2 and 3 show representative artifact reduction results from the head and
+thoracic regions.
+The reconstructed images are compared with the corresponding
+metal-free references, and the difference maps show the remaining HU deviations
+after artifact reduction compared to the reference.
+Figure 2 presents the representative head CT example. The metal-artifact in-
+put contains pronounced streak artifacts extending from the metallic regions into
+the surrounding anatomy.
+All evaluated methods reduced the dominant artifacts
+to varying degrees. CycleGAN and Pix2Pix retained larger residual intensity devi-
+ations, whereas Res-SRDiff and I2I-Mamba provided stronger artifact suppression.
+I2SB produced a reconstruction closely matching the metal-free reference. The pro-
+17
+
+
+posed diffusion bridge model further reduced residual intensity errors while preserving
+local anatomical structures. The corresponding difference map showed limited HU
+deviations in the artifact-affected regions.
+Figure 2: Qualitative comparison on representative head CT from the held-out test
+set. Reconstructed images and corresponding difference maps relative to the metal-
+free reference are shown for the evaluated methods. Red regions indicate metallic
+implants. CT images are displayed using a window of [−300, 300] HU, and difference
+maps are reported in HU.
+Figure 3 presents the representative thoracic CT example. The metal-artifact in-
+put contains streak artifacts extending from the metallic regions across the surround-
+ing anatomy. CycleGAN and Pix2Pix reduced the major streak patterns but retained
+visible local intensity differences. Res-SRDiff, I2I-Mamba, and I2SB showed stronger
+artifact reduction and closer agreement with the metal-free reference. The proposed
+model effectively reduced the streak artifacts while preserving local anatomical struc-
+tures and soft-tissue contrast. Its difference map also showed reduced residual HU
+deviations in the artifact-affected regions.
+18
+
+
+Figure 3: Qualitative comparison on representative thoracic CT slice 261 from the
+held-out test set. Reconstructed images and corresponding difference maps relative
+to the metal-free reference are shown for the evaluated methods. Red regions indicate
+metallic implants. CT images are displayed using a window of [−300, 300] HU, and
+difference maps are reported in HU.
+3.2
+Quantitative and Statistical Comparison
+Table 1 summarizes the quantitative performance of the evaluated methods on the
+1,322 held-out test slices. The original metal-artifact images had a PSNR of 29.48 ±
+3.59 dB, an SSIM of 0.7972 ± 0.1232, an MAE of 57.33 ± 22.14 HU, and an LPIPS of
+0.2912 ± 0.1401.
+Among the reconstruction methods, our proposed model achieved the highest
+PSNR of 43.67 ± 4.56 dB, the highest SSIM of 0.9856 ± 0.0138, and the lowest MAE
+of 14.74±8.68 HU. I2SB provided the closest performance for these three metrics, with
+a PSNR of 43.48 ± 4.35 dB, an SSIM of 0.9837 ± 0.0144, and an MAE of 16.59 ± 9.87
+HU. I2I-Mamba achieved a PSNR of 40.41 ± 3.37 dB, an SSIM of 0.9752 ± 0.0163,
+and an MAE of 20.57 ± 9.48 HU.
+The ranking differed for LPIPS. Res-SRDiff achieved the lowest LPIPS (0.0150 ±
+0.0121), followed by I2SB (0.0169±0.0186), whereas the proposed model obtained an
+LPIPS of 0.0401 ± 0.0564. These results indicate that the proposed model achieved
+19
+
+
+Table 1: Quantitative comparison on the held-out CT-MAR test set.
+Values are
+reported as mean ± standard deviation. SSIM and LPIPS are displayed in units of
+10−2. Bold values indicate the best mean performance for each metric. Friedman tests
+compare the six reconstruction methods, excluding the artifact input; ∗∗∗p < 0.001
+indicates an overall difference among methods, not pairwise significance. Kendall’s
+W quantifies the omnibus effect size.
+Method
+PSNR (dB) ↑
+SSIM (×102) ↑
+MAE (HU) ↓
+LPIPS (×102) ↓
+Input (artifact)
+29.48 ± 3.59
+79.72 ± 12.32
+57.33 ± 22.14
+29.12 ± 14.01
+CycleGAN
+34.32 ± 3.72
+93.02 ± 4.59
+36.32 ± 15.24
+8.84 ± 5.68
+Pix2Pix
+38.54 ± 3.56
+96.25 ± 2.16
+24.19 ± 10.40
+6.03 ± 3.16
+Res-SRDiff
+39.89 ± 3.22
+95.00 ± 2.31
+23.15 ± 9.07
+1.50 ± 1.21
+I2I-Mamba
+40.41 ± 3.37
+97.52 ± 1.63
+20.57 ± 9.48
+5.13 ± 4.37
+I2SB
+43.48 ± 4.35
+98.37 ± 1.44
+16.59 ± 9.87
+1.69 ± 1.86
+RDBM-MAR (ours)
+43.67 ± 4.56
+98.56 ± 1.38
+14.74 ± 8.68
+4.01 ± 5.64
+Friedman χ2(5)
+5818.91∗∗∗
+5650.74∗∗∗
+5980.92∗∗∗
+4779.70∗∗∗
+Kendall’s W
+0.880
+0.855
+0.905
+0.723
+the strongest performance in image fidelity, structural similarity, and HU accuracy,
+while Res-SRDiff achieved the lowest perceptual feature-space error.
+Figure 4 shows the slice-level distributions of PSNR, SSIM, MAE, and LPIPS
+across the held-out test set. The proposed model maintained favorable PSNR, SSIM,
+and MAE distributions across the test slices, while substantial overlap with the
+strongest comparison methods remained for some metrics. The LPIPS distributions
+followed a different pattern, with Res-SRDiff and I2SB shifted toward lower values.
+The slice-level variability and overlap among methods motivated the paired statistical
+analysis rather than relying solely on the mean values reported in Table 1.
+The Friedman omnibus test showed significant differences among the six recon-
+struction methods for all four image-quality metrics.
+Significant differences were
+observed for PSNR (χ2(5) = 5818.91, p < 0.001), SSIM (χ2(5) = 5650.74, p < 0.001),
+MAE (χ2(5) = 5980.92, p < 0.001), and LPIPS (χ2(5) = 4779.70, p < 0.001).
+20
+
+
+CycleGAN
+pix2pix
+Res-SRDiff
+I2I-Mamba
+I2SB
+RDBM-MAR (ours)
+0.6
+0.7
+0.8
+0.9
+1.0
+SSIM [-]  ↑
+(a)
+CycleGAN
+pix2pix
+Res-SRDiff
+I2I-Mamba
+I2SB
+RDBM-MAR (ours)
+20
+30
+40
+50
+PSNR [dB]  ↑
+(b)
+CycleGAN
+pix2pix
+Res-SRDiff
+I2I-Mamba
+I2SB
+RDBM-MAR (ours)
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+LPIPS [-]  ↓
+(c)
+CycleGAN
+pix2pix
+Res-SRDiff
+I2I-Mamba
+I2SB
+RDBM-MAR (ours)
+0
+20
+40
+60
+80
+100
+120
+140
+MAE [HU]  ↓
+(d)
+Figure 4: Figure 4: Slice-level distributions of (a) SSIM, (b) PSNR, (c) LPIPS, and (d)
+MAE across the 1,322 held-out test slices. Higher values indicate better performance
+for PSNR and SSIM, whereas lower values indicate better performance for MAE and
+LPIPS.
+Kendall’s W values were 0.880, 0.855, 0.905, and 0.723 for PSNR, SSIM, MAE,
+and LPIPS, respectively, indicating substantial between-method differences across
+the paired test slices.
+Pairwise Wilcoxon signed-rank tests with Holm correction showed that the pro-
+posed model significantly outperformed each of the five comparison methods in PSNR,
+SSIM, and MAE (all adjusted p < 0.001). Compared with I2SB, the closest-performing
+comparison method for these metrics, the proposed model achieved median paired
+21
+
+
+differences of +0.556 dB in PSNR, +0.0014 in SSIM, and −1.557 HU in MAE.
+For LPIPS, the proposed model achieved significantly lower values than CycleGAN,
+Pix2Pix, and I2I-Mamba, but significantly higher values than Res-SRDiff and I2SB
+after Holm correction.
+3.2.1
+HU Profile Analysis
+Figure 5 provides an HU profile comparison for the same head CT example shown
+in Fig. 2. The metal-artifact input showed substantial deviations from the metal-free
+reference along this profile. Although all reconstruction methods reduced these devi-
+ations to varying degrees, differences remained around the regions with the strongest
+intensity variation. The profile produced by the proposed model more closely followed
+the reference CT values across the artifact-affected region. This local profile analy-
+sis complements the whole-slice MAE by illustrating how the reconstruction behaves
+across individual anatomical and artifact boundaries.
+3.3
+Clinical CT Evaluation
+Figure 6 shows the application of the proposed model to clinical images from the
+AAPM CT-MAR scoring dataset. Because a metal-free reference image is not avail-
+able for this clinical case, the evaluation was conducted qualitatively. The input con-
+tains visible metal-associated streak artifacts surrounding the implant regions. After
+reconstruction, the proposed model reduced the prominent streaking and improved
+the visibility of the surrounding anatomical structures.
+Metal regions identified from the original CT image using a threshold of 3000
+HU are displayed as red overlays for visualization only. The metal mask was not
+22
+
+
+Figure 5: HU profile comparison for representative head CT. Intensity profiles from
+the metal-artifact input and reconstructed images are compared with the correspond-
+ing metal-free reference along the selected line.
+provided to the model during training or inference. This clinical example provides an
+additional qualitative evaluation on clinically representative CT data containing real
+metal artifacts.
+4
+Discussion
+The proposed diffusion bridge model demonstrated strong performance for image-
+domain CT metal artifact reduction across the held-out test set.
+Among the six
+reconstruction methods, the proposed model achieved the highest PSNR and SSIM
+and the lowest MAE, indicating closer agreement with the metal-free reference images
+23
+
+
+Res-SRDiff
+CycleGAN
+Pix2Pix
+Input
+Ours
+I2SB
+I2I-Mamba
+Difference Map(HU)
+200
+100
+0
+-100
+-200
+Figure 6: Qualitative evaluation on clinical image 13 from the AAPM CT-MAR
+scoring dataset. Metal regions identified from the original CT image using a threshold
+of 3000 HU are overlaid in red for visualization. CT images are displayed using a
+window of [−300, 300] HU. No metal-free reference is available for this clinical case.
+Difference maps were calculated as the reconstructed image minus the input metal-
+artifact CT image.
+in terms of overall image fidelity, structural similarity, and CT intensity accuracy.
+The paired statistical analysis further supported these findings. The Friedman tests
+showed significant differences among the evaluated methods for all four metrics, with
+Kendall’s W values ranging from 0.723 to 0.905. Pairwise Wilcoxon signed-rank tests
+with Holm correction showed that the proposed model significantly outperformed all
+five comparison methods in PSNR, SSIM, and MAE. These results indicate that the
+observed improvements were consistent across the paired test slices rather than being
+driven only by differences in average performance.
+The qualitative results were consistent with the quantitative evaluation. In both
+the representative head and thoracic CT examples, the proposed model substantially
+reduced metal-induced streak artifacts while preserving the surrounding anatomical
+structures. The corresponding difference maps showed smaller residual HU deviations
+in artifact-affected regions. The HU line-profile analysis further showed that the re-
+24
+
+
+constructed CT values preserved the overall intensity trend of the metal-free reference
+with reduced local fluctuations. Together with the lower MAE observed across the
+full test set, these findings support the quantitative reliability of HU recovery by the
+proposed model and suggest that artifact-related intensity errors can be reduced with
+lower risks of altering the underlying anatomical information.
+The ranking of the methods differed for LPIPS. Res-SRDiff achieved the lowest
+LPIPS, followed by I2SB, whereas the proposed model achieved the best performance
+in PSNR, SSIM, and MAE. Pairwise testing similarly showed that the proposed model
+had lower LPIPS than CycleGAN, Pix2Pix, and I2I-Mamba, but higher LPIPS than
+Res-SRDiff and I2SB. This difference indicates that the similarity of the learned per-
+ceptual features and the accuracy of CT intensity do not necessarily rank the re-
+construction methods in the same order, consistent with the perception–distortion
+trade-off in image restoration [9]. In the reduction of CT metal artifacts, this distinc-
+tion is important because accurate recovery of HU values and anatomical structures
+is required in addition to visual similarity. The lower MAE of the proposed method
+therefore provides complementary information to the LPIPS results. Unlike natural-
+image restoration, CT reconstruction requires preservation not only of visual appear-
+ance but also of quantitatively meaningful image intensities. HU values carry crucial
+physical information that is used in quantitative image interpretation and clinical
+analysis. In this context, the lower MAE achieved by the proposed model indicates
+improved recovery of CT intensity values and complements the information provided
+by perceptual metrics such as LPIPS. The simultaneous improvement in PSNR, SSIM,
+and MAE therefore suggests that the proposed method reduces artifact-related errors
+while maintaining both structural and quantitative fidelity to the metal-free reference.
+25
+
+
+The observed performance may be related to the formulation of the restoration
+process. Unlike conventional diffusion approaches that initialize reverse reconstruc-
+tion from an independent Gaussian sample, the diffusion bridge starts directly from
+the observed metal-artifact CT image.
+As a result, anatomical information that
+remains present in the degraded observation is retained at the beginning of recon-
+struction rather than being regenerated from noise. The conditional U-Net further
+predicts an image-domain correction relative to the metal-artifact image, focusing the
+reconstruction on the differences between the degraded observation and the metal-
+free target. The bridge formulation therefore provides a direct restoration trajectory
+between the paired artifact and metal-free endpoints. In addition, the shortened de-
+terministic reverse trajectory allows reconstruction to be performed with a limited
+number of network evaluations. Although the contribution of each component was not
+separately evaluated in the current study, these design characteristics may contribute
+to the strong intensity and structural fidelity observed in the results.
+The clinical CT example from the AAPM CT-MAR scoring dataset provided an
+additional qualitative evaluation beyond the paired benchmark data. The model re-
+duced visible streak artifacts surrounding the metal regions and improved the visibility
+of nearby anatomical structures. However, a metal-free reference was not available for
+this case, and the clinical result should therefore be interpreted qualitatively rather
+than as a quantitative validation of performance on real metal artifacts.
+Several limitations remain.
+The quantitative evaluation was performed using
+paired benchmark data generated through the AAPM CT-MAR simulation frame-
+work, and performance on clinical CT images may differ because of variations in
+scanner configuration, implant composition, anatomy, and artifact severity. The cur-
+26
+
+
+rent model also processes each CT slice independently and does not use information
+from adjacent slices or three-dimensional anatomical continuity.
+In addition, the
+clinical evaluation was limited to a single scoring case without a metal-free refer-
+ence. Future work will therefore include evaluation on a larger range of clinical CT
+images and implant types, reader-based assessment, and extension of the framework
+to adjacent-slice or three-dimensional reconstruction. Metal masks and projection-
+domain measurements could also be incorporated as additional conditioning informa-
+tion. Finally, alternative training objectives may help improve perceptual similarity
+while preserving the HU accuracy and structural fidelity achieved by the current
+model.
+Conflicts of interest
+There are no conflicts of interest declared by the authors.
+Acknowledgment
+This research is supported in part by the National Institutes of Health under Award
+Numbers R01HL183223, R01DE033512, and R01CA272991.
+This work used the datasets provided by the AAPM CT-MAR Grand Challenge.
+The training datasets were generated using a hybrid data simulation framework, which
+incorporates publicly available clinical images from the DeepLesion CT dataset and
+the UCLH Stroke EIT Dataset, together with metal objects generated using the
+CatSim simulator in the open-source toolkit XCIST. This work also used clinical
+CT data from the benchmark provided by the AAPM CT-MAR Grand Challenge.
+27
+
+
+The dataset and associated benchmark resources are available through the official
+challenge website: https://www.aapm.org/GrandChallenge/CT-MAR/Default.asp.
+References
+[1] Gjesteby, L., De Man, B., Jin, Y., Paganetti, H., Verburg, J., Giantsoudi, D., and
+Wang, G., “Metal artifact reduction in CT: Where are we after four decades?,”
+IEEE Access 4, 5826–5849 (2016). 4
+[2] Kleber, C. E., Karius, R., Naessens, L. E., Van Toledo, C. O., van Osch, J. A.,
+Boomsma, M. F., Heemskerk, J. W., and van der Molen, A. J., “Advancements in
+supervised deep learning for metal artifact reduction in computed tomography:
+A systematic review,” European Journal of Radiology 181, 111732 (2024). 4
+[3] Kalender, W. A., Hebel, R., and Ebersberger, J., “Reduction of CT artifacts
+caused by metallic implants,” Radiology 164(2), 576–577 (1987). 4
+[4] Meyer, E., Raupach, R., Lell, M., Schmidt, B., and Kachelrieß, M., “Nor-
+malized metal artifact reduction (NMAR) in computed tomography,” Medical
+Physics 37(10), 5482–5493 (2010). 4
+[5] Zhang, Y. and Yu, H., “Convolutional neural network based metal artifact re-
+duction in x-ray computed tomography,” IEEE transactions on medical imag-
+ing 37(6), 1370–1381 (2018). 4
+[6] Lin, W.-A., Liao, H., Peng, C., Sun, X., Zhang, J., Luo, J., Chellappa, R., and
+Zhou, S. K., “DuDoNet: Dual domain network for CT metal artifact reduction,”
+28
+
+
+in [Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR)], 10512–10521 (2019). 4 and 5
+[7] Isola, P., Zhu, J.-Y., Zhou, T., and Efros, A. A., “Image-to-image translation
+with conditional adversarial networks,” in [Proceedings of the IEEE Confer-
+ence on Computer Vision and Pattern Recognition (CVPR)], 1125–1134 (2017).
+5, 7, and 15
+[8] Wang, J., Zhao, Y., Noble, J. H., and Dawant, B. M., “Conditional genera-
+tive adversarial networks for metal artifact reduction in ct images of the ear,”
+in [International conference on medical image computing and computer-assisted
+intervention], 3–11, Springer (2018). 5
+[9] Blau, Y. and Michaeli, T., “The perception-distortion tradeoff,” in [Proceedings
+of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)],
+6228–6237 (2018). 5 and 25
+[10] Ho, J., Jain, A., and Abbeel, P., “Denoising diffusion probabilistic models,” in
+[Advances in Neural Information Processing Systems], 33, 6840–6851 (2020). 5
+[11] Nichol, A. Q. and Dhariwal, P., “Improved denoising diffusion probabilistic mod-
+els,” in [Proceedings of the 38th International Conference on Machine Learn-
+ing (ICML)], Proceedings of Machine Learning Research 139, 8162–8171 (2021).
+5 and 11
+[12] Safari, M., Wang, S., Eidex, Z., Li, Q., Qiu, R. L. J., Middlebrooks, E. H.,
+Yu, D. S., and Yang, X., “MRI super-resolution reconstruction using efficient
+29
+
+
+diffusion probabilistic model with residual shifting,” Physics in Medicine & Bi-
+ology 70(12), 125008 (2025). 5, 7, and 15
+[13] Liu, G.-H., Vahdat, A., Huang, D.-A., Theodorou, E. A., Nie, W., and Anandku-
+mar, A., “I2SB: Image-to-image schr¨odinger bridge,” in [Proceedings of the 40th
+International Conference on Machine Learning (ICML)], Proceedings of Machine
+Learning Research 202, 22042–22062 (2023). 5, 7, and 15
+[14] Wang, H., Zhang, J., Chen, H., Guo, H., Wang, D., Ma, J., and Du, B., “Residual
+diffusion bridge model for image restoration,” in [Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR)], 8375–8386
+(2026). 5, 6, and 9
+[15] Ronneberger, O., Fischer, P., and Brox, T., “U-Net: Convolutional networks for
+biomedical image segmentation,” in [Medical Image Computing and Computer-
+Assisted Intervention (MICCAI)], Lecture Notes in Computer Science 9351,
+234–241 (2015). 6
+[16] Zhu, J.-Y., Park, T., Isola, P., and Efros, A. A., “Unpaired image-to-image
+translation using cycle-consistent adversarial networks,” in [Proceedings of the
+IEEE International Conference on Computer Vision (ICCV)], 2223–2232 (2017).
+7 and 15
+[17] Atli, O. F., Kabas, B., Arslan, F., Demirtas, A. C., Yurt, M., Dalmaz, O., and
+C¸ukur, T., “I2i-mamba: Multi-modal medical image synthesis via selective state
+space modeling,” IEEE Transactions on Biomedical Engineering , 1–12 (2026).
+7 and 15
+30
+
+
+[18] Wang, Z., Bovik, A. C., Sheikh, H. R., and Simoncelli, E. P., “Image quality
+assessment: From error visibility to structural similarity,” IEEE Transactions
+on Image Processing 13(4), 600–612 (2004). 7
+[19] Zhang, R., Isola, P., Efros, A. A., Shechtman, E., and Wang, O., “The unrea-
+sonable effectiveness of deep features as a perceptual metric,” in [Proceedings of
+the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)],
+586–595 (2018). 7
+[20] Haneda, E., Peters, N., Zhang, J., Karageorgos, G., Xia, W., Paganetti, H.,
+Wang, G., Guo, Y., Ma, J., Park, H. S., Jeon, K., Fan, F., Thies, M., and
+De Man, B., “AAPM CT metal artifact reduction grand challenge,” Medical
+Physics 52(10), e70050 (2025). 8 and 9
+[21] Peters, N., Haneda, E., Zhang, J., Karageorgos, G., Xia, W., Verburg, J., Wang,
+G., Paganetti, H., and De Man, B., “A hybrid training database and evaluation
+benchmark for assessing metal artifact reduction methods for x-ray CT imaging,”
+Medical Physics 52(10), e70020 (2025). 8 and 9
+[22] “AAPM CT metal artifact reduction (CT-MAR) grand challenge bench-
+mark tool.” XCIST, GitHub repository (2024). https://github.com/xcist/
+example/tree/main/AAPM_datachallenge. 8
+[23] Yan, K., Wang, X., Lu, L., and Summers, R. M., “DeepLesion: Automated
+mining of large-scale lesion annotations and universal lesion detection with deep
+learning,” Journal of Medical Imaging 5(3), 036501 (2018). 8
+31
+
+
+[24] Goren, N., Dowrick, T., Avery, J., and Holder, D., “UCLH stroke EIT dataset—
+radiology data (CT).” Zenodo (2017). 8
+[25] Wu, M., FitzGerald, P., Zhang, J., Segars, W. P., Yu, H., Xu, Y., and De Man,
+B., “XCIST—an open access x-ray/CT simulation toolkit,” Physics in Medicine
+& Biology 67(19), 194002 (2022). 8
+[26] Yue, C., Peng, Z., Ma, J., Du, S., Wei, P., and Zhang, D., “Image restoration
+through generalized Ornstein–Uhlenbeck bridge,” in [Proceedings of the 41st In-
+ternational Conference on Machine Learning (ICML)], Proceedings of Machine
+Learning Research 235 (2024). 9
+[27] Kingma, D. P. and Ba, J., “Adam: A method for stochastic optimization,” in
+[International Conference on Learning Representations (ICLR)], (2015). 14
+32
